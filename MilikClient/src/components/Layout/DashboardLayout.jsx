@@ -12,7 +12,7 @@ import {
   FaExclamationTriangle, FaCalculator, FaPhone,
   FaFile, FaSave, FaFileExport, FaPrint, FaSignOutAlt,
   FaHome, FaPlus, FaInfo, FaSquare, FaCheck, FaCheckCircle,
-  FaUser, FaUsers, FaAddressCard, FaTag, FaClipboard,
+  FaUser, FaUsers, FaTag, FaClipboard,
   FaHandshake, FaChartLine, FaChartPie, FaFileAlt, FaBalanceScale,
   FaToolbox, FaDatabase, FaWrench, FaHeadset, FaInfoCircle, FaList,
   FaBuilding, FaKey, FaUserSlash, FaRedoAlt, FaCar, FaUserPlus, FaUserCheck,
@@ -43,7 +43,6 @@ const MENU_PERMISSION_MAP = {
   "property-commission-settings": { resource: "commissions", action: "view", moduleKey: "propertyManagement" },
   "commissions-list": { resource: "commissions", action: "view", moduleKey: "propertyManagement" },
   availability: { resource: "units", action: "view", moduleKey: "propertyManagement" },
-  "units-spaces": { resource: "units", action: "view", moduleKey: "propertyManagement" },
   "units-list": { resource: "units", action: "view", moduleKey: "propertyManagement" },
   "add-unit": { resource: "units", action: "create", moduleKey: "propertyManagement" },
   "space-types": { resource: "units", action: "view", moduleKey: "propertyManagement" },
@@ -504,40 +503,31 @@ const MENU_COLOR_MAP = {
 };
 
 const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick, menuColorMap = MENU_COLOR_MAP }) => {
-  const menuInfo = menuColorMap[menuId] || { color: "#0B3B2E", label: menuId.toUpperCase(), icon: FaCog };
-  const MenuIcon = menuInfo.icon;
   return (
     <div
-      className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
+      className={`absolute left-full top-0 w-56 shadow-lg z-[120] overflow-visible border pointer-events-auto ${
         darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
       }`}
       style={{ marginLeft: "0px" }}
       onMouseEnter={() => onMenuEnter(menuId)}
       onMouseLeave={onMenuLeave}
     >
-      <div style={{ backgroundColor: menuInfo.color }} className="px-5 py-4 text-white flex items-center space-x-3">
-        <MenuIcon size={22} className="flex-shrink-0" />
-        <div>
-          <h3 className="text-sm font-bold leading-tight">{menuInfo.label}</h3>
-          <p className="text-xs opacity-90">Quick Access</p>
-        </div>
-      </div>
       <div className={`${darkMode ? "bg-gray-800" : "bg-white"} max-h-96 overflow-y-auto`}>
         {items.map((item, idx) => (
           <React.Fragment key={item.id || `sep-${idx}`}>
             {item.type === "separator" ? (
-              <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} mx-3 my-2`} />
+              <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} my-1`} />
             ) : (
               <button
                 onClick={() => onItemClick(item.id)}
-                className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
+                className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${
                   darkMode
-                    ? "text-gray-200 hover:bg-gray-700 hover:text-white border-l-transparent"
-                    : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent border-l-transparent"
+                    ? "text-gray-200 hover:bg-gray-700 hover:text-white"
+                    : "text-gray-800 hover:bg-gray-100"
                 }`}
               >
                 {item.icon && (
-                  <span className="flex-shrink-0 transition-transform duration-150" style={{ color: "#FF8C00" }}>
+                  <span className="flex-shrink-0 text-gray-500">
                     <item.icon size={16} />
                   </span>
                 )}
@@ -549,62 +539,52 @@ const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeav
                     </span>
                   )}
                 </div>
-                <span className="text-xs opacity-50 transition-opacity" style={{ color: menuInfo.color }}>&gt;</span>
+                <span className="text-xs text-gray-400">&gt;</span>
               </button>
             )}
           </React.Fragment>
         ))}
       </div>
-      <div style={{ backgroundColor: menuInfo.color }} className="h-1.5" />
     </div>
   );
 };
 
 const FinancialDropdown = ({ categoryId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick, menuColorMap = MENU_COLOR_MAP }) => {
-  const category = menuColorMap[categoryId] || { color: "#0B3B2E", label: "Financial Accounts", icon: FaBook };
   return (
     <div
-      className={`absolute left-full top-0 w-96 shadow-2xl z-[120] rounded-lg overflow-visible border pointer-events-auto ${
+      className={`absolute left-full top-0 w-56 shadow-lg z-[120] overflow-visible border pointer-events-auto ${
         darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-100"
       }`}
       style={{ marginLeft: "0px" }}
       onMouseEnter={() => onMenuEnter(categoryId)}
       onMouseLeave={onMenuLeave}
     >
-      <div style={{ backgroundColor: category.color }} className="px-5 py-4 text-white flex items-center space-x-3">
-        <category.icon size={22} className="flex-shrink-0" />
-        <div>
-          <h3 className="text-sm font-bold leading-tight">{category.label}</h3>
-          <p className="text-xs opacity-90">Financial Operations</p>
-        </div>
-      </div>
       <div className={`${darkMode ? "bg-gray-800" : "bg-white"} max-h-96 overflow-y-auto`}>
         {items.map((item, idx) => (
           <React.Fragment key={item.id || `sep-${idx}`}>
             {item.type === "separator" ? (
-              <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} mx-3 my-2`} />
+              <div className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} my-1`} />
             ) : (
               <button
                 onClick={() => onItemClick(item.id)}
-                className={`w-full text-left px-5 py-3 text-sm font-medium flex items-center space-x-3 transition-all duration-150 border-l-4 ${
+                className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${
                   darkMode
-                    ? "text-gray-200 hover:bg-gray-700 hover:text-white border-l-transparent"
-                    : "text-gray-700 hover:bg-gradient-to-r hover:from-gray-50 hover:to-transparent border-l-transparent"
+                    ? "text-gray-200 hover:bg-gray-700 hover:text-white"
+                    : "text-gray-800 hover:bg-gray-100"
                 }`}
               >
                 {item.icon && (
-                  <span className="flex-shrink-0 transition-transform duration-150" style={{ color: category.color }}>
+                  <span className="flex-shrink-0 text-gray-500">
                     <item.icon size={16} />
                   </span>
                 )}
                 <span>{item.label}</span>
-                <span className="text-xs opacity-50 transition-opacity" style={{ color: category.color }}>&gt;</span>
+                <span className="text-xs text-gray-400">&gt;</span>
               </button>
             )}
           </React.Fragment>
         ))}
       </div>
-      <div style={{ backgroundColor: category.color }} className="h-1.5" />
     </div>
   );
 };
@@ -920,7 +900,6 @@ const TopToolbar = ({
       "zones": "/properties/zones",
       "property-commission-settings": "/properties/commission-settings",
       "commissions-list": "/properties/commissions-list",
-      "units-spaces": "/units",
       availability: "/vacants",
       "units-list": "/units",
       "add-unit": "/units/new",
@@ -931,8 +910,6 @@ const TopToolbar = ({
       "tenant-agreements": "/agreements",
       "tenant-deposits": "/tenants/deposits",
       "tenant-take-on-balances": "/tenants/take-on-balances",
-      "tenant-financing": "/tenants/financing",
-      "tenant-journals": "/tenants/journals",
       "rental-invoices-list": "/invoices/rental",
       "credit-notes": "/invoices/notes",
       "debit-notes": "/invoices/notes",
@@ -1522,7 +1499,6 @@ const TopToolbar = ({
         submenu: [
           { id: "landlord-list", label: `${termLandlord} Listing`, icon: FaUser },
           { id: "add-landlord", label: `Add New ${termLandlord}`, icon: FaPlus },
-          { id: "landlord-details", label: `${termLandlord} Details`, icon: FaAddressCard },
         ],
       },
       {
@@ -1536,9 +1512,6 @@ const TopToolbar = ({
           { type: "separator" },
           { id: "property-commission-settings", label: "Commission Settings", icon: FaCog },
           { id: "commissions-list", label: "Commission List", icon: FaList },
-          { type: "separator" },
-          { id: "units-spaces", label: `${termUnits}/Spaces Management`, icon: FaSquare },
-          { id: "availability", label: "Availability Status", icon: FaCheck },
         ],
       },
       {
@@ -1549,6 +1522,8 @@ const TopToolbar = ({
           { id: "units-list", label: `${termUnits} Listing`, icon: FaSquare },
           { id: "add-unit", label: `Add New ${termUnit}`, icon: FaPlus },
           { id: "space-types", label: `${termUnit} Types`, icon: FaTag },
+          { type: "separator" },
+          { id: "availability", label: "Availability Status", icon: FaCheck },
         ],
       },
       {
@@ -1563,8 +1538,6 @@ const TopToolbar = ({
           { id: "tenant-deposits", label: `${termTenant} Deposits`, icon: FaCoins },
           { id: "tenant-agreements", label: `${termTenant} Agreements`, icon: FaClipboard },
           { id: "tenant-take-on-balances", label: "Take-On Balances", icon: FaMoneyBillWave },
-          { id: "tenant-financing", label: `${termTenant} Financing`, icon: FaReceipt },
-          { id: "tenant-journals", label: `${termTenant} Journals`, icon: FaClipboard },
         ],
       },
       {
@@ -1637,8 +1610,6 @@ const TopToolbar = ({
               .map((subItem) => {
                 if (subItem.id === "properties-list") return { ...subItem, label: `My ${termProperties}` };
                 if (subItem.id === "add-property") return { ...subItem, label: `Add ${termProperty}` };
-                if (subItem.id === "units-spaces") return { ...subItem, label: `${termUnits} / Spaces` };
-                if (subItem.id === "availability") return { ...subItem, label: "Occupancy & Availability" };
                 return subItem;
               }),
           };
@@ -1785,7 +1756,7 @@ const TopToolbar = ({
       return (
         <div
           key={`sep-${index}`}
-          className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-200"} my-1`}
+          className={`h-px ${darkMode ? "bg-gray-700" : "bg-gray-300"} my-1`}
         />
       );
     }
@@ -1799,7 +1770,7 @@ const TopToolbar = ({
           onMouseLeave={closeHoveredFinancialItem}
         >
           <button
-            className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-all duration-200 ${
+            className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between transition-all duration-200 ${
               darkMode
                 ? "text-gray-300 hover:bg-gray-700 hover:text-white"
                 : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
@@ -1811,7 +1782,7 @@ const TopToolbar = ({
                   style={{
                     color: activeMenu === "financial"
                       ? (item.categoryColor || "#666")
-                      : "#FF8C00",
+                      : "#64748b",
                   }}
                   className="transition-transform duration-200"
                 >
@@ -1862,7 +1833,7 @@ const TopToolbar = ({
       <button
         key={item.id}
         onClick={() => handleMenuItemClick(item.id)}
-        className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between transition-all duration-200 ${
+        className={`w-full text-left px-3 py-1.5 text-xs flex items-center justify-between transition-all duration-200 ${
           darkMode
             ? "text-gray-300 hover:bg-gray-700 hover:text-white"
             : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
@@ -1874,7 +1845,7 @@ const TopToolbar = ({
               style={{
                 color: activeMenu === "financial"
                   ? (item.categoryColor || "#666")
-                  : "#FF8C00",
+                  : "#64748b",
               }}
               className="transition-transform duration-200"
             >
@@ -1905,11 +1876,11 @@ const TopToolbar = ({
               onClick={() => {
                 setActiveMenu(activeMenu === item.id ? null : item.id);
               }}
-              className={`whitespace-nowrap px-2 py-1 text-[11px] font-bold text-white transition-colors sm:px-2.5 sm:text-xs ${
+              className={`whitespace-nowrap px-2 py-1 text-[11px] font-semibold text-white transition-colors sm:px-2.5 sm:text-xs ${
                 activeMenu === item.id
                   ? darkMode
                     ? "bg-gray-700 text-white"
-                    : "bg-emerald-700 text-white"
+                    : "bg-white/15 text-white"
                   : darkMode
                     ? "text-gray-300 hover:bg-gray-700 hover:text-white"
                     : "text-gray-100 hover:bg-emerald-700 hover:text-white"
@@ -1928,7 +1899,7 @@ const TopToolbar = ({
                 />
               ) : (
                 <div
-                  className={`absolute left-0 top-full mt-0 max-h-[70vh] w-64 overflow-visible shadow-lg z-[90] border ${
+                  className={`absolute left-0 top-full mt-0 max-h-[70vh] w-56 overflow-visible shadow-lg z-[90] border ${
                     darkMode ? "bg-gray-800 border-gray-700" : "bg-white border-gray-200"
                   }`}
                 >

@@ -403,7 +403,7 @@ const TabManager = ({ darkMode }) => {
 
   return (
     <div
-      className={`relative flex items-center border-b shadow-lg overflow-hidden ${
+      className={`relative flex items-center border-b overflow-hidden ${
         darkMode ? 'bg-gray-800 border-gray-700' : 'bg-[#0B3B2E] border-[#0B3B2E]'
       }`}
     >
@@ -433,14 +433,14 @@ const TabManager = ({ darkMode }) => {
                 role="tab"
                 aria-selected={isActive}
                 title={resolveTitle(tab.route) || tab.title}
-                className={`flex items-center px-2 py-0.5 rounded-t-md cursor-pointer transition-all duration-150 border-t border-l border-r select-none outline-none focus-visible:ring-1 focus-visible:ring-white/50 ${
+                className={`flex items-center px-2 py-0.5 cursor-pointer transition-colors duration-150 border-t border-l border-r select-none outline-none focus-visible:ring-1 focus-visible:ring-white/50 ${
                   isActive
                     ? darkMode
-                      ? 'bg-gray-900 text-white border-gray-600 font-semibold shadow-md'
-                      : 'bg-[#E85C0D] text-white border-[#c94d09] font-semibold shadow-md'
+                      ? 'bg-gray-900 text-white border-gray-600 font-semibold'
+                      : 'bg-[#E85C0D] text-white border-[#c94d09] font-semibold'
                     : darkMode
-                      ? 'bg-gray-700 text-gray-300 border-gray-700 font-medium hover:bg-gray-600 hover:text-white'
-                      : 'bg-[#2a5a47] text-gray-200 border-[#2a5a47] font-medium hover:bg-[#337a57] hover:text-white'
+                      ? 'bg-gray-700 text-gray-300 border-gray-700 font-normal hover:bg-gray-600 hover:text-white'
+                      : 'bg-[#2a5a47] text-gray-200 border-[#2a5a47] font-normal hover:bg-[#337a57] hover:text-white'
                 }`}
               >
                 {tab.route === '/dashboard' && (
@@ -455,7 +455,7 @@ const TabManager = ({ darkMode }) => {
                       const dest = sortedTabs[idx - 1] || sortedTabs[idx + 1];
                       if (dest?.route) preloadRoute(dest.route);
                     }}
-                    className={`ml-1 p-0.5 rounded-full flex-shrink-0 transition-colors duration-150 ${
+                    className={`ml-1 p-0.5 flex-shrink-0 transition-colors duration-150 ${
                       isActive
                         ? 'text-white hover:bg-red-600'
                         : 'text-gray-300 hover:bg-red-500 hover:text-white'
@@ -490,7 +490,7 @@ const TabManager = ({ darkMode }) => {
       )}
 
       {isNavigating && (
-        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-400 animate-pulse pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-400 pointer-events-none" />
       )}
     </div>
   );

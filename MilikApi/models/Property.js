@@ -486,6 +486,15 @@ PropertySchema.virtual("fullAddress").get(function () {
   return parts.join(", ");
 });
 
+// The printed address (lease, documents) is stored, so every save keeps it in step with the address parts
+PropertySchema.pre("validate", function syncAddress(next) {
+  this.address = [this.roadStreet, this.estateArea, this.townCityState, this.zoneRegion, this.country]
+    .map((part) => String(part || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  next();
+});
+
 PropertySchema.index({ business: 1, propertyCode: 1 }, { unique: true });
 PropertySchema.index({ business: 1, lrNumber: 1 });
 PropertySchema.index({ business: 1, propertyName: 1 });

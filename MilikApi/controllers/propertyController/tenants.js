@@ -194,26 +194,21 @@ const syncTenantAssignedUnitOccupancy = async ({
 
 const normalizeString = (value) => (typeof value === "string" ? value.trim() : value);
 
-// Normalise Kenyan phone numbers to the local 0XXXXXXXXX (10-digit) format for storage.
-// Handles: +254712345678 / 254712345678 / 0712345678 / 712345678 (9 digits missing leading 0)
-const normalizeKenyanPhoneForStorage = (value) => {
-  // Normalize each segment so both display correctly (e.g. "79060740/0724383809" → "079060740/0724383809")
-  // SMS sending uses only the first segment — see normalizePhoneNumber in communicationService.js
-  const segments = String(value || "").trim().split(/[\/,]/).map((seg) => {
-    const raw = seg.trim().replace(/\D/g, "");
-    if (!raw) return null;
-    if (raw.startsWith("254") && raw.length === 12) return `0${raw.slice(3)}`; // 254712345678 → 0712345678
-    if (raw.startsWith("0") && raw.length === 10) return raw;                  // already correct
-    if (raw.length === 9) return `0${raw}`;                                    // 712345678 → 0712345678
-    return raw;                                                                 // unknown format — store as-is
-  }).filter(Boolean);
-  return segments.length ? segments.join("/") : null;
-};
 
 const isPlaceholder = (value) => {
   if (value === null || value === undefined) return true;
   const s = String(value).trim().toLowerCase();
   return s === "" || s === "-" || s === "--" || s === "n/a" || s === "na" || s === "none";
+};
+const TENANT_PHONE_ERROR = "Enter one valid mobile number, e.g. 0712 345 678, or - for none";
+
+const resolveTenantPhone = (raw) => {
+  if (isPlaceholder(raw)) return { value: null };
+  const digits = String(raw).replace(/D/g, "");
+  let local = digits;
+  if (digits.length === 12 && digits.startsWith("254")) local = `0${digits.slice(3)}`;
+  else if (digits.length === 9) local = `0${digits}`;
+  return /^0[17]d{8}$/.test(local) ? { value: local } : { error: TENANT_PHONE_ERROR };
 };
 
 const normalizeLower = (value) =>
@@ -755,7 +750,9 @@ export const createTenant = async (req, res, next) => {
       : (unit?.property?.depositHeldBy || "propertyManager");
 
     const normalizedName = normalizeString(req.body.name);
-    const normalizedPhone = isPlaceholder(req.body.phone) ? null : normalizeKenyanPhoneForStorage(req.body.phone);
+    const phoneResult = resolveTenantPhone(req.body.phone);
+    if (phoneResult.error) return next(createError(400, phoneResult.error));
+    const normalizedPhone = phoneResult.value;
     const normalizedIdNumber = isPlaceholder(req.body.idNumber) ? null : normalizeString(req.body.idNumber);
     const normalizedPaymentMethod = normalizePaymentMethod(req.body.paymentMethod);
     const normalizedTenantCode = normalizeString(req.body.tenantCode);
@@ -1221,7 +1218,9 @@ export const updateTenant = async (req, res, next) => {
     }
 
     if (normalizedPayload.phone !== undefined) {
-      normalizedPayload.phone = isPlaceholder(normalizedPayload.phone) ? null : normalizeKenyanPhoneForStorage(normalizedPayload.phone);
+      const phoneResult = resolveTenantPhone(normalizedPayload.phone);
+      if (phoneResult.error) return next(createError(400, phoneResult.error));
+      normalizedPayload.phone = phoneResult.value;
     }
 
     if (normalizedPayload.idNumber !== undefined) {
@@ -2366,7 +2365,12 @@ export const bulkImportTenants = async (req, res, next) => {
 
       try {
         const normalizedTenantName = normalizeString(record.tenantName);
-        const normalizedPhoneNumber = isPlaceholder(record.phoneNumber) ? null : normalizeKenyanPhoneForStorage(record.phoneNumber);
+        const phoneResult = resolveTenantPhone(record.phoneNumber);
+        if (phoneResult.error) {
+          failed.push({ tenantName: record.tenantName, error: phoneResult.error, row: rowIndex });
+          continue;
+        }
+        const normalizedPhoneNumber = phoneResult.value;
         const normalizedIdNumber = isPlaceholder(record.idNumber) ? null : normalizeString(record.idNumber);
 
         if (!normalizedTenantName) {

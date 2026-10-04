@@ -1,16 +1,20 @@
+import MilikSelect from "../../components/common/MilikSelect";
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { useEntityCache } from "../../hooks/useEntityCache";
-import { useDispatch, useSelector } from "react-redux";
+import {
+  useEntityCache } from "../../hooks/useEntityCache";
+import { useDispatch,
+  useSelector } from "react-redux";
 import {
   selectCurrentUser,
   selectCurrentCompany,
   selectAllProperties,
   selectAllUnits,
-} from "../../redux/selectors";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+  } from "../../redux/selectors";
+import { useLocation,
+  useNavigate,
+  useParams } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import Spinner from "../../components/common/Spinner";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import {
   FaSave,
   FaTimes,
@@ -19,13 +23,9 @@ import {
   FaPlus,
   FaTrash,
   FaUser,
-  FaBuilding,
-  FaMoneyBillWave,
   FaEnvelope,
-  FaExclamationTriangle,
   FaPhone,
   FaIdCard,
-  FaBolt,
   FaArrowLeft,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -40,6 +40,14 @@ import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import AppSelect from "../../components/common/AppSelect";
 import { useTerms } from "../../hooks/useTerm";
+import {
+  buildRecurringInvoiceDescription,
+  buildUtilityChargeDescription,
+  getDueDateForPeriod,
+} from "./invoiceBookingUtils";
+
+// Rental bookings default to the 5th; Add Tenant opening invoices use the same due day.
+const DEFAULT_BOOKING_DUE_DAY = 5;
 
 // Milik theme constants
 const MILIK_GREEN_BG = "bg-[#0B3B2E]";
@@ -56,20 +64,6 @@ const slugifyTakeOnValue = (value) =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "") || "other";
 
-const buildTakeOnMetadata = (config = {}) => ({
-  isTakeOnBalance: true,
-  takeOn: true,
-  takeOnSource: "tenant_take_on",
-  takeOnType: config.type || "debit",
-  takeOnBillItemKey: config.billItemKey || "other",
-  takeOnBillItemLabel: config.billItemLabel || "Take-On Balance",
-  utilityType: config.utilityType || undefined,
-  meterUtilityType: config.utilityType || undefined,
-  invoicePriorityCategory: config.invoicePriorityCategory || undefined,
-  takeOnUtilityBreakdown: Array.isArray(config.utilityBreakdown) ? config.utilityBreakdown : undefined,
-  depositHeldBy: config.depositHeldBy || undefined,
-  ledgerMode: config.ledgerMode || undefined,
-});
 
 const normalizeId = (value) => {
   if (!value) return "";
@@ -236,117 +230,9 @@ const buildUtilitiesPayload = ({ inheritedUtilities = [], customUtilities = [] }
     })),
   ]);
 
-/**
- * Custom dropdown with Milik styling
- */
-function MilikSelect({
-  label,
-  required,
-  placeholder = "Select...",
-  items = [],
-  value,
-  onChange,
-  getLabel,
-  getValue,
-  disabled,
-  error,
-  className = "",
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
 
-  const selectedItem = useMemo(
-    () => items.find((it) => getValue(it) === value) || null,
-    [items, value, getValue]
-  );
-
-  useEffect(() => {
-    const onClickOutside = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
-  return (
-    <div className={`${className} relative`} ref={wrapRef}>
-      {label ? (
-        <label className="block text-sm font-bold text-slate-800 mb-1 tracking-tight">
-          {label} {required ? <span className="text-red-500">*</span> : null}
-        </label>
-      ) : null}
-
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((s) => !s)}
-        className={[
-          "w-full h-10 px-3 rounded-md bg-white text-slate-900 shadow-sm border",
-          error ? "border-red-500" : "border-slate-300",
-          "transition-all duration-200 ease-out hover:border-slate-400",
-          `focus:outline-none focus:ring-2 ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`,
-          "flex items-center justify-between gap-2",
-          disabled ? "opacity-50 cursor-not-allowed" : "",
-        ].join(" ")}
-      >
-        <span className="text-sm font-semibold truncate">
-          {selectedItem ? (
-            getLabel(selectedItem)
-          ) : (
-            <span className="text-slate-400">{placeholder}</span>
-          )}
-        </span>
-        <FaChevronDown className="text-slate-600" />
-      </button>
-
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-
-      {open && !disabled && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-          <div className="max-h-56 overflow-auto">
-            {items.length === 0 ? (
-              <div className="px-3 py-3 text-sm text-slate-500">No items available</div>
-            ) : (
-              items.map((it) => {
-                const v = getValue(it);
-                const isSelected = v === value;
-                return (
-                  <button
-                    type="button"
-                    key={v}
-                    onClick={() => {
-                      onChange?.(v, it);
-                      setOpen(false);
-                    }}
-                    className={[
-                      "w-full text-left px-3 py-2 text-sm font-semibold transition-colors",
-                      isSelected
-                        ? `${MILIK_ORANGE_BG} text-white`
-                        : "text-slate-800 hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    {getLabel(it)}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
+const inputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
 const DUPLICATE_CHECK_FIELDS = new Set(["tenantCode", "name", "idNumber", "emergencyContactName"]);
 
 const AddTenant = () => {
@@ -392,7 +278,6 @@ const AddTenant = () => {
     lease: termLease,
     invoice: termInvoice,
     invoices: termInvoices,
-    utility: termUtility,
     utilities: termUtilities,
     receipts: termReceipts,
   } = useTerms("tenant", "tenants", "property", "unit", "units", "landlord", "rent", "lease", "invoice", "invoices", "utility", "utilities", "receipts");
@@ -1331,20 +1216,27 @@ useEffect(() => {
         pendingInvoiceContext.tenant?.createdBy ||
         null;
 
+      // Ordinary invoices, built the same way as the rental booking path: dated to the start of
+      // the move-in month (the billing period they are for) and narrated with the same builders.
+      const moveInDate = new Date(pendingInvoiceContext.invoiceDate);
+      const periodMonth = moveInDate.getMonth();
+      const periodYear = moveInDate.getFullYear();
+      const periodStart = new Date(periodYear, periodMonth, 1);
+      const unitName = selectedUnitRecord?.unitNumber || selectedUnitRecord?.name || "";
+
       const baseRequest = {
         business: pendingInvoiceContext.business,
         property: pendingInvoiceContext.property,
         landlord: pendingInvoiceContext.landlord,
         tenant: pendingInvoiceContext.tenant._id,
         unit: pendingInvoiceContext.unit,
-        invoiceDate: pendingInvoiceContext.invoiceDate,
-        dueDate: pendingInvoiceContext.dueDate,
+        invoiceDate: periodStart,
+        dueDate: getDueDateForPeriod(periodMonth, periodYear, DEFAULT_BOOKING_DUE_DAY),
         createdBy: actorId,
       };
 
       const normalizedDepositHolder = normalizeDepositHolder(formData.depositHeldBy) || "manager";
       const depositLedgerMode = normalizedDepositHolder === "landlord" ? "off_ledger" : undefined;
-      const tenantName = pendingInvoiceContext.tenant.name || formData.name;
 
       const invoiceItems = [];
 
@@ -1355,8 +1247,8 @@ useEffect(() => {
             ...baseRequest,
             category: "RENT_CHARGE",
             amount: Number(rentItem.amount),
-            description: `Opening rent balance for ${tenantName}`,
-            metadata: buildTakeOnMetadata({ type: "debit", billItemKey: "rent", billItemLabel: "Rent", invoicePriorityCategory: "rent" }),
+            description: buildRecurringInvoiceDescription({ month: periodMonth, year: periodYear, label: `Rent - ${unitName}` }),
+            metadata: { billItemKey: "rent", billItemLabel: "Rent", invoicePriorityCategory: "rent" },
           });
         }
       }
@@ -1369,16 +1261,15 @@ useEffect(() => {
             ...baseRequest,
             category: "UTILITY_CHARGE",
             amount: Number(row.amount),
-            description: `Opening ${label} balance for ${tenantName}`,
-            metadata: buildTakeOnMetadata({
-              type: "debit",
+            description: buildUtilityChargeDescription({ utilityLabel: label, month: periodMonth, year: periodYear }),
+            metadata: {
               billItemKey: `utility:${slugifyTakeOnValue(label)}`,
               billItemLabel: label,
               utilityType: label,
               meterUtilityType: label,
               statementUtilityType: label,
               invoicePriorityCategory: "utility",
-            }),
+            },
           });
         });
       }
@@ -1392,15 +1283,14 @@ useEffect(() => {
             amount: Number(depositItem.amount),
             depositHeldBy: normalizedDepositHolder,
             ledgerMode: depositLedgerMode,
-            description: `Opening deposit balance (${formData.depositHeldBy}) for ${tenantName}`,
-            metadata: buildTakeOnMetadata({
-              type: "debit",
+            description: `Security deposit - ${unitName}`.trim(),
+            metadata: {
               billItemKey: "deposit:security",
               billItemLabel: "Security Deposit",
               invoicePriorityCategory: "deposit",
               depositHeldBy: normalizedDepositHolder,
               ledgerMode: depositLedgerMode,
-            }),
+            },
           });
         }
       }
@@ -1456,44 +1346,29 @@ useEffect(() => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-        {/* Sticky dark header */}
-        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={handleCancel} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
-              <FaArrowLeft /> Back
-            </button>
-            <div className="h-4 w-px bg-[#2A5C4A]" />
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termTenants}</div>
-              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? `Edit ${termTenant}` : `New ${termTenant}`}</h1>
-            </div>
-          </div>
-        </div>
-
         {/* Scrollable content */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
           {generalError && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            <div className="mb-2 border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
               {generalError}
             </div>
           )}
 
           {isEditMode && tenantLoading ? (
-            <div className="rounded-lg border border-slate-200 bg-white px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
+            <div className="border border-slate-200 bg-white px-6 py-10 flex items-center justify-center gap-3 text-slate-700">
               <Spinner size="sm" />
               <span className="text-xs font-semibold">Loading {termTenant.toLowerCase()} details...</span>
             </div>
           ) : (
           <form id="tenant-form" onSubmit={handleSubmit}>
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 gap-2 xl:grid-cols-2 xl:items-start">
+              <div className="space-y-2">
 
               {/* ── Tenant Information ── */}
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded bg-[#0B3B2E]/10 text-[#0B3B2E]"><FaUser size={13} /></span>
+              <div className="border border-slate-200 bg-white">
+                <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">{termTenant} Information</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">Identity and contact details</p>
+                    <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{termTenant} Information</h3>
                   </div>
                   <div className="ml-auto">
                     <input
@@ -1502,11 +1377,11 @@ useEffect(() => {
                       value={formData.tenantCode}
                       onChange={handleInputChange}
                       placeholder={`${termTenant} Code (auto)`}
-                      className="h-7 w-36 rounded border border-slate-200 bg-white px-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
+                      className="h-7 w-36 border border-slate-200 bg-white px-2 text-xs font-mono text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/30"
                     />
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-4">
+                <div className="grid grid-cols-1 gap-x-3 gap-y-2 p-2.5 md:grid-cols-2 xl:grid-cols-4">
                   <div>
                     <label className={labelClass}>Full Name <span className="text-red-500">*</span></label>
                     <div className="relative">
@@ -1518,7 +1393,7 @@ useEffect(() => {
                   </div>
 
                   <div>
-                    <label className={labelClass}>Phone Number <span className="text-red-500">*</span></label>
+                    <label className={labelClass}>Phone Number</label>
                     <div className="relative">
                       <FaPhone className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
                       <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+254 712 345 678"
@@ -1534,13 +1409,11 @@ useEffect(() => {
                       <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="tenant@example.com"
                         className={`${inputClass} pl-8 ${fieldErrors.email ? "border-red-400" : ""}`} />
                     </div>
-                    {fieldErrors.email
-                      ? <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>
-                      : <p className="mt-1 text-[11px] text-slate-400">Used for email notifications &amp; {termReceipts.toLowerCase()}</p>}
+                    {fieldErrors.email && <p className="mt-1 text-xs text-red-600">{fieldErrors.email}</p>}
                   </div>
 
                   <div>
-                    <label className={labelClass}>ID / Passport Number <span className="text-red-500">*</span></label>
+                    <label className={labelClass}>ID / Passport Number</label>
                     <div className="relative">
                       <FaIdCard className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={11} />
                       <input type="text" name="idNumber" value={formData.idNumber} onChange={handleInputChange} placeholder="12345678"
@@ -1552,21 +1425,19 @@ useEffect(() => {
               </div>
 
               {/* ── Property & Unit ── */}
-              <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded bg-emerald-100 text-emerald-600"><FaBuilding size={13} /></span>
+              <div className="border border-slate-200 bg-white">
+                <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">{termProperty} &amp; {termUnit}</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">Assign a {termProperty.toLowerCase()} and {termUnit.toLowerCase()} to this {termTenant.toLowerCase()}</p>
+                    <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{termProperty} &amp; {termUnit}</h3>
                   </div>
                 </div>
-                <div className="p-4 space-y-4">
+                <div className="p-2.5 space-y-2">
 
                   {preselectedUnitBanner && !isEditMode && (
-                    <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+                    <div className="mb-2 border border-slate-200 bg-slate-50 p-2.5">
                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                         <div>
-                          <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-700">Availability Status handoff</p>
+                          <p className="text-[11px] font-black uppercase tracking-wide text-slate-800">Availability Status handoff</p>
                           <p className="mt-1 text-sm font-bold text-slate-900">
                             {preselectedUnitBanner.propertyName} • {preselectedUnitBanner.unitNumber}
                           </p>
@@ -1587,7 +1458,7 @@ useEffect(() => {
                             <button
                               type="button"
                               onClick={() => setTakeOnSelectionLocked(false)}
-                              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm transition-colors hover:bg-emerald-100"
+                              className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
                             >
                               Change Selection
                             </button>
@@ -1611,7 +1482,7 @@ useEffect(() => {
                                   }));
                                 }
                               }}
-                              className="rounded-lg border border-emerald-300 bg-white px-3 py-2 text-xs font-bold text-emerald-800 shadow-sm transition-colors hover:bg-emerald-100"
+                              className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
                             >
                               Re-lock Selected Unit
                             </button>
@@ -1620,7 +1491,7 @@ useEffect(() => {
                       </div>
                     </div>
                   )}
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
                     <MilikSelect
                       label={termProperty}
                       required
@@ -1659,7 +1530,7 @@ useEffect(() => {
                   </div>
 
                   {formData.property && (availableUnits.length > 1 || (isEditMode && (formData.additionalUnits?.length ?? 0) > 0)) && (
-                    <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="mt-2 border border-slate-200 bg-slate-50 p-2.5">
                       <label className="flex items-center gap-3 text-sm font-semibold text-slate-800">
                         <input
                           type="checkbox"
@@ -1679,9 +1550,8 @@ useEffect(() => {
                         />
                         Assign additional {termUnits.toLowerCase()} to this {termTenant.toLowerCase()}
                       </label>
-                      <p className="mt-1 text-xs text-slate-500">Keep the selected {termUnit.toLowerCase()} as the primary {termUnit.toLowerCase()}, then reveal and tick extra {termUnits.toLowerCase()} only when this {termTenant.toLowerCase()} should occupy more than one {termUnit.toLowerCase()}.</p>
                       {showAdditionalUnits && selectedAdditionalUnitRecords.length > 0 && (
-                        <p className="mt-2 text-xs font-semibold text-emerald-700">{selectedAdditionalUnitRecords.length} additional {termUnit.toLowerCase()}(s) selected.</p>
+                        <p className="mt-2 text-xs font-semibold text-slate-700">{selectedAdditionalUnitRecords.length} additional {termUnit.toLowerCase()}(s) selected.</p>
                       )}
                       {showAdditionalUnits ? (
                         <div className="mt-3 grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -1702,7 +1572,7 @@ useEffect(() => {
                             const unitId = unit._id || unit.id;
                             const checked = Array.isArray(formData.additionalUnits) && formData.additionalUnits.some((id) => normalizeId(id) === normalizeId(unitId));
                             return (
-                              <label key={unitId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+                              <label key={unitId} className="flex items-center justify-between gap-3 border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700">
                                 <span>{unit.unitNumber} - Ksh {Number(unit.rent || 0).toLocaleString()}</span>
                                 <input
                                   type="checkbox"
@@ -1731,16 +1601,68 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* ── Billing Information ── */}
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded bg-blue-100 text-blue-600"><FaMoneyBillWave size={13} /></span>
+              {/* ── Emergency Contact ── */}
+              <div className="border border-slate-200 bg-white">
+                <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                   <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Billing Information</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">{termRent}, deposit and billing settings</p>
+                    <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Emergency Contact</h3>
                   </div>
                 </div>
-                <div className="p-4 space-y-4">
+                <div className="p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className={labelClass}>Contact Name</label>
+                      <input
+                        type="text"
+                        name="emergencyContactName"
+                        value={formData.emergencyContactName}
+                        onChange={handleInputChange}
+                        placeholder="Jane Doe"
+                        className={inputClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Contact Phone</label>
+                      <input
+                        type="tel"
+                        name="emergencyContactPhone"
+                        value={formData.emergencyContactPhone}
+                        onChange={handleInputChange}
+                        placeholder="+254 700 000 000"
+                        className={inputClass}
+                      />
+                    </div>
+
+                    <div>
+                      <label className={labelClass}>Relationship</label>
+                      <AppSelect
+                        value={formData.emergencyContactRelationship}
+                        onChange={(v) => handleInputChange({ target: { name: "emergencyContactRelationship", value: v ?? "Family" } })}
+                        options={[
+                          { value: "Family", label: "Family" },
+                          { value: "Friend", label: "Friend" },
+                          { value: "Guardian", label: "Guardian" },
+                          { value: "Colleague", label: "Colleague" },
+                          { value: "Other", label: "Other" },
+                        ]}
+                        size="md"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              </div>
+              <div className="space-y-2">
+              {/* ── Billing Information ── */}
+              <div className="border border-slate-200 bg-white">
+                <div className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                  <div>
+                    <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Billing Information</h3>
+                  </div>
+                </div>
+                <div className="p-2.5 space-y-2">
                   <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <div>
                       <label className={labelClass}>
@@ -1810,11 +1732,6 @@ useEffect(() => {
                         error={fieldErrors.depositHeldBy || ""}
                         size="md"
                       />
-                      <p className="mt-1 text-xs text-slate-500">
-                        {isSelfManagingLandlordMode
-                          ? `This company is operating as the owner, so deposits default to ${termLandlord.toLowerCase()}-held for new ${termTenants.toLowerCase()}.`
-                          : `Choose whether the security deposit is held by the management company or the ${termLandlord.toLowerCase()}.`}
-                      </p>
                       {fieldErrors.depositHeldBy && (
                         <p className="mt-1 text-xs text-red-600">{fieldErrors.depositHeldBy}</p>
                       )}
@@ -1822,17 +1739,17 @@ useEffect(() => {
 
                     <div className="md:col-span-2">
                       <label className={labelClass}>{termUtilities} & Charges (Ksh)</label>
-                      <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-3 min-h-10 max-h-32 overflow-y-auto">
+                      <div className="border border-slate-200 bg-slate-50 p-2 min-h-7 max-h-32 overflow-y-auto">
                         {combinedUtilitiesPreview.length > 0 ? (
                           <div className="space-y-1">
                             {combinedUtilitiesPreview.map((util, idx) => {
                               const charge = parseFloat(util.unitCharge) || 0;
                               return (
                                 <div key={util.utility || util.utilityLabel || idx} className="text-xs flex justify-between items-center">
-                                  <span className="text-green-700 font-medium">
+                                  <span className="text-slate-700 font-medium">
                                     {util.utilityLabel}:
                                   </span>
-                                  <span className="text-green-900 font-bold">
+                                  <span className="text-slate-900 font-bold">
                                     Ksh {charge.toFixed(2)}
                                   </span>
                                 </div>
@@ -1840,14 +1757,14 @@ useEffect(() => {
                             })}
                           </div>
                         ) : (
-                          <p className="text-xs text-green-600">No {termUtilities.toLowerCase()}</p>
+                          <p className="text-xs text-slate-500">No {termUtilities.toLowerCase()}</p>
                         )}
                       </div>
                     </div>
 
                     <div>
                       <label className={labelClass}>Total Monthly Bill (Ksh)</label>
-                      <div className="bg-gradient-to-br from-[#0B3B2E]/10 to-slate-50 border border-[#0B3B2E]/30 rounded-lg p-3 min-h-10 flex items-center justify-center">
+                      <div className="border border-slate-200 bg-slate-50 p-2 min-h-7 flex items-center justify-center">
                         <div className="text-center">
                           <p className="text-2xl font-black text-[#0B3B2E]">
                             {(
@@ -1875,33 +1792,23 @@ useEffect(() => {
                         ]}
                         size="md"
                       />
-                      <p className="mt-1 text-xs text-gray-600">At Will / Fixed Term</p>
                     </div>
 </div>
 
                   {!isEditMode && (
-                    <div className={`mt-4 rounded-xl border p-4 ${isLettingProperty ? "border-blue-200 bg-blue-50/70" : "border-[#0B3B2E]/20 bg-[#0B3B2E]/5"}`}>
+                    <div className={`mt-2 border border-slate-200 bg-slate-50 p-2.5`}>
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <h4 className={`text-sm font-bold ${isLettingProperty ? "text-blue-900" : "text-[#0B3B2E]"}`}>
+                          <h4 className={`text-[11px] font-black uppercase tracking-wide text-slate-800`}>
                             {isLettingProperty ? "Letting Fee" : `${termLease} / Agreement Fee`}
                           </h4>
-                          <p className={`mt-1 text-xs ${isLettingProperty ? "text-blue-800" : "text-[#0B3B2E]/70"}`}>
-                            {isLettingProperty
-                              ? `This ${termProperty.toLowerCase()} is managed under Letting. A letting fee is automatically applied based on the ${termProperty.toLowerCase()} setting (${
-                                  selectedPropertyRecord?.lettingFeeMode === "fixed"
-                                    ? `fixed Ksh ${Number(selectedPropertyRecord?.lettingFeeValue || 0).toLocaleString()}`
-                                    : `${selectedPropertyRecord?.lettingFeeValue ?? 100}% of ${termRent.toLowerCase()}`
-                                }).`
-                              : `Create a one-time ${termTenant.toLowerCase()} onboarding charge. This is posted as manager/company income and excluded from ${termLandlord.toLowerCase()} statements.`}
-                          </p>
                           {isLettingProperty && computedLettingFee > 0 && (
-                            <p className="mt-1 text-xs font-semibold text-blue-900">
+                            <p className="mt-1 text-xs font-semibold text-slate-800">
                               Computed fee: Ksh {computedLettingFee.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </p>
                           )}
                         </div>
-                        <label className={`inline-flex items-center gap-2 text-sm font-semibold ${isLettingProperty ? "text-blue-900" : "text-[#0B3B2E]"}`}>
+                        <label className={`inline-flex items-center gap-2 text-xs font-bold text-slate-900`}>
                           <input
                             type="checkbox"
                             name="createLeaseFeeInvoice"
@@ -1942,7 +1849,7 @@ useEffect(() => {
                               className={`${inputClass} ${fieldErrors.leaseFeeAmount ? "border-red-500" : ""}`}
                             />
                             {isLettingProperty && computedLettingFee > 0 && (
-                              <p className="mt-1 text-xs text-blue-600">
+                              <p className="mt-1 text-xs text-slate-500">
                                 Auto-computed: Ksh {computedLettingFee.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — adjust if needed
                               </p>
                             )}
@@ -1990,9 +1897,9 @@ useEffect(() => {
                   )}
 
                   {proratedInfo && (
-                    <div className="mt-4 bg-[#0B3B2E]/5 border border-[#0B3B2E]/20 rounded-lg p-4">
+                    <div className="mt-2 border border-slate-200 bg-slate-50 p-2.5">
                       <div className="flex items-start gap-2">
-                        <FaCalculator className="text-[#0B3B2E] mt-1 flex-shrink-0" />
+                        <FaCalculator className="mt-1 flex-shrink-0 text-slate-600" />
                         <div className="flex-1">
                           <h4 className="font-bold text-[#0B3B2E] text-sm mb-2">Prorated {termRent} Calculation (First Month)</h4>
                           <div className="text-xs text-[#0B3B2E]/70 space-y-1">
@@ -2000,8 +1907,8 @@ useEffect(() => {
                             <p>• Remaining days (including start date): <span className="font-bold">{proratedInfo.remainingDays}</span></p>
                             <p>• Daily rate: <span className="font-bold">Ksh {proratedInfo.dailyRate.toFixed(2)}</span></p>
                           </div>
-                          <div className="mt-3 pt-2 border-t border-[#0B3B2E]/20">
-                            <label className="block text-xs font-bold text-[#0B3B2E] mb-1.5">First month bill (Ksh) — editable</label>
+                          <div className="mt-2 pt-2 border-t border-slate-200">
+                            <label className="block text-xs font-bold text-slate-800 mb-1">First month bill (Ksh) — editable</label>
                             <div className="flex items-center gap-2">
                               <input
                                 type="number"
@@ -2009,7 +1916,7 @@ useEffect(() => {
                                 onChange={(e) => setProratedOverride(e.target.value)}
                                 step="0.01"
                                 min="0"
-                                className="h-9 w-48 rounded border border-[#0B3B2E]/30 bg-white px-3 text-sm font-bold text-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/40"
+                                className="h-9 w-48 border border-[#0B3B2E]/30 bg-white px-3 text-sm font-bold text-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/40"
                               />
                               {proratedOverride !== "" && (
                                 <button
@@ -2035,27 +1942,25 @@ useEffect(() => {
               </div>
 
               {/* ── Additional Utilities ── */}
-              <div ref={additionalUtilitiesSectionRef} className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
+              <div ref={additionalUtilitiesSectionRef} className="border border-slate-200 bg-white">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                   <div className="flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 items-center justify-center rounded bg-indigo-100 text-indigo-600"><FaBolt size={13} /></span>
                     <div>
-                      <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Additional {termUtilities}</h3>
-                      <p className="text-[10px] text-slate-500 leading-tight">Add {termUtilities.toLowerCase()} beyond the {termUnit.toLowerCase()}'s defaults</p>
+                      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Additional {termUtilities}</h3>
                     </div>
                   </div>
                   <button
                     type="button"
                     onClick={addAdditionalUtility}
-                    className="h-7 px-3 text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white rounded flex items-center gap-1.5 transition-all"
+                    className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline"
                   >
                     <FaPlus size={10} /> Add Utility
                   </button>
                 </div>
-                <div className="p-4 space-y-3">
+                <div className="p-2.5 space-y-2">
 
                   {additionalUtilities.length === 0 ? (
-                    <div className="text-center py-8 text-indigo-600">
+                    <div className="text-center py-6 text-xs text-slate-500">
                       <p className="text-sm font-medium">No additional utilities added yet</p>
                     </div>
                   ) : (
@@ -2063,7 +1968,7 @@ useEffect(() => {
                       {additionalUtilities.map((util, idx) => (
                         <div
                           key={util.utility || idx}
-                          className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end p-4 bg-white border border-indigo-200 rounded-lg hover:shadow-md transition-shadow"
+                          className="grid grid-cols-1 md:grid-cols-5 gap-x-3 gap-y-2 items-end p-2.5 bg-white border border-slate-200"
                         >
                           <div>
                             <MilikSelect
@@ -2114,7 +2019,7 @@ useEffect(() => {
                             <button
                               type="button"
                               onClick={() => removeAdditionalUtility(idx)}
-                              className="w-full h-10 px-3 text-sm font-semibold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg flex items-center justify-center gap-2 transition-colors"
+                              className="h-7 px-2 text-xs font-bold text-red-600 hover:underline flex items-center justify-center gap-1"
                             >
                               <FaTrash /> Remove
                             </button>
@@ -2129,72 +2034,19 @@ useEffect(() => {
                 </div>
               </div>
 
-              {/* ── Emergency Contact ── */}
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="flex h-7 w-7 items-center justify-center rounded bg-red-100 text-red-500"><FaExclamationTriangle size={13} /></span>
-                  <div>
-                    <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700 leading-tight">Emergency Contact</h3>
-                    <p className="text-[10px] text-slate-500 leading-tight">Optional backup contact for this {termTenant.toLowerCase()}</p>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className={labelClass}>Contact Name</label>
-                      <input
-                        type="text"
-                        name="emergencyContactName"
-                        value={formData.emergencyContactName}
-                        onChange={handleInputChange}
-                        placeholder="Jane Doe"
-                        className={inputClass}
-                      />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Contact Phone</label>
-                      <input
-                        type="tel"
-                        name="emergencyContactPhone"
-                        value={formData.emergencyContactPhone}
-                        onChange={handleInputChange}
-                        placeholder="+254 700 000 000"
-                        className={inputClass}
-                      />
-                    </div>
-
-                    <div>
-                      <label className={labelClass}>Relationship</label>
-                      <AppSelect
-                        value={formData.emergencyContactRelationship}
-                        onChange={(v) => handleInputChange({ target: { name: "emergencyContactRelationship", value: v ?? "Family" } })}
-                        options={[
-                          { value: "Family", label: "Family" },
-                          { value: "Friend", label: "Friend" },
-                          { value: "Guardian", label: "Guardian" },
-                          { value: "Colleague", label: "Colleague" },
-                          { value: "Other", label: "Other" },
-                        ]}
-                        size="md"
-                      />
-                    </div>
-                  </div>
-                </div>
               </div>
-
             </div>
           </form>
           )}
         </div>
 
         {/* Sticky footer */}
-        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={handleCancel}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               Cancel
             </button>
@@ -2203,7 +2055,7 @@ useEffect(() => {
                 type="button"
                 onClick={handleReset}
                 disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 Reset
               </button>
@@ -2212,7 +2064,7 @@ useEffect(() => {
               type="submit"
               form="tenant-form"
               disabled={loading || tenantLoading}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-black text-white transition ${loading || tenantLoading ? "bg-slate-400 cursor-not-allowed" : "bg-[#0B3B2E] hover:bg-[#0A3127]"}`}
+              className={`flex h-7 items-center gap-1.5 px-3 text-xs font-black text-white transition ${loading || tenantLoading ? "bg-slate-400 cursor-not-allowed" : "bg-[#0B3B2E] hover:bg-[#0A3127]"}`}
             >
               {loading ? <Spinner size="sm" /> : <FaSave />}
               {loading ? (isEditMode ? "Updating…" : "Saving…") : (isEditMode ? `Update ${termTenant}` : `Save ${termTenant}`)}
@@ -2223,7 +2075,7 @@ useEffect(() => {
 
       {showInvoicePrompt && pendingInvoiceContext ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+          <div className="w-full max-w-sm border border-slate-300 bg-white shadow-xl overflow-hidden">
             {/* Header */}
             <div className={`flex items-start justify-between gap-3 ${MILIK_GREEN_BG} px-4 py-3`}>
               <div>
@@ -2247,11 +2099,11 @@ useEffect(() => {
             {/* Lease fee notice */}
             {pendingInvoiceContext?.leaseFeeAmount > 0 && (
               <div className="px-4 pt-3">
-                <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2">
-                  <p className="text-[11px] font-semibold text-blue-900">
+                <div className="border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                  <p className="text-[11px] font-semibold text-slate-800">
                     {pendingInvoiceContext?.isLettingFee ? "Letting fee" : `${termLease} / Agreement fee`} already posted
                   </p>
-                  <p className="text-[10px] text-blue-700 mt-0.5">
+                  <p className="text-[10px] text-slate-600 mt-0.5">
                     KES {Number(pendingInvoiceContext.leaseFeeAmount).toLocaleString()} was invoiced automatically when the tenant was saved.
                   </p>
                 </div>
@@ -2308,7 +2160,7 @@ useEffect(() => {
                 type="button"
                 onClick={handleSkipInitialInvoicing}
                 disabled={isCreatingInitialInvoices}
-                className="h-8 px-3 rounded-md border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-60 transition"
+                className="h-8 px-3 border border-slate-300 bg-white text-slate-700 text-xs font-semibold hover:bg-slate-100 disabled:opacity-60 transition"
               >
                 Skip for now
               </button>
@@ -2316,7 +2168,7 @@ useEffect(() => {
                 type="button"
                 onClick={handleConfirmInitialInvoicing}
                 disabled={isCreatingInitialInvoices}
-                className={`h-8 px-4 rounded-md text-white text-xs font-black flex items-center gap-1.5 transition-colors ${
+                className={`h-8 px-4 text-white text-xs font-black flex items-center gap-1.5 transition-colors ${
                   isCreatingInitialInvoices ? "bg-slate-400 cursor-not-allowed" : `${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER}`
                 }`}
               >

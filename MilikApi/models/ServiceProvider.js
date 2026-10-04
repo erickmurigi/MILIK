@@ -19,7 +19,9 @@ const ServiceProviderSchema = new mongoose.Schema(
     accountNumber: { type: String, trim: true, default: "" },
     paybillNumber: { type: String, trim: true, default: "" },
     bankName: { type: String, trim: true, default: "" },
+    branchName: { type: String, trim: true, default: "" },
     accountName: { type: String, trim: true, default: "" },
+    mobileNumber: { type: String, trim: true, default: "" }, // M-Pesa number, 0XXXXXXXXX
     subjectToWht: { type: Boolean, default: false },
     whtRate:      { type: Number, min: 0, max: WHT_MAX_RATE, default: 0 },
     whtCategory:  { type: String, trim: true, default: "" },

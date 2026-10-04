@@ -1,6 +1,7 @@
 // redux/tenantSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit"
 import { adminRequests } from "../utils/requestMethods";
+import { fetchAllPages } from "../utils/fetchAllPages";
 
 const normalizeTenantCollection = (payload) => {
     if (Array.isArray(payload)) return payload;
@@ -42,9 +43,23 @@ export const getTenants = createAsyncThunk(
   'tenant/getAll',
   async (params, { rejectWithValue }) => {
     try {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await adminRequests.get(`/tenants?${queryString}`);
-      return response.data;
+      // A call without an explicit page loads the whole list. The server returns one page of
+      // 100 by default, so pickers (batch booking, agreements, take-on, notes) were working from
+      // a partial list.
+      if (params?.page !== undefined) {
+        const queryString = new URLSearchParams(params).toString();
+        const response = await adminRequests.get(`/tenants?${queryString}`);
+        return response.data;
+      }
+      const bodies = await fetchAllPages(
+        (page, limit) =>
+          adminRequests
+            .get(`/tenants?${new URLSearchParams({ ...params, page, limit })}`)
+            .then((res) => res.data),
+        500
+      );
+      const data = bodies.flatMap((body) => normalizeTenantCollection(body));
+      return { data, total: data.length, page: 1, pages: 1, limit: data.length };
     } catch (error) {
       return rejectWithValue(error.response?.data || { message: error.message });
     }

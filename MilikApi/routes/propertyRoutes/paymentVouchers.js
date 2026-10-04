@@ -6,6 +6,7 @@ import {
   updatePaymentVoucher,
   updatePaymentVoucherStatus,
   deletePaymentVoucher,
+  getPayeeBankPreview,
 } from "../../controllers/propertyController/paymentVoucher.js";
 import { downloadPaymentVoucherPdf } from "../../controllers/propertyController/paymentVoucherPdf.js";
 import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js";
@@ -31,6 +32,8 @@ const canChangeStatus = (req, res, next) => {
 
 router.post("/", verifyUser, canCreate, createPaymentVoucher);
 router.get("/", verifyUser, canView, getPaymentVouchers);
+// Payee bank for a chosen provider or property (landlord). Read-only; same rules as saving a voucher.
+router.get("/payee-bank", verifyUser, canView, getPayeeBankPreview);
 router.get("/:id/pdf", verifyUser, canView, downloadPaymentVoucherPdf);
 router.get("/:id", verifyUser, canView, getPaymentVoucher);
 router.put("/:id", verifyUser, canUpdate, updatePaymentVoucher);

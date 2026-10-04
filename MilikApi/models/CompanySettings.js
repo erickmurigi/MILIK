@@ -77,6 +77,10 @@ const expenseItemSchema = new mongoose.Schema(
       default: "other",
     },
     defaultAmount: { type: Number, default: 0 },
+    // Expense ledger account a voucher line posts to when it picks this item
+    expenseAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+    // Payable a voucher line credits when it uses this item; falls back to the company's accounts payable default
+    payableAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
     isActive: { type: Boolean, default: true },
     createdAt: { type: Date, default: Date.now },
   },
@@ -255,6 +259,12 @@ const accountingDefaultsSchema = new mongoose.Schema(
       default: null,
     },
     leaseAgreementFeeIncomeAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
+      default: null,
+    },
+    // Fallback payable for supplier vouchers whose lines have no expense item payable
+    accountsPayableAccount: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ChartOfAccount",
       default: null,

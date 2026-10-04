@@ -1,9 +1,25 @@
 import mongoose from "mongoose";
 import { voucherReferenceKey } from "../utils/voucherReference.js";
 
+// One charge on a voucher. A voucher without lines is a single charge carried on the header fields.
+const VoucherLineSchema = new mongoose.Schema(
+  {
+    description: { type: String, trim: true, maxlength: 200, default: "" },
+    property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", default: null },
+    expenseItem: { type: mongoose.Schema.Types.ObjectId, default: null },
+    expenseAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+    payableAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+    amount: { type: Number, required: true, min: 0 },
+    whtRate: { type: Number, min: 0, max: 100, default: 0 },
+    whtAmount: { type: Number, min: 0, default: 0 },
+  },
+  { _id: true }
+);
+
 const PaymentVoucherSchema = new mongoose.Schema(
   {
     voucherNo: { type: String, required: true },
+    lines: { type: [VoucherLineSchema], default: [] },
     category: {
       type: String,
       enum: [
@@ -33,6 +49,20 @@ const PaymentVoucherSchema = new mongoose.Schema(
     // a full Service Provider record. Ignored (left blank) when serviceProvider is set —
     // the provider's own name is the source of truth in that case.
     payeeName: { type: String, trim: true, default: "" },
+    paymentMethod: {
+      type: String,
+      enum: ["bank_transfer", "mobile_money", "cash", "cheque", "other"],
+      default: "bank_transfer",
+    },
+    // Where this payment is sent. Prefilled from the linked landlord or service provider, and
+    // editable for this one voucher. Optional: the system records payments, it does not block them.
+    payeeBank: {
+      bankName: { type: String, trim: true, default: "" },
+      branchName: { type: String, trim: true, default: "" },
+      accountName: { type: String, trim: true, default: "" },
+      accountNumber: { type: String, trim: true, default: "" },
+      mobileNumber: { type: String, trim: true, default: "" }, // M-Pesa, 0XXXXXXXXX
+    },
     dueDate: { type: Date, required: true },
     paidDate: { type: Date },
     reference: { type: String, trim: true, maxlength: 100 },

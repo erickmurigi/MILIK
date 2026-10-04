@@ -63,6 +63,7 @@ import {
 } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { fmtDate } from "../../utils/dates";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Spinner from "../../components/common/Spinner";
@@ -715,7 +716,7 @@ const Tenants = ({ listingMode = "active" }) => {
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const actionMenuRef = useRef(null);
+  const actionMenuBtnRef = useRef(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [showCommunicationModal, setShowCommunicationModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
@@ -888,14 +889,6 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     };
   }, []);
 
-  useEffect(() => {
-    const onDocClick = (e) => {
-      if (!actionMenuRef.current) return;
-      if (!actionMenuRef.current.contains(e.target)) setActionMenuOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
 
   const refreshTenants = useCallback(() => {
     if (!currentCompany?._id) return;
@@ -1048,10 +1041,10 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         unitNumber: getTenantUnitLabel(tenant),
         propertyName: resolveTenantPropertyName(tenant),
         startDate: resolvedStartDate
-          ? new Date(resolvedStartDate).toLocaleDateString()
+          ? fmtDate(resolvedStartDate)
           : "-",
         endDate: resolvedEndDate
-          ? new Date(resolvedEndDate).toLocaleDateString()
+          ? fmtDate(resolvedEndDate)
           : "-",
         rent: tenant.rent
           ? `Ksh ${Number(tenant.rent).toLocaleString()}`
@@ -1063,8 +1056,9 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         balance,
         hasBalance,
         status: tenantOperationalStatus,
-        terminationDate: tenant.terminationDate ? new Date(tenant.terminationDate).toLocaleDateString() : "-",
-        moveOutDate: tenant.moveOutDate ? new Date(tenant.moveOutDate).toLocaleDateString() : "-",
+        statusLabel: tenantOperationalStatus.charAt(0).toUpperCase() + tenantOperationalStatus.slice(1),
+        terminationDate: tenant.terminationDate ? fmtDate(tenant.terminationDate) : "-",
+        moveOutDate: tenant.moveOutDate ? fmtDate(tenant.moveOutDate) : "-",
         terminationReason: tenant.terminationReason || "",
         depositHeld: Number(tenant.depositReceipted ?? 0),
         depositHeldBy: tenant.depositHeldBy || tenant.unit?.property?.depositHeldBy || "Management Company",
@@ -2121,232 +2115,179 @@ const confirmTransferUnit = useCallback(async () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex flex-col h-full min-h-0 p-0 bg-gray-50 overflow-hidden">
-        {/* Toolbar — single scrollable row */}
-        <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-          <div className="flex items-center gap-0">
-            {/* Filters section — scrolls horizontally; no flex-1 so action buttons sit flush */}
-            <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1 min-w-0">
-              <AppSelect
-                value={draftFilters.property !== "any" ? draftFilters.property : ""}
-                onChange={(v) => setDraftFilters({ ...draftFilters, property: v ?? "any" })}
-                options={uniquePropertyOptions}
-                placeholder="All Properties"
-                searchable
-                clearable
-                compact
-              />
+        <ListToolbar>
+          <AppSelect
+            value={draftFilters.property !== "any" ? draftFilters.property : ""}
+            onChange={(v) => setDraftFilters({ ...draftFilters, property: v ?? "any" })}
+            options={uniquePropertyOptions}
+            placeholder="All Properties"
+            searchable
+            clearable
+            compact
+          />
+          <AppSelect
+            value={draftFilters.status !== "any" ? draftFilters.status : ""}
+            onChange={(v) => setDraftFilters({ ...draftFilters, status: v ?? "any" })}
+            options={statusSelectOptions}
+            placeholder="All Status"
+            clearable
+            compact
+          />
+          <AppSelect
+            value={draftFilters.balanceScope !== "any" ? draftFilters.balanceScope : ""}
+            onChange={(v) => setDraftFilters({ ...draftFilters, balanceScope: v ?? "any" })}
+            options={[{ value: "with_balance", label: "With Balance" }]}
+            placeholder="All Balances"
+            clearable
+            compact
+          />
 
-              <AppSelect
-                value={draftFilters.status !== "any" ? draftFilters.status : ""}
-                onChange={(v) => setDraftFilters({ ...draftFilters, status: v ?? "any" })}
-                options={statusSelectOptions}
-                placeholder="All Status"
-                clearable
-                compact
-              />
+          <ListToolbar.Divider />
 
-              <AppSelect
-                value={draftFilters.balanceScope !== "any" ? draftFilters.balanceScope : ""}
-                onChange={(v) => setDraftFilters({ ...draftFilters, balanceScope: v ?? "any" })}
-                options={[{ value: "with_balance", label: "With Balance" }]}
-                placeholder="All Balances"
-                clearable
-                compact
-              />
+          <ListToolbar.Input width="w-24" type="text" placeholder="Name" value={draftFilters.tenantName}
+            onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })} />
+          <ListToolbar.Input width="w-24" type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
+            onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })} />
+          <ListToolbar.Input width="w-28" type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
+            onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })} />
 
-              <ListToolbar.Divider />
+          <ListToolbar.Divider />
 
-              <ListToolbar.Input width="w-24" type="text" placeholder="Name" value={draftFilters.tenantName}
-                onChange={(e) => setDraftFilters({ ...draftFilters, tenantName: normalizeUppercaseInput(e.target.value) })} />
-              <ListToolbar.Input width="w-24" type="text" placeholder="Code (TT####)" value={draftFilters.tenantCode}
-                onChange={(e) => setDraftFilters({ ...draftFilters, tenantCode: normalizeUppercaseInput(e.target.value) })} />
-              <ListToolbar.Input width="w-28" type="text" placeholder={isTerminatedView ? "Search terminated…" : "Search tenants…"} value={draftFilters.search}
-                onChange={(e) => setDraftFilters({ ...draftFilters, search: normalizeUppercaseInput(e.target.value) })} />
+          <ListToolbar.Button icon={FaSearch} onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }}>Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={handleResetFilters}>Reset</ListToolbar.Button>
+          {canUpdateTenant && (
+            <ListToolbar.Button icon={FaEdit} variant="outline" onClick={handleEditTenant} disabled={selectedTenants.length !== 1}>Edit</ListToolbar.Button>
+          )}
+          {selectedTenants.length > 0 && (
+            <span className="shrink-0 text-[10px] font-semibold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
+          )}
 
-              <ListToolbar.Divider />
+          <ListToolbar.Divider />
 
-              <ListToolbar.Button icon={FaSearch} onClick={() => { setAppliedFilters(draftFilters); setCurrentPage(1); }}>
-                Search
-              </ListToolbar.Button>
-              <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={handleResetFilters}>
-                Reset
-              </ListToolbar.Button>
-              {canUpdateTenant && (
-                <ListToolbar.Button
-                  icon={FaEdit}
-                  className="!bg-blue-500 hover:!bg-blue-600"
-                  onClick={handleEditTenant}
-                  disabled={selectedTenants.length !== 1}
-                >Edit</ListToolbar.Button>
-              )}
-              {selectedTenants.length > 0 && (
-                <span className="shrink-0 text-[9px] font-bold text-slate-500 tabular-nums">{selectedTenants.length} selected</span>
-              )}
+          <ListToolbar.Button ref={actionMenuBtnRef} icon={FaEllipsisV} onClick={() => setActionMenuOpen((open) => !open)}>Actions</ListToolbar.Button>
+          <ListToolbar.Menu open={actionMenuOpen} onClose={() => setActionMenuOpen(false)} anchorRef={actionMenuBtnRef} width="w-64">
+            <div className="border-b border-gray-100 bg-slate-50 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                {selectedTenants.length === 0
+                  ? `No ${termTenant.toLowerCase()} selected`
+                  : `${selectedTenants.length} ${selectedTenants.length !== 1 ? termTenants.toLowerCase() : termTenant.toLowerCase()} selected`}
+              </p>
             </div>
 
-            {/* Action buttons — NOT inside overflow container so dropdowns are never clipped */}
-            <div className="flex items-center gap-0.5 shrink-0 px-2 py-1 border-l border-slate-200">
-              <div className="relative" ref={actionMenuRef}>
-                <button onClick={() => setActionMenuOpen(!actionMenuOpen)}
-                  className="h-[20px] flex items-center gap-0.5 bg-[#0B3B2E] px-1.5 text-[9px] font-semibold text-white hover:bg-[#0A3127]">
-                  <FaEllipsisV size={7} /> Actions
-                </button>
-                {actionMenuOpen && (
-                  <div className="absolute right-0 mt-1 w-64 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg z-50">
+            <ListToolbar.MenuItem icon={FaFileInvoiceDollar} disabled={!menuHasSel} onClick={handleViewStatement}>
+              View Statement
+              {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">1st selected</span>}
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem icon={FaMoneyBillWave} disabled={!menuHasSel} onClick={handleViewReceipts}>
+              View Receipts
+              {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">1st selected</span>}
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem icon={FaHandshake} disabled={!menuHasOneSel} onClick={handleOpenAgreement}>
+              {termTenant} Agreement
+              {!menuHasSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+              {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+            </ListToolbar.MenuItem>
 
-                    {/* Selection context header */}
-                    <div className="border-b border-gray-100 bg-slate-50 px-3 py-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                        {selectedTenants.length === 0
-                          ? `No ${termTenant.toLowerCase()} selected`
-                          : `${selectedTenants.length} ${selectedTenants.length !== 1 ? termTenants.toLowerCase() : termTenant.toLowerCase()} selected`}
-                      </p>
-                    </div>
+            {canUpdateTenant && (
+              <>
+                <div className="border-t border-gray-100" />
+                <ListToolbar.MenuItem icon={FaUserEdit} disabled={!menuHasOneSel} onClick={handleEditTenant}>
+                  Edit {termTenant} Details
+                  {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                </ListToolbar.MenuItem>
+                <ListToolbar.MenuItem icon={FaExchangeAlt} disabled={!menuCanTransfer} onClick={handleTransferUnit}>
+                  Transfer Unit
+                  {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                  {menuHasOneSel && !selectedPrimaryTenant?.canTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
+                </ListToolbar.MenuItem>
+                <ListToolbar.MenuItem icon={FaUndoAlt} disabled={!menuCanRollbackTransfer} onClick={handleOpenRollbackTransfer}>
+                  Rollback Last Transfer
+                  {menuHasOneSel && !selectedPrimaryTenant?.canRollbackTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
+                </ListToolbar.MenuItem>
+                <ListToolbar.MenuItem icon={FaChartLine} disabled={!menuHasOneSel} onClick={handleReviewRent}>
+                  Review Rent
+                  {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                </ListToolbar.MenuItem>
 
-                    {/* ── VIEW ─────────────────────────────────── */}
-                    <div className="border-b border-gray-100 py-1">
-                      <button onClick={handleViewStatement} disabled={!menuHasSel}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                        <FaFileInvoiceDollar size={12} /> View Statement
-                        {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">1st selected</span>}
-                      </button>
-                      <button onClick={handleViewReceipts} disabled={!menuHasSel}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                        <FaMoneyBillWave size={12} /> View Receipts
-                        {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">1st selected</span>}
-                      </button>
-                      <button onClick={handleOpenAgreement} disabled={!menuHasOneSel}
-                        className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                        <FaHandshake size={12} /> {termTenant} Agreement
-                        {!menuHasSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                        {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                      </button>
-                    </div>
+                <div className="border-t border-gray-100" />
+                <ListToolbar.MenuItem icon={FaBolt} disabled={!menuHasSel} onClick={handleAddUtility}>
+                  Add Utility
+                  {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">{selectedTenants.length} {termTenants.toLowerCase()}</span>}
+                </ListToolbar.MenuItem>
+                <ListToolbar.MenuItem icon={FaTrash} disabled={!menuHasSel} onClick={handleRemoveUtility}>
+                  Remove Utility
+                  {menuHasMulti && <span className="ml-auto text-[10px] text-slate-400">{selectedTenants.length} {termTenants.toLowerCase()}</span>}
+                </ListToolbar.MenuItem>
 
-                    {/* ── EDIT ─────────────────────────────────── */}
-                    {canUpdateTenant && (
-                      <div className="border-b border-gray-100 py-1">
-                        <button onClick={handleEditTenant} disabled={!menuHasOneSel}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaUserEdit size={12} /> Edit {termTenant} Details
-                          {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                        </button>
-                        <button onClick={handleTransferUnit} disabled={!menuCanTransfer}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaExchangeAlt size={12} /> Transfer Unit
-                          {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                          {menuHasOneSel && !selectedPrimaryTenant?.canTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
-                        </button>
-                        <button onClick={handleOpenRollbackTransfer} disabled={!menuCanRollbackTransfer}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanRollbackTransfer ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaUndoAlt size={12} /> Rollback Last Transfer
-                          {menuHasOneSel && !selectedPrimaryTenant?.canRollbackTransfer && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
-                        </button>
-                        <button onClick={handleReviewRent} disabled={!menuHasOneSel}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasOneSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaChartLine size={12} /> Review Rent
-                          {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* ── UTILITIES ────────────────────────────── */}
-                    {canUpdateTenant && (
-                      <div className="border-b border-gray-100 py-1">
-                        <button onClick={handleAddUtility} disabled={!menuHasSel}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaBolt size={12} /> Add Utility
-                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} {termTenants.toLowerCase()}</span>}
-                        </button>
-                        <button onClick={handleRemoveUtility} disabled={!menuHasSel}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuHasSel ? "hover:bg-gray-100 text-gray-700" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaTrash size={12} /> Remove Utility
-                          {menuHasMulti && <span className="ml-auto text-[10px] text-indigo-500">{selectedTenants.length} {termTenants.toLowerCase()}</span>}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* ── LIFECYCLE ────────────────────────────── */}
-                    {canUpdateTenant && (
-                      <div className="border-b border-gray-100 py-1">
-                        {!isTerminatedView && (
-                          <button onClick={handleOpenTerminateTenant} disabled={!menuCanTerminate}
-                            className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 ${menuCanTerminate ? "hover:bg-amber-50 text-amber-700 font-medium" : "cursor-not-allowed text-gray-300"}`}>
-                            <FaUserSlash size={12} /> Terminate {termTenant}
-                            {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                            {menuHasOneSel && !selectedPrimaryTenant?.canTerminate && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
-                          </button>
-                        )}
-                        {isTerminatedView && (
-                          <button onClick={handleOpenRestoreTenant} disabled={!menuCanRestore}
-                            className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 font-semibold ${menuCanRestore ? "hover:bg-emerald-50 text-[#0B3B2E]" : "cursor-not-allowed text-gray-300"}`}>
-                            <FaRedoAlt size={12} /> Restore {termTenant}
-                            {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ── COMMUNICATIONS ───────────────────────── */}
-                    <div className="border-b border-gray-100 py-1">
-                      <button onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}
-                        className="w-full text-left px-3 py-1.5 text-xs hover:bg-orange-50 flex items-center gap-2 text-orange-700">
-                        <FaSms size={12} /> SMS {termTenants}
-                        {menuHasSel && <span className="ml-auto text-[10px] text-orange-400">{selectedTenants.length} selected</span>}
-                      </button>
-                    </div>
-
-                    {/* ── DELETE ───────────────────────────────── */}
-                    {canDeleteTenant && (
-                      <div className="py-1">
-                        <button onClick={handleDeleteSelectedTenants} disabled={!menuHasDeletable}
-                          className={`w-full text-left px-3 py-1.5 text-xs flex items-center gap-2 font-semibold ${menuHasDeletable ? "hover:bg-red-50 text-red-600" : "cursor-not-allowed text-gray-300"}`}>
-                          <FaTrash size={12} /> Delete {termTenant}(s)
-                          {menuHasDeletable
-                            ? <span className="ml-auto text-[10px]">{selectedDeletableTenants.length} eligible</span>
-                            : <span className="ml-auto text-[10px] text-slate-400">none eligible</span>}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                <div className="border-t border-gray-100" />
+                {!isTerminatedView && (
+                  <ListToolbar.MenuItem icon={FaUserSlash} disabled={!menuCanTerminate} onClick={handleOpenTerminateTenant} className="text-amber-700">
+                    Terminate {termTenant}
+                    {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                    {menuHasOneSel && !selectedPrimaryTenant?.canTerminate && <span className="ml-auto text-[10px] text-slate-400">not eligible</span>}
+                  </ListToolbar.MenuItem>
                 )}
-              </div>
+                {isTerminatedView && (
+                  <ListToolbar.MenuItem icon={FaRedoAlt} disabled={!menuCanRestore} onClick={handleOpenRestoreTenant} className="font-semibold">
+                    Restore {termTenant}
+                    {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                  </ListToolbar.MenuItem>
+                )}
+              </>
+            )}
 
-              {(isTerminatedView || canCreateTenant) && (
-                <ListToolbar.Button icon={FaPlus} variant="accent" onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}>
-                  {isTerminatedView ? "Final Billing" : "Add"}
-                </ListToolbar.Button>
-              )}
-              {canCreateTenant && !isTerminatedView && (
-                <ListToolbar.Button variant="accent" onClick={() => setShowImportModal(true)}>
-                  <FaFileExport size={7} className="rotate-180" /> Import
-                </ListToolbar.Button>
-              )}
-              <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
-              <ListToolbar.Button icon={FaFileExport} className="!bg-gray-600 hover:!bg-gray-700" onClick={handleExportToExcel}>Export</ListToolbar.Button>
-            </div>
-          </div>
-        </div>
+            <div className="border-t border-gray-100" />
+            <ListToolbar.MenuItem icon={FaSms} onClick={() => { setActionMenuOpen(false); setShowCommunicationModal(true); }}>
+              SMS {termTenants}
+              {menuHasSel && <span className="ml-auto text-[10px] text-slate-400">{selectedTenants.length} selected</span>}
+            </ListToolbar.MenuItem>
+
+            {canDeleteTenant && (
+              <>
+                <div className="border-t border-gray-100" />
+                <ListToolbar.MenuItem icon={FaTrash} disabled={!menuHasDeletable} onClick={handleDeleteSelectedTenants} className="font-semibold text-red-600">
+                  Delete {termTenant}(s)
+                  {menuHasDeletable
+                    ? <span className="ml-auto text-[10px]">{selectedDeletableTenants.length} eligible</span>
+                    : <span className="ml-auto text-[10px] text-slate-400">none eligible</span>}
+                </ListToolbar.MenuItem>
+              </>
+            )}
+          </ListToolbar.Menu>
+
+          {(isTerminatedView || canCreateTenant) && (
+            <ListToolbar.Button icon={FaPlus} variant="accent" onClick={() => isTerminatedView ? navigate("/invoices/new") : navigate("/tenant/new")}>
+              {isTerminatedView ? "Final Billing" : "Add"}
+            </ListToolbar.Button>
+          )}
+          {canCreateTenant && !isTerminatedView && (
+            <ListToolbar.Button variant="accent" onClick={() => setShowImportModal(true)}>
+              <FaFileExport size={7} className="rotate-180" /> Import
+            </ListToolbar.Button>
+          )}
+          <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
+          <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExportToExcel}>Export</ListToolbar.Button>
+        </ListToolbar>
 
         {/* ===== TENANTS TABLE ===== */}
         <MilikTable
           columns={[
-            { label: termUnit, width: "80px" },
-            { label: "A/C #", width: "82px" },
-            { label: termTenant },
+            { label: termUnit, width: "7%" },
+            { label: "A/C #", width: "8%" },
+            { label: termTenant, width: "30%" },
             ...(isTerminatedView ? [
-              { label: "Terminated", width: "108px" },
-              { label: "Move-out", width: "100px" },
-              { label: "Final Balance", align: "right", width: "110px" },
-              { label: "Deposit Held", align: "right", width: "110px" },
-              { label: "Settlement", align: "center", width: "110px" },
-              { label: "Held By", width: "130px" },
+              { label: "Terminated", width: "11%" },
+              { label: "Move-out", width: "10%" },
+              { label: "Final Balance", align: "right", width: "11%" },
+              { label: "Deposit Held", align: "right", width: "11%" },
+              { label: "Settlement", align: "center", width: "11%" },
+              { label: "Held By", width: "10%" },
             ] : [
-              { label: "Phone", width: "120px" },
-              { label: termRent, align: "right", width: "100px" },
-              { label: "Balance", align: "right", width: "112px" },
-              { label: "Lease Period", width: "188px" },
-              { label: "Status", align: "center", width: "92px" },
+              { label: "Phone", width: "11%" },
+              { label: termRent, align: "right", width: "10%" },
+              { label: "Balance", align: "right", width: "12%" },
+              { label: "Lease Period", width: "15%" },
+              { label: "Status", align: "center", width: "7%" },
             ]),
           ]}
           rows={currentTenants}
@@ -2373,7 +2314,10 @@ const confirmTransferUnit = useCallback(async () => {
               </td>
               <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden group/name">
                 <div className="flex items-center gap-1 min-w-0">
-                  <span className="font-semibold text-slate-900 leading-tight truncate" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</span>
+                  <span className="shrink-0 max-w-[60%] truncate font-semibold text-slate-900 leading-tight" title={toListingCaps(tenant.tenantName)}>{toListingCaps(tenant.tenantName)}</span>
+                  {tenant.email && tenant.email !== "-" && (
+                    <span className="min-w-0 truncate text-[10px] normal-case text-slate-500" title={tenant.email}>{tenant.email}</span>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); const firstName = (tenant.tenantName || "Tenant").split(" ")[0]; navigate(`/tenant/${tenant.id}/statement`, { state: { tabTitle: `${firstName}-${tenant.tenantCode || "TT0000"}` } }); }}
                     className="flex-shrink-0 opacity-0 group-hover/name:opacity-100 rounded p-0.5 text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition-all"
@@ -2390,7 +2334,7 @@ const confirmTransferUnit = useCallback(async () => {
                     {tenant.balance < -0.009 ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
                     ) : tenant.balance > 0.009 ? (
-                      <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
+                      <span className="font-bold text-red-600">Ksh {tenant.balance.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-700 whitespace-nowrap">Ksh {tenant.depositHeld.toLocaleString()}</td>
@@ -2416,7 +2360,7 @@ const confirmTransferUnit = useCallback(async () => {
                     {tenant.balance < -0.009 ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">CR&nbsp;{Math.abs(tenant.balance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}</span>
                     ) : tenant.balance > 0.009 ? (
-                      <span className="font-bold text-red-600">KES {tenant.balance.toLocaleString()}</span>
+                      <span className="font-bold text-red-600">Ksh {tenant.balance.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
@@ -2435,7 +2379,7 @@ const confirmTransferUnit = useCallback(async () => {
                       tenant.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                       : tenant.status === "terminated" ? "bg-red-50 text-red-700 border-red-200"
                       : "bg-slate-100 text-slate-600 border-slate-200"
-                    }`}>{tenant.status}</span>
+                    }`}>{tenant.statusLabel}</span>
                     {tenant.expiryWarning?.hasWarning && <div className="mt-0.5"><span className="inline-flex items-center rounded-full bg-red-50 border border-red-200 px-1.5 py-0.5 text-[9px] font-bold text-red-600">Expiring</span></div>}
                   </td>
                 </>

@@ -1632,7 +1632,7 @@ export const getManagementFeeInvoicePdf = async (req, res, next) => {
   try {
     const { statementId } = req.params;
     const statement = await findScopedProcessedStatementById(req, statementId, [
-      { path: "landlord", select: "landlordName firstName lastName email contact" },
+      { path: "landlord", select: "landlordName firstName lastName email contact taxPin" },
       { path: "property", select: "propertyCode propertyName name commissionPaymentMode commissionPercentage" },
       { path: "business", select: COMPANY_PRINT_FIELDS },
     ]);

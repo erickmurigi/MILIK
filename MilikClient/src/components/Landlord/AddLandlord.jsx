@@ -1,3 +1,4 @@
+import MilikSelect from "../common/MilikSelect";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 // components/Landlord/AddLandlord.jsx
 import React, { useRef, useState, useEffect, useMemo } from "react";
@@ -6,126 +7,51 @@ import { useLocation, useNavigate } from "react-router-dom";
 import DashboardLayout from "../Layout/DashboardLayout";
 import {
   FaSave,
-  FaTimes,
   FaPaperclip,
   FaDownload,
   FaTrash,
   FaTrashAlt,
   FaChevronDown,
   FaSpinner,
-  FaArrowLeft,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { createLandlord, updateLandlord } from "../../redux/apiCalls";
-import { selectCurrentCompany, selectCurrentUser, selectLandlordIsFetching } from "../../redux/selectors";
+import { selectAllLandlords, selectCurrentCompany, selectCurrentUser, selectLandlordIsFetching } from "../../redux/selectors";
 import { useTerms } from "../../hooks/useTerm";
+import BankDetailsFields from "../common/BankDetailsFields";
+import { INITIAL_LANDLORD_FORM, formatMobile, resolveLandlordPhone, toKenyanMobile, validateLandlordForm } from "../../utils/landlordForm";
 
-const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
-const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE_RING = "";
-const MILIK_ORANGE_BORDER_FOCUS = "";
+const LANDLORD_TYPES = ["Individual", "Company", "Partnership", "Trust"];
 
-/**
- * Custom dropdown with orange highlighting
- */
-function MilikSelect({
-  label,
-  required,
-  placeholder = "Select...",
-  items = [],
-  value,
-  onChange,
-  getLabel,
-  getValue,
-  disabled,
-  className = "",
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
+const INITIAL_FORM = INITIAL_LANDLORD_FORM;
 
-  const selectedItem = useMemo(
-    () => items.find((it) => getValue(it) === value) || null,
-    [items, value, getValue]
-  );
+// Uppercased on entry, like the rest of the Milik name and address fields
+const UPPERCASE_FIELDS = new Set(["landlordCode", "landlordName", "regId", "taxPin", "postalAddress", "location", "bankName", "branchName", "accountName"]);
 
-  useEffect(() => {
-    const onClickOutside = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+const validateForm = validateLandlordForm;
 
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
 
-  return (
-    <div className={`${className} relative`} ref={wrapRef}>
-      {label ? (
-        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
-          {label} {required ? <span className="text-red-500">*</span> : ""}
-        </label>
-      ) : null}
+const inputClass = (hasError = false) =>
+  `h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 ${
+    hasError
+      ? "border-red-500 focus:border-red-500 focus:ring-red-500/20"
+      : "border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20"
+  }`;
 
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((s) => !s)}
-        className={[
-          "w-full h-8 px-3 rounded border border-slate-200 bg-white text-slate-900",
-          "transition focus:outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20",
-          "flex items-center justify-between gap-2",
-          disabled ? "opacity-50 cursor-not-allowed" : "",
-        ].join(" ")}
-      >
-        <span className="text-xs font-semibold truncate">
-          {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
-        </span>
-        <FaChevronDown className="text-slate-600" size={10} />
-      </button>
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
 
-      {open && !disabled && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-          <div className="max-h-56 overflow-auto">
-            {items.length === 0 ? (
-              <div className="px-3 py-3 text-sm text-slate-500">No items</div>
-            ) : (
-              items.map((it) => {
-                const v = getValue(it);
-                const isSelected = v === value;
-                return (
-                  <button
-                    type="button"
-                    key={v}
-                    onClick={() => {
-                      onChange?.(v, it);
-                      setOpen(false);
-                    }}
-                    className={[
-                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
-                      isSelected
-                        ? `${MILIK_ORANGE_BG} text-white`
-                        : "text-slate-800 hover:bg-orange-50",
-                    ].join(" ")}
-                  >
-                    {getLabel(it)}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+
+const FieldError = ({ error }) => (error ? <p className="mt-0.5 text-[11px] font-semibold text-red-600">{error}</p> : null);
+
+const Section = ({ title, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white ${className}`}>
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
     </div>
-  );
-}
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 
 const AddLandlord = () => {
   const dispatch = useDispatch();
@@ -134,7 +60,8 @@ const AddLandlord = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isFetching = useSelector(selectLandlordIsFetching);
-  const { landlord: termLandlord, landlords: termLandlords } = useTerms("landlord", "landlords");
+  const landlords = useSelector(selectAllLandlords);
+  const { landlord: termLandlord } = useTerms("landlord");
   const fileInputRef = useRef(null);
   const editLandlordId = location.state?.landlordId || null;
   const editLandlordData = location.state?.landlordData || null;
@@ -143,20 +70,8 @@ const AddLandlord = () => {
     ? `milik:landlord-form-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}:${isEditMode ? editLandlordId || "edit" : "new"}`
     : null;
 
-  const [formData, setFormData] = useState({
-    landlordCode: "",
-    landlordType: "Individual",
-    landlordName: "",
-    regId: "",
-    taxPin: "",
-    postalAddress: "",
-    email: "",
-    phoneNumber: "",
-    location: "",
-    portalAccess: "Disabled",
-    status: "Active",
-  });
-
+  const [formData, setFormData] = useState(INITIAL_FORM);
+  const [fieldErrors, setFieldErrors] = useState({});
   const [attachments, setAttachments] = useState([]);
   const draftReadyRef = useRef(false);
   const [draftReadyNonce, setDraftReadyNonce] = useState(0);
@@ -165,6 +80,7 @@ const AddLandlord = () => {
     if (!draftStorageKey || typeof window === "undefined" || !window.sessionStorage) return;
     window.sessionStorage.removeItem(draftStorageKey);
   };
+
   useEffect(() => {
     if (!isEditMode || !editLandlordData) return;
 
@@ -174,12 +90,16 @@ const AddLandlord = () => {
       landlordName: editLandlordData.landlordName || editLandlordData.name || "",
       regId: editLandlordData.regId || "",
       taxPin: editLandlordData.taxPin || editLandlordData.pin || "",
-      postalAddress: editLandlordData.postalAddress || editLandlordData.address || "",
-      email: editLandlordData.email || "",
-      phoneNumber: editLandlordData.phoneNumber || editLandlordData.phone || "",
-      location: editLandlordData.location || "",
-      portalAccess: editLandlordData.portalAccess || "Disabled",
       status: editLandlordData.status || "Active",
+      phoneNumber: editLandlordData.phoneNumber || editLandlordData.phone || "",
+      email: editLandlordData.email || "",
+      location: editLandlordData.location || "",
+      postalAddress: editLandlordData.postalAddress || editLandlordData.address || "",
+      bankName: editLandlordData.bankName || "",
+      branchName: editLandlordData.branchName || "",
+      accountName: editLandlordData.accountName || "",
+      accountNumber: editLandlordData.accountNumber || "",
+      mobileNumber: editLandlordData.mobileNumber || "",
     });
 
     setAttachments(
@@ -192,6 +112,7 @@ const AddLandlord = () => {
       }))
     );
   }, [isEditMode, editLandlordData]);
+
   useEffect(() => {
     draftReadyRef.current = false;
 
@@ -243,18 +164,28 @@ const AddLandlord = () => {
       console.warn("Failed to persist landlord draft", draftError);
     }
   }, [attachments, draftReadyNonce, draftStorageKey, formData, isEditMode]);
-  // Input classes for consistency
-  const inputClass =
-    "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
-  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
+  // Bank names already used by other landlords, offered in the bank list
+  const landlordBankNames = useMemo(
+    () => (Array.isArray(landlords) ? landlords : []).map((l) => l?.bankName).filter(Boolean),
+    [landlords]
+  );
 
-  const uppercaseLandlordFields = new Set(["landlordCode", "landlordName", "regId", "taxPin", "postalAddress", "location"]);
+  const isIndividual = formData.landlordType === "Individual";
+  const regIdLabel = isIndividual ? "National ID No." : "Registration No.";
+  const regIdPlaceholder = isIndividual ? "e.g. 12345678" : "e.g. PVT-1234567";
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    const nextValue = uppercaseLandlordFields.has(name) ? normalizeUppercaseInput(value) : value;
+    const nextValue = UPPERCASE_FIELDS.has(name) ? normalizeUppercaseInput(value) : value;
     setFormData((prev) => ({ ...prev, [name]: nextValue }));
+    if (fieldErrors[name]) setFieldErrors((prev) => ({ ...prev, [name]: undefined }));
+  };
+
+  // Show a valid Kenyan number in its standard spacing once the user leaves the field
+  const handleMobileBlur = (name) => {
+    const local = toKenyanMobile(formData[name]);
+    if (local) setFormData((prev) => ({ ...prev, [name]: formatMobile(local) }));
   };
 
   const formatFileSize = (bytes) => {
@@ -302,15 +233,20 @@ const AddLandlord = () => {
       return;
     }
 
-    // Validation
-    if (!formData.landlordName?.trim()) {
-      toast.error(`${termLandlord} name is required`);
+    const errors = validateForm(formData);
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error("Check the highlighted fields");
       return;
     }
 
     try {
       const payload = {
         ...formData,
+        phoneNumber: resolveLandlordPhone(formData.phoneNumber).value ?? "",
+        email: formData.email.trim(),
+        mobileNumber: formData.mobileNumber.trim() ? toKenyanMobile(formData.mobileNumber) : "",
+        portalAccess: "Disabled",
         company: currentCompany._id,
         attachments: attachments.map(({ id, name, size, dateTime }) => ({
           id,
@@ -342,7 +278,8 @@ const AddLandlord = () => {
 
   const handleReset = () => {
     if (isEditMode) return;
-    setFormData({ landlordCode: "", landlordType: "Individual", landlordName: "", regId: "", taxPin: "", postalAddress: "", email: "", phoneNumber: "", location: "", portalAccess: "Disabled", status: "Active" });
+    setFormData(INITIAL_FORM);
+    setFieldErrors({});
     setAttachments([]);
     clearDraftState();
   };
@@ -350,291 +287,176 @@ const AddLandlord = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-        {/* Sticky dark header */}
-        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={handleCancel} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
-                <FaArrowLeft /> Back
-              </button>
-              <div className="h-4 w-px bg-[#2A5C4A]" />
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termLandlords}</div>
-                <h1 className="text-sm font-black text-white leading-none">{isEditMode ? `Edit ${termLandlord}` : `New ${termLandlord}`}</h1>
-              </div>
-            </div>
-            {currentCompany?.companyName && (
-              <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">{currentCompany.companyName}</span>
-            )}
-          </div>
-        </div>
-
         {/* Scrollable content */}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <form id="landlord-form" onSubmit={handleSubmit} className="w-full max-w-none">
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3">
-              {/* General Information */}
-              <div className="xl:col-span-7 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">General Information</h3>
+          <form id="landlord-form" onSubmit={handleSubmit} noValidate className="w-full space-y-2.5">
+            {/* Landlord details: general, contact and address together */}
+            <Section title="Landlord Details">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
+                <MilikSelect
+                  label={`${termLandlord} Type`}
+                  required
+                  placeholder="Select type"
+                  items={LANDLORD_TYPES}
+                  value={formData.landlordType}
+                  onChange={(val) => setFormData((p) => ({ ...p, landlordType: val }))}
+                  getLabel={(x) => x}
+                  getValue={(x) => x}
+                />
+
+                <div>
+                  <label className={labelClass} htmlFor="landlordCode">{termLandlord} Code</label>
+                  <input id="landlordCode" type="text" name="landlordCode" value={formData.landlordCode} onChange={handleInputChange} className={inputClass()} placeholder="Auto" />
                 </div>
-                <div className="p-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                  <div>
-                    <label className={labelClass}>{termLandlord} Code</label>
-                    <input
-                      type="text"
-                      name="landlordCode"
-                      value={formData.landlordCode}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="Leave blank to auto-generate (LL001...)"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">Auto-generated if left empty</p>
-                  </div>
 
-                  <div>
-                    <MilikSelect
-                      label={`${termLandlord} Type`}
-                      required
-                      placeholder="Select Type"
-                      items={["Individual", "Company", "Partnership", "Trust"]}
-                      value={formData.landlordType}
-                      onChange={(val) => setFormData((p) => ({ ...p, landlordType: val }))}
-                      getLabel={(x) => x}
-                      getValue={(x) => x}
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>
-                      {termLandlord} Name <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="landlordName"
-                      value={formData.landlordName}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder={`Enter ${termLandlord.toLowerCase()} name`}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Reg/ID NO. <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="regId"
-                      value={formData.regId}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="ID number or registration number"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Tax/PIN NO. <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      name="taxPin"
-                      value={formData.taxPin}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="e.g., A123456789X"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <MilikSelect
-                      label="Status"
-                      placeholder="Select Status"
-                      items={["Active", "Archived"]}
-                      value={formData.status}
-                      onChange={(val) => setFormData((p) => ({ ...p, status: val }))}
-                      getLabel={(x) => x}
-                      getValue={(x) => x}
-                    />
-                  </div>
-
-                  <div>
-                    <MilikSelect
-                      label="Portal Access"
-                      placeholder="Select Access"
-                      items={["Enabled", "Disabled"]}
-                      value={formData.portalAccess}
-                      onChange={(val) => setFormData((p) => ({ ...p, portalAccess: val }))}
-                      getLabel={(x) => x}
-                      getValue={(x) => x}
-                    />
-                  </div>
-                </div>
-                </div>
-              </div>
-
-              {/* Address Information */}
-              <div className="xl:col-span-5 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Address Information</h3>
-                </div>
-                <div className="p-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Postal Address</label>
-                    <input
-                      type="text"
-                      name="postalAddress"
-                      value={formData.postalAddress}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="Physical or postal address"
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>Email</label>
-                    <input
-                      type="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="Email address (optional)"
-                    />
-                  </div>
-
-                  <div>
-                    <label className={labelClass}>
-                      Phone Number <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="tel"
-                      name="phoneNumber"
-                      value={formData.phoneNumber}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="+254 XXX XXX XXX"
-                      required
-                    />
-                  </div>
-
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Location</label>
-                    <input
-                      type="text"
-                      name="location"
-                      value={formData.location}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      placeholder="e.g., Nairobi CBD, Westlands, etc."
-                    />
-                  </div>
-                </div>
-                </div>
-              </div>
-
-              {/* Attachments */}
-              <div className="xl:col-span-12 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <h3 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Attachments</h3>
-                </div>
-                <div className="p-3">
-
-                <div className="flex gap-2 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`px-4 py-2 text-sm text-white rounded-lg flex items-center gap-2 ${MILIK_ORANGE_BG} ${MILIK_ORANGE_BG_HOVER} transition-colors`}
-                  >
-                    <FaPaperclip className="text-xs" />
-                    Add File
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setAttachments([])}
-                    className="px-4 py-2 text-sm border border-slate-300 rounded-lg flex items-center gap-2 hover:bg-slate-50 transition-colors"
-                  >
-                    <FaTrashAlt className="text-xs" />
-                    Delete All
-                  </button>
-
+                <div className="col-span-2">
+                  <label className={labelClass} htmlFor="landlordName">{termLandlord} Name<Required /></label>
                   <input
-                    type="file"
-                    ref={fileInputRef}
-                    onChange={handleFileUpload}
-                    className="hidden"
-                    multiple
+                    id="landlordName"
+                    type="text"
+                    name="landlordName"
+                    value={formData.landlordName}
+                    onChange={handleInputChange}
+                    className={inputClass(Boolean(fieldErrors.landlordName))}
+                    placeholder="Full legal name"
+                    aria-invalid={Boolean(fieldErrors.landlordName)}
+                  />
+                  <FieldError error={fieldErrors.landlordName} />
+                </div>
+
+                <div>
+                  <label className={labelClass} htmlFor="phoneNumber">Phone<Required /></label>
+                  <input
+                    id="phoneNumber"
+                    type="tel"
+                    inputMode="tel"
+                    name="phoneNumber"
+                    value={formData.phoneNumber}
+                    onChange={handleInputChange}
+                    onBlur={() => handleMobileBlur("phoneNumber")}
+                    className={inputClass(Boolean(fieldErrors.phoneNumber))}
+                    placeholder="0712 345 678"
+                    aria-invalid={Boolean(fieldErrors.phoneNumber)}
+                  />
+                  <FieldError error={fieldErrors.phoneNumber} />
+                </div>
+
+                <div>
+                  <label className={labelClass} htmlFor="email">Email<Required /></label>
+                  <input
+                    id="email"
+                    type="email"
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    className={inputClass(Boolean(fieldErrors.email))}
+                    placeholder="Email, or -"
+                    aria-invalid={Boolean(fieldErrors.email)}
+                  />
+                  <FieldError error={fieldErrors.email} />
+                </div>
+
+                <div>
+                  <label className={labelClass} htmlFor="regId">{regIdLabel}</label>
+                  <input id="regId" type="text" name="regId" value={formData.regId} onChange={handleInputChange} className={inputClass()} placeholder={regIdPlaceholder} />
+                </div>
+
+                <div>
+                  <label className={labelClass} htmlFor="taxPin">Tax PIN (KRA)</label>
+                  <input id="taxPin" type="text" name="taxPin" value={formData.taxPin} onChange={handleInputChange} className={inputClass()} placeholder="A000000000Z" />
+                </div>
+
+                <div>
+                  <MilikSelect
+                    label="Status"
+                    placeholder="Select status"
+                    items={["Active", "Archived"]}
+                    value={formData.status}
+                    onChange={(val) => setFormData((p) => ({ ...p, status: val }))}
+                    getLabel={(x) => x}
+                    getValue={(x) => x}
                   />
                 </div>
 
-                {attachments.length > 0 ? (
-                  <div className="overflow-x-auto border border-slate-200 rounded-lg">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-slate-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left font-bold text-slate-800 border-b">Name</th>
-                          <th className="px-4 py-3 text-left font-bold text-slate-800 border-b">Size</th>
-                          <th className="px-4 py-3 text-left font-bold text-slate-800 border-b">Date & Time</th>
-                          <th className="px-4 py-3 text-left font-bold text-slate-800 border-b">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {attachments.map((attachment) => (
-                          <tr key={attachment.id} className="hover:bg-slate-50">
-                            <td className="px-4 py-3 border-b">{attachment.name}</td>
-                            <td className="px-4 py-3 border-b">{attachment.size}</td>
-                            <td className="px-4 py-3 border-b">{attachment.dateTime}</td>
-                            <td className="px-4 py-3 border-b">
-                              <div className="flex gap-2">
-                                <button
-                                  type="button"
-                                  onClick={() => handleDownload(attachment)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title="Download"
-                                >
-                                  <FaDownload />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteAttachment(attachment.id)}
-                                  className="text-red-600 hover:text-red-800"
-                                  title="Delete"
-                                >
-                                  <FaTrash />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-slate-500 text-sm border border-slate-200 rounded-lg bg-slate-50">
-                    No attachments added yet
-                  </div>
-                )}
+                <div>
+                  <label className={labelClass} htmlFor="location">Location</label>
+                  <input id="location" type="text" name="location" value={formData.location} onChange={handleInputChange} className={inputClass()} placeholder="e.g. Westlands" />
+                </div>
+
+                <div className="col-span-2">
+                  <label className={labelClass} htmlFor="postalAddress">Postal Address</label>
+                  <input id="postalAddress" type="text" name="postalAddress" value={formData.postalAddress} onChange={handleInputChange} className={inputClass()} placeholder="P.O. Box 1234-00100, Nairobi" />
                 </div>
               </div>
-            </div>
+            </Section>
+
+            {/* Payments: where remittances are paid. Optional; the system records, it does not block. */}
+            <BankDetailsFields
+              values={formData}
+              onChange={(field, value) => setFormData((prev) => ({ ...prev, [field]: value }))}
+              knownBanks={landlordBankNames}
+              errors={{ mobileNumber: fieldErrors.mobileNumber }}
+              title="Bank & Payment Details"
+            />
+
+            {/* Attachments */}
+            <Section title="Attachments">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white transition hover:bg-[#0A3127]"
+                >
+                  <FaPaperclip size={10} />
+                  Add File
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAttachments([])}
+                  disabled={attachments.length === 0}
+                  className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FaTrashAlt size={10} />
+                  Delete All
+                </button>
+                <span className="text-xs font-semibold text-slate-600">
+                  {attachments.length === 0 ? "No files" : `${attachments.length} file${attachments.length === 1 ? "" : "s"} (names only)`}
+                </span>
+                <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" multiple />
+              </div>
+
+              {attachments.length > 0 && (
+                <ul className="mt-2 divide-y divide-slate-200 border border-slate-200">
+                  {attachments.map((attachment) => (
+                    <li key={attachment.id} className="flex items-center justify-between gap-3 px-2.5 py-1.5 text-xs">
+                      <span className="truncate font-semibold text-slate-900">{attachment.name}</span>
+                      <span className="shrink-0 text-slate-600">{attachment.size}</span>
+                      <div className="flex shrink-0 gap-3">
+                        {attachment.file && (
+                          <button type="button" onClick={() => handleDownload(attachment)} className="text-[#0B3B2E] hover:underline" title="Download">
+                            <FaDownload size={11} />
+                          </button>
+                        )}
+                        <button type="button" onClick={() => handleDeleteAttachment(attachment.id)} className="text-red-700 hover:underline" title="Remove">
+                          <FaTrash size={11} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
           </form>
         </div>
 
-        {/* Sticky footer */}
-        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={handleCancel}
               disabled={isFetching}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
             >
               Cancel
             </button>
@@ -643,7 +465,7 @@ const AddLandlord = () => {
                 type="button"
                 onClick={handleReset}
                 disabled={isFetching}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
               >
                 Reset
               </button>
@@ -652,9 +474,9 @@ const AddLandlord = () => {
               type="submit"
               form="landlord-form"
               disabled={isFetching}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isFetching ? <FaSpinner className="animate-spin" /> : <FaSave />}
+              {isFetching ? <FaSpinner className="animate-spin" size={11} /> : <FaSave size={11} />}
               {isFetching ? "Saving…" : isEditMode ? `Update ${termLandlord}` : `Save ${termLandlord}`}
             </button>
           </div>

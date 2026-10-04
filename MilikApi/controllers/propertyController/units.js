@@ -26,7 +26,7 @@ import {
 const MAX_UNIT_IMAGES = 12;
 
 const OCCUPYING_TENANT_STATUSES = ["active", "overdue"];
-const NON_OCCUPIABLE_UNIT_STATUSES = ["vacant", "maintenance", "reserved", "archived"];
+const NON_OCCUPIABLE_UNIT_STATUSES = ["vacant", "owner_occupied", "maintenance", "reserved", "archived"];
 
 // The 6 values Unit.unitType used to hard-code as a schema enum. Existing units still
 // carry these, so they stay permanently valid alongside whatever a company configures
@@ -157,7 +157,7 @@ const calculateDepositFromPropertyDefaults = (propertyDoc, rentAmount, explicitD
 
 const normalizeUnitStatus = (value, fallback = "vacant") => {
   const normalized = String(value || fallback).trim().toLowerCase();
-  return ["vacant", "occupied", "maintenance", "reserved", "archived"].includes(normalized)
+  return ["vacant", "occupied", "owner_occupied", "maintenance", "reserved", "archived"].includes(normalized)
     ? normalized
     : fallback;
 };
@@ -504,7 +504,11 @@ export const createUnit = async (req, res, next) => {
     // New units must always start as vacant. Occupancy is controlled by tenant assignment,
     // not by the create-unit form payload. This keeps the Add Unit UI simple and prevents
     // orphan occupied/reserved/maintenance states during creation.
-    const requestedStatus = "vacant";
+    // Owner-occupied units are the one exception: nobody rents them, so they are created without a vacancy.
+    // Occupied needs a tenant, so it cannot be set at creation; every other status can.
+    const chosenStatus = normalizeUnitStatus(req.body.status, "vacant");
+    const requestedStatus = chosenStatus === "occupied" ? "vacant" : chosenStatus;
+    const isVacant = requestedStatus === "vacant";
 
     const resolvedRent = calculateRentFromPropertyDefaults(
       property,
@@ -523,15 +527,15 @@ export const createUnit = async (req, res, next) => {
       unitType: resolvedUnitType,
       property: property._id,
       business: businessId,
-      rent: resolvedRent,
+      rent: resolvedRent ?? 0,
       deposit: resolvedDeposit,
       areaSqFt: Number(req.body.areaSqFt || 0),
       amenities: sanitizeAmenities(req.body.amenities),
       utilities: sanitizeUtilities(req.body.utilities),
       deposits: sanitizeDeposits(req.body.deposits),
       status: requestedStatus,
-      isVacant: true,
-      vacantSince: new Date(),
+      isVacant,
+      vacantSince: isVacant ? new Date() : undefined,
       daysVacant: 0,
     });
 
@@ -820,7 +824,6 @@ export const updateUnit = async (req, res, next) => {
     const statusValidation = await validateUnitStatusChange({
       unit,
       requestedStatus,
-      allowOccupiedWithoutTenant: Boolean(req.body.ownerOccupied),
     });
 
     if (!statusValidation.ok) {

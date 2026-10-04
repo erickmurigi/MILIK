@@ -1,5 +1,6 @@
 import { adminRequests } from "../../utils/requestMethods";
 import { store, isListCacheFresh, extractList } from "./shared";
+import { fetchAllPages } from "../../utils/fetchAllPages";
 
 import {
   getLeasesStart,
@@ -39,8 +40,21 @@ export const getLeases = async (dispatch, business, status = null, tenant = null
     if (tenant) url += `&tenant=${tenant}`;
     if (unit) url += `&unit=${unit}`;
 
-    const res = await adminRequests.get(url);
-    dispatch(getLeasesSuccess(extractList(res.data)));
+    // Company-wide loads page through the whole list; the server returns 50 by default, which
+    // left the Agreements page with only the first 50 leases.
+    let list;
+    let scopedBody = null;
+    if (tenant || unit) {
+      scopedBody = (await adminRequests.get(url)).data;
+      list = extractList(scopedBody);
+    } else {
+      const bodies = await fetchAllPages(
+        (page, limit) => adminRequests.get(`${url}&page=${page}&limit=${limit}`).then((res) => res.data),
+        200
+      );
+      list = bodies.flatMap((body) => extractList(body));
+    }
+    dispatch(getLeasesSuccess(list));
 
     // Only stamp the company-wide cache when no per-entity filter is used.
     // Tenant- or unit-scoped fetches return a partial list and must not
@@ -49,7 +63,7 @@ export const getLeases = async (dispatch, business, status = null, tenant = null
       dispatch(setLeaseLoadMeta({ loadedFor: String(business || ''), loadedAt: Date.now() }));
     }
 
-    return res.data;
+    return scopedBody ?? list;
   } catch (err) {
     dispatch(getLeasesFailure());
     throw err; // Re-throw so caller can handle the error

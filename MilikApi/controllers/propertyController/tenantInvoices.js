@@ -6,6 +6,8 @@ import TenantInvoice, { TENANT_INVOICE_CATEGORIES } from "../../models/TenantInv
 import TenantInvoiceNote, { TENANT_NOTE_TYPES } from "../../models/TenantInvoiceNote.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
+import Lease from "../../models/Lease.js";
+import { buildSchedulePeriodKey } from "../../services/billingPeriodService.js";
 import Property from "../../models/Property.js";
 import { matchTenantIds, matchUnitIds } from "../../utils/listSearch.js";
 import Company from "../../models/Company.js";
@@ -447,7 +449,9 @@ const findConflictingMonthlyInvoice = ({ existingInvoices = [], category, metada
   return (
     existingInvoices.find((invoice) => {
       if (!isActiveInvoiceStatus(invoice?.status)) return false;
-      if (isTakeOnBalanceInvoice(invoice)) return false;
+      // Take-on invoices count too. The lookup is already limited to the billing period being
+      // booked, so a take-on dated in that period is the same charge as a recurring one.
+      // (Take-ons dated before the period are outside the lookup and still carry as arrears.)
 
       const existingBucket = getInvoiceDuplicateBucket({
         category: invoice?.category,
@@ -3502,6 +3506,37 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     req?.body?.account;
 
   const statementPeriod = buildStatementPeriod(normalizedInvoiceDate);
+  // The period key comes from the tenant's lease (its start date is the billing anchor), so every
+  // recurring charge for the same period carries the same key, whichever screen created it.
+  // Callers that already send a key (batch booking) keep theirs.
+  if (
+    !normalizeSchedulePeriodKey(normalizedMetadata?.periodKey) &&
+    ["RENT_CHARGE", "UTILITY_CHARGE", "DEPOSIT_CHARGE"].includes(normalizedCategory)
+  ) {
+    const invoiceMonth = new Date(normalizedInvoiceDate);
+    const periodStart = new Date(Date.UTC(invoiceMonth.getUTCFullYear(), invoiceMonth.getUTCMonth(), 1));
+    const periodEnd = new Date(Date.UTC(invoiceMonth.getUTCFullYear(), invoiceMonth.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    const lease = await Lease.findOne({
+      business: businessId,
+      tenant,
+      unit,
+      status: { $ne: "deleted" },
+      startDate: { $lte: periodEnd },
+      $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: periodStart } }],
+    })
+      .sort({ startDate: -1 })
+      .select("startDate billingPeriodKey")
+      .lean();
+
+    if (lease?.startDate) {
+      normalizedMetadata.billingPeriodKey = canonicalizeBillingPeriodKey(lease.billingPeriodKey || "monthly");
+      normalizedMetadata.periodKey = buildSchedulePeriodKey({
+        startDate: lease.startDate,
+        billingPeriodKey: normalizedMetadata.billingPeriodKey,
+      });
+    }
+  }
+
   const schedulePeriodKey = normalizeSchedulePeriodKey(normalizedMetadata?.periodKey);
   const recurringInvoiceCacheKey = buildRecurringInvoiceCacheKey({
     businessId,

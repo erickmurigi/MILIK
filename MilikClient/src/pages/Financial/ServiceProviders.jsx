@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useRef, useState } from "react";
+import BankDetailsFields from "../../components/common/BankDetailsFields";
 import { FaEdit, FaPlus, FaSave, FaSearch, FaTimes, FaTrash } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
@@ -29,7 +30,9 @@ const blankForm = {
   accountNumber: "",
   paybillNumber: "",
   bankName: "",
+  branchName: "",
   accountName: "",
+  mobileNumber: "",
   subjectToWht: false,
   whtRate: "",
   whtCategory: "",
@@ -152,7 +155,9 @@ const ServiceProviders = () => {
       accountNumber: row.accountNumber || "",
       paybillNumber: row.paybillNumber || "",
       bankName: row.bankName || "",
+      branchName: row.branchName || "",
       accountName: row.accountName || "",
+      mobileNumber: row.mobileNumber || "",
       subjectToWht: Boolean(row.subjectToWht),
       whtRate:      row.whtRate ? String(row.whtRate) : "",
       whtCategory:  row.whtCategory || "",
@@ -305,10 +310,7 @@ const ServiceProviders = () => {
                 ["email", "Email"],
                 ["category", "Category"],
                 ["kraPin", "KRA PIN"],
-                ["accountNumber", "Account Number"],
                 ["paybillNumber", "Paybill / Till"],
-                ["bankName", "Bank Name"],
-                ["accountName", "Bank Account Name"],
               ].map(([field, label]) => (
                 <label key={field} className="block">
                   <span className="mb-0.5 block text-xs font-semibold text-slate-700">{label}</span>
@@ -324,6 +326,13 @@ const ServiceProviders = () => {
                   />
                 </label>
               ))}
+              <div className="md:col-span-2">
+                <BankDetailsFields
+                  values={form}
+                  onChange={(field, value) => setForm((prev) => ({ ...prev, [field]: value }))}
+                  title="Bank & Payment Details"
+                />
+              </div>
               <label className="md:col-span-2 block">
                 <span className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</span>
                 <textarea

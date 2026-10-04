@@ -4,17 +4,17 @@ import Company from "../../models/Company.js";
 import ExpenseRequisition from "../../models/ExpenseRequisition.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
-// models this controller populates: imported here so the refs are always registered, whatever else has been loaded
-import "../../models/Property.js";
-import "../../models/Landlord.js";
+import Property from "../../models/Property.js";
+import Landlord from "../../models/Landlord.js";
 import "../../models/User.js";
-import "../../models/ServiceProvider.js";
+import ServiceProvider from "../../models/ServiceProvider.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
+import { resolveConfiguredAccountingDefaultAccount } from "../../services/companyAccountingDefaultsService.js";
 import {
   resolvePropertyAccountingContext,
   resolveLandlordRemittancePayableAccount,
@@ -30,6 +30,28 @@ import { cleanVoucherReference, voucherReferenceKey } from "../../utils/voucherR
 import { parsePagination } from "../../utils/pagination.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
+
+// How the payment is made. Stored on the voucher; the bank or M-Pesa details come from the payee bank block.
+const PAYMENT_METHODS = ["bank_transfer", "mobile_money", "cash", "cheque", "other"];
+
+// Payee bank details. They are optional and never block a voucher: the system records payments.
+const PAYEE_BANK_KEYS = ["bankName", "branchName", "accountName", "accountNumber", "mobileNumber"];
+const pickPayeeBank = (src = {}) => Object.fromEntries(PAYEE_BANK_KEYS.map((k) => [k, String(src?.[k] || "").trim()]));
+
+// A voucher's payee bank starts from the linked service provider or landlord. Anything typed on the
+// voucher wins, and blanks are filled from the record.
+const resolvePayeeBank = async ({ businessId, serviceProvider = null, landlord = null, requested = null }) => {
+  const own = pickPayeeBank(requested || {});
+  const fields = PAYEE_BANK_KEYS.join(" ");
+  let source = null;
+  if (serviceProvider) {
+    source = await ServiceProvider.findOne({ _id: serviceProvider, business: businessId }).select(fields).lean();
+  } else if (landlord) {
+    source = await Landlord.findOne({ _id: landlord, company: businessId }).select(fields).lean();
+  }
+  if (!source) return own;
+  return Object.fromEntries(PAYEE_BANK_KEYS.map((k) => [k, own[k] || String(source[k] || "").trim()]));
+};
 
 const VOUCHER_CATEGORIES = PaymentVoucher.schema.path("category").enumValues;
 const OBJECT_ID = /^[0-9a-fA-F]{24}$/;
@@ -105,7 +127,116 @@ const sanitizeVoucherFields = (body = {}) => {
   }
   if (has("narration")) out.narration = cleanText(body.narration, 1000, "Narration");
   if (has("payeeName")) out.payeeName = cleanText(body.payeeName, 150, "Payee name");
+  if (has("payeeBank")) out.payeeBank = pickPayeeBank(body.payeeBank);
+  if (has("paymentMethod")) {
+    const method = String(body.paymentMethod || "bank_transfer").trim();
+    if (!PAYMENT_METHODS.includes(method)) throw createError(400, "Choose a valid payment method");
+    out.paymentMethod = method;
+  }
   return out;
+};
+
+const MAX_VOUCHER_LINES = 50;
+// Landlord-side vouchers post to a property control account and cover one property, so their lines never pick an expense account
+const CONTROL_ACCOUNT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund"]);
+
+const linesHaveExpenseAccounts = (lines = []) =>
+  Array.isArray(lines) && lines.length > 0 && lines.every((line) => line?.expenseAccount);
+
+const linesHavePayableAccounts = (lines = []) =>
+  Array.isArray(lines) && lines.length > 0 && lines.every((line) => line?.payableAccount);
+
+// The header payable is only needed when some line has no payable of its own
+const resolveHeaderPayable = async ({ businessId, requested, lines = [] }) => {
+  if (isValidObjectId(requested)) return requested;
+  if (linesHavePayableAccounts(lines)) return null;
+  const fallback = await resolveConfiguredAccountingDefaultAccount({ businessId, field: "accountsPayableAccount" });
+  if (!fallback) {
+    throw createError(400, "Set the Accounts Payable default in Accounting Defaults, or give each line's expense item a payable account.");
+  }
+  return fallback._id;
+};
+
+// Each payable a voucher credits (on accrual) or debits (on settlement), with the amount it carries
+const payableGroupsFor = (voucher) => {
+  const lines = voucher.lines?.length ? voucher.lines : null;
+  const groups = new Map();
+  for (const row of lines || [{ amount: voucher.amount, payableAccount: null }]) {
+    const accountId = row.payableAccount || voucher.liabilityAccount;
+    if (!accountId) throw createError(400, "A payable account is required for this voucher.");
+    const key = String(accountId);
+    const group = groups.get(key) || { accountId, amount: 0 };
+    group.amount = roundMoney(group.amount + Math.abs(Number(row.amount || 0)));
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+};
+
+/**
+ * Validates the lines a voucher is saved with and returns them with totals.
+ * Returns null when no lines were sent, so a single-amount voucher keeps its header fields.
+ */
+const resolveVoucherLines = async ({ businessId, rawLines, category, property = null }) => {
+  if (!Array.isArray(rawLines) || rawLines.length === 0) return null;
+  if (rawLines.length > MAX_VOUCHER_LINES) throw createError(400, `A voucher can have at most ${MAX_VOUCHER_LINES} lines.`);
+
+  const controlled = CONTROL_ACCOUNT_CATEGORIES.has(category);
+  const lines = [];
+  for (const raw of rawLines) {
+    const amount = roundMoney(Number(raw?.amount));
+    if (!Number.isFinite(amount) || amount <= 0 || amount > MAX_VOUCHER_AMOUNT) {
+      throw createError(400, "Each voucher line needs an amount greater than zero.");
+    }
+    const whtRate = Number(raw?.whtRate || 0);
+    if (!Number.isFinite(whtRate) || whtRate < 0 || whtRate > 100) {
+      throw createError(400, "Withholding tax rate must be between 0 and 100.");
+    }
+    const whtAmount = roundMoney((amount * whtRate) / 100);
+    if (whtAmount >= amount) throw createError(400, "Withholding tax must be less than the line amount.");
+
+    let linePropertyId = raw?.property || property || null;
+    if (linePropertyId && !isValidObjectId(linePropertyId)) throw createError(400, "Invalid property on a voucher line.");
+    if (controlled && String(linePropertyId || "") !== String(property || "")) {
+      throw createError(400, "A landlord voucher covers one property. Create a separate voucher for each property.");
+    }
+
+    let expenseAccountId = null;
+    if (!controlled && raw?.expenseAccount) {
+      if (!isValidObjectId(raw.expenseAccount)) throw createError(400, "Invalid expense account on a voucher line.");
+      await ensureExplicitDebitAccount({ businessId, debitAccountId: raw.expenseAccount, voucherCategory: category });
+      expenseAccountId = raw.expenseAccount;
+    }
+
+    let payableAccountId = null;
+    if (!controlled && raw?.payableAccount) {
+      if (!isValidObjectId(raw.payableAccount)) throw createError(400, "Invalid payable account on a voucher line.");
+      await ensureLiabilityAccount({ businessId, liabilityAccountId: raw.payableAccount });
+      payableAccountId = raw.payableAccount;
+    }
+
+    lines.push({
+      description: String(raw?.description || "").trim().slice(0, 200),
+      property: linePropertyId,
+      expenseItem: raw?.expenseItem && isValidObjectId(raw.expenseItem) ? raw.expenseItem : null,
+      expenseAccount: expenseAccountId,
+      payableAccount: payableAccountId,
+      amount,
+      whtRate,
+      whtAmount,
+    });
+  }
+
+  const propertyIds = [...new Set(lines.map((line) => line.property).filter(Boolean).map(String))];
+  if (propertyIds.length) {
+    const found = await Property.countDocuments({ _id: { $in: propertyIds }, business: businessId });
+    if (found !== propertyIds.length) throw createError(400, "A property on a voucher line was not found for this business.");
+  }
+
+  return {
+    lines,
+    amount: roundMoney(lines.reduce((sum, line) => sum + line.amount, 0)),
+    whtAmount: roundMoney(lines.reduce((sum, line) => sum + line.whtAmount, 0)),
+  };
 };
 
 /**
@@ -870,7 +1001,7 @@ const withPostingRollback = async ({ voucher, actorUserId, work }) => {
   }
 };
 
-const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate = null }) => {
+const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate = null, direct = false }) => {
   // If the voucher was created from a requisition that already generated GL entries,
   // skip the accrual step — expense + AP liability were already posted at requisition approval.
   if (voucher.sourceRequisition) {
@@ -910,16 +1041,29 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
     voucherCategory: voucher.category,
   });
 
-  const liabilityAccount = await ensureLiabilityAccount({
-    businessId: voucher.business,
-    liabilityAccountId: voucher.liabilityAccount,
-  });
+  // A voucher paid on the spot goes straight from the expense to cash, so it never touches a payable
+  const payableGroups = direct ? [] : payableGroupsFor(voucher);
+  for (const group of payableGroups) {
+    await ensureLiabilityAccount({ businessId: voucher.business, liabilityAccountId: group.accountId });
+  }
 
-  const debitAccount = await resolveVoucherDebitAccount({
-    voucher,
-    businessId: voucher.business,
-    accountingContext,
-  });
+  const lines = voucher.lines?.length ? voucher.lines : null;
+  const needsDefaultDebit = !lines || lines.some((line) => CONTROL_ACCOUNT_CATEGORIES.has(voucher.category) || !line.expenseAccount);
+  const defaultDebitAccount = needsDefaultDebit
+    ? await resolveVoucherDebitAccount({ voucher, businessId: voucher.business, accountingContext })
+    : null;
+
+  const debitGroups = new Map();
+  for (const row of lines || [{ amount: voucher.amount, property: null, expenseAccount: null }]) {
+    const useLineAccount = Boolean(lines && row.expenseAccount && !CONTROL_ACCOUNT_CATEGORIES.has(voucher.category));
+    const accountId = useLineAccount ? row.expenseAccount : defaultDebitAccount._id;
+    const property = row.property || accountingContext.propertyId || null;
+    const key = `${String(accountId)}|${String(property || "")}`;
+    const group = debitGroups.get(key) || { accountId, property, amount: 0 };
+    group.amount = roundMoney(group.amount + Math.abs(Number(row.amount || 0)));
+    debitGroups.set(key, group);
+  }
+  const headerDebitAccountId = defaultDebitAccount?._id || lines[0].expenseAccount;
 
   const postingDate = normalizeDate(resolveVoucherPostingDate({ voucher, statementDate }));
 
@@ -946,7 +1090,8 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   const narration = String(voucher.narration || voucher.reference || `${_voucherCategoryLabel} — ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
 
-  let debitLeg;
+  const debitLegs = [];
+  const creditLegs = [];
   try {
     const accrualBase = {
       business: accountingContext.businessId,
@@ -970,61 +1115,68 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
       status: "approved",
     };
 
-    debitLeg = await postEntry({
-      ...accrualBase,
-      direction: "debit",
-      debit: amount,
-      credit: 0,
-      accountId: debitAccount._id,
-      receiver: voucher.category === "deposit_refund" ? "landlord" : "vendor",
-      metadata: {
-        voucherNo: voucher.voucherNo,
-        voucherCategory: voucher.category,
-        postingRole: voucher.category === "deposit_refund" ? "landlord_payable_reduction" : ["landlord_maintenance", "landlord_other"].includes(voucher.category) ? "property_control_deduction" : "expense_or_deduction",
-        includeInLandlordStatement: false,
-        expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
-      },
-    });
+    for (const group of debitGroups.values()) {
+      const leg = await postEntry({
+        ...accrualBase,
+        property: group.property,
+        direction: "debit",
+        debit: group.amount,
+        credit: 0,
+        accountId: group.accountId,
+        receiver: voucher.category === "deposit_refund" ? "landlord" : "vendor",
+        metadata: {
+          voucherNo: voucher.voucherNo,
+          voucherCategory: voucher.category,
+          postingRole: voucher.category === "deposit_refund" ? "landlord_payable_reduction" : ["landlord_maintenance", "landlord_other"].includes(voucher.category) ? "property_control_deduction" : "expense_or_deduction",
+          includeInLandlordStatement: false,
+          expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
+        },
+      });
+      debitLegs.push(leg);
+    }
 
-    const creditLeg = await postEntry({
-      ...accrualBase,
-      direction: "credit",
-      debit: 0,
-      credit: amount,
-      accountId: liabilityAccount._id,
-      receiver: voucher.category === "deposit_refund" ? "tenant" : "vendor",
-      metadata: {
-        voucherNo: voucher.voucherNo,
-        voucherCategory: voucher.category,
-        postingRole: "liability_accrual",
-        includeInLandlordStatement: false,
-        offsetOfEntryId: String(debitLeg._id),
-        expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
-      },
-    });
+    for (const group of payableGroups) {
+      const leg = await postEntry({
+        ...accrualBase,
+        direction: "credit",
+        debit: 0,
+        credit: group.amount,
+        accountId: group.accountId,
+        receiver: voucher.category === "deposit_refund" ? "tenant" : "vendor",
+        metadata: {
+          voucherNo: voucher.voucherNo,
+          voucherCategory: voucher.category,
+          postingRole: "liability_accrual",
+          includeInLandlordStatement: false,
+          offsetOfEntryId: String(debitLegs[0]._id),
+          expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
+        },
+      });
+      creditLegs.push(leg);
+    }
 
     voucher.landlord = accountingContext.landlordId;
-    voucher.debitAccount = debitAccount._id;
+    voucher.debitAccount = headerDebitAccountId;
     voucher.journalGroupId = journalGroupId;
-    voucher.ledgerEntries = [debitLeg._id, creditLeg._id];
+    voucher.ledgerEntries = [...debitLegs, ...creditLegs].map((leg) => leg._id);
     voucher.expenseRecord = expenseRecord?._id || null;
     await voucher.save();
 
     await aggregateChartOfAccountBalances(voucher.business, [
-      String(debitAccount._id),
-      String(liabilityAccount._id),
+      ...Array.from(debitGroups.values()).map((group) => String(group.accountId)),
+      ...payableGroups.map((group) => String(group.accountId)),
     ]);
 
     return {
       voucher,
-      entries: [debitLeg, creditLeg],
+      entries: [...debitLegs, ...creditLegs],
       expenseRecord,
       journalGroupId,
       reused: false,
     };
   } catch (error) {
-    if (debitLeg?._id) {
-      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for voucher accrual ${voucher.voucherNo}`, userId: actorUserId }).catch(() => null);
+    for (const leg of [...debitLegs, ...creditLegs]) {
+      await postReversal({ entryId: leg._id, reason: `Auto-reversal: GL balance protection for voucher accrual ${voucher.voucherNo}`, userId: actorUserId }).catch(() => null);
     }
     if (expenseRecord?._id) {
       await ExpenseProperty.findByIdAndDelete(expenseRecord._id).catch(() => null);
@@ -1033,7 +1185,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
   }
 };
 
-const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate = null }) => {
+const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate = null, direct = false }) => {
   const existingSettlementEntries = await FinancialLedgerEntry.find({
     business: voucher.business,
     sourceTransactionType: "payment_voucher",
@@ -1052,11 +1204,8 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     };
   }
 
-  const [liabilityAccount, settlementAccount, accountingContext] = await Promise.all([
-    ensureLiabilityAccount({
-      businessId: voucher.business,
-      liabilityAccountId: voucher.liabilityAccount,
-    }),
+  const payableGroups = direct ? [] : payableGroupsFor(voucher);
+  const [settlementAccount, accountingContext] = await Promise.all([
     ensureSettlementAccount({
       businessId: voucher.business,
       settlementAccountId: voucher.settlementAccount,
@@ -1068,6 +1217,9 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
       voucherCategory: voucher.category,
     }),
   ]);
+  for (const group of payableGroups) {
+    await ensureLiabilityAccount({ businessId: voucher.business, liabilityAccountId: group.accountId });
+  }
 
   const txDate = normalizeDate(paidDate || voucher.paidDate || voucher.paidAt || new Date());
   const { start, end } = buildStatementPeriod(txDate);
@@ -1118,20 +1270,24 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     whtAccount = await resolveWhtPayableAccount({ businessId: voucher.business, accountId: voucher.whtAccountId });
   }
 
-  let debitLeg, creditLeg, whtLeg;
+  const debitLegs = [];
+  let creditLeg, whtLeg;
   try {
-    debitLeg = await postEntry({
-      ...baseEntry,
-      amount,
-      direction: "debit",
-      accountId: liabilityAccount._id,
-      metadata: {
-        voucherNo: voucher.voucherNo,
-        voucherCategory: voucher.category,
-        postingRole: "liability_settlement",
-        includeInLandlordStatement: false,
-      },
-    });
+    for (const group of payableGroups) {
+      const leg = await postEntry({
+        ...baseEntry,
+        amount: group.amount,
+        direction: "debit",
+        accountId: group.accountId,
+        metadata: {
+          voucherNo: voucher.voucherNo,
+          voucherCategory: voucher.category,
+          postingRole: "liability_settlement",
+          includeInLandlordStatement: false,
+        },
+      });
+      debitLegs.push(leg);
+    }
 
     // Cr Cashbook — net cash paid to vendor (gross - WHT if applicable)
     creditLeg = await postEntry({
@@ -1144,13 +1300,13 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
         voucherCategory: voucher.category,
         postingRole: "cashbook_outflow",
         includeInLandlordStatement: false,
-        offsetOfEntryId: String(debitLeg._id),
+        offsetOfEntryId: debitLegs[0] ? String(debitLegs[0]._id) : null,
       },
     });
 
     // Cr WHT Payable — tax withheld from vendor
     whtLeg = null;
-    const touchedAccounts = [String(liabilityAccount._id), String(settlementAccount._id)];
+    const touchedAccounts = [...payableGroups.map((group) => String(group.accountId)), String(settlementAccount._id)];
     if (whtAccount) {
       whtLeg = await postEntry({
         ...baseEntry,
@@ -1170,7 +1326,7 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     voucher.journalGroupId = journalGroupId;
     voucher.ledgerEntries = Array.from(new Set([
       ...(Array.isArray(voucher.ledgerEntries) ? voucher.ledgerEntries.map((entry) => String(entry)) : []),
-      String(debitLeg._id),
+      ...debitLegs.map((leg) => String(leg._id)),
       String(creditLeg._id),
       ...(whtLeg ? [String(whtLeg._id)] : []),
     ]));
@@ -1180,12 +1336,12 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
 
     return {
       voucher,
-      entries: [debitLeg, creditLeg, ...(whtLeg ? [whtLeg] : [])],
+      entries: [...debitLegs, creditLeg, ...(whtLeg ? [whtLeg] : [])],
       journalGroupId,
       reused: false,
     };
   } catch (error) {
-    const rollbackIds = [debitLeg?._id, creditLeg?._id, whtLeg?._id].filter(Boolean);
+    const rollbackIds = [...debitLegs.map((leg) => leg._id), creditLeg?._id, whtLeg?._id].filter(Boolean);
     for (const id of rollbackIds) {
       await postReversal({ entryId: id, reason: `Auto-reversal: GL balance protection for voucher settlement ${voucher.voucherNo}`, userId: actorUserId }).catch(() => null);
     }
@@ -1221,13 +1377,30 @@ export const createPaymentVoucher = async (req, res, next) => {
       return next(createError(400, "Invalid property supplied"));
     }
 
-    if (voucherRequiresExplicitDebitAccount(voucherCategory) && (!input.debitAccount || !isValidObjectId(input.debitAccount))) {
+    const lineResult = await resolveVoucherLines({
+      businessId,
+      rawLines: input.lines,
+      category: voucherCategory,
+      property: input.property || null,
+    });
+    if (lineResult) {
+      input.amount = lineResult.amount;
+      input.whtAmount = lineResult.whtAmount;
+    }
+    const usesLineAccounts = linesHaveExpenseAccounts(lineResult?.lines);
+
+    if (voucherRequiresExplicitDebitAccount(voucherCategory) && !usesLineAccounts && (!input.debitAccount || !isValidObjectId(input.debitAccount))) {
       return next(createError(400, "Debit posting account is required for this voucher category"));
     }
 
-    if (!input.liabilityAccount || !isValidObjectId(input.liabilityAccount)) {
-      return next(createError(400, "Liability posting account is required"));
-    }
+    const directPayment = status === "paid" && !CONTROL_ACCOUNT_CATEGORIES.has(voucherCategory);
+    const headerPayable = directPayment
+      ? (isValidObjectId(input.liabilityAccount) ? input.liabilityAccount : null)
+      : await resolveHeaderPayable({
+        businessId,
+        requested: input.liabilityAccount,
+        lines: lineResult?.lines || [],
+      });
 
     const amount = Number(input.amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -1252,16 +1425,26 @@ export const createPaymentVoucher = async (req, res, next) => {
     });
 
     const whtAmt = Math.max(0, Math.round(Number(input.whtAmount || 0) * 100) / 100);
+    const payeeBank = await resolvePayeeBank({
+      businessId,
+      serviceProvider: input.serviceProvider && isValidObjectId(input.serviceProvider) ? input.serviceProvider : null,
+      landlord: accountingContext.landlordId || null,
+      requested: input.payeeBank,
+    });
+
     const payload = {
+      payeeBank,
+      paymentMethod: input.paymentMethod || "bank_transfer",
       category: voucherCategory,
       property: input.property || null,
       landlord: accountingContext.landlordId || null,
-      liabilityAccount: input.liabilityAccount,
+      liabilityAccount: headerPayable,
       debitAccount: input.debitAccount || null,
       settlementAccount: input.settlementAccount || null,
       amount,
       whtAmount:    whtAmt,
       whtNetAmount: Math.max(0, Math.round((amount - whtAmt) * 100) / 100),
+      lines: lineResult?.lines || [],
       whtAccountId: input.whtAccountId || null,
       serviceProvider: input.serviceProvider && isValidObjectId(input.serviceProvider) ? input.serviceProvider : null,
       // Only kept when there's no registered service provider — that name is the
@@ -1283,8 +1466,10 @@ export const createPaymentVoucher = async (req, res, next) => {
 
     // a voucher that will be posted needs usable accounts: say so now, before it is saved
     if (status === "approved" || status === "paid") {
-      await ensureLiabilityAccount({ businessId, liabilityAccountId: payload.liabilityAccount });
-      if (voucherRequiresExplicitDebitAccount(voucherCategory)) {
+      for (const group of directPayment ? [] : payableGroupsFor(payload)) {
+        await ensureLiabilityAccount({ businessId, liabilityAccountId: group.accountId });
+      }
+      if (voucherRequiresExplicitDebitAccount(voucherCategory) && !usesLineAccounts) {
         await ensureExplicitDebitAccount({ businessId, debitAccountId: payload.debitAccount, voucherCategory });
       }
       if (status === "paid") {
@@ -1344,11 +1529,10 @@ export const createPaymentVoucher = async (req, res, next) => {
           work: async () => {
             if (voucher.status === "paid") {
               await ensureSettlementAccount({ businessId, settlementAccountId: voucher.settlementAccount });
-              await ensureLiabilityAccount({ businessId, liabilityAccountId: voucher.liabilityAccount });
             }
-            await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: postingDate });
+            await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: postingDate, direct: directPayment });
             if (voucher.status === "paid") {
-              await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate: postingDate });
+              await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate: postingDate, direct: directPayment });
             }
             await voucher.save();
           },
@@ -1453,10 +1637,6 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(payload, "category") && !payload.category) {
       return next(createError(400, "Voucher category is required"));
     }
-    if (Object.prototype.hasOwnProperty.call(payload, "liabilityAccount") && !payload.liabilityAccount) {
-      return next(createError(400, "Liability posting account is required"));
-    }
-
     if (Object.prototype.hasOwnProperty.call(payload, "landlord") && !payload.landlord) {
       payload.landlord = null;
     }
@@ -1473,10 +1653,41 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
     const existing = await PaymentVoucher.findOne({ _id: req.params.id, business }).lean();
     if (!existing) return next(createError(404, "Payment voucher not found"));
 
+    if (Object.prototype.hasOwnProperty.call(payload, "payeeBank")) {
+      payload.payeeBank = await resolvePayeeBank({
+        businessId: business,
+        serviceProvider: payload.serviceProvider ?? existing.serviceProvider,
+        landlord: payload.landlord ?? existing.landlord,
+        requested: payload.payeeBank,
+      });
+    }
+
     if (existing.status !== "draft") {
       return next(createError(400, "Only draft vouchers can be edited."));
     }
 
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "lines")) {
+      const lineResult = await resolveVoucherLines({
+        businessId: business,
+        rawLines: req.body.lines,
+        category: payload.category || existing.category || "",
+        property: Object.prototype.hasOwnProperty.call(payload, "property") ? payload.property || null : existing.property || null,
+      });
+      payload.lines = lineResult?.lines || [];
+      if (lineResult) {
+        payload.amount = lineResult.amount;
+        payload.whtAmount = lineResult.whtAmount;
+      }
+    }
+
+    const effectiveLines = payload.lines ?? existing.lines ?? [];
+    if (Object.prototype.hasOwnProperty.call(payload, "liabilityAccount")) {
+      payload.liabilityAccount = await resolveHeaderPayable({
+        businessId: business,
+        requested: payload.liabilityAccount,
+        lines: effectiveLines,
+      });
+    }
     const effectiveAmount = payload.amount ?? Number(existing.amount || 0);
     const effectiveWht = payload.whtAmount ?? Number(existing.whtAmount || 0);
     if (effectiveWht > 0 && effectiveWht >= effectiveAmount) {
@@ -1511,7 +1722,7 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
       return next(createError(400, "Property is required for this voucher category."));
     }
 
-    if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
+    if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !linesHaveExpenseAccounts(effectiveLines) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
       return next(createError(400, "Debit posting account is required for this voucher category."));
     }
     const [sourceRequisition, accountingContext] = await Promise.all([
@@ -1630,7 +1841,9 @@ const updatePaymentVoucherStatusHandler = async (req, res, next) => {
         actorUserId,
         work: async () => {
           await ensureSettlementAccount({ businessId: business, settlementAccountId: voucher.settlementAccount });
-          await ensureLiabilityAccount({ businessId: business, liabilityAccountId: voucher.liabilityAccount });
+          for (const group of payableGroupsFor(voucher)) {
+            await ensureLiabilityAccount({ businessId: business, liabilityAccountId: group.accountId });
+          }
           await ensureVoucherAccrualPosting({ voucher, actorUserId, statementDate: voucher.approvedAt || paidDate });
           await ensureVoucherSettlementPosting({ voucher, actorUserId, paidDate });
           voucher.status = "paid";
@@ -1746,3 +1959,28 @@ const deletePaymentVoucherHandler = async (req, res, next) => {
 export const updatePaymentVoucher = withVoucherLock(updatePaymentVoucherHandler);
 export const updatePaymentVoucherStatus = withVoucherLock(updatePaymentVoucherStatusHandler);
 export const deletePaymentVoucher = withVoucherLock(deletePaymentVoucherHandler);
+
+// Payee bank for a chosen service provider, or for the landlord of a chosen property. The voucher form
+// calls this when the payee changes, so the bank fills in at once. Read-only.
+export const getPayeeBankPreview = async (req, res, next) => {
+  try {
+    const businessId = await resolveBusinessId(req);
+    if (!businessId || !isValidObjectId(businessId)) return next(createError(400, "Company context required"));
+
+    const serviceProvider = isValidObjectId(req.query.serviceProvider) ? req.query.serviceProvider : null;
+    let landlord = null;
+    if (!serviceProvider && isValidObjectId(req.query.property)) {
+      const context = await resolveVoucherLandlordContext({
+        businessId,
+        propertyId: req.query.property,
+        voucherCategory: String(req.query.category || ""),
+      });
+      landlord = context?.landlordId || null;
+    }
+
+    const payeeBank = await resolvePayeeBank({ businessId, serviceProvider, landlord });
+    return res.status(200).json({ payeeBank });
+  } catch (err) {
+    return next(err);
+  }
+};

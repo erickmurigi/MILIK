@@ -58,8 +58,8 @@ export const updatePropertySchema = createPropertySchema.partial().passthrough()
 export const createUnitSchema = z.object({
   unitNumber: z.string().min(1, "Unit number is required"),
   property: z.string().min(1, "Property ID is required"),
-  rent: z.number().min(0, "Rent must be a positive number"),
-  status: z.enum(['vacant', 'occupied', 'maintenance']).default('vacant'),
+  rent: z.number().min(0, "Rent must be a positive number").optional(),
+  status: z.enum(['vacant', 'occupied', 'owner_occupied', 'maintenance']).default('vacant'),
   bedrooms: z.number().optional(),
   bathrooms: z.number().optional()
 });
@@ -71,7 +71,7 @@ export const createTenantSchema = z.object({
   name: z.string().min(1, "Tenant name is required"),
   email: z.string().email("Invalid email address").optional(),
   phone: z.string().min(10, "Valid phone number is required"),
-  idNumber: z.string().min(1, "ID number is required"),
+  idNumber: z.string().optional(),
   unit: z.string().min(1, "Unit ID is required"),
   leaseStartDate: z.string().or(z.date()),
   leaseEndDate: z.string().or(z.date()),

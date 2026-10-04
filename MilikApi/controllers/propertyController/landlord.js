@@ -47,6 +47,41 @@ const normalizeImportEmail = (value) => {
   return trimmed;
 };
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Kenyan mobile, stored as 0XXXXXXXXX (the same format tenants use). Accepts 0712…, 712…,
+// 254712… and +254 712…. Returns null when the value is not a valid mobile number.
+const toKenyanMobile = (value) => {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  let local = digits;
+  if (digits.length === 12 && digits.startsWith("254")) local = `0${digits.slice(3)}`;
+  else if (digits.length === 9) local = `0${digits}`;
+  return /^0[17]\d{8}$/.test(local) ? local : null;
+};
+
+const PHONE_ERROR = "Enter one valid mobile number, e.g. 0712 345 678, or - for none";
+
+// "-" means the landlord has no phone on record, the same as email. It is stored as an empty phone.
+const resolveLandlordPhone = (raw) => {
+  const trimmed = String(raw ?? "").trim();
+  if (trimmed === "-") return { value: "" };
+  const mobile = toKenyanMobile(trimmed);
+  return mobile ? { value: mobile } : { error: PHONE_ERROR };
+};
+const EMAIL_REQUIRED_ERROR = "Email is required. Enter - if the landlord has no email.";
+const EMAIL_INVALID_ERROR = "Enter a valid email address, or - if there is none.";
+
+// Returns { value } where value is the stored email (null for "-"), or { error }.
+const resolveLandlordEmail = (raw) => {
+  const trimmed = normalizeString(raw) || "";
+  if (!trimmed) return { error: EMAIL_REQUIRED_ERROR };
+  if (trimmed === "-") return { value: null };
+  const email = normalizeEmail(trimmed);
+  return EMAIL_PATTERN.test(email) ? { value: email } : { error: EMAIL_INVALID_ERROR };
+};
+
+const BANK_FIELDS = ["bankName", "branchName", "accountName", "accountNumber"];
+
 const authorizeLandlordAccess = (req, landlord) => {
   if (!landlord) {
     return { allowed: false, status: 404, message: "Landlord not found" };
@@ -111,11 +146,20 @@ export const createLandlord = async (req, res, next) => {
 
     const regIdValue = isPlaceholder(req.body.regId) ? null : normalizeString(req.body.regId);
     const idNumberValue = isPlaceholder(req.body.idNumber) ? null : (normalizeString(req.body.idNumber) || regIdValue);
-    const emailValue = isPlaceholder(req.body.email) ? null : normalizeEmail(req.body.email);
+    const emailResult = resolveLandlordEmail(req.body.email);
+    if (emailResult.error) return next(createError(400, emailResult.error));
+    const emailValue = emailResult.value;
     const taxPinValue = isPlaceholder(req.body.taxPin) ? null : normalizeString(req.body.taxPin);
     const landlordNameValue = normalizeString(req.body.landlordName);
     const landlordTypeValue = normalizeString(req.body.landlordType) || "Individual";
-    const phoneNumberValue = isPlaceholder(req.body.phoneNumber) ? null : normalizeString(req.body.phoneNumber);
+    const phoneResult = resolveLandlordPhone(req.body.phoneNumber);
+    if (phoneResult.error) return next(createError(400, phoneResult.error));
+    const phoneNumberValue = phoneResult.value;
+    const mobileNumberValue = normalizeString(req.body.mobileNumber) ? toKenyanMobile(req.body.mobileNumber) : "";
+    if (normalizeString(req.body.mobileNumber) && !mobileNumberValue) {
+      return next(createError(400, "Enter a valid M-Pesa number, e.g. 0712 345 678"));
+    }
+    const bankDetails = Object.fromEntries(BANK_FIELDS.map((field) => [field, normalizeString(req.body[field]) || ""]));
     const postalAddressValue = normalizeString(req.body.postalAddress) || "";
     const locationValue = normalizeString(req.body.location) || "";
     const statusValue = normalizeString(req.body.status) || "Active";
@@ -177,6 +221,8 @@ export const createLandlord = async (req, res, next) => {
       phoneNumber: phoneNumberValue,
       postalAddress: postalAddressValue,
       location: locationValue,
+      mobileNumber: mobileNumberValue,
+      ...bankDetails,
       status: statusValue,
       portalAccess: portalAccessValue,
       company: companyId,
@@ -376,7 +422,26 @@ export const updateLandlord = async (req, res, next) => {
     }
 
     if (updateData.email !== undefined) {
-      updateData.email = isPlaceholder(updateData.email) ? null : normalizeEmail(updateData.email);
+      const emailResult = resolveLandlordEmail(updateData.email);
+      if (emailResult.error) return next(createError(400, emailResult.error));
+      updateData.email = emailResult.value;
+    }
+
+    if (updateData.phoneNumber !== undefined) {
+      const phoneResult = resolveLandlordPhone(updateData.phoneNumber);
+      if (phoneResult.error) return next(createError(400, phoneResult.error));
+      updateData.phoneNumber = phoneResult.value;
+    }
+
+    if (updateData.mobileNumber !== undefined) {
+      const raw = normalizeString(updateData.mobileNumber) || "";
+      const mobile = raw ? toKenyanMobile(raw) : "";
+      if (raw && !mobile) return next(createError(400, "Enter a valid M-Pesa number, e.g. 0712 345 678"));
+      updateData.mobileNumber = mobile;
+    }
+
+    for (const field of BANK_FIELDS) {
+      if (updateData[field] !== undefined) updateData[field] = normalizeString(updateData[field]) || "";
     }
 
     if (updateData.landlordName !== undefined) {
@@ -389,10 +454,6 @@ export const updateLandlord = async (req, res, next) => {
 
     if (updateData.taxPin !== undefined) {
       updateData.taxPin = isPlaceholder(updateData.taxPin) ? null : normalizeString(updateData.taxPin);
-    }
-
-    if (updateData.phoneNumber !== undefined) {
-      updateData.phoneNumber = isPlaceholder(updateData.phoneNumber) ? null : normalizeString(updateData.phoneNumber);
     }
 
     if (updateData.postalAddress !== undefined) {
@@ -610,18 +671,32 @@ export const bulkImportLandlords = async (req, res, next) => {
     const normalizedLandlords = landlords.map((item) => {
       const regIdRaw = normalizeImportField(item.regId);
       const idNumberRaw = normalizeImportField(item.idNumber) || regIdRaw;
+      // Same rules as the create form: phone must be a valid Kenyan mobile, email is required
+      // unless it is "-" (no email), and the optional M-Pesa number must be valid when given.
+      const emailResult = resolveLandlordEmail(item.email);
+      const phoneResult = resolveLandlordPhone(item.phoneNumber);
+      const phone = phoneResult.value ?? null;
+      const rawMobile = normalizeString(item.mobileNumber) || "";
+      const mobile = rawMobile ? toKenyanMobile(rawMobile) : "";
+      let validationError = null;
+      if (emailResult.error) validationError = emailResult.error;
+      else if (phoneResult.error) validationError = phoneResult.error;
+      else if (rawMobile && !mobile) validationError = "Enter a valid M-Pesa number, e.g. 0712 345 678";
       return {
         landlordName: normalizeString(item.landlordName),
         landlordType: normalizeString(item.landlordType) || "Individual",
         regId: regIdRaw,
         idNumber: idNumberRaw,
         taxPin: normalizeImportField(item.taxPin),
-        email: normalizeImportEmail(item.email),
-        phoneNumber: normalizeImportField(item.phoneNumber),
+        email: emailResult.value ?? "",
+        phoneNumber: phone,
+        mobileNumber: mobile,
+        ...Object.fromEntries(BANK_FIELDS.map((field) => [field, normalizeString(item[field]) || ""])),
         postalAddress: normalizeString(item.postalAddress) || "",
         location: normalizeString(item.location) || "",
         status: normalizeString(item.status) || "Active",
-        portalAccess: normalizeString(item.portalAccess) || "Disabled",
+        portalAccess: "Disabled",
+        validationError,
       };
     });
 
@@ -674,6 +749,11 @@ export const bulkImportLandlords = async (req, res, next) => {
         continue;
       }
 
+      if (landlordData.validationError) {
+        results.failed.push({ landlord: landlordData.landlordName, error: landlordData.validationError });
+        continue;
+      }
+
       if (landlordData.email && existingEmails.has(landlordData.email)) {
         results.failed.push({
           landlord: landlordData.landlordName,
@@ -709,6 +789,8 @@ export const bulkImportLandlords = async (req, res, next) => {
         taxPin: landlordData.taxPin,
         email: landlordData.email || "",
         phoneNumber: landlordData.phoneNumber,
+        mobileNumber: landlordData.mobileNumber,
+        ...Object.fromEntries(BANK_FIELDS.map((field) => [field, landlordData[field]])),
         postalAddress: landlordData.postalAddress,
         location: landlordData.location,
         status: landlordData.status,

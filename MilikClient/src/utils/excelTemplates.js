@@ -1,23 +1,53 @@
 // utils/excelTemplates.js
 import * as XLSX from 'xlsx';
 
+// Kenyan mobile in the 0XXXXXXXXX format used across Milik (tenants and landlords). Accepts
+// 0712…, 712…, 254712… and +254 712…. Returns null for anything else.
+const normalizeKenyanMobile = (value) => {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  let local = digits;
+  if (digits.length === 12 && digits.startsWith('254')) local = `0${digits.slice(3)}`;
+  else if (digits.length === 9) local = `0${digits}`;
+  return /^0[17]\d{8}$/.test(local) ? local : null;
+};
+
 /**
  * Generate Excel template for Landlords with instructions
  */
 export const generateLandlordsTemplate = () => {
-  // Sheet 1: Data Template (Headers only)
+  // Sheet 1: Data Template (Headers only, with one example row)
   const dataSheet = XLSX.utils.aoa_to_sheet([
     [
       'Landlord Name *',
       'Landlord Type *',
       'Reg/ID Number',
       'Tax PIN',
-      'Email',
-      'Phone Number',
+      'Email *',
+      'Phone Number *',
       'Postal Address',
       'Location',
       'Status',
-      'Portal Access'
+      'Bank Name',
+      'Branch',
+      'Account Name',
+      'Account Number',
+      'M-Pesa Number'
+    ],
+    [
+      'JOHN KAMAU',
+      'Individual',
+      '12345678',
+      'A000000000Z',
+      'john@example.com',
+      '0712 345 678',
+      'P.O. Box 1234-00100, Nairobi',
+      'Westlands',
+      'Active',
+      'Equity Bank',
+      'Westlands',
+      'JOHN KAMAU',
+      '0123456789',
+      '0712 345 678'
     ]
   ]);
 
@@ -32,7 +62,11 @@ export const generateLandlordsTemplate = () => {
     { wch: 30 }, // Postal Address
     { wch: 20 }, // Location
     { wch: 12 }, // Status
-    { wch: 15 }  // Portal Access
+    { wch: 20 }, // Bank Name
+    { wch: 18 }, // Branch
+    { wch: 25 }, // Account Name
+    { wch: 20 }, // Account Number
+    { wch: 18 }  // M-Pesa Number
   ];
 
   // Sheet 2: Instructions & Examples
@@ -42,31 +76,38 @@ export const generateLandlordsTemplate = () => {
     ['REQUIRED FIELDS (marked with *)'],
     ['• Landlord Name: Full name of the landlord or company'],
     ['• Landlord Type: Must be one of: Individual, Company, Partnership, Trust'],
+    ['• Email: Valid email address. Enter - if the landlord has no email'],
+    ['• Phone Number: Kenyan mobile, e.g. 0712 345 678 (also accepted: 254712345678), or a dash (-) if there is none'],
     [''],
     ['OPTIONAL FIELDS (leave blank or use a dash - if not available)'],
-    ['• Reg/ID Number: National ID or company registration number (must be unique if provided)'],
+    ['• Reg/ID Number: National ID for an individual, registration number for a company (must be unique if provided)'],
     ['• Tax PIN: Tax identification number (must be unique if provided)'],
-    ['• Email: Valid email address (must be unique if provided)'],
-    ['• Phone Number: Contact phone number'],
     ['• Postal Address: Mailing address'],
     ['• Location: Physical location or area'],
     ['• Status: Active or Archived (default: Active)'],
-    ['• Portal Access: Enabled or Disabled (default: Disabled)'],
+    [''],
+    ['PAYMENT DETAILS (optional): where remittances are paid'],
+    ['• Bank Name, Branch, Account Name, Account Number'],
+    ['• M-Pesa Number: Kenyan mobile, same format as Phone Number'],
     [''],
     ['EXAMPLE DATA (Copy to Data Sheet)'],
     [''],
     // Headers
     [
-      'Landlord Name',
-      'Landlord Type',
+      'Landlord Name *',
+      'Landlord Type *',
       'Reg/ID Number',
       'Tax PIN',
-      'Email',
-      'Phone Number',
+      'Email *',
+      'Phone Number *',
       'Postal Address',
       'Location',
       'Status',
-      'Portal Access'
+      'Bank Name',
+      'Branch',
+      'Account Name',
+      'Account Number',
+      'M-Pesa Number'
     ],
     // Example 1
     [
@@ -75,11 +116,15 @@ export const generateLandlordsTemplate = () => {
       'C123456789',
       'A001234567K',
       'john.doe@example.com',
-      '+254712345678',
+      '0712 345 678',
       'P.O. Box 12345, Nairobi',
       'Westlands',
       'Active',
-      'Enabled'
+      'Equity Bank',
+      'Westlands',
+      'John Doe Properties Ltd',
+      '0123456789',
+      '0712 345 678'
     ],
     // Example 2
     [
@@ -88,40 +133,48 @@ export const generateLandlordsTemplate = () => {
       '12345678',
       'A009876543L',
       'mary.wanjiku@example.com',
-      '+254723456789',
+      '0723 456 789',
       'P.O. Box 54321, Mombasa',
       'Nyali',
       'Active',
-      'Disabled'
+      'KCB Bank',
+      'Nyali',
+      'Mary Wanjiku',
+      '1234567890',
+      ''
     ],
-    // Example 3
+    // Example 3: no email, so "-"
     [
       'ABC Real Estate Partnership',
       'Partnership',
       'P987654321',
       'A005554443M',
-      'info@abcrealestate.com',
-      '+254734567890',
+      '-',
+      '0734 567 890',
       'P.O. Box 98765, Kisumu',
       'Milimani',
       'Active',
-      'Enabled'
+      '',
+      '',
+      '',
+      '',
+      ''
     ],
     [''],
     ['IMPORTANT NOTES'],
     ['• Do not modify the column headers in the Data sheet'],
-    ['• Only Landlord Name and Landlord Type are required'],
-    ['• For optional fields you do not have, leave the cell blank or enter a dash (-)'],
+    ['• Landlord Name, Landlord Type, Email and Phone Number are required'],
+    ['• No email? Enter a dash (-) in the Email column'],
+    ['• Phone numbers must be Kenyan mobiles, e.g. 0712 345 678'],
     ['• Landlord Type must match exactly: Individual, Company, Partnership, or Trust'],
     ['• Status must be either: Active or Archived'],
-    ['• Portal Access must be either: Enabled or Disabled'],
-    ['• Email, Reg/ID Number, and Tax PIN must be unique if provided — duplicates will be skipped'],
+    ['• Email and Reg/ID Number must be unique when provided — duplicates will be skipped. A dash (-) is never a duplicate'],
     ['• Delete these instruction rows before uploading'],
     ['• Maximum 1000 landlords per import']
   ]);
 
   instructionsSheet['!cols'] = [
-    { wch: 80 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 15 }
+    { wch: 80 }, { wch: 20 }, { wch: 20 }, { wch: 20 }, { wch: 30 }, { wch: 18 }, { wch: 30 }, { wch: 20 }, { wch: 12 }, { wch: 20 }, { wch: 18 }, { wch: 25 }, { wch: 20 }, { wch: 18 }
   ];
 
   // Sheet 3: Dropdown Values Reference
@@ -137,10 +190,6 @@ export const generateLandlordsTemplate = () => {
     ['Status Options:'],
     ['Active'],
     ['Archived'],
-    [''],
-    ['Portal Access Options:'],
-    ['Enabled'],
-    ['Disabled'],
     [''],
     ['TIPS:'],
     ['• Copy and paste these values into your Data sheet'],
@@ -244,14 +293,18 @@ export const parseLandlordsExcel = (file) => {
             return row['Status'] || row['status'] || 'Active';
           };
           
-          const getPortalAccess = (row) => {
-            return row['Portal Access'] || row['portalAccess'] || 'Disabled';
-          };
-          
           // Treat dash placeholders the same as blank — user has no data for that field
           const stripPlaceholder = (v) => {
             const s = String(v || "").trim();
             return /^-+$|^n\/a$|^na$|^none$/i.test(s) ? "" : s;
+          };
+
+          const pick = (row, ...keys) => {
+            for (const key of keys) {
+              const value = row[key];
+              if (value !== undefined && value !== null && String(value).trim() !== '') return String(value).trim();
+            }
+            return '';
           };
 
           return {
@@ -260,12 +313,17 @@ export const parseLandlordsExcel = (file) => {
             landlordType: getType(row).trim(),
             regId: stripPlaceholder(getRegId(row)),
             taxPin: stripPlaceholder(getTaxPin(row)),
-            email: stripPlaceholder(getEmail(row)).toLowerCase(),
-            phoneNumber: stripPlaceholder(getPhone(row)),
+            // "-" is kept on purpose: it means the landlord has no email (the server accepts it)
+            email: String(getEmail(row) || '').trim().toLowerCase(),
+            phoneNumber: String(getPhone(row) || '').trim(),
             postalAddress: getAddress(row).trim(),
             location: getLocation(row).trim(),
             status: getStatus(row).trim(),
-            portalAccess: getPortalAccess(row).trim()
+            bankName: pick(row, 'Bank Name', 'bankName'),
+            branchName: pick(row, 'Branch', 'branchName'),
+            accountName: pick(row, 'Account Name', 'accountName'),
+            accountNumber: pick(row, 'Account Number', 'accountNumber'),
+            mobileNumber: pick(row, 'M-Pesa Number', 'mobileNumber'),
           };
         });
         
@@ -275,7 +333,6 @@ export const parseLandlordsExcel = (file) => {
         
         const validLandlordTypes = ['Individual', 'Company', 'Partnership', 'Trust'];
         const validStatuses = ['Active', 'Archived'];
-        const validPortalAccess = ['Enabled', 'Disabled'];
         
         // Track duplicates within the file
         const seenEmails = new Set();
@@ -285,13 +342,29 @@ export const parseLandlordsExcel = (file) => {
         mappedData.forEach((record) => {
           const rowErrors = [];
           
-          // Required field validations — only Name is truly required
+          // Required: name, email (or "-" for none), and a valid Kenyan mobile phone (or "-" for none)
           if (!record.landlordName) {
             rowErrors.push('Landlord Name is required');
           }
-          // Optional fields: validate format only when a value is provided
-          if (record.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email)) {
-            rowErrors.push('Invalid email format — leave blank or use a dash (-) if no email');
+          if (!record.email) {
+            rowErrors.push('Email is required — enter a dash (-) if the landlord has no email');
+          } else if (record.email !== '-' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(record.email)) {
+            rowErrors.push('Invalid email format — or enter a dash (-) if there is none');
+          }
+          if (String(record.phoneNumber ?? "").trim() === "-") {
+            record.phoneNumber = "-";
+          } else {
+            const phone = normalizeKenyanMobile(record.phoneNumber);
+            if (!phone) {
+              rowErrors.push('Phone Number must be a valid Kenyan mobile, e.g. 0712 345 678, or a dash (-) if there is none');
+            } else {
+              record.phoneNumber = phone;
+            }
+          }
+          if (record.mobileNumber) {
+            const mobile = normalizeKenyanMobile(record.mobileNumber);
+            if (!mobile) rowErrors.push('M-Pesa Number must be a valid Kenyan mobile, e.g. 0712 345 678');
+            else record.mobileNumber = mobile;
           }
           
           // Enum validations
@@ -301,12 +374,8 @@ export const parseLandlordsExcel = (file) => {
           if (record.status && !validStatuses.includes(record.status)) {
             rowErrors.push(`Invalid Status. Must be one of: ${validStatuses.join(', ')}`);
           }
-          if (record.portalAccess && !validPortalAccess.includes(record.portalAccess)) {
-            rowErrors.push(`Invalid Portal Access. Must be one of: ${validPortalAccess.join(', ')}`);
-          }
-          
-          // Check for duplicates within the file
-          if (record.email) {
+          // Check for duplicates within the file ("-" means no email, so it is never a duplicate)
+          if (record.email && record.email !== '-') {
             if (seenEmails.has(record.email)) {
               rowErrors.push('Duplicate email within file');
             }
@@ -375,7 +444,11 @@ export const exportLandlordsToExcel = (landlords) => {
     'Postal Address': landlord.postalAddress || '',
     'Location': landlord.location || '',
     'Status': landlord.status || 'Active',
-    'Portal Access': landlord.portalAccess || 'Disabled',
+    'Bank Name': landlord.bankName || '',
+    'Branch': landlord.branchName || '',
+    'Account Name': landlord.accountName || '',
+    'Account Number': landlord.accountNumber || '',
+    'M-Pesa Number': landlord.mobileNumber || '',
     'Active Properties': landlord.activeProperties || 0,
     'Created Date': landlord.createdAt ? new Date(landlord.createdAt).toLocaleDateString() : ''
   }));
@@ -395,7 +468,11 @@ export const exportLandlordsToExcel = (landlords) => {
     { wch: 30 }, // Address
     { wch: 20 }, // Location
     { wch: 12 }, // Status
-    { wch: 15 }, // Portal
+    { wch: 20 }, // Bank Name
+    { wch: 18 }, // Branch
+    { wch: 25 }, // Account Name
+    { wch: 20 }, // Account Number
+    { wch: 18 }, // M-Pesa
     { wch: 18 }, // Properties
     { wch: 15 }  // Created
   ];

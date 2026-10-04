@@ -1,16 +1,14 @@
-import { createPage, resetBrowser } from './browserService.js';
 import RentPayment from '../models/RentPayment.js';
-import { documentPageHtml, formatMoney } from '../utils/printKitCore.js';
+import Unit from '../models/Unit.js';
+import Property from '../models/Property.js';
+import Landlord from '../models/Landlord.js';
+import { documentPageHtml, formatMoney, resolveSupplier } from '../utils/printKitCore.js';
 import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
+import { renderHtmlToPdf } from '../utils/pdfRender.js';
 
 const pdfBufferCache = new Map();
 const pdfRenderPromises = new Map();
 const MAX_PDF_CACHE_ENTRIES = 24;
-const MAX_CONCURRENT_PDF_RENDERS = 3;
-const QUEUE_TIMEOUT_MS = 120_000;
-const RENDER_TIMEOUT_MS = 90_000;
-let activePdfRenderCount = 0;
-const pdfRenderWaitQueue = [];
 
 const formatCurrency = (value) =>
   new Intl.NumberFormat('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value || 0));
@@ -23,9 +21,6 @@ const esc = (value = '') =>
 
 const humanizeSnake = (s = '') =>
   String(s).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-
-const withTimeout = (promise, ms, message) =>
-  Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(new Error(message)), ms))]);
 
 const rememberPdfBuffer = (cacheKey, buffer) => {
   if (!cacheKey || !buffer) return;
@@ -43,38 +38,31 @@ const getCachedPdfBuffer = (cacheKey) => {
   return Buffer.from(cached);
 };
 
-const acquirePdfRenderSlot = async () => {
-  if (activePdfRenderCount < MAX_CONCURRENT_PDF_RENDERS) {
-    activePdfRenderCount += 1;
-    return;
-  }
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      const idx = pdfRenderWaitQueue.indexOf(resolve);
-      if (idx !== -1) pdfRenderWaitQueue.splice(idx, 1);
-      reject(new Error('PDF render queue timeout'));
-    }, QUEUE_TIMEOUT_MS);
-    pdfRenderWaitQueue.push(() => { clearTimeout(timer); resolve(); });
-  });
-  activePdfRenderCount += 1;
-};
 
-const releasePdfRenderSlot = () => {
-  activePdfRenderCount = Math.max(0, activePdfRenderCount - 1);
-  const next = pdfRenderWaitQueue.shift();
-  if (next) next();
+// A receipt belongs to a unit's property; the property's primary landlord is the supplier.
+const resolvePrimaryLandlordId = async (unitId) => {
+  if (!unitId) return null;
+  const unit = await Unit.findById(unitId).select('property').lean();
+  if (!unit?.property) return null;
+  const property = await Property.findById(unit.property).select('landlords').lean();
+  const list = Array.isArray(property?.landlords) ? property.landlords : [];
+  return (list.find((l) => l.isPrimary) || list[0])?.landlordId || null;
 };
 
 export const generateReceiptPdf = async (receiptId, businessId) => {
   // Cheap, indexed lookup (just enough to build the cache key and enforce access) so a cache
   // hit never pays for the full populated fetch below — that one only runs on an actual miss.
   const receiptStub = await RentPayment.findOne({ _id: receiptId, business: businessId })
-    .select('_id updatedAt')
+    .select('_id updatedAt unit')
     .lean();
 
   if (!receiptStub) { const e = new Error('Receipt not found or access denied'); e.status = 404; throw e; }
 
-  const cacheKey = `receipt::${String(receiptStub._id)}::${receiptStub.updatedAt ? new Date(receiptStub.updatedAt).toISOString() : ''}`;
+  // The supplier block prints the landlord's name and KRA PIN, so the landlord's update time is
+  // part of the key: editing the landlord must not leave a cached receipt with the old PIN.
+  const stubLandlordId = await resolvePrimaryLandlordId(receiptStub.unit);
+  const stubLandlord = stubLandlordId ? await Landlord.findById(stubLandlordId).select('updatedAt').lean() : null;
+  const cacheKey = `receipt::${String(receiptStub._id)}::${receiptStub.updatedAt ? new Date(receiptStub.updatedAt).toISOString() : ''}::${stubLandlord?.updatedAt ? new Date(stubLandlord.updatedAt).toISOString() : ''}`;
   const cached = getCachedPdfBuffer(cacheKey);
   if (cached) return cached;
 
@@ -96,6 +84,13 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
     receipt.receiptDate = receipt.paymentDate || receipt.createdAt;
 
     const company = receipt.business || {};
+    // The landlord is the supplier, so the letterhead carries the landlord's name, address and KRA
+    // PIN. The company (the managing agent) is only the fallback when no landlord is linked.
+    const landlordId = await resolvePrimaryLandlordId(receipt.unit?._id || receipt.unit);
+    const landlord = landlordId
+      ? await Landlord.findById(landlordId).select('landlordName taxPin postalAddress location phoneNumber email').lean()
+      : null;
+    const supplier = resolveSupplier({ landlord, company });
     const tenant = receipt.tenant || {};
     const property = receipt.property || {};
     const unit = receipt.unit || {};
@@ -125,7 +120,7 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
     const companyName = company.companyName || company.name || 'the company';
 
     const html = documentPageHtml({
-      company,
+      company: supplier,
       docType: 'Receipt',
       docNumber: receipt.receiptNumber || receipt.referenceNumber || '',
       status: confirmed ? { label: 'Confirmed', tone: 'success' } : { label: 'Pending confirmation', tone: 'warning' },
@@ -167,27 +162,9 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
       footerNote: 'Thank you for your payment.',
     });
 
-    await acquirePdfRenderSlot();
-    let page = null;
-    try {
-      page = await createPage();
-      page.setDefaultNavigationTimeout(30_000);
-      page.setDefaultTimeout(30_000);
-      await page.setContent(html, { waitUntil: 'domcontentloaded' });
-      const pdfBuffer = await withTimeout(
-        page.pdf({ format: 'A4', printBackground: true, margin: { top: '12mm', right: '12mm', bottom: '12mm', left: '12mm' } }),
-        RENDER_TIMEOUT_MS,
-        'Receipt PDF render timed out'
-      );
-      try { await page.close(); } catch { /* ignore */ }
-      rememberPdfBuffer(cacheKey, pdfBuffer);
-      return Buffer.from(pdfBuffer);
-    } catch (error) {
-      await resetBrowser();
-      throw error;
-    } finally {
-      releasePdfRenderSlot();
-    }
+    const pdfBuffer = await renderHtmlToPdf(html, 'Receipt PDF');
+    rememberPdfBuffer(cacheKey, pdfBuffer);
+    return pdfBuffer;
   })();
 
   pdfRenderPromises.set(cacheKey, renderPromise);

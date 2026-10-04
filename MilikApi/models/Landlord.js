@@ -87,6 +87,13 @@ const LandlordSchema = new mongoose.Schema(
 
     location: { type: String, default: "", trim: true },
 
+    // Payment details: where landlord remittances are sent (all optional)
+    bankName: { type: String, default: "", trim: true },
+    branchName: { type: String, default: "", trim: true },
+    accountName: { type: String, default: "", trim: true },
+    accountNumber: { type: String, default: "", trim: true },
+    mobileNumber: { type: String, default: "", trim: true }, // M-Pesa number, 0XXXXXXXXX
+
     // Attachments
     attachments: {
       type: [attachmentSchema],

@@ -18,6 +18,7 @@ import {
   FaSearch,
   FaSms,
   FaTimes,
+  FaPrint,
   FaUndo,
   FaUpload,
 } from "react-icons/fa";
@@ -29,6 +30,7 @@ import ImportModal from "../../components/Modals/ImportModal";
 import { parseInvoiceNotesExcel, downloadInvoiceNotesTemplate } from "../../utils/excelTemplates";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getChartOfAccounts, getTenantInvoices } from "../../redux/apiCalls";
+import { downloadNotePdf } from "../../redux/apiCalls/tenantInvoices";
 import {
   createTenantInvoiceNote,
   deleteTenantInvoiceNote,
@@ -1084,14 +1086,21 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
               }}
               renderActions={(note) => {
                 const noteId = String(note._id);
-                return canReverseNote(note) ? (
-                  <button type="button" onClick={() => handleReverseNote(note)} disabled={busyNoteId === noteId} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-40" title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}>
-                    <FaUndo size={12} />
-                  </button>
-                ) : (
-                  <span className="inline-flex cursor-not-allowed rounded p-1 text-slate-300" title={String(note?.status || "").toLowerCase() === "reversed" ? "Already reversed" : "Cannot reverse a cancelled note"}>
-                    <FaUndo size={12} />
-                  </span>
+                return (
+                  <div className="inline-flex items-center gap-1">
+                    <button type="button" onClick={() => downloadNotePdf(noteId, { preview: true })} className="rounded p-1 text-[#0B3B2E] hover:bg-slate-100" title="Print note">
+                      <FaPrint size={12} />
+                    </button>
+                    {canReverseNote(note) ? (
+                      <button type="button" onClick={() => handleReverseNote(note)} disabled={busyNoteId === noteId} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:cursor-not-allowed disabled:opacity-40" title={String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE" ? "Reverse this debit note only if it is still unpaid" : "Reverse this credit note and restore the source invoice amount"}>
+                        <FaUndo size={12} />
+                      </button>
+                    ) : (
+                      <span className="inline-flex cursor-not-allowed rounded p-1 text-slate-300" title={String(note?.status || "").toLowerCase() === "reversed" ? "Already reversed" : "Cannot reverse a cancelled note"}>
+                        <FaUndo size={12} />
+                      </span>
+                    )}
+                  </div>
                 );
               }}
             />

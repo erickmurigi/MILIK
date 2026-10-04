@@ -200,7 +200,7 @@ const SIDEBAR_GROUPS = [
 const emptyForms = {
   utilities: { name: "", description: "", category: "utility", isActive: true },
   periods: { name: "", durationInMonths: 1, durationInDays: 30, isActive: true },
-  expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, isActive: true },
+  expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, expenseAccount: "", payableAccount: "", isActive: true },
   deposits: { name: "", description: "", code: "", defaultAmount: 0, refundable: true, isActive: true },
   unitTypes: { name: "", description: "", category: "residential", isActive: true },
   maintenanceCategories: { name: "", description: "", priority: "medium", isActive: true },
@@ -328,6 +328,7 @@ const normalizeAccountingDefaults = (settings = {}) => ({
     settings?.accountingDefaults?.managementCommissionIncomeAccount || "",
   leaseAgreementFeeIncomeAccount:
     settings?.accountingDefaults?.leaseAgreementFeeIncomeAccount || "",
+  accountsPayableAccount: settings?.accountingDefaults?.accountsPayableAccount || "",
 });
 
 const normalizeInvAccountingDefaults = (settings = {}) => ({
@@ -490,6 +491,12 @@ const ACCOUNTING_DEFAULT_FIELDS = [
     description: "Default income account used when charging one-time tenant onboarding or lease/agreement fees.",
     type: "income",
   },
+  {
+    key: "accountsPayableAccount",
+    label: "Accounts Payable (supplier vouchers)",
+    description: "Liability credited when a supplier or one-off payment is approved. Used by any expense line whose expense item has no payable of its own.",
+    type: "liability",
+  },
 ];
 
 const INV_POS_DEFAULTS = {
@@ -519,6 +526,12 @@ const DEFAULT_UNIT_TYPES_SEED = [
   { name: "4 Bedroom",  category: "residential", isActive: true },
   { name: "Commercial", category: "commercial",  isActive: true },
 ];
+
+// Defaults whose name isn't already in the company's unit type list (case-insensitive)
+const getMissingUnitTypeDefaults = (existing = []) => {
+  const names = new Set(existing.map((item) => String(item?.name || "").trim().toLowerCase()));
+  return DEFAULT_UNIT_TYPES_SEED.filter((ut) => !names.has(ut.name.toLowerCase()));
+};
 
 const BILLING_DAY_OPTIONS = Array.from({ length: 28 }, (_, i) => {
   const d = i + 1;
@@ -1401,7 +1414,7 @@ const CompanySettings = () => {
   }, [currentCompany?._id]);
 
   useEffect(() => {
-    if (activeTab === "accounting" || activeTab === "hrAccounting") {
+    if (activeTab === "accounting" || activeTab === "hrAccounting" || activeTab === "expenses") {
       loadChartAccounts();
     }
     if (activeTab === "penaltyRules") {
@@ -1902,16 +1915,27 @@ const CompanySettings = () => {
     if (!currentCompany?._id || loadingDefaults) return;
     setLoadingDefaults(true);
     try {
-      // Fire all seed requests in parallel instead of sequentially to avoid N+1 latency
-      await Promise.all(
-        DEFAULT_UNIT_TYPES_SEED.map((ut) =>
-          adminRequests.post(`/company-settings/${currentCompany._id}/unit-types`, ut)
-        )
-      );
-      toast.success("Default unit types loaded.");
+      // One at a time: each add is a separate request, and running them together made some fail
+      // while others succeeded. Failures are collected so the user sees exactly what is missing.
+      const missing = getMissingUnitTypeDefaults(collectionMap.unitTypes || []);
+      if (missing.length === 0) {
+        toast.success("All default unit types are already present.");
+        return;
+      }
+      const failed = [];
+      for (const ut of missing) {
+        try {
+          await adminRequests.post(`/company-settings/${currentCompany._id}/unit-types`, ut);
+        } catch (err) {
+          failed.push(`${ut.name} (${extractErrorMessage(err)})`);
+        }
+      }
+      if (failed.length === 0) {
+        toast.success("Default unit types loaded.");
+      } else {
+        toast.error(`Could not add: ${failed.join("; ")}`);
+      }
       await loadSettings({ silent: true });
-    } catch (err) {
-      toast.error(extractErrorMessage(err));
     } finally {
       setLoadingDefaults(false);
     }
@@ -1934,7 +1958,7 @@ const CompanySettings = () => {
             </label>
           </div>
           <div className="flex items-center gap-2">
-            {tabKey === "unitTypes" && list.length === 0 && (
+            {tabKey === "unitTypes" && getMissingUnitTypeDefaults(list).length > 0 && (
               <button
                 onClick={handleLoadDefaultUnitTypes}
                 disabled={loadingDefaults}
@@ -2506,6 +2530,8 @@ const CompanySettings = () => {
         const bucket = chartAccountOptionsByType[field.type];
         const options = bucket?.options || [];
         const selectedAccount = (bucket?.accounts || []).find((account) => String(account?._id || "") === String(defaults[field.key] || ""));
+        const fallback = settings?.accountingDefaultsResolved?.[field.key] || null;
+        const fallbackLabel = fallback ? `${fallback.code ? `${fallback.code} – ` : ""}${fallback.name}` : "";
 
         return (
           <div key={field.key} className="border border-slate-200 bg-slate-50 p-3">
@@ -2517,7 +2543,7 @@ const CompanySettings = () => {
                 value={defaults[field.key] || ""}
                 onChange={(v) => setField(field.key, v ?? "")}
                 options={options}
-                placeholder="Use automatic fallback"
+                placeholder={fallbackLabel ? `${fallbackLabel} (automatic)` : "No account available — choose one"}
                 clearable
                 searchable
                 size="md"
@@ -2532,7 +2558,9 @@ const CompanySettings = () => {
             <div className="mt-2 text-xs leading-5 text-slate-600">
               {selectedAccount
                 ? `Selected: ${selectedAccount.code ? `${selectedAccount.code} • ` : ""}${selectedAccount.name}`
-                : "No explicit company default selected."}
+                : fallbackLabel
+                  ? `Used until you choose one: ${fallbackLabel}`
+                  : "No account available. Choose one, or create it in Chart of Accounts."}
             </div>
           </div>
         );
@@ -3351,6 +3379,26 @@ const CompanySettings = () => {
             size="md"
           />
         </div>
+        <AppSelect
+          label="Expense account"
+          value={formData.expenseAccount || ""}
+          onChange={(v) => setFormData((prev) => ({ ...prev, expenseAccount: v ?? "" }))}
+          options={chartAccounts.filter((a) => a.type === "expense").map((a) => ({ value: String(a._id), label: `${a.code} – ${a.name}` }))}
+          placeholder="Select expense account"
+          searchable
+          clearable
+          hint="Voucher lines that use this item post to this account."
+        />
+        <AppSelect
+          label="Payable account"
+          value={formData.payableAccount || ""}
+          onChange={(v) => setFormData((prev) => ({ ...prev, payableAccount: v ?? "" }))}
+          options={chartAccounts.filter((a) => a.type === "liability").map((a) => ({ value: String(a._id), label: `${a.code} – ${a.name}` }))}
+          placeholder="Use the company's Accounts Payable default"
+          searchable
+          clearable
+          hint="The liability this item's payments are owed to, e.g. Utilities Payable or Staff Payable."
+        />
         <div>
           <label className="mb-1 block text-xs font-bold text-slate-700">Default Amount</label>
           <Input type="number" min="0" step="0.01" value={formData.defaultAmount || 0} onChange={(e) => setFormData((prev) => ({ ...prev, defaultAmount: e.target.value }))} />

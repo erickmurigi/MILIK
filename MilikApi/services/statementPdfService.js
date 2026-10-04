@@ -605,7 +605,7 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
     )
     .populate(
       "landlord",
-      "firstName lastName landlordName email phone phoneNumber"
+      "firstName lastName landlordName email phone phoneNumber taxPin"
     )
     .populate("business", `${COMPANY_PRINT_FIELDS} slogan POBOX Street City`)
     .lean();
@@ -971,6 +971,11 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
               <td class="meta-value">${esc(landlordName)}</td>
               <td class="period-cell" style="font-weight:800;color:#0B3B2E">PERIOD: ${esc(statementPeriodLabel)}</td>
             </tr>
+            ${statement.landlord?.taxPin ? `<tr>
+              <td class="meta-label">Landlord KRA PIN</td>
+              <td class="meta-value">${esc(statement.landlord.taxPin)}</td>
+              <td></td>
+            </tr>` : ""}
             <tr>
               <td class="meta-label">Property</td>
               <td class="meta-value">${esc(propertyName)}</td>

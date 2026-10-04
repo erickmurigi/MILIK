@@ -78,15 +78,6 @@ const getStatusColor = (status) => {
   }
 };
 
-const getCategoryColor = (category) => {
-  switch (category?.toLowerCase()) {
-    case "residential": return "bg-blue-50 text-blue-700 border-blue-200";
-    case "commercial": return "bg-purple-50 text-purple-700 border-purple-200";
-    case "mixed use": return "bg-amber-50 text-amber-700 border-amber-200";
-    default: return "bg-slate-100 text-slate-600 border-slate-200";
-  }
-};
-
 // Module-scope helper — avoids creating an IIFE on every row render
 const getLedgerBadge = (property) => {
   const v = String(property.accountLedgerType || "").toLowerCase();
@@ -129,7 +120,6 @@ const Properties = () => {
   // Selection + table UI
   const [selectedProperties, setSelectedProperties] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
-  const [zoneOptions, setZoneOptions] = useState([]);
   const [expandedRows, setExpandedRows] = useState(new Set()); // property ids currently expanded — Set, matches MilikTable's expandedKeys shape
   const [isResizing, setIsResizing] = useState(false);
 
@@ -162,14 +152,6 @@ const Properties = () => {
     }
   }, [dispatch, currentCompany?._id]);
 
-  useEffect(() => {
-    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
-      .then((res) => setZoneOptions(
-        (res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))
-      ))
-      .catch(() => {});
-  }, []);
-
   // Keep selectAll off when page changes
   useEffect(() => {
     setSelectAll(false);
@@ -189,7 +171,7 @@ const Properties = () => {
     setSelectedProperties([]);
     setSelectAll(false);
     setActionMenuOpen(false);
-    setExpandedRows([]);
+    setExpandedRows(new Set());
   }, [draftFilters, setAppliedFilters, setCurrentPage]);
 
   const resetFilters = useCallback(() => {
@@ -198,7 +180,7 @@ const Properties = () => {
     setCurrentPage(1);
     setSelectedProperties([]);
     setSelectAll(false);
-    setExpandedRows([]);
+    setExpandedRows(new Set());
     setActionMenuOpen(false);
   }, [setAppliedFilters, setCurrentPage]);
 
@@ -397,8 +379,11 @@ const Properties = () => {
         { label: `${termProperty} Code`, value: (row) => row?.propertyCode || row?.code || "-" },
         { label: `${termProperty} Name`, value: (row) => row?.propertyName || row?.name || "-" },
         { label: termLandlord, value: (row) => row?.landlord?.name || row?.landlordName || row?.landlords?.[0]?.name || row?.landlords?.[0]?.landlordId?.landlordName || row?.landlords?.[0]?.landlordId?.fullName || "-" },
-        { label: "Location", value: (row) => row?.location || row?.address || "-" },
-        { label: termUnits, value: (row) => row?.unitsCount || row?.totalUnits || row?.units?.length || "-", align: "right" },
+        { label: "Category", value: (row) => row?.propertyType || "-" },
+        { label: "Address", value: (row) => getFullAddress(row) || "-" },
+        { label: "Mode", value: (row) => row?.letManage || "-" },
+        { label: `Total ${termUnits}`, value: (row) => row?.totalUnits || 0, align: "right" },
+        { label: "Occupancy", value: (row) => `${row?.occupiedUnits || 0} / ${row?.totalUnits || 0}`, align: "right" },
         { label: "Status", value: (row) => row?.status || "active" },
       ],
       rows: properties,
@@ -502,16 +487,6 @@ const Properties = () => {
           />
 
           <AppSelect
-            value={draftFilters.zone}
-            onChange={(v) => setDraftFilters((p) => ({ ...p, zone: v ?? "" }))}
-            options={zoneOptions}
-            placeholder="All Zones"
-            searchable
-            clearable
-            compact
-          />
-
-          <AppSelect
             value={draftFilters.category}
             onChange={(v) => setDraftFilters((p) => ({ ...p, category: v ?? "" }))}
             options={[
@@ -542,10 +517,6 @@ const Properties = () => {
             onKeyDown={onFilterEnter} placeholder="Code" />
           <ListToolbar.Input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))}
             onKeyDown={onFilterEnter} placeholder="Name" />
-          <ListToolbar.Input width="w-[4.5rem]" value={draftFilters.lr} onChange={(e) => setDraftFilters((p) => ({ ...p, lr: e.target.value }))}
-            onKeyDown={onFilterEnter} placeholder="LR No." />
-          <ListToolbar.Input width="w-20" value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: normalizeUppercaseInput(e.target.value) }))}
-            onKeyDown={onFilterEnter} placeholder="Location" />
 
           <ListToolbar.Divider />
 
@@ -565,27 +536,22 @@ const Properties = () => {
             </ListToolbar.Button>
           )}
 
-          {canUpdateProperty && (
+          {(canUpdateProperty || canDeleteProperty) && (
             <div className="shrink-0">
               <ListToolbar.Button
-                icon={FaArchive}
+                icon={FaChevronDown}
                 ref={actionMenuBtnRef}
                 disabled={selectedProperties.length === 0}
                 onClick={() => setActionMenuOpen((v) => !v)}
               >
-                Actions <FaChevronDown size={8} />
+                Actions{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
               </ListToolbar.Button>
               <ListToolbar.Menu open={actionMenuOpen && selectedProperties.length > 0} onClose={() => setActionMenuOpen(false)} anchorRef={actionMenuBtnRef}>
-                <ListToolbar.MenuItem icon={FaArchive} onClick={archiveSelected}>Archive</ListToolbar.MenuItem>
-                <ListToolbar.MenuItem icon={FaUndo} onClick={restoreSelected}>Restore</ListToolbar.MenuItem>
+                {canUpdateProperty && <ListToolbar.MenuItem icon={FaArchive} onClick={archiveSelected}>Archive</ListToolbar.MenuItem>}
+                {canUpdateProperty && <ListToolbar.MenuItem icon={FaUndo} onClick={restoreSelected}>Restore</ListToolbar.MenuItem>}
+                {canDeleteProperty && <ListToolbar.MenuItem icon={FaTrash} onClick={handleBulkDelete}>Delete</ListToolbar.MenuItem>}
               </ListToolbar.Menu>
             </div>
-          )}
-
-          {canDeleteProperty && (
-            <ListToolbar.Button icon={FaTrash} variant="danger" disabled={selectedProperties.length === 0} onClick={handleBulkDelete}>
-              Delete{selectedProperties.length > 0 ? ` (${selectedProperties.length})` : ""}
-            </ListToolbar.Button>
           )}
           {canCreateProperty && (
             <Link to="/properties/new" className="shrink-0">
@@ -607,11 +573,10 @@ const Properties = () => {
                 { label: "Name" },
                 { label: termLandlord },
                 { label: "Category" },
-                { label: "Zone" },
-                { label: "Location" },
+                { label: "Address" },
+                { label: "Mode", width: "96px" },
                 { label: `Total ${termUnits}`, align: "center", width: "92px" },
-                { label: "Occupied", align: "center", width: "84px" },
-                { label: "Vacant", align: "center", width: "84px" },
+                { label: "Occupancy", align: "center", width: "104px" },
                 { label: "Status" },
               ]}
               rows={properties || []}
@@ -631,7 +596,7 @@ const Properties = () => {
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                                     {/* Property Details */}
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-[#0B3B2E]">📋 {termProperty} Details</h4>
+                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b border-slate-300">{termProperty} details</h4>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">{termProperty} Type:</span>
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.propertyCategory || property.propertyType || "N/A"}</p>
@@ -656,7 +621,7 @@ const Properties = () => {
 
                                     {/* Financial Details */}
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-[#FF8C00]">💰 Financial Details</h4>
+                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b border-slate-300">Financial details</h4>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Let/Manage:</span>
                                         <p className="text-sm font-bold text-gray-900 mt-1">{property.letManage || "N/A"}</p>
@@ -666,33 +631,31 @@ const Properties = () => {
                                         <div className="mt-1 flex flex-col gap-1">
                                           {getLedgerBadge(property) ? (
                                             <>
-                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700 border border-purple-200">
-                                                {termProperty} GL — {property.propertyLedgerEnabled ? "Ledger Active" : "Ledger Disabled"}
+                                              <span className="text-sm font-bold text-gray-900">
+                                                {termProperty} GL — {property.propertyLedgerEnabled ? "Ledger active" : "Ledger disabled"}
                                               </span>
                                               <Link
                                                 to={`/properties/${property._id}/ledger`}
-                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-700 text-white hover:bg-purple-800 w-fit"
+                                                className="inline-flex items-center gap-1 text-xs font-bold text-[#0B3B2E] underline w-fit"
                                                 onClick={(e) => e.stopPropagation()}
                                               >
                                                 {termProperty} Ledger →
                                               </Link>
                                             </>
                                           ) : (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700 border border-emerald-200">
-                                              In-GL — Posts to General Ledger
-                                            </span>
+                                            <span className="text-sm font-bold text-gray-900">In-GL: posts to the general ledger</span>
                                           )}
                                         </div>
                                       </div>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">Held for {termLandlord}:</span>
                                         {property.pctrlBalance > 0 ? (
-                                          <p className="text-sm font-bold text-emerald-700 mt-1">
+                                          <p className="text-sm font-bold text-gray-900 mt-1">
                                             KES {Number(property.pctrlBalance).toLocaleString("en-KE", { minimumFractionDigits: 2 })}
                                           </p>
                                         ) : (
-                                          <p className="text-sm font-bold text-slate-400 mt-1">
-                                            {property.controlAccount ? "KES 0.00" : "⚠ No control account"}
+                                          <p className="text-sm font-bold text-slate-500 mt-1">
+                                            {property.controlAccount ? "KES 0.00" : "No control account"}
                                           </p>
                                         )}
                                       </div>
@@ -702,18 +665,18 @@ const Properties = () => {
                                       </div>
                                       <div>
                                         <span className="text-xs font-semibold text-gray-700">M-Pesa Paybill:</span>
-                                        <p className="text-sm font-bold text-gray-900 mt-1">{property.mpesaPaybill ? "✅ Yes" : "❌ No"}</p>
+                                        <p className="text-sm font-bold text-gray-900 mt-1">{property.mpesaPaybill ? "Yes" : "No"}</p>
                                       </div>
                                     </div>
 
                                     {/* Contact Details */}
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-blue-600">👥 Contact Details</h4>
+                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b border-slate-300">Contact details</h4>
                                       {property.landlords && property.landlords.length > 0 ? (
                                         property.landlords.map((landlord, idx) => (
                                           <div key={landlord._id || landlord.landlordId || idx} className="p-2 bg-gray-50 rounded border border-gray-200">
                                             <p className="text-sm font-bold text-gray-900">
-                                              {landlord.name} {landlord.isPrimary && "⭐ (Primary)"}
+                                              {landlord.name} {landlord.isPrimary && "(primary)"}
                                             </p>
                                             {landlord.contact && (
                                               <p className="text-xs text-gray-700 font-semibold mt-1">{landlord.contact}</p>
@@ -733,10 +696,10 @@ const Properties = () => {
 
                                     {/* Actions */}
                                     <div className="space-y-3 p-3 bg-white rounded-lg shadow-sm border border-gray-100">
-                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b-2 border-green-600">⚙️ Actions</h4>
+                                      <h4 className="font-bold text-gray-900 text-sm mb-3 pb-2 border-b border-slate-300">Actions</h4>
                                       <div className="flex flex-col gap-2 action-buttons">
                                         <Link to={`/properties/${property._id}`} onClick={(e) => e.stopPropagation()}>
-                                          <button className="px-3 py-2 text-xs bg-blue-600 text-white rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors w-full font-bold">
+                                          <button className="px-3 py-2 text-xs border border-slate-300 bg-white text-slate-800 flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors w-full font-bold">
                                             <FaEye /> View Details
                                           </button>
                                         </Link>
@@ -773,38 +736,33 @@ const Properties = () => {
               renderRow={(property) => (
                 <>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(property.propertyCode)}</span>
+                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyCode)}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                     <span className="font-semibold text-slate-900 truncate block">{toListingCaps(property.propertyName)}</span>
                     {getLedgerBadge(property) && (
-                      <span className="inline-flex items-center px-1.5 py-px rounded text-[9px] font-bold tracking-wide bg-purple-100 text-purple-700 border border-purple-200 mt-0.5">
-                        {termProperty} GL{property.propertyLedgerEnabled ? " ✓" : ""}
+                      <span className="block text-[10px] font-semibold text-slate-500">
+                        {termProperty} GL{property.propertyLedgerEnabled ? "" : " (off)"}
                       </span>
                     )}
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="text-slate-600 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
-                  </td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getCategoryColor(property.propertyType)}`}>
-                      {property.propertyType || "N/A"}
-                    </span>
+                    <span className="text-slate-700 truncate block">{toListingCaps(getPrimaryLandlord(property.landlords))}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="text-slate-600 truncate block">{toListingCaps(property.zoneRegion || "—")}</span>
+                    <span className="text-slate-700 truncate block">{property.propertyType || "—"}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="text-slate-600 truncate block">{toListingCaps(getFullAddress(property))}</span>
+                    <span className="text-slate-700 truncate block">{toListingCaps(getFullAddress(property) || "—")}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-700">
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-700 truncate block">{property.letManage || "—"}</span>
+                  </td>
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-semibold text-slate-900 tabular-nums">
                     {property.totalUnits || 0}
                   </td>
-                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-emerald-700">
-                    {property.occupiedUnits || 0}
-                  </td>
-                  <td className="px-3 py-1.5 text-center border-r border-gray-100 font-bold text-red-600">
-                    {property.vacantUnits || 0}
+                  <td className="px-3 py-1.5 text-center border-r border-gray-100 tabular-nums text-slate-900">
+                    {property.occupiedUnits || 0} / {property.totalUnits || 0}
                   </td>
                   <td className="px-3 py-1.5">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(property.status)}`}>

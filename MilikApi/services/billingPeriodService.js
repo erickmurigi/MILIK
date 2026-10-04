@@ -41,6 +41,16 @@ export const canonicalizeBillingPeriodKey = (value = "") => {
   return LEGACY_KEY_ALIASES[normalized] || normalized || "monthly";
 };
 
+// Schedule period key: billing key + the date the period is anchored on (the lease start).
+// Same format the client's schedule builds. Dates are read in UTC, which matches how
+// "YYYY-MM-DD" move-in and start dates are stored (midnight UTC).
+export const buildSchedulePeriodKey = ({ startDate, billingPeriodKey = "monthly" } = {}) => {
+  const dt = new Date(startDate);
+  if (Number.isNaN(dt.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${canonicalizeBillingPeriodKey(billingPeriodKey)}:${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+};
+
 export const buildBillingPeriodRecord = (input = {}, fallback = null) => {
   const fallbackDurationMonths = Number(fallback?.durationInMonths || 1);
   const durationInMonthsRaw = Number(input?.durationInMonths ?? fallback?.durationInMonths ?? 1);

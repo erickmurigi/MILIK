@@ -190,8 +190,9 @@ const AppSelect = ({
     }
   };
 
-  const heightCls = compact ? "h-[20px] text-[9px]" : size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
-  const roundedCls = (compact || size === "sm") ? "rounded-none" : "rounded-lg";
+  const heightCls = compact ? "h-[22px] text-[10px]" : size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
+  // Square corners everywhere, to match the rest of the Milik fields
+  const roundedCls = "rounded-none";
   const paddingCls = compact ? "px-1.5" : "px-3";
   const minWidthCls = compact ? "min-w-[70px]" : "min-w-[110px]";
   const hasError = Boolean(error);
@@ -246,14 +247,14 @@ const AppSelect = ({
                 e.stopPropagation();
                 onChange?.(null);
               }}
-              className="rounded p-0.5 text-slate-400 hover:text-slate-700"
+              className="p-0.5 text-slate-400 hover:text-slate-700"
               aria-label="Clear"
             >
               <FaTimes size={9} />
             </span>
           )}
           <FaChevronDown
-            size={compact ? 7 : 10}
+            size={compact ? 9 : 10}
             className={`shrink-0 text-slate-400 transition-transform duration-150 ${
               open ? "rotate-180" : ""
             }`}
@@ -278,7 +279,7 @@ const AppSelect = ({
             style={dropdownStyle}
             className={(compact || size === "sm")
               ? "border border-slate-300 bg-white shadow-lg"
-              : "rounded-xl border border-slate-200 bg-white shadow-2xl"}
+              : "border border-slate-200 bg-white shadow-2xl"}
           >
             {searchable && (
               <div className={`flex items-center gap-2 border-b border-slate-100 ${compact ? "px-2 py-1" : "px-3 py-2"}`}>

@@ -1,6 +1,6 @@
 import React, { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../common/AppSelect";
 import {
@@ -20,21 +20,23 @@ import {
   FaCog,
   FaArrowLeft,
 } from "react-icons/fa";
-import { createProperty } from "../../redux/propertyRedux";
+import { clearCurrentProperty, createProperty, getPropertyById, updateProperty } from "../../redux/propertyRedux";
 import { getLandlords, createLandlord } from "../../redux/apiCalls";
+import BankDetailsFields from "../common/BankDetailsFields";
+import { INITIAL_LANDLORD_FORM, buildLandlordPayload, formatMobile, toKenyanMobile, validateLandlordForm } from "../../utils/landlordForm";
 import { useTerms } from "../../hooks/useTerm";
-import { selectCurrentCompany, selectCurrentUser, selectActiveLandlords, selectAllProperties, selectPropertyLoading, selectPropertyError } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectActiveLandlords, selectAllProperties, selectPropertyLoading, selectPropertyError, selectCurrentProperty } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
-import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 const PropertyMapPicker = lazy(() => import("../common/PropertyMapPicker"));
 
 const MILIK_ORANGE_BG = "bg-orange-600";
 const MILIK_ORANGE_BG_HOVER = "hover:bg-orange-700";
 const MILIK_ORANGE_RING = "focus:ring-orange-500/30";
-const MILIK_ORANGE_BORDER_FOCUS = "focus:border-orange-500";
+const MILIK_ORANGE_BORDER_FOCUS = "focus:border-[#0B3B2E]";
 
 const normalizePropertyServiceMode = (value = "Managing") => {
   const normalized = String(value || "").trim().toLowerCase();
@@ -110,7 +112,6 @@ const AddProperty = () => {
   const currentUser = useSelector(selectCurrentUser);
   const {
     property: termProperty,
-    properties: termProperties,
     unit: termUnit,
     units: termUnits,
     landlord: termLandlord,
@@ -126,7 +127,6 @@ const AddProperty = () => {
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isSelfManagingLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
-  const operatingModeLabel = getCompanyOperatingModeLabel(activeCompanyContext?.companyMode);
   const ownerCompanyName = activeCompanyContext?.companyName || "Current company";
   const ownerPrimaryContact =
     activeCompanyContext?.email ||
@@ -139,7 +139,10 @@ const AddProperty = () => {
 
   const [zones, setZones] = useState([]);
   const [activeTab, setActiveTab] = useState("general");
-  const draftStorageKey = currentCompany?._id ? `milik:add-property-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
+  const { id } = useParams();
+  const isEditMode = Boolean(id);
+  const currentProperty = useSelector(selectCurrentProperty);
+  const draftStorageKey = !isEditMode && currentCompany?._id ? `milik:add-property-draft:${currentCompany._id}:${currentUser?._id || currentUser?.id || currentUser?.email || "user"}` : null;
   const draftReadyRef = useRef(false);
   const [draftReadyNonce, setDraftReadyNonce] = useState(0);
 
@@ -222,15 +225,67 @@ const AddProperty = () => {
   );
 
   const [formData, setFormData] = useState(initialFormData);
+
+  useEffect(() => {
+    if (!id) return;
+    dispatch(clearCurrentProperty());
+    dispatch(getPropertyById(id));
+    return () => {
+      dispatch(clearCurrentProperty());
+    };
+  }, [dispatch, id]);
+
+  useEffect(() => {
+    if (!isEditMode || !currentProperty) return;
+    const landlordArray = Array.isArray(currentProperty.landlords)
+      ? currentProperty.landlords
+      : currentProperty.landlords ? [currentProperty.landlords] : [];
+    const normalizedLandlords = landlordArray.length > 0
+      ? landlordArray.map((landlord, index) => ({
+          ...landlord,
+          landlordId: landlord?.landlordId?._id || landlord?.landlordId || landlord?._id || "",
+          name: landlord?.name || landlord?.landlordName || landlord?.landlordId?.landlordName || landlord?.landlordId?.fullName || landlord?.landlordId?.name || "",
+          contact: landlord?.contact || landlord?.landlordId?.email || landlord?.landlordId?.phone || "",
+          isPrimary: index === 0 || landlord?.isPrimary === true,
+        }))
+      : [{ landlordId: "", name: "", contact: "", isPrimary: true }];
+
+    let parsedDate = "";
+    if (currentProperty.dateAcquired) {
+      const d = new Date(currentProperty.dateAcquired);
+      if (!Number.isNaN(d.getTime())) parsedDate = d.toISOString().split("T")[0];
+    }
+
+    setFormData({
+      ...initialFormData,
+      ...currentProperty,
+      landlords: normalizedLandlords,
+      dateAcquired: parsedDate,
+      standingCharges: currentProperty.standingCharges || [],
+      securityDeposits: currentProperty.securityDeposits || [],
+      utilityRates: currentProperty.utilityRates || [],
+      smsExemptions: currentProperty.smsExemptions || initialFormData.smsExemptions,
+      emailExemptions: currentProperty.emailExemptions || initialFormData.emailExemptions,
+      lettingFeeMode: currentProperty.lettingFeeMode || "percentage",
+      lettingFeeValue: currentProperty.lettingFeeValue ?? 100,
+      amenities: Array.isArray(currentProperty.amenities) ? currentProperty.amenities.join(", ") : "",
+      yearBuilt: currentProperty.yearBuilt ?? "",
+      listingContact: { ...initialFormData.listingContact, ...(currentProperty.listingContact || {}) },
+      nearbyPoints: Array.isArray(currentProperty.nearbyPoints) ? currentProperty.nearbyPoints : [],
+      coordinates: {
+        lat: currentProperty.coordinates?.lat ?? "",
+        lng: currentProperty.coordinates?.lng ?? "",
+      },
+    });
+    draftReadyRef.current = true;
+  }, [currentProperty, id, isEditMode, initialFormData]);
   const [fieldErrors, setFieldErrors] = useState({});
   const [generalError, setGeneralError] = useState("");
 
   const [openAddLandlordModal, setOpenAddLandlordModal] = useState(false);
-  const [newLandlord, setNewLandlord] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-  });
+  const [newLandlord, setNewLandlord] = useState(INITIAL_LANDLORD_FORM);
+  const [newLandlordErrors, setNewLandlordErrors] = useState({});
+  const [savingLandlord, setSavingLandlord] = useState(false);
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
   const [utilityTypeOptionsLoading, setUtilityTypeOptionsLoading] = useState(false);
   const [depositTypeOptions, setDepositTypeOptions] = useState([]);
@@ -311,14 +366,13 @@ const AddProperty = () => {
   ];
 
 
-  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
-  const helperLabelClass = "block text-xs font-medium text-slate-600 mb-1";
+  const labelClass = "mb-1 block text-xs font-bold text-slate-900";
 
-  const inputClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
-  const textareaClass = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 min-h-[80px]";
+  const inputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+  const textareaClass = "w-full border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 min-h-[80px]";
 
-  const sectionCard = "overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm";
-  const sectionHeader = "text-[11px] font-bold uppercase tracking-wide text-slate-700";
+  const sectionCard = "overflow-hidden border border-slate-200 bg-white shadow-sm";
+  const sectionHeader = "text-[11px] font-black uppercase tracking-wide text-slate-700";
 
   const uppercasePropertyFields = new Set(["propertyCode", "propertyName", "zoneRegion", "roadStreet", "estateArea", "townCityState", "invoicePrefix", "specificContactInfo"]);
 
@@ -480,57 +534,59 @@ const AddProperty = () => {
     return errors;
   };
 
+  const resetNewLandlord = () => {
+    setNewLandlord(INITIAL_LANDLORD_FORM);
+    setNewLandlordErrors({});
+  };
+
+  const closeAddLandlordModal = () => {
+    setOpenAddLandlordModal(false);
+    resetNewLandlord();
+  };
+
+  const updateNewLandlord = (name, value) => {
+    setNewLandlord((prev) => ({ ...prev, [name]: value }));
+    if (newLandlordErrors[name]) setNewLandlordErrors((prev) => ({ ...prev, [name]: undefined }));
+  };
+
   const saveNewLandlordFromModal = async () => {
     if (!currentCompany?._id) {
       toast.error("No active company selected. Please create or select a company first.");
       return;
     }
 
-    if (!newLandlord.fullName.trim()) {
-      toast.error(`${termLandlord} full name is required`);
-      return;
-    }
-    if (!newLandlord.email.trim()) {
-      toast.error(`${termLandlord} email is required`);
-      return;
-    }
-    if (!newLandlord.phone.trim()) {
-      toast.error(`${termLandlord} phone is required`);
+    const errors = validateLandlordForm(newLandlord);
+    setNewLandlordErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      toast.error("Check the highlighted fields");
       return;
     }
 
-    const names = newLandlord.fullName.trim().split(/\s+/);
-    const landlordName = newLandlord.fullName.trim();
-    const regId = `TEMP-${Date.now()}`;
-    const taxPin = `TEMP-PIN-${Date.now()}`;
+    // The same landlord already on file is selected, not duplicated
+    const phone = toKenyanMobile(newLandlord.phoneNumber);
+    const email = newLandlord.email.trim().toLowerCase();
+    const existing = landlordsFromStore.find((l) =>
+      (phone && toKenyanMobile(l?.phoneNumber) === phone) ||
+      (email && email !== "-" && String(l?.email || "").trim().toLowerCase() === email)
+    );
+    if (existing) {
+      handleSelectLandlord(existing._id, existing);
+      toast.info(`${termLandlord} already on file, selected.`);
+      closeAddLandlordModal();
+      return;
+    }
 
+    setSavingLandlord(true);
     try {
-      const created = await dispatch(
-        createLandlord({
-          landlordName,
-          landlordType: "Individual",
-          regId,
-          taxPin,
-          postalAddress: "",
-          email: newLandlord.email.trim(),
-          phoneNumber: newLandlord.phone.trim(),
-          location: "",
-          portalAccess: "Disabled",
-          status: "Active",
-          company: currentCompany._id,
-        })
-      );
-
-      const savedLandlord = created;
-
+      const saved = await dispatch(createLandlord(buildLandlordPayload({ ...newLandlord, status: "Active" }, currentCompany._id)));
       await dispatch(getLandlords({ company: currentCompany._id }));
-      handleSelectLandlord(savedLandlord._id, savedLandlord);
-
-      toast.success(`${termLandlord} added successfully!`);
-      setOpenAddLandlordModal(false);
-      setNewLandlord({ fullName: "", email: "", phone: "" });
+      handleSelectLandlord(saved._id, saved);
+      toast.success(`${termLandlord} added`);
+      closeAddLandlordModal();
     } catch (err) {
-      toast.error(err?.message || "Failed to add landlord");
+      toast.error(err?.message || `Failed to add ${termLandlord.toLowerCase()}`);
+    } finally {
+      setSavingLandlord(false);
     }
   };
 
@@ -585,19 +641,25 @@ const AddProperty = () => {
       },
     };
 
+    // Images are managed through their own endpoint, never through the main payload
+    delete propertyData.images;
+    if (isEditMode) delete propertyData.createdBy;
+
     try {
       setFieldErrors({});
       setGeneralError("");
 
-      const result = await dispatch(createProperty(propertyData)).unwrap();
+      const result = await dispatch(
+        isEditMode ? updateProperty({ id, propertyData }) : createProperty(propertyData)
+      ).unwrap();
 
       await dispatch(getLandlords({ company: businessId }));
 
       clearDraftState();
-      toast.success(result?.message || `${termProperty} created successfully!`);
+      toast.success(result?.message || `${termProperty} ${isEditMode ? "updated" : "created"} successfully!`);
       navigate("/properties");
     } catch (err) {
-      let backendMessage = "Failed to create property";
+      let backendMessage = `Failed to ${isEditMode ? "update" : "create"} ${termProperty.toLowerCase()}`;
 
       if (typeof err === "string") backendMessage = err;
       else if (err?.message && err.message !== "Unauthorized") backendMessage = err.message;
@@ -774,8 +836,8 @@ const AddProperty = () => {
     const landlordOptions = landlordItems.map((l) => ({ value: getLandlordId(l), label: getLandlordLabel(l) }));
 
     return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className={labelClass}>Date Acquired <span className="text-red-500">*</span></label>
             <input
@@ -799,14 +861,14 @@ const AddProperty = () => {
               onChange={(val) => handleChange({ target: { name: "letManage", value: val } })}
             />
             {formData.letManage === "Letting" && (
-              <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <span className="font-bold">Letting only:</span> {termTenant} pays {termRent} directly to the {termLandlord}. Deposit held by {termLandlord}. A one-time letting fee is charged when placing a {termTenant}. {termLandlord} statements and disbursements are not available.
-              </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                {termTenant} pays {termRent} directly to the {termLandlord}. A one-time letting fee is charged when placing a {termTenant}.
+              </p>
             )}
             {formData.letManage === "Both" && (
-              <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-                <span className="font-bold">Let &amp; Manage:</span> Charge a one-time letting fee when placing a {termTenant}, then continue managing the {termProperty} with ongoing commission and {termLandlord} statements.
-              </div>
+              <p className="mt-1 text-[11px] text-slate-500">
+                A one-time letting fee is charged when placing a {termTenant}, then the {termProperty} is managed with ongoing commission and {termLandlord} statements.
+              </p>
             )}
           </div>
 
@@ -953,6 +1015,7 @@ const AddProperty = () => {
             <AppSelect
               label="Zone/Region"
               placeholder="Select Zone"
+              searchable
               options={zones.map((x) => ({ value: x, label: x }))}
               value={formData.zoneRegion}
               onChange={(val) => handleChange({ target: { name: "zoneRegion", value: val } })}
@@ -1008,9 +1071,9 @@ const AddProperty = () => {
               <button
                 type="button"
                 onClick={() => setOpenAddLandlordModal(true)}
-                className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
+                className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline"
               >
-                <FaPlus /> Add {termLandlord}
+                <FaPlus size={9} /> Add {termLandlord}
               </button>
             </div>
 
@@ -1027,9 +1090,6 @@ const AddProperty = () => {
                   onChange={(id) => handleSelectLandlord(id, landlordItems.find((l) => getLandlordId(l) === id))}
                   error={fieldErrors.landlord}
                 />
-                <p className="mt-1 text-xs text-slate-500">
-                  Select an existing landlord from the database.
-                </p>
               </div>
 
               <div>
@@ -1065,157 +1125,175 @@ const AddProperty = () => {
         <Modal
           open={openAddLandlordModal}
           title={`Add ${termLandlord}`}
-          onClose={() => setOpenAddLandlordModal(false)}
+          onClose={closeAddLandlordModal}
+          maxWidthClass="max-w-3xl"
         >
-          <div className="space-y-3">
-            <div>
-              <label className={labelClass}>Full Name <span className="text-red-500">*</span></label>
-              <input
-                value={newLandlord.fullName}
-                onChange={(e) => setNewLandlord((p) => ({ ...p, fullName: e.target.value }))}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                placeholder="e.g., John Doe"
-              />
-            </div>
+          {(() => {
+            const fieldError = (name) =>
+              newLandlordErrors[name] ? <p className="mt-0.5 text-[11px] font-semibold text-red-600">{newLandlordErrors[name]}</p> : null;
+            const isIndividual = newLandlord.landlordType === "Individual";
+            const landlordTypeOptions = ["Individual", "Company", "Partnership", "Trust"].map((x) => ({ value: x, label: x }));
+            const knownBanks = landlordsFromStore.map((l) => l?.bankName).filter(Boolean);
 
-            <div>
-              <label className={labelClass}>Email <span className="text-red-600">*</span></label>
-              <input
-                value={newLandlord.email}
-                onChange={(e) => setNewLandlord((p) => ({ ...p, email: e.target.value }))}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                placeholder="e.g., john@example.com"
-              />
-            </div>
+            return (
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-3">
+                  <div className="md:col-span-2">
+                    <label className={labelClass}>{termLandlord} name <span className="text-red-600">*</span></label>
+                    <input
+                      value={newLandlord.landlordName}
+                      onChange={(e) => updateNewLandlord("landlordName", normalizeUppercaseInput(e.target.value))}
+                      placeholder="e.g. JOHN DOE"
+                      className={`${inputClass} ${newLandlordErrors.landlordName ? "border-red-500" : ""}`}
+                    />
+                    {fieldError("landlordName")}
+                  </div>
+                  <div>
+                    <AppSelect
+                      label={`${termLandlord} type`}
+                      options={landlordTypeOptions}
+                      value={newLandlord.landlordType}
+                      onChange={(val) => updateNewLandlord("landlordType", val || "Individual")}
+                    />
+                  </div>
 
-            <div>
-              <label className={labelClass}>Phone <span className="text-red-500">*</span></label>
-              <input
-                value={newLandlord.phone}
-                onChange={(e) => setNewLandlord((p) => ({ ...p, phone: e.target.value }))}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                placeholder="e.g., +2547..."
-              />
-            </div>
+                  <div>
+                    <label className={labelClass}>Phone <span className="text-red-600">*</span></label>
+                    <input
+                      value={newLandlord.phoneNumber}
+                      onChange={(e) => updateNewLandlord("phoneNumber", e.target.value)}
+                      onBlur={() => {
+                        const local = toKenyanMobile(newLandlord.phoneNumber);
+                        if (local) updateNewLandlord("phoneNumber", formatMobile(local));
+                      }}
+                      placeholder="0712 345 678"
+                      className={`${inputClass} ${newLandlordErrors.phoneNumber ? "border-red-500" : ""}`}
+                    />
+                    {fieldError("phoneNumber")}
+                  </div>
+                  <div>
+                    <label className={labelClass}>Email <span className="text-red-600">*</span></label>
+                    <input
+                      value={newLandlord.email}
+                      onChange={(e) => updateNewLandlord("email", e.target.value)}
+                      placeholder="name@example.com, or -"
+                      className={`${inputClass} ${newLandlordErrors.email ? "border-red-500" : ""}`}
+                    />
+                    {fieldError("email")}
+                  </div>
+                  <div>
+                    <label className={labelClass}>KRA PIN</label>
+                    <input
+                      value={newLandlord.taxPin}
+                      onChange={(e) => updateNewLandlord("taxPin", normalizeUppercaseInput(e.target.value))}
+                      placeholder="Leave blank if not known"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>{isIndividual ? "National ID No." : "Registration No."}</label>
+                    <input
+                      value={newLandlord.regId}
+                      onChange={(e) => updateNewLandlord("regId", normalizeUppercaseInput(e.target.value))}
+                      placeholder={isIndividual ? "e.g. 12345678" : "e.g. PVT-1234567"}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setOpenAddLandlordModal(false)}
-                className="h-10 px-4 text-sm font-semibold border border-slate-300 rounded-md bg-white hover:bg-slate-50 transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={saveNewLandlordFromModal}
-                className={`h-10 px-4 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md ${MILIK_ORANGE_BG_HOVER} transition`}
-              >
-                Save {termLandlord}
-              </button>
-            </div>
-          </div>
+                <BankDetailsFields
+                  title="Bank & payment details"
+                  values={newLandlord}
+                  onChange={updateNewLandlord}
+                  knownBanks={knownBanks}
+                />
+
+                <div className="flex justify-end gap-2 border-t border-slate-200 pt-2">
+                  <button
+                    type="button"
+                    onClick={closeAddLandlordModal}
+                    disabled={savingLandlord}
+                    className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveNewLandlordFromModal}
+                    disabled={savingLandlord}
+                    className="h-7 bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50"
+                  >
+                    {savingLandlord ? "Saving…" : `Save ${termLandlord}`}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
         </Modal>
       </div>
     );
   };
 
-  const renderAccountingBilling = () => (
-    <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <AppSelect
-            label="Account Ledger Type"
-            placeholder="Select Ledger Type"
-            options={["in-gl", "property-gl"].map((x) => ({
-              value: x,
-              label: x === "property-gl" ? `${termProperty} GL` : "In-GL (Company General Ledger)",
-            }))}
-            value={formData.accountLedgerType}
-            onChange={(val) => handleChange({ target: { name: "accountLedgerType", value: val } })}
-          />
-          {formData.accountLedgerType === "in-gl" && (
-            <p className="mt-1 text-[11px] text-blue-600">{termInvoices} and {termReceipts.toLowerCase()} post journal entries into the company GL. Appears in Trial Balance, P&amp;L, and Balance Sheet.</p>
-          )}
-          {formData.accountLedgerType === "property-gl" && (
-            <p className="mt-1 text-[11px] text-purple-600">This {termProperty.toLowerCase()} has its own isolated ledger — no entries post to the company GL. Enable the {termProperty} Ledger below to activate posting.</p>
-          )}
-        </div>
-      </div>
+  const renderAccountingBilling = () => {
+    const messageRows = [
+      { key: "all", label: "All messages" },
+      { key: "invoice", label: termInvoices },
+      { key: "receipt", label: termReceipts },
+      { key: "balance", label: "Balance" },
+      { key: "general", label: "General" },
+    ];
+    const toggleExemption = (group, key, checked) =>
+      handleChange({ target: { name: key, type: "checkbox", checked } }, group);
+    const isPropertyGl = formData.accountLedgerType === "property-gl";
 
-      {formData.accountLedgerType === "property-gl" && (
-        <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-4">
-          <div className="flex items-start gap-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                name="propertyLedgerEnabled"
-                checked={!!formData.propertyLedgerEnabled}
-                onChange={(e) => handleChange({ target: { name: "propertyLedgerEnabled", type: "checkbox", checked: e.target.checked } })}
-                className="h-4 w-4 rounded border-purple-300 text-purple-600 focus:ring-purple-500"
-              />
-              <span className="text-sm font-semibold text-purple-800">Enable {termProperty} Ledger</span>
-            </label>
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-3">
+          <div>
+            <AppSelect
+              label="Account Ledger Type"
+              placeholder="Select Ledger Type"
+              options={[
+                { value: "in-gl", label: "In-GL (Company General Ledger)" },
+                { value: "property-gl", label: `${termProperty} GL` },
+              ]}
+              value={formData.accountLedgerType}
+              onChange={(val) => handleChange({ target: { name: "accountLedgerType", value: val } })}
+            />
+            <p className="mt-1 text-[11px] text-slate-500">
+              {isPropertyGl
+                ? `Posts to this ${termProperty.toLowerCase()}'s own ledger, not the company GL.`
+                : `${termInvoices} and ${termReceipts.toLowerCase()} post to the company GL.`}
+            </p>
           </div>
-          <p className="mt-2 text-[11px] text-purple-700">
-            When enabled, {termInvoices.toLowerCase()} and {termReceipts.toLowerCase()} post to this {termProperty.toLowerCase()}&apos;s own isolated ledger — visible via the <strong>{termProperty} Ledger</strong> button on the {termProperties.toLowerCase()} list.
-            When disabled, transactions are tracked internally but no journal entries are created.
-          </p>
-        </div>
-      )}
 
-      <div>
-      <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>COMMUNICATION CONTROLS</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              name="all"
-              checked={Boolean(formData.smsExemptions?.all)}
-              onChange={(e) => handleChange(e, "smsExemptions")}
-            />
-            Disable All SMS
-          </label>
+          {isPropertyGl && (
+            <div className="flex items-start pt-6">
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-900">
+                <input
+                  type="checkbox"
+                  name="propertyLedgerEnabled"
+                  checked={!!formData.propertyLedgerEnabled}
+                  onChange={(e) => handleChange({ target: { name: "propertyLedgerEnabled", type: "checkbox", checked: e.target.checked } })}
+                />
+                Enable {termProperty} Ledger
+              </label>
+            </div>
+          )}
 
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              name="all"
-              checked={Boolean(formData.emailExemptions?.all)}
-              onChange={(e) => handleChange(e, "emailExemptions")}
-            />
-            Disable All Emails
-          </label>
-        </div>
-      </div>
-
-        <label className={labelClass}>{termInvoice} Payment Terms</label>
-        <textarea
-          name="invoicePaymentTerms"
-          value={formData.invoicePaymentTerms}
-          onChange={handleChange}
-          rows={4}
-          className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-        />
-      </div>
-
-      <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>LATE PENALTY SETTING</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-          <div className="flex items-center gap-3">
-            <label className={helperLabelClass}>Exempt from Late Penalties?</label>
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+          <div>
+            <span className={labelClass}>Exempt from late penalties</span>
+            <div className="flex h-7 items-center gap-4 text-xs font-bold text-slate-900">
+              <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
                   name="exemptFromLatePenalties"
-                  checked={formData.exemptFromLatePenalties}
+                  checked={Boolean(formData.exemptFromLatePenalties)}
                   onChange={() => setFormData((p) => ({ ...p, exemptFromLatePenalties: true }))}
                 />
                 Yes
               </label>
-              <label className="flex items-center gap-2 text-sm text-slate-700 font-semibold">
+              <label className="flex items-center gap-1.5">
                 <input
                   type="radio"
                   name="exemptFromLatePenalties"
@@ -1226,25 +1304,68 @@ const AddProperty = () => {
               </label>
             </div>
           </div>
+        </div>
 
-          <div className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-3 text-xs text-amber-800">
-            Automatically processed late penalties will skip this property when this option is set to Yes.
+        <div>
+          <label className={labelClass}>{termInvoice} payment terms</label>
+          <textarea
+            name="invoicePaymentTerms"
+            value={formData.invoicePaymentTerms}
+            onChange={handleChange}
+            rows={2}
+            className={`${textareaClass} min-h-0`}
+          />
+        </div>
+
+        <div className="border border-slate-200">
+          <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-700">
+            Message controls
           </div>
+          <table className="w-full text-xs">
+            <thead className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-2.5 py-1">Turn off for</th>
+                <th className="w-20 px-2.5 py-1 text-center">SMS</th>
+                <th className="w-20 px-2.5 py-1 text-center">Email</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {messageRows.map((row) => (
+                <tr key={row.key}>
+                  <td className="px-2.5 py-1 font-bold text-slate-900">{row.label}</td>
+                  <td className="text-center">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.smsExemptions?.[row.key])}
+                      onChange={(e) => toggleExemption("smsExemptions", row.key, e.target.checked)}
+                    />
+                  </td>
+                  <td className="text-center">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(formData.emailExemptions?.[row.key])}
+                      onChange={(e) => toggleExemption("emailExemptions", row.key, e.target.checked)}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
-
-      {renderCommunications()}
-    </div>
-  );
+    );
+  };
 
   const renderSpaceUnits = () => {
-    const basisArea = parseFloat(formData.netLettableArea || formData.grossLettableArea || 0) || 0;
-    const ratePerMeasure = parseFloat(formData.rentPerMeasure || 0) || 0;
-    const estimatedRent = basisArea * ratePerMeasure;
+    const updateCharge = (index, patch) =>
+      setFormData((p) => ({ ...p, standingCharges: p.standingCharges.map((c, i) => (i === index ? { ...c, ...patch } : c)) }));
+    const updateDeposit = (index, patch) =>
+      setFormData((p) => ({ ...p, securityDeposits: p.securityDeposits.map((d, i) => (i === index ? { ...d, ...patch } : d)) }));
+    const selectClass = "h-7 text-xs";
 
     return (
-      <div className="space-y-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-3 lg:grid-cols-5">
           <div>
             <label className={labelClass}>Gross Lettable Area</label>
             <input
@@ -1313,337 +1434,175 @@ const AddProperty = () => {
           </div>
         </div>
 
-        <div className={`${sectionCard} p-4`}>
-          <h3 className={sectionHeader}>MEASUREMENT-BASED RENT PREVIEW</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Pricing Basis Area</div>
-              <div className="mt-1 text-lg font-extrabold text-slate-900">
-                {basisArea.toLocaleString()} {formData.unitMeasurement}
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                Uses net lettable area when present, otherwise gross lettable area.
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Rate Per Measure</div>
-              <div className="mt-1 text-lg font-extrabold text-slate-900">
-                {ratePerMeasure.toLocaleString()} {formData.rentCurrency}
-              </div>
-              <div className="mt-1 text-xs text-slate-500">
-                This default rate is available when pricing units from their measured area.
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-              <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Estimated Monthly {termRent}</div>
-              <div className="mt-1 text-lg font-extrabold text-emerald-900">
-                {estimatedRent.toLocaleString()} {formData.rentCurrency}
-              </div>
-              <div className="mt-1 text-xs text-emerald-700">
-                Saved property defaults can now feed unit rent calculation when a unit area is entered.
-              </div>
-            </div>
+        <div className={sectionCard}>
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <span className={sectionHeader}>Standing charges</span>
+            <button type="button" onClick={addStandingCharge} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+              <FaPlus size={9} /> Add charge
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] table-auto text-xs">
+              <thead className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-2 py-1">{termUtility} / charge</th>
+                  <th className="px-2 py-1">Mode</th>
+                  <th className="px-2 py-1 text-right">Cost per area</th>
+                  <th className="px-2 py-1 text-right">Value</th>
+                  <th className="px-2 py-1">VAT</th>
+                  <th className="px-2 py-1 text-center">Escalates</th>
+                  <th className="px-1 py-1" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {formData.standingCharges.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-2 py-2 text-center italic text-slate-400">No standing charges</td>
+                  </tr>
+                )}
+                {formData.standingCharges.map((charge, index) => (
+                  <tr key={index}>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder="Select type"
+                        options={standingChargeOptions.map((x) => ({ value: x, label: x }))}
+                        value={charge.serviceCharge}
+                        onChange={(val) => updateCharge(index, { serviceCharge: val })}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder="Select mode"
+                        options={["Monthly", "Quarterly", "Annual", "One-time"].map((x) => ({ value: x, label: x }))}
+                        value={charge.chargeMode}
+                        onChange={(val) => updateCharge(index, { chargeMode: val })}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="text"
+                        value={charge.costPerArea}
+                        onChange={(e) => updateCharge(index, { costPerArea: e.target.value })}
+                        placeholder="e.g. 50"
+                        className={`${inputClass} ${selectClass} text-right`}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="number"
+                        value={charge.chargeValue}
+                        onChange={(e) => updateCharge(index, { chargeValue: e.target.value })}
+                        placeholder="0.00"
+                        className={`${inputClass} ${selectClass} text-right`}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder="VAT"
+                        options={["0%", "8%", "16%"].map((x) => ({ value: x, label: x }))}
+                        value={charge.vatRate}
+                        onChange={(val) => updateCharge(index, { vatRate: val })}
+                      />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(charge.escalatesWithRent)}
+                        onChange={(e) => updateCharge(index, { escalatesWithRent: e.target.checked })}
+                      />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      {index > 0 && (
+                        <button type="button" onClick={() => removeStandingCharge(index)} title="Remove" className="p-1 text-slate-400 hover:text-rose-600">
+                          <FaTrash size={10} />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {renderStandingCharges()}
+        <div className={sectionCard}>
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <span className={sectionHeader}>Security deposit</span>
+            <button type="button" onClick={addSecurityDeposit} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+              <FaPlus size={9} /> Add deposit
+            </button>
+          </div>
+          <p className="border-b border-slate-100 px-2.5 py-1 text-[11px] text-slate-500">
+            Feeds the default deposit when a {termUnit.toLowerCase()} is created for this {termProperty.toLowerCase()}.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] table-auto text-xs">
+              <thead className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-2 py-1">Deposit type</th>
+                  <th className="px-2 py-1">Mode</th>
+                  <th className="px-2 py-1 text-right">Amount</th>
+                  <th className="px-2 py-1 text-center">Refundable</th>
+                  <th className="px-1 py-1" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {formData.securityDeposits.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-2 py-2 text-center italic text-slate-400">No security deposit</td>
+                  </tr>
+                )}
+                {formData.securityDeposits.map((deposit, index) => (
+                  <tr key={index}>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder="Select type"
+                        options={securityDepositTypeOptions.map((x) => ({ value: x, label: x }))}
+                        value={deposit.depositType}
+                        onChange={(val) => updateDeposit(index, { depositType: val })}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder="Select mode"
+                        options={["Percentage", "Fixed Amount"].map((x) => ({ value: x, label: x }))}
+                        value={deposit.chargeMode}
+                        onChange={(val) => updateDeposit(index, { chargeMode: val })}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="number"
+                        value={deposit.amount}
+                        onChange={(e) => updateDeposit(index, { amount: e.target.value })}
+                        placeholder={deposit.chargeMode === "Percentage" ? `% of ${termRent}` : "0.00"}
+                        step={deposit.chargeMode === "Percentage" ? "1" : "0.01"}
+                        min="0"
+                        className={`${inputClass} ${selectClass} text-right`}
+                      />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <input type="checkbox" checked={Boolean(deposit.refundable)} onChange={(e) => updateDeposit(index, { refundable: e.target.checked })} />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <button type="button" onClick={() => removeSecurityDeposit(index)} title="Remove" className="p-1 text-slate-400 hover:text-rose-600">
+                        <FaTrash size={10} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     );
   };
-
-  const renderStandingCharges = () => (
-    <div className="space-y-6">
-      <div className={`${sectionCard} p-4`}>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className={sectionHeader}>DEFAULT STANDING CHARGES</h3>
-          <button
-            type="button"
-            onClick={addStandingCharge}
-            className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
-          >
-            <FaPlus /> Add Standing Charge
-          </button>
-        </div>
-
-        <div className="space-y-3">
-          {formData.standingCharges.map((charge, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
-            >
-              <div>
-                <AppSelect
-                  label={`Service Charge/${termUtility}`}
-                  placeholder="Select Type"
-                  options={standingChargeOptions.map((x) => ({ value: x, label: x }))}
-                  value={charge.serviceCharge}
-                  onChange={(val) => {
-                    const updated = [...formData.standingCharges];
-                    updated[index].serviceCharge = val;
-                    setFormData((p) => ({ ...p, standingCharges: updated }));
-                  }}
-                />
-              </div>
-
-              <div>
-                <AppSelect
-                  label="Charge Mode"
-                  placeholder="Select Mode"
-                  options={["Monthly", "Quarterly", "Annual", "One-time"].map((x) => ({ value: x, label: x }))}
-                  value={charge.chargeMode}
-                  onChange={(val) => {
-                    const updated = [...formData.standingCharges];
-                    updated[index].chargeMode = val;
-                    setFormData((p) => ({ ...p, standingCharges: updated }));
-                  }}
-                />
-              </div>
-
-              <div>
-                <AppSelect
-                  label="Billing Currency"
-                  placeholder="Select Currency"
-                  options={["KES", "USD"].map((x) => ({ value: x, label: x }))}
-                  value={charge.billingCurrency}
-                  onChange={(val) => {
-                    const updated = [...formData.standingCharges];
-                    updated[index].billingCurrency = val;
-                    setFormData((p) => ({ ...p, standingCharges: updated }));
-                  }}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Cost Per Area</label>
-                <input
-                  type="text"
-                  value={charge.costPerArea}
-                  onChange={(e) => {
-                    const updated = [...formData.standingCharges];
-                    updated[index].costPerArea = e.target.value;
-                    setFormData((p) => ({ ...p, standingCharges: updated }));
-                  }}
-                  className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                  placeholder="e.g., 50"
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>Charge Value</label>
-                <input
-                  type="number"
-                  value={charge.chargeValue}
-                  onChange={(e) => {
-                    const updated = [...formData.standingCharges];
-                    updated[index].chargeValue = e.target.value;
-                    setFormData((p) => ({ ...p, standingCharges: updated }));
-                  }}
-                  className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div>
-                <AppSelect
-                  label="VAT Rate"
-                  placeholder="Select Rate"
-                  options={["0%", "8%", "16%"].map((x) => ({ value: x, label: x }))}
-                  value={charge.vatRate}
-                  onChange={(val) => {
-                    const updated = [...formData.standingCharges];
-                    updated[index].vatRate = val;
-                    setFormData((p) => ({ ...p, standingCharges: updated }));
-                  }}
-                />
-              </div>
-
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={charge.escalatesWithRent}
-                    onChange={(e) => {
-                      const updated = [...formData.standingCharges];
-                      updated[index].escalatesWithRent = e.target.checked;
-                      setFormData((p) => ({ ...p, standingCharges: updated }));
-                    }}
-                  />
-                  Escalates?
-                </label>
-
-                {index > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => removeStandingCharge(index)}
-                    className="h-9 w-9 flex items-center justify-center rounded-md bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
-                    title="Remove"
-                  >
-                    <FaTrash />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`${sectionCard} p-4`}>
-        <div className="flex justify-between items-center mb-3">
-          <h3 className={sectionHeader}>DEFAULT SECURITY DEPOSIT</h3>
-          <button
-            type="button"
-            onClick={addSecurityDeposit}
-            className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
-          >
-            <FaPlus /> Add Security Deposit
-          </button>
-        </div>
-
-        <div className="mb-3 rounded-lg border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-          The {termRent.toLowerCase()} security deposit configured here now feeds the main {termUnit.toLowerCase()} deposit default when creating a {termUnit.toLowerCase()} for this {termProperty.toLowerCase()}.
-        </div>
-
-        <div className="space-y-3">
-          {formData.securityDeposits.map((deposit, index) => (
-            <div
-              key={index}
-              className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
-            >
-              <div>
-                <AppSelect
-                  label="Deposit Type"
-                  placeholder="Select Type"
-                  options={securityDepositTypeOptions.map((x) => ({ value: x, label: x }))}
-                  value={deposit.depositType}
-                  onChange={(val) => {
-                    const updated = [...formData.securityDeposits];
-                    updated[index].depositType = val;
-                    setFormData((p) => ({ ...p, securityDeposits: updated }));
-                  }}
-                />
-              </div>
-
-              <div>
-                <AppSelect
-                  label="Charge Mode"
-                  placeholder="Select Mode"
-                  options={["Percentage", "Fixed Amount"].map((x) => ({ value: x, label: x }))}
-                  value={deposit.chargeMode}
-                  onChange={(val) => {
-                    const updated = [...formData.securityDeposits];
-                    updated[index].chargeMode = val;
-                    setFormData((p) => ({ ...p, securityDeposits: updated }));
-                  }}
-                />
-              </div>
-
-              <div>
-                <label className={labelClass}>
-                  {deposit.chargeMode === "Percentage" ? `Percentage (% of ${termRent})` : "Amount"}
-                </label>
-                <input
-                  type="number"
-                  value={deposit.amount}
-                  onChange={(e) => {
-                    const updated = [...formData.securityDeposits];
-                    updated[index].amount = e.target.value;
-                    setFormData((p) => ({ ...p, securityDeposits: updated }));
-                  }}
-                  className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                  placeholder={deposit.chargeMode === "Percentage" ? "e.g., 100 (for 100%)" : "0.00"}
-                  step={deposit.chargeMode === "Percentage" ? "1" : "0.01"}
-                  min="0"
-                  max={deposit.chargeMode === "Percentage" ? "1000" : undefined}
-                />
-              </div>
-
-              <div>
-                <AppSelect
-                  label="Currency"
-                  placeholder="Select Currency"
-                  options={["KES", "USD"].map((x) => ({ value: x, label: x }))}
-                  value={deposit.currency}
-                  onChange={(val) => {
-                    const updated = [...formData.securityDeposits];
-                    updated[index].currency = val;
-                    setFormData((p) => ({ ...p, securityDeposits: updated }));
-                  }}
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
-                <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <input
-                    type="checkbox"
-                    checked={deposit.refundable}
-                    onChange={(e) => {
-                      const updated = [...formData.securityDeposits];
-                      updated[index].refundable = e.target.checked;
-                      setFormData((p) => ({ ...p, securityDeposits: updated }));
-                    }}
-                  />
-                  Refundable
-                </label>
-              </div>
-
-              <div className="flex">
-                <button
-                  type="button"
-                  onClick={() => removeSecurityDeposit(index)}
-                  className="h-9 w-9 flex items-center justify-center rounded-md bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
-                  title="Remove"
-                >
-                  <FaTrash />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderCommunications = () => (
-    <div className="space-y-5">
-      <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>DISABLE SMSING</h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
-          {Object.entries(formData.smsExemptions).map(([key, value]) => (
-            <label key={key} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                name={key}
-                checked={value}
-                onChange={(e) => handleChange(e, "smsExemptions")}
-              />
-              {key === "all" ? "Disable All SMS" : `Disable ${key} SMS`}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className={`${sectionCard} p-4`}>
-        <h3 className={sectionHeader}>DISABLE EMAILING</h3>
-
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-3">
-          {Object.entries(formData.emailExemptions).map(([key, value]) => (
-            <label key={key} className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <input
-                type="checkbox"
-                name={key}
-                checked={value}
-                onChange={(e) => handleChange(e, "emailExemptions")}
-              />
-              {key === "all" ? "Disable All Email" : `Disable ${key} Email`}
-            </label>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
 
   const renderBanking = () => (
     <div className="space-y-5">
@@ -1703,165 +1662,103 @@ const AddProperty = () => {
     </div>
   );
 
-  const renderNotes = () => (
-    <div className="space-y-5">
-      <div className={`${sectionCard} p-4`}>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <label className={labelClass}>Exclude In Fee Summary Report:</label>
-            <p className="text-xs text-slate-600">
-              Choose whether to exclude this property in fee summary reports.
-            </p>
+  const renderNotes = () => {
+    const nearbyCategories = ["road", "school", "hospital", "shopping", "transport", "security", "other"].map((x) => ({
+      value: x,
+      label: x.charAt(0).toUpperCase() + x.slice(1),
+    }));
+
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className={`${sectionCard} p-2.5`}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className={sectionHeader}>Internal</span>
+              <div className="flex items-center gap-3 text-xs font-bold text-slate-900">
+                <span>Exclude from fee summary</span>
+                <label className="flex items-center gap-1">
+                  <input type="radio" name="excludeFeeSummary" checked={Boolean(formData.excludeFeeSummary)} onChange={() => setFormData((p) => ({ ...p, excludeFeeSummary: true }))} />
+                  Yes
+                </label>
+                <label className="flex items-center gap-1">
+                  <input type="radio" name="excludeFeeSummary" checked={!formData.excludeFeeSummary} onChange={() => setFormData((p) => ({ ...p, excludeFeeSummary: false }))} />
+                  No
+                </label>
+              </div>
+            </div>
+            <label className={labelClass}>Internal notes <span className="font-normal text-slate-400">(not shown publicly)</span></label>
+            <textarea
+              name="notes"
+              value={formData.notes}
+              onChange={handleChange}
+              rows={3}
+              className={`${textareaClass} min-h-0`}
+              placeholder="Internal notes…"
+            />
           </div>
 
-          <div className="flex items-center gap-5">
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <input
-                type="radio"
-                name="excludeFeeSummary"
-                checked={formData.excludeFeeSummary}
-                onChange={() => setFormData((p) => ({ ...p, excludeFeeSummary: true }))}
+          <div className={`${sectionCard} p-2.5`}>
+            <div className="mb-2 flex items-center justify-between">
+              <span className={sectionHeader}>Public listing</span>
+              <label className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
+                <input type="checkbox" name="listingEnabled" checked={Boolean(formData.listingEnabled)} onChange={handleChange} />
+                List this {termProperty.toLowerCase()} publicly
+              </label>
+            </div>
+            {formData.listingEnabled && (
+            <>
+            <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-3">
+              <div>
+                <label className={labelClass}>Amenities</label>
+                <input type="text" name="amenities" value={formData.amenities} onChange={handleChange} placeholder="Pool, Gym, Generator" className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+              </div>
+              <div>
+                <label className={labelClass}>Year built</label>
+                <input type="number" name="yearBuilt" value={formData.yearBuilt} onChange={handleChange} min="1800" className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+              </div>
+              <div>
+                <label className={labelClass}>Video URL</label>
+                <input type="url" name="videoUrl" value={formData.videoUrl || ""} onChange={handleChange} placeholder="https://youtube.com/…" className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-2">
+              <div>
+                <label className={labelClass}>Virtual tour URL</label>
+                <input type="url" name="virtualTourUrl" value={formData.virtualTourUrl || ""} onChange={handleChange} placeholder="https://matterport.com/…" className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
+              </div>
+              <div>
+                <label className={labelClass}>Listing description <span className="font-normal text-slate-400">(shown on listing page)</span></label>
+                <textarea name="description" value={formData.description} onChange={handleChange} rows={2} className={`${textareaClass} min-h-0`} placeholder="Location, features, security…" />
+              </div>
+            </div>
+            </>
+          )}
+          </div>
+        </div>
+
+        <div className={`${sectionCard} p-2.5`}>
+          <div className="mb-1 flex items-center justify-between">
+            <span className={sectionHeader}>Location on map</span>
+            <span className="text-[11px] text-slate-500">Search a place, use the address fields, or click the map to pin the {termProperty.toLowerCase()}.</span>
+          </div>
+          <div className="h-56 overflow-hidden border border-slate-200">
+            <Suspense fallback={<div className="flex h-full items-center justify-center text-xs text-slate-400">Loading map…</div>}>
+              <PropertyMapPicker
+                lat={formData.coordinates?.lat}
+                lng={formData.coordinates?.lng}
+                onLocationChange={({ lat, lng }) => setFormData((prev) => ({ ...prev, coordinates: { lat, lng } }))}
+                addressHint={[formData.estateArea, formData.roadStreet, formData.townCityState].filter(Boolean).join(", ")}
               />
-              Yes
-            </label>
-
-            <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-              <input
-                type="radio"
-                name="excludeFeeSummary"
-                checked={!formData.excludeFeeSummary}
-                onChange={() => setFormData((p) => ({ ...p, excludeFeeSummary: false }))}
-              />
-              No
-            </label>
+            </Suspense>
           </div>
         </div>
 
-        <div className="mt-4">
-          <label className={labelClass}>Internal Notes</label>
-          <textarea
-            name="notes"
-            value={formData.notes}
-            onChange={handleChange}
-            rows={3}
-            className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="Internal notes (not shown publicly)..."
-          />
-        </div>
-
-        <div className="mt-4">
-          <label className={labelClass}>Specific Contact Info</label>
-          <textarea
-            name="specificContactInfo"
-            value={formData.specificContactInfo}
-            onChange={handleChange}
-            rows={3}
-            className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="Enter specific contact information..."
-          />
-        </div>
-      </div>
-
-      <div className={`${sectionCard} p-4`}>
-        <div className="flex items-center justify-between gap-4 mb-3">
-          <h3 className={sectionHeader}>PUBLIC LISTING DETAILS</h3>
-          <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-            <input
-              type="checkbox"
-              name="listingEnabled"
-              checked={Boolean(formData.listingEnabled)}
-              onChange={handleChange}
-              className="h-4 w-4 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
-            />
-            List this property publicly
-          </label>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Amenities</label>
-            <input
-              type="text"
-              name="amenities"
-              value={formData.amenities}
-              onChange={handleChange}
-              placeholder="e.g., Pool, Gym, Backup Generator (comma separated)"
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            />
+        {formData.listingEnabled && (
+        <div className={`${sectionCard} p-2.5`}>
+          <div className="mb-2 flex items-center justify-between">
+            <span className={sectionHeader}>Listing contact</span>
           </div>
-
-          <div>
-            <label className={labelClass}>Year Built</label>
-            <input
-              type="number"
-              name="yearBuilt"
-              value={formData.yearBuilt}
-              onChange={handleChange}
-              min="1800"
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            />
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <label className={labelClass}>Location on Map</label>
-          <p className="mb-2 text-[11px] text-slate-400">
-            Search by place name, click "Use Address ↑" to geocode from the address fields above, or click directly on the map to pin the property.
-          </p>
-          <Suspense fallback={<div className="h-48 flex items-center justify-center text-xs text-slate-400">Loading map…</div>}>
-            <PropertyMapPicker
-              lat={formData.coordinates?.lat}
-              lng={formData.coordinates?.lng}
-              onLocationChange={({ lat, lng }) =>
-                setFormData((prev) => ({ ...prev, coordinates: { lat, lng } }))
-              }
-              addressHint={[formData.estateArea, formData.roadStreet, formData.townCityState]
-                .filter(Boolean)
-                .join(", ")}
-            />
-          </Suspense>
-        </div>
-
-        <div className="mt-4">
-          <label className={labelClass}>{termProperty} Description <span className="font-normal text-slate-400">(shown on listing page)</span></label>
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            rows={4}
-            className={`${textareaClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            placeholder="Describe the property to prospective tenants — location highlights, building features, security, etc."
-          />
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Video URL</label>
-            <input
-              type="url"
-              name="videoUrl"
-              value={formData.videoUrl || ""}
-              onChange={handleChange}
-              placeholder="https://youtube.com/..."
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Virtual Tour URL</label>
-            <input
-              type="url"
-              name="virtualTourUrl"
-              value={formData.virtualTourUrl || ""}
-              onChange={handleChange}
-              placeholder="https://matterport.com/..."
-              className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-            />
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-2">Listing Contact</h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-3 xl:grid-cols-5">
             <div>
               <label className={labelClass}>Name</label>
               <input type="text" value={formData.listingContact?.name || ""} onChange={(e) => handleListingContactChange("name", e.target.value)} className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
@@ -1879,246 +1776,173 @@ const AddProperty = () => {
               <input type="email" value={formData.listingContact?.email || ""} onChange={(e) => handleListingContactChange("email", e.target.value)} className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`} />
             </div>
             <div>
-              <label className={labelClass}>Preferred Method</label>
-              <select
+              <AppSelect
+                label="Preferred method"
                 value={formData.listingContact?.preferredMethod || "phone"}
-                onChange={(e) => handleListingContactChange("preferredMethod", e.target.value)}
-                className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} appearance-none`}
-              >
-                <option value="phone">Phone</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="email">Email</option>
-              </select>
+                onChange={(val) => handleListingContactChange("preferredMethod", val)}
+                options={[
+                  { value: "phone", label: "Phone" },
+                  { value: "whatsapp", label: "WhatsApp" },
+                  { value: "email", label: "Email" },
+                ]}
+              />
             </div>
           </div>
         </div>
-
-        <div className="mt-4">
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Nearby Points of Interest</h4>
-            <button
-              type="button"
-              onClick={addNearbyPoint}
-              className={`h-8 px-3 text-xs font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors`}
-            >
-              <FaPlus /> Add Point
-            </button>
-          </div>
-
-          {formData.nearbyPoints.length === 0 ? (
-            <div className="text-center py-4 text-slate-400 text-xs border border-dashed border-slate-200 rounded-lg">
-              e.g., "400m to Tarmac Road", "Close to Riara Academy"
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {formData.nearbyPoints.map((point, index) => (
-                <div key={index} className="grid grid-cols-1 md:grid-cols-8 gap-2 items-end p-2 bg-slate-50/60 border border-slate-200 rounded-lg">
-                  <div className="md:col-span-2">
-                    <label className={labelClass}>Category</label>
-                    <select
-                      value={point.category}
-                      onChange={(e) => updateNearbyPoint(index, "category", e.target.value)}
-                      className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS} appearance-none`}
-                    >
-                      <option value="road">Road</option>
-                      <option value="school">School</option>
-                      <option value="hospital">Hospital</option>
-                      <option value="shopping">Shopping</option>
-                      <option value="transport">Transport</option>
-                      <option value="security">Security</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div className="md:col-span-4">
-                    <label className={labelClass}>Label</label>
-                    <input
-                      type="text"
-                      value={point.label}
-                      onChange={(e) => updateNearbyPoint(index, "label", e.target.value)}
-                      placeholder="e.g., Tarmac Road"
-                      className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    />
-                  </div>
-                  <div className="md:col-span-1">
-                    <label className={labelClass}>Distance</label>
-                    <input
-                      type="text"
-                      value={point.distance}
-                      onChange={(e) => updateNearbyPoint(index, "distance", e.target.value)}
-                      placeholder="400m"
-                      className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    />
-                  </div>
-                  <div className="md:col-span-1 flex justify-end">
-                    <button
-                      type="button"
-                      onClick={() => removeNearbyPoint(index)}
-                      className="h-9 px-3 rounded-md bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors flex items-center justify-center"
-                    >
-                      <FaTrash className="text-xs" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
-
-  const renderUtilityRates = () => (
-    <div className="space-y-6">
-      <div className={`${sectionCard} p-4`}>
-        <div className="flex justify-between items-center mb-3">
-          <div>
-            <h3 className={sectionHeader}>METER READING RATES</h3>
-            <p className="text-xs text-slate-500 mt-0.5">
-              Set the charge per unit for each utility at this property. These rates override company defaults and apply when billing meter readings.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={addUtilityRate}
-            className={`h-9 px-3 text-sm font-semibold ${MILIK_ORANGE_BG} text-white rounded-md flex items-center gap-2 ${MILIK_ORANGE_BG_HOVER} transition-colors flex-shrink-0`}
-          >
-            <FaPlus /> Add Rate
-          </button>
-        </div>
-
-        {formData.utilityRates.length === 0 ? (
-          <div className="py-8 text-center border border-dashed border-slate-200 rounded-lg">
-            <FaCog className="text-3xl mx-auto mb-2 text-slate-300" />
-            <p className="text-sm font-semibold text-slate-500">No utility rates configured</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Add rates here to override company-level defaults for this property.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {formData.utilityRates.map((rate, index) => (
-              <div
-                key={index}
-                className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end p-3 border border-slate-200 rounded-lg bg-slate-50/40"
-              >
-                <div>
-                  <AppSelect
-                    label={`${termUtility} Type`}
-                    placeholder={utilityTypeOptionsLoading ? "Loading..." : `Select ${termUtility}`}
-                    options={utilityTypeOptions.map((x) => ({ value: x.name, label: x.name }))}
-                    value={rate.utilityType}
-                    onChange={(val) => {
-                      const item = utilityTypeOptions.find((x) => x.name === val);
-                      const updated = [...formData.utilityRates];
-                      updated[index] = {
-                        ...updated[index],
-                        utilityType: val,
-                        unitCost: item?.unitCost ?? updated[index].unitCost,
-                        billingCycle: item?.billingCycle ?? updated[index].billingCycle,
-                      };
-                      setFormData((p) => ({ ...p, utilityRates: updated }));
-                    }}
-                    disabled={utilityTypeOptionsLoading}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>{termUnit} Cost (KES)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    value={rate.unitCost}
-                    onChange={(e) => {
-                      const updated = [...formData.utilityRates];
-                      updated[index] = { ...updated[index], unitCost: e.target.value };
-                      setFormData((p) => ({ ...p, utilityRates: updated }));
-                    }}
-                    className={`${inputClass} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div>
-                  <AppSelect
-                    label="Billing Cycle"
-                    placeholder="Select Cycle"
-                    options={["monthly", "quarterly", "annually", "per_use"].map((x) => ({
-                      value: x,
-                      label: x.charAt(0).toUpperCase() + x.slice(1).replace("_", " "),
-                    }))}
-                    value={rate.billingCycle}
-                    onChange={(val) => {
-                      const updated = [...formData.utilityRates];
-                      updated[index] = { ...updated[index], billingCycle: val };
-                      setFormData((p) => ({ ...p, utilityRates: updated }));
-                    }}
-                  />
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <label className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={rate.isActive}
-                      onChange={(e) => {
-                        const updated = [...formData.utilityRates];
-                        updated[index] = { ...updated[index], isActive: e.target.checked };
-                        setFormData((p) => ({ ...p, utilityRates: updated }));
-                      }}
-                    />
-                    Active
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removeUtilityRate(index)}
-                    className="h-9 w-9 flex items-center justify-center rounded-md bg-red-50 text-red-700 hover:bg-red-100 transition-colors"
-                    title="Remove"
-                  >
-                    <FaTrash />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
         )}
 
-        <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-          <p className="text-xs text-blue-700 font-semibold mb-1">Rate Resolution Priority</p>
-          <ol className="text-xs text-blue-600 space-y-0.5 list-decimal list-inside">
-            <li>Rate entered directly on the {termMeter.toLowerCase()} reading</li>
-            <li>Per-{termUnit.toLowerCase()} rate (configured on each {termUnit.toLowerCase()})</li>
-            <li>{termProperty} rate (configured here)</li>
-          </ol>
+        {formData.listingEnabled && (
+        <div className={sectionCard}>
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <span className={sectionHeader}>Nearby points of interest</span>
+            <button type="button" onClick={addNearbyPoint} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+              <FaPlus size={9} /> Add point
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] table-auto text-xs">
+              <thead className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-2 py-1">Category</th>
+                  <th className="px-2 py-1">Label</th>
+                  <th className="px-2 py-1">Distance</th>
+                  <th className="px-1 py-1" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {formData.nearbyPoints.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="px-2 py-2 text-center italic text-slate-400">None added. For example: 400m to Tarmac Road.</td>
+                  </tr>
+                )}
+                {formData.nearbyPoints.map((point, index) => (
+                  <tr key={index}>
+                    <td className="px-1 py-1">
+                      <AppSelect size="sm" options={nearbyCategories} value={point.category} onChange={(val) => updateNearbyPoint(index, "category", val)} />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input type="text" value={point.label} onChange={(e) => updateNearbyPoint(index, "label", e.target.value)} placeholder="e.g. Tarmac Road" className={`${inputClass} h-7 text-xs`} />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input type="text" value={point.distance} onChange={(e) => updateNearbyPoint(index, "distance", e.target.value)} placeholder="400m" className={`${inputClass} h-7 text-xs`} />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <button type="button" onClick={() => removeNearbyPoint(index)} title="Remove" className="p-1 text-slate-400 hover:text-rose-600">
+                        <FaTrash size={10} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderUtilityRates = () => {
+    const updateRate = (index, patch) =>
+      setFormData((p) => ({ ...p, utilityRates: p.utilityRates.map((r, i) => (i === index ? { ...r, ...patch } : r)) }));
+    const cycleOptions = ["monthly", "quarterly", "annually", "per_use"].map((x) => ({
+      value: x,
+      label: x.charAt(0).toUpperCase() + x.slice(1).replace("_", " "),
+    }));
+
+    return (
+      <div className="space-y-2">
+        <p className="text-[11px] text-slate-500">
+          Rates here override company defaults for this {termProperty.toLowerCase()}. Order used: reading entry, then the {termUnit.toLowerCase()} rate, then this rate.
+        </p>
+
+        <div className={sectionCard}>
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+            <span className={sectionHeader}>Meter reading rates</span>
+            <button type="button" onClick={addUtilityRate} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+              <FaPlus size={9} /> Add rate
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] table-auto text-xs">
+              <thead className="text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-2 py-1">{termUtility}</th>
+                  <th className="px-2 py-1 text-right">Cost per {termUnit.toLowerCase()} (KES)</th>
+                  <th className="px-2 py-1">Billing cycle</th>
+                  <th className="px-2 py-1 text-center">Active</th>
+                  <th className="px-1 py-1" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {formData.utilityRates.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-2 py-2 text-center italic text-slate-400">No rates set. Company defaults apply.</td>
+                  </tr>
+                )}
+                {formData.utilityRates.map((rate, index) => (
+                  <tr key={index}>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder={utilityTypeOptionsLoading ? "Loading..." : `Select ${termUtility.toLowerCase()}`}
+                        options={utilityTypeOptions.map((x) => ({ value: x.name, label: x.name }))}
+                        value={rate.utilityType}
+                        disabled={utilityTypeOptionsLoading}
+                        onChange={(val) => {
+                          const item = utilityTypeOptions.find((x) => x.name === val);
+                          updateRate(index, {
+                            utilityType: val,
+                            unitCost: item?.unitCost ?? rate.unitCost,
+                            billingCycle: item?.billingCycle ?? rate.billingCycle,
+                          });
+                        }}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <input
+                        type="number"
+                        min="0"
+                        value={rate.unitCost}
+                        onChange={(e) => updateRate(index, { unitCost: e.target.value })}
+                        placeholder="0.00"
+                        className={`${inputClass} h-7 text-xs text-right`}
+                      />
+                    </td>
+                    <td className="px-1 py-1">
+                      <AppSelect
+                        size="sm"
+                        placeholder="Select cycle"
+                        options={cycleOptions}
+                        value={rate.billingCycle}
+                        onChange={(val) => updateRate(index, { billingCycle: val })}
+                      />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <input type="checkbox" checked={Boolean(rate.isActive)} onChange={(e) => updateRate(index, { isActive: e.target.checked })} />
+                    </td>
+                    <td className="px-1 py-1 text-center">
+                      <button type="button" onClick={() => removeUtilityRate(index)} title="Remove" className="p-1 text-slate-400 hover:text-rose-600">
+                        <FaTrash size={10} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
 
   return (
     <>
       <DashboardLayout lockContentScroll>
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-          {/* Sticky dark header */}
-          <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <button type="button" onClick={() => { clearDraftState(); navigate(-1); }} disabled={loading} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition disabled:opacity-50">
-                  <FaArrowLeft /> Back
-                </button>
-                <div className="h-4 w-px bg-[#2A5C4A]" />
-                <div>
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termProperties}</div>
-                  <h1 className="text-sm font-black text-white leading-none">Add New {termProperty}</h1>
-                </div>
-              </div>
-              <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">{operatingModeLabel}</span>
-            </div>
-          </div>
-
           {/* Tab navigation */}
-          <div className="flex-shrink-0 border-b border-slate-200 bg-white px-3">
+          <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2">
             <div className="flex flex-wrap gap-0.5">
               {tabs.map((tab) => {
                 const isActive = activeTab === tab.id;
@@ -2128,7 +1952,7 @@ const AddProperty = () => {
                     onClick={() => setActiveTab(tab.id)}
                     disabled={loading}
                     className={[
-                      "h-10 px-4 text-sm font-bold flex items-center gap-2 rounded-t-md transition-all duration-200",
+                      "h-8 px-3 text-xs font-bold flex items-center gap-1.5 transition-all duration-200",
                       isActive ? `${MILIK_ORANGE_BG} text-white shadow-sm` : "text-slate-700 hover:bg-slate-100",
                       loading ? "opacity-50 cursor-not-allowed" : "",
                     ].join(" ")}
@@ -2142,10 +1966,10 @@ const AddProperty = () => {
           </div>
 
           {/* Scrollable content */}
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-2">
           <div className={`${sectionCard}`}>
             <form id="add-property-form" onSubmit={handleSubmit}>
-              <div className="p-3">
+              <div className="p-2.5">
                 <div className={activeTab === "general" ? "" : "hidden"}>{renderGeneralInfo()}</div>
                 <div className={activeTab === "space" ? "" : "hidden"}>{renderSpaceUnits()}</div>
                 <div className={activeTab === "accounting" ? "" : "hidden"}>{renderAccountingBilling()}</div>
@@ -2168,14 +1992,14 @@ const AddProperty = () => {
             <div className="flex items-center justify-between gap-2">
               <div className="text-xs text-slate-500">Fields marked with * are required</div>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => { clearDraftState(); navigate(-1); }} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
-                <button type="button" onClick={handleReset} disabled={loading} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Reset</button>
+                <button type="button" onClick={() => { clearDraftState(); navigate(-1); }} disabled={loading} className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="button" onClick={handleReset} disabled={loading} className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Reset</button>
               {!isFirstTab && (
                 <button
                   type="button"
                   onClick={handlePreviousTab}
                   disabled={loading}
-                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 >
                   Previous
                 </button>
@@ -2186,7 +2010,7 @@ const AddProperty = () => {
                   type="button"
                   onClick={handleNextTab}
                   disabled={loading}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Next
                 </button>
@@ -2195,9 +2019,9 @@ const AddProperty = () => {
                   type="submit"
                   form="add-property-form"
                   disabled={loading || justEnteredLastTab}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> Save {termProperty}</>}
+                  {loading ? <><FaSpinner className="animate-spin" /> Saving…</> : <><FaSave /> {isEditMode ? "Update" : "Save"} {termProperty}</>}
                 </button>
               )}
               </div>

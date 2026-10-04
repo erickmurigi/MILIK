@@ -70,7 +70,7 @@ const UnitSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["vacant", "occupied", "maintenance", "reserved", "archived"],
+      enum: ["vacant", "occupied", "owner_occupied", "maintenance", "reserved", "archived"],
       default: "vacant",
     },
 
@@ -147,7 +147,6 @@ const UnitSchema = new mongoose.Schema(
     // marketed ("Available from <date>") before it actually turns vacant.
     availableFrom: { type: Date, default: null },
 
-    ownerOccupied: { type: Boolean, default: false },
 
     business: {
       type: mongoose.Schema.Types.ObjectId,

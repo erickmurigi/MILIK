@@ -3,16 +3,17 @@ import { useTabState } from '../../hooks/useTabState';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { FaArrowLeft, FaInfoCircle, FaSave } from 'react-icons/fa';
+import { FaArrowLeft, FaRedoAlt, FaSave } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
 import { adminRequests } from '../../utils/requestMethods';
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from '../../redux/selectors';
 import { hasCompanyPermission } from '../../utils/permissions';
 import AppSelect from '../../components/common/AppSelect';
+import ListToolbar from '../../components/common/ListToolbar';
 import { useTerm } from '../../hooks/useTerm';
 
-const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+const CARD = 'border border-slate-200 bg-white';
 const INPUT = 'w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
 const SELECT = INPUT;
 const GREEN = 'bg-[#0B3B2E]';
@@ -176,7 +177,7 @@ const PropertyCommissionSettings = () => {
         key: 'rent',
         label: termRent,
         categoryType: 'rent',
-        description: `Classic ${termRent.toLowerCase()} line items remain commissionable by default for backward compatibility.`,
+        description: `Rent charges on statements.`,
       },
       ...utilityRows,
     ];
@@ -293,56 +294,39 @@ const PropertyCommissionSettings = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-        {/* Sticky header */}
-        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] transition hover:text-white"
-            >
-              <FaArrowLeft /> Back
-            </button>
-            <div className="h-4 w-px bg-[#2A5C4A]" />
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termProperty}</div>
-              <h1 className="text-sm font-black leading-none text-white">Commission Settings</h1>
-            </div>
-          </div>
-        </div>
+        <ListToolbar>
+          <span className="text-xs font-black uppercase tracking-wide text-slate-900">Commission settings</span>
+          <ListToolbar.Divider />
+          <AppSelect
+            value={selectedPropertyId}
+            onChange={(v) => setSelectedPropertyId(v ?? "")}
+            options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode} - ${p.propertyName}` }))}
+            placeholder={`Select ${termProperty.toLowerCase()}`}
+            searchable
+            disabled={loading}
+            compact
+          />
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate(-1)}>Back</ListToolbar.Button>
+        </ListToolbar>
 
         {/* Scrollable content */}
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <div className={`${CARD} mb-4 p-5`}>
-            <label className="mb-0.5 block text-xs font-semibold text-slate-700">Select {termProperty}</label>
-            <p className="mb-2 text-xs text-slate-500">
-              Configure {termProperty.toLowerCase()}-level management commission rules and VAT/tax treatment for statements.
-            </p>
-            <AppSelect
-              value={selectedPropertyId}
-              onChange={(v) => setSelectedPropertyId(v ?? "")}
-              options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode} - ${p.propertyName}` }))}
-              placeholder={`-- Select ${termProperty} --`}
-              searchable
-              disabled={loading}
-              size="sm"
-            />
-          </div>
 
           {selectedProperty && (
-            <form id="commission-settings-form" onSubmit={handleSubmit} className="space-y-4">
-              <div className={`${GREEN} rounded-2xl p-5 text-white shadow-sm`}>
-                <div className="text-xl font-bold">{selectedProperty.propertyName}</div>
-                <div className="mt-1 text-sm text-emerald-50">{termProperty} Code: {selectedProperty.propertyCode}</div>
+            <form id="commission-settings-form" onSubmit={handleSubmit} className="space-y-3">
+              <div className="border border-slate-200 bg-white px-3 py-2">
+                <div className="text-sm font-bold text-slate-900">{selectedProperty.propertyName}</div>
+                <div className="text-xs text-slate-500">{termProperty} code: {selectedProperty.propertyCode}</div>
               </div>
 
               {String(selectedProperty.letManage || "").toLowerCase() === "letting" && (
-                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                <div className="border border-slate-300 bg-slate-50 p-3">
                   <div className="flex items-start gap-3">
-                    <FaInfoCircle className="mt-0.5 flex-shrink-0 text-amber-600" />
+                    <FaInfoCircle className="mt-0.5 flex-shrink-0 text-slate-500" />
                     <div>
-                      <p className="text-sm font-bold text-amber-900">Letting Mode {termProperty}</p>
-                      <p className="mt-1 text-xs text-amber-800">
+                      <p className="text-xs font-bold text-slate-900">Letting mode {termProperty}</p>
+                      <p className="mt-1 text-xs text-slate-700">
                         This {termProperty.toLowerCase()} is set to <strong>Letting</strong> mode. {termTenant} payments go directly to the {termLandlord.toLowerCase()} and the {termLandlord.toLowerCase()} holds the deposit.
                         Commission processing and {termLandlord.toLowerCase()} disbursement statements are not available for Letting {termProperties.toLowerCase()}.
                         Any commission settings saved here will be stored but will not be applied to processed statements.
@@ -352,14 +336,14 @@ const PropertyCommissionSettings = () => {
                 </div>
               )}
 
-              <div className="grid gap-6 lg:grid-cols-2">
-                <div className={`${CARD} p-5`}>
-                  <h2 className="text-lg font-bold text-slate-900">Commission Rule</h2>
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div className={`${CARD} p-3`}>
+                  <h2 className="text-xs font-black uppercase tracking-wide text-slate-800">Commission Rule</h2>
                   <p className="mt-1 text-xs text-slate-500">These settings control the core management commission architecture for this {termProperty.toLowerCase()}.</p>
 
                   <div className="mt-5 space-y-4">
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Mode</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Commission Mode</label>
                       <AppSelect
                         value={formData.commissionPaymentMode || null}
                         onChange={(v) => setFormData((f) => ({ ...f, commissionPaymentMode: v ?? '' }))}
@@ -373,7 +357,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Percentage</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Commission Percentage</label>
                       <input
                         type="number"
                         name="commissionPercentage"
@@ -389,7 +373,7 @@ const PropertyCommissionSettings = () => {
 
                     {(formData.commissionPaymentMode === 'fixed' || formData.commissionPaymentMode === 'both') && (
                       <div>
-                        <label className="mb-0.5 block text-xs font-semibold text-slate-700">Fixed Commission Amount</label>
+                        <label className="mb-1 block text-xs font-bold text-slate-900">Fixed Commission Amount</label>
                         <input
                           type="number"
                           name="commissionFixedAmount"
@@ -403,7 +387,7 @@ const PropertyCommissionSettings = () => {
                     )}
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commission Recognition Basis</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Commission Recognition Basis</label>
                       <AppSelect
                         value={formData.commissionRecognitionBasis || null}
                         onChange={(v) => setFormData((f) => ({ ...f, commissionRecognitionBasis: v ?? '' }))}
@@ -417,7 +401,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Prepayment Recognition</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Prepayment Recognition</label>
                       <AppSelect
                         value={formData.prepaymentRecognition || null}
                         onChange={(v) => setFormData((f) => ({ ...f, prepaymentRecognition: v ?? '' }))}
@@ -435,7 +419,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">{termTenants} Pay To</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">{termTenants} Pay To</label>
                       <AppSelect
                         value={formData.tenantsPaysTo || null}
                         onChange={(v) => setFormData((f) => ({ ...f, tenantsPaysTo: v ?? '' }))}
@@ -448,7 +432,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Deposit Held By</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Deposit Held By</label>
                       <AppSelect
                         value={formData.depositHeldBy || null}
                         onChange={(v) => setFormData((f) => ({ ...f, depositHeldBy: v ?? '' }))}
@@ -461,21 +445,21 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Commissionable Statement Categories</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Commissionable Statement Categories</label>
                       <p className="mb-3 text-xs leading-5 text-slate-500">
-                        Select the normalized landlord-statement categories that should contribute to the commission base.
-                        Rent stays available for backward compatibility, while active utility and service-charge types come from company operational settings.
+                        Choose which statement charges count toward the commission.
+                        Utility and service-charge types are managed under Operational Settings, Utility Types.
                       </p>
                       <div className="space-y-3">
                         {availableCommissionCategories.map((item) => {
                           const isChecked = (formData.commissionCategoryKeys || []).includes(item.key);
                           return (
-                            <label key={item.key} className={`flex items-start gap-3 rounded-xl border px-4 py-3 transition ${isChecked ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
+                            <label key={item.key} className={`flex items-start gap-3 border px-3 py-2 transition ${isChecked ? 'border-slate-400 bg-slate-100' : 'border-slate-200 bg-white'}`}>
                               <input
                                 type="checkbox"
                                 checked={isChecked}
                                 onChange={() => handleCommissionCategoryToggle(item.key)}
-                                className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                                className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0B3B2E]"
                               />
                               <div>
                                 <div className="text-sm font-semibold text-slate-900">{item.label}</div>
@@ -492,27 +476,27 @@ const PropertyCommissionSettings = () => {
                   </div>
                 </div>
 
-                <div className={`${CARD} p-5`}>
+                <div className={`${CARD} p-3`}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <h2 className="text-lg font-bold text-slate-900">Management Commission VAT / Tax</h2>
+                      <h2 className="text-xs font-black uppercase tracking-wide text-slate-800">Management Commission VAT / Tax</h2>
                       <p className="mt-1 text-xs text-slate-500">
                         This is the advanced property-level tax section for management commission. The simple commission list remains untouched.
                       </p>
                     </div>
-                    <div className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${taxConfig?.taxSettings?.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    <div className={`border border-slate-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-700`}>
                       {taxConfig?.taxSettings?.enabled ? 'Company tax enabled' : 'Company tax off'}
                     </div>
                   </div>
 
                   <div className="mt-5 space-y-4">
-                    <label className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
+                    <label className="flex items-start gap-3 border border-slate-200 bg-white px-3 py-2">
                       <input
                         type="checkbox"
                         name="enabled"
                         checked={Boolean(formData.commissionTaxSettings.enabled)}
                         onChange={handleTaxFieldChange}
-                        className="mt-1 h-4 w-4 rounded border-slate-300 text-emerald-600"
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-[#0B3B2E]"
                       />
                       <div>
                         <div className="text-sm font-semibold text-slate-900">Apply VAT/tax on management commission</div>
@@ -523,7 +507,7 @@ const PropertyCommissionSettings = () => {
                     </label>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Code</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Tax Code</label>
                       <AppSelect
                         value={formData.commissionTaxSettings.taxCodeKey || null}
                         onChange={(v) => setFormData((f) => ({ ...f, commissionTaxSettings: { ...f.commissionTaxSettings, taxCodeKey: v ?? '' } }))}
@@ -534,7 +518,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Tax Mode</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Tax Mode</label>
                       <AppSelect
                         value={formData.commissionTaxSettings.taxMode || null}
                         onChange={(v) => setFormData((f) => ({ ...f, commissionTaxSettings: { ...f.commissionTaxSettings, taxMode: v ?? '' } }))}
@@ -549,7 +533,7 @@ const PropertyCommissionSettings = () => {
                     </div>
 
                     <div>
-                      <label className="mb-0.5 block text-xs font-semibold text-slate-700">Rate Override (Optional)</label>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Rate Override (Optional)</label>
                       <input
                         type="number"
                         name="rateOverride"
@@ -563,17 +547,6 @@ const PropertyCommissionSettings = () => {
                       />
                     </div>
 
-                    <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-xs text-blue-800">
-                      <div className="flex items-start gap-2">
-                        <FaInfoCircle className="mt-0.5" />
-                        <div>
-                          <div className="font-bold">Phase 1 behavior</div>
-                          <div className="mt-1 leading-5">
-                            Statement deductions will use gross commission where tax applies, while ledger posting will separate commission income and tax payable.
-                          </div>
-                        </div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -583,30 +556,26 @@ const PropertyCommissionSettings = () => {
         </div>
 
         {/* Sticky footer */}
-        {selectedProperty && (
-          <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
-            <div className="flex items-center justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setFormData(selectedProperty ? normalizePropertyForm(selectedProperty) : defaultForm)}
-                disabled={saving}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
-                Reset
-              </button>
-              {canWrite && (
-                <button
-                  type="submit"
-                  form="commission-settings-form"
-                  disabled={saving}
-                  className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60 ${GREEN} ${GREEN_HOVER}`}
-                >
-                  <FaSave /> {saving ? 'Saving...' : 'Save Commission Settings'}
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-white px-3 py-2">
+          <button
+            type="button"
+            onClick={() => setFormData(selectedProperty ? normalizePropertyForm(selectedProperty) : defaultForm)}
+            disabled={!selectedProperty || saving}
+            className="border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Reset
+          </button>
+          {canWrite && (
+            <button
+              type="submit"
+              form="commission-settings-form"
+              disabled={!selectedProperty || saving}
+              className="flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FaSave /> {saving ? "Saving…" : "Save"}
+            </button>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

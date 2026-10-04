@@ -41,6 +41,7 @@ import { getCompanyUnitTypes } from "../../redux/apiCalls";
 import { printTabularList } from "../../utils/printList";
 import { useTerms } from "../../hooks/useTerm";
 import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { fmtDate } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
@@ -240,7 +241,7 @@ const Units = () => {
     setCurrentPage(1);
     setSelectAll(false);
     setSelectedUnits([]);
-    setExpandedUnits([]);
+    setExpandedUnits(new Set());
     if (currentCompany?._id) dispatch(getUnits(buildUnitParams(1, newFilters)));
   }, [draftFilters, setAppliedFilters, setCurrentPage, currentCompany?._id, dispatch, buildUnitParams]);
 
@@ -248,7 +249,7 @@ const Units = () => {
     setDraftFilters(EMPTY_FILTERS);
     setAppliedFilters(EMPTY_FILTERS);
     setCurrentPage(1);
-    setExpandedUnits([]);
+    setExpandedUnits(new Set());
     setSelectAll(false);
     setSelectedUnits([]);
     setActionMenuOpen(false);
@@ -346,7 +347,7 @@ const Units = () => {
         currentRent: formatRentAmount(unit.rent),
         unitType: unit.unitType || "N/A",
         status: normalizedStatus,
-        vacantFrom: unit.vacantSince ? new Date(unit.vacantSince).toLocaleDateString() : "-",
+        vacantFrom: unit.vacantSince ? fmtDate(unit.vacantSince) : "-",
         propertyId: propertyId,
         canArchive,
         canRestore,
@@ -839,6 +840,7 @@ const Units = () => {
               { value: "active", label: "Active" },
               { value: "any", label: "All Statuses" },
               { value: "occupied", label: "Occupied" },
+              { value: "owner_occupied", label: "Owner occupied" },
               { value: "vacant", label: "Vacant" },
               { value: "maintenance", label: "Maintenance" },
               { value: "archived", label: "Archived" },
@@ -883,33 +885,29 @@ const Units = () => {
             </ListToolbar.Button>
           )}
 
-          {canUpdateUnit && (
+          {(canUpdateUnit || canDeleteUnit) && (
             <div className="shrink-0">
               <ListToolbar.Button
-                icon={FaArchive}
+                icon={FaChevronDown}
                 ref={actionMenuBtnRef}
                 disabled={selectedCount === 0}
                 onClick={() => setActionMenuOpen((v) => !v)}
               >
-                Actions <FaChevronDown size={8} />
+                Actions{selectedCount > 0 ? ` (${selectedCount})` : ""}
               </ListToolbar.Button>
               <ListToolbar.Menu open={actionMenuOpen && selectedCount > 0} onClose={() => setActionMenuOpen(false)} anchorRef={actionMenuBtnRef}>
-                <ListToolbar.MenuItem icon={FaArchive} disabled={selectedArchivableUnits.length === 0} onClick={archiveSelected}>Archive</ListToolbar.MenuItem>
-                <ListToolbar.MenuItem icon={FaUndo} disabled={selectedRestorableUnits.length === 0} onClick={restoreSelected}>Restore</ListToolbar.MenuItem>
+                {canUpdateUnit && <ListToolbar.MenuItem icon={FaArchive} disabled={selectedArchivableUnits.length === 0} onClick={archiveSelected}>Archive</ListToolbar.MenuItem>}
+                {canUpdateUnit && <ListToolbar.MenuItem icon={FaUndo} disabled={selectedRestorableUnits.length === 0} onClick={restoreSelected}>Restore</ListToolbar.MenuItem>}
+                {canDeleteUnit && <ListToolbar.MenuItem icon={FaTrash} disabled={selectedDeletableUnits.length === 0} onClick={deleteSelected}>Delete</ListToolbar.MenuItem>}
               </ListToolbar.Menu>
             </div>
           )}
 
-          {canDeleteUnit && (
-            <ListToolbar.Button icon={FaTrash} variant="danger" disabled={selectedCount === 0 || selectedDeletableUnits.length === 0} onClick={deleteSelected}>
-              Delete{selectedCount > 0 ? ` (${selectedCount})` : ""}
-            </ListToolbar.Button>
-          )}
           {canCreateUnit && (
             <ListToolbar.Button icon={FaPlus} onClick={() => navigate("/units/new")}>Add</ListToolbar.Button>
           )}
+          <ListToolbar.Button icon={FaFileExport} variant="outlineOk" onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
           <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
-          <ListToolbar.Button icon={FaFileExport} variant="toggle" onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
           <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExportToExcel}>Export</ListToolbar.Button>
         </ListToolbar>
 
@@ -920,13 +918,12 @@ const Units = () => {
               tableFixed
               actionsWidth="72px"
               columns={[
-                { label: `${termUnit} No`, width: '90px' },
-                { label: 'Code', width: '78px' },
-                { label: `${termUnit} Type`, width: '112px' },
-                { label: termRent, align: 'right', width: '108px' },
-                { label: 'Status', align: 'center', width: '92px' },
-                { label: 'Occupancy', width: '200px' },
-                { label: 'Vacant Since', width: '100px' },
+                { label: `${termUnit} No`, width: '9%' },
+                { label: 'Code', width: '10%' },
+                { label: `${termUnit} Type`, width: '13%' },
+                { label: termRent, align: 'right', width: '12%' },
+                { label: 'Status', align: 'center', width: '12%' },
+                { label: termTenant, width: '44%' },
               ]}
               rows={currentUnits}
               rowKey="id"
@@ -946,46 +943,40 @@ const Units = () => {
               renderRow={(u) => (
                 <>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="font-semibold text-slate-700 truncate block">{toListingCaps(u.unitNo)}</span>
+                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(u.unitNo)}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(u.unitCode)}</span>
+                    <span className="text-slate-700 truncate block">{toListingCaps(u.unitCode)}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="text-slate-600 truncate block">{formatUnitTypeLabel(u.unitType) || 'N/A'}</span>
+                    <span className="text-slate-700 truncate block">{formatUnitTypeLabel(u.unitType) || '—'}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 text-right whitespace-nowrap">
-                    <span className="font-semibold text-slate-700">{u.currentRent}</span>
+                    <span className="font-semibold text-slate-900 tabular-nums">{u.currentRent}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 text-center">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
                       u.status === 'occupied' ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      : u.status === 'vacant' ? 'bg-red-50 text-red-700 border-red-200'
+                      : u.status === 'owner_occupied' ? 'bg-slate-100 text-slate-700 border-slate-300'
                       : u.status === 'maintenance' ? 'bg-amber-50 text-amber-700 border-amber-200'
-                      : u.status === 'archived' ? 'bg-slate-100 text-slate-500 border-slate-200'
-                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-300'
                     }`}>
-                      {u.status.charAt(0).toUpperCase() + u.status.slice(1)}
+                      {u.status === 'owner_occupied' ? 'Owner occupied' : u.status.charAt(0).toUpperCase() + u.status.slice(1)}
                     </span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    {u.status === 'occupied' && u.tenant !== '-' ? (
-                      <span className="font-semibold text-slate-800 truncate block">
-                        <span className="text-emerald-500 mr-1">●</span>{toListingCaps(u.tenant)}
-                      </span>
+                    {u.status === 'owner_occupied' ? (
+                      <span className="text-slate-600 text-[11px]">Owner occupied</span>
+                    ) : u.status === 'occupied' && u.tenant !== '-' ? (
+                      <span className="font-semibold text-slate-900 truncate block">{toListingCaps(u.tenant)}</span>
+                    ) : u.status === 'vacant' ? (
+                      <span className="text-slate-600 text-[11px] truncate block">Vacant since {u.vacantFrom}</span>
                     ) : u.status === 'maintenance' ? (
-                      <span className="text-amber-600 font-semibold text-[10px]">In Maintenance</span>
+                      <span className="text-slate-600 text-[11px]">In maintenance</span>
                     ) : u.status === 'archived' ? (
-                      <span className="text-slate-400 text-[10px]">Archived</span>
+                      <span className="text-slate-500 text-[11px]">Archived</span>
                     ) : (
-                      <span className="text-slate-300">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    {u.status === 'vacant' ? (
-                      <span className="text-red-500 font-medium text-[11px] truncate block">{u.vacantFrom}</span>
-                    ) : (
-                      <span className="text-slate-300">—</span>
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
                 </>
@@ -999,34 +990,30 @@ const Units = () => {
                 </button>
               )}
               renderExpanded={(u) => (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-[#0B3B2E]/30">
-                    <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-[#0B3B2E]">📋 {termUnit} Details</h4>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termUnit} Number</span><p className="text-sm font-black text-gray-900 mt-2">{u.unitNo || 'N/A'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termUnit} Code</span><p className="text-sm font-black font-mono text-gray-900 mt-2 bg-gray-100 p-2 rounded">{u.unitCode || 'N/A'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termUnit} Type</span><p className="text-sm font-black text-gray-900 mt-2">{formatUnitTypeLabel(u.unitType) || 'N/A'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Status</span>
-                      <p className={`text-sm font-black mt-2 inline-block px-3 py-1 rounded-lg ${u.status === 'occupied' ? 'bg-green-200 text-green-900' : u.status === 'vacant' ? 'bg-red-200 text-red-900' : u.status === 'maintenance' ? 'bg-yellow-200 text-yellow-900' : 'bg-gray-200 text-gray-900'}`}>
-                        {u.status.charAt(0).toUpperCase() + u.status.slice(1)}
-                      </p>
-                    </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-3 border border-slate-200 bg-white p-3">
+                    <h4 className="border-b border-slate-300 pb-2 text-sm font-bold text-gray-900">{termUnit} details</h4>
+                    <div><span className="text-xs font-semibold text-gray-700">{termUnit} number</span><p className="mt-1 text-sm font-bold text-gray-900">{u.unitNo || 'N/A'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">{termUnit} code</span><p className="mt-1 text-sm font-bold text-gray-900">{u.unitCode || 'N/A'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">{termUnit} type</span><p className="mt-1 text-sm font-bold text-gray-900">{formatUnitTypeLabel(u.unitType) || 'N/A'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">Status</span><p className="mt-1 text-sm font-bold text-gray-900">{u.status.charAt(0).toUpperCase() + u.status.slice(1)}</p></div>
                   </div>
-                  <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-[#FF8C00]/30">
-                    <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-[#FF8C00]">💰 Financial Details</h4>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Monthly {termRent}</span><p className="text-sm font-black text-gray-900 mt-2">{u.currentRent || 'Ksh 0'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Market {termRent}</span><p className="text-sm font-black text-gray-900 mt-2">{u.marketRent || 'N/A'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Billing Frequency</span><p className="text-sm font-black text-gray-900 mt-2">Monthly</p></div>
+                  <div className="space-y-3 border border-slate-200 bg-white p-3">
+                    <h4 className="border-b border-slate-300 pb-2 text-sm font-bold text-gray-900">Financial details</h4>
+                    <div><span className="text-xs font-semibold text-gray-700">Monthly {termRent}</span><p className="mt-1 text-sm font-bold text-gray-900">{u.currentRent || 'Ksh 0'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">Market {termRent}</span><p className="mt-1 text-sm font-bold text-gray-900">{u.marketRent || 'N/A'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">Billing frequency</span><p className="mt-1 text-sm font-bold text-gray-900">Monthly</p></div>
                   </div>
-                  <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-blue-300/50">
-                    <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-blue-600">👥 Occupancy Details</h4>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Current {termTenant}</span><p className="text-sm font-black text-gray-900 mt-2">{u.tenant || '-'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">Vacant Since</span><p className="text-sm font-black text-gray-900 mt-2">{u.status === 'vacant' ? u.vacantFrom : '-'}</p></div>
-                    <div><span className="text-xs font-black text-gray-700 uppercase tracking-wide">{termProperty}</span><p className="text-sm font-black text-gray-900 mt-2">{u.propertyName || 'Unknown'}</p></div>
+                  <div className="space-y-3 border border-slate-200 bg-white p-3">
+                    <h4 className="border-b border-slate-300 pb-2 text-sm font-bold text-gray-900">Occupancy</h4>
+                    <div><span className="text-xs font-semibold text-gray-700">Current {termTenant}</span><p className="mt-1 text-sm font-bold text-gray-900">{u.tenant || '-'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">Vacant since</span><p className="mt-1 text-sm font-bold text-gray-900">{u.status === 'vacant' ? u.vacantFrom : '-'}</p></div>
+                    <div><span className="text-xs font-semibold text-gray-700">{termProperty}</span><p className="mt-1 text-sm font-bold text-gray-900">{u.propertyName || 'Unknown'}</p></div>
                   </div>
-                  <div className="space-y-4 p-4 bg-white rounded-lg shadow-md border-2 border-green-300/50">
-                    <h4 className="font-black text-gray-900 text-sm mb-4 pb-2 border-b-3 border-green-600">⚙️ Actions</h4>
-                    <button onClick={() => navigate(`/units/${u.id}`)} className={`w-full px-3 py-2 text-xs text-white rounded-lg flex items-center justify-center gap-2 transition-colors font-black ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-                      <FaEdit /> View Full Details
+                  <div className="space-y-3 border border-slate-200 bg-white p-3">
+                    <h4 className="border-b border-slate-300 pb-2 text-sm font-bold text-gray-900">Actions</h4>
+                    <button onClick={() => navigate(`/units/${u.id}`)} className={`w-full px-3 py-2 text-xs text-white flex items-center justify-center gap-2 transition-colors font-bold ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
+                      <FaEdit /> View full details
                     </button>
                   </div>
                 </div>

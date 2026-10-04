@@ -1,6 +1,5 @@
 // pages/ModulesDashboard/ModulesDashboard.jsx
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useTabState } from "../../hooks/useTabState";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
@@ -11,14 +10,10 @@ import {
   FaCar,
   FaChartLine,
   FaCity,
-  FaHandshake,
   FaLock,
-  FaSearch,
-  FaStore,
   FaUsers,
   FaWarehouse,
 } from "react-icons/fa";
-import { toast } from "react-toastify";
 import {
   getCompanyOperatingModeLabel,
   hasCompanyModule,
@@ -26,107 +21,66 @@ import {
 } from "../../utils/companyModules";
 import StartMenu from "../../components/StartMenu/StartMenu";
 import { useTermPresetLabel, useTerm } from "../../hooks/useTerm";
-import "./ModulesDashboard.css";
 
-const CATEGORIES = ["All", "Core", "Finance", "Sales", "Operations", "People"];
+// Accounting is shared by every other module, so it is the one orange tile and always comes last
+const SHARED_MODULE_ID = "accounts";
 
 const moduleRegistry = [
   {
     id: "milik",
     moduleKey: "propertyManagement",
-    title: "MILIK",
-    subtitle: "Property Management",
-    status: "active",
+    title: "Property Management",
+    subtitle: "Leases, Billing & Collections",
     route: "/dashboard",
     icon: FaCity,
-    color: "#0B3B2E",
-    category: "Core",
-  },
-  {
-    id: "accounts",
-    moduleKey: "accounts",
-    title: "Accounting",
-    subtitle: "Finance & Reporting",
-    status: "active",
-    route: "/accounts/dashboard",
-    icon: FaChartLine,
-    color: "#C2570C",
-    category: "Finance",
   },
   {
     id: "inventory",
     moduleKey: "inventory",
     title: "Inventory",
     subtitle: "Stock & Warehousing",
-    status: "active",
     route: "/inventory/dashboard",
     icon: FaWarehouse,
-    color: "#0F766E",
-    category: "Operations",
   },
   {
     id: "propertySale",
     moduleKey: "propertySale",
     title: "Property Sales",
     subtitle: "Listings & Deals",
-    status: "active",
     route: "/sale/dashboard",
     icon: FaBuilding,
-    color: "#14532D",
-    category: "Sales",
-  },
-  {
-    id: "pos",
-    moduleKey: "pos",
-    title: "POS & Billing",
-    subtitle: "Point of Sale",
-    status: "coming",
-    icon: FaStore,
-    color: "#B45309",
-    category: "Sales",
   },
   {
     id: "carwash",
     moduleKey: "carwash",
     title: "Car Wash",
     subtitle: "Wash Jobs & Staff",
-    status: "active",
     route: "/carwash/dashboard",
     icon: FaCar,
-    color: "#155E75",
-    category: "Operations",
   },
   {
     id: "hr",
     moduleKey: "hr",
     title: "Human Resource",
     subtitle: "People & Payroll",
-    status: "active",
     route: "/hr/dashboard",
     icon: FaUsers,
-    color: "#3F6212",
-    category: "People",
   },
   {
     id: "clients",
     moduleKey: "clients",
     title: "Contract Management",
     subtitle: "Clients, Contracts & Billing",
-    status: "active",
     route: "/clients/dashboard",
     icon: FaAddressBook,
-    color: "#065F46",
-    category: "Sales",
   },
   {
-    id: "vendoor",
-    moduleKey: "procurement",
-    title: "Ven-Door",
-    subtitle: "Vendor Management",
-    status: "coming",
-    icon: FaHandshake,
-    color: "#1E3A5F",
-    category: "Operations",
+    id: SHARED_MODULE_ID,
+    moduleKey: "accounts",
+    title: "Accounting",
+    subtitle: "Finance & Reporting",
+    route: "/accounts/dashboard",
+    icon: FaChartLine,
   },
 ];
 
@@ -135,8 +89,6 @@ const ModulesDashboard = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const isFetchingCompany = useSelector((state) => state.company?.isFetching || false);
-  const [search, setSearch] = useTabState("/moduleDashboard:search", "");
-  const [activeCategory, setActiveCategory] = useTabState("/moduleDashboard:activeCategory", "All");
 
   const activeCompanyContext = currentCompany || currentUser?.company || null;
   const isLandlordMode = isSelfManagingLandlordCompany(activeCompanyContext);
@@ -151,12 +103,6 @@ const ModulesDashboard = () => {
     document.title = name ? `Apps | ${name} | Milik` : "Apps | Milik";
   }, [activeCompanyContext]);
 
-  const firstName = String(currentUser?.otherNames || currentUser?.surname || "").trim().split(/\s+/)[0];
-  const greeting = useMemo(() => {
-    const hour = new Date().getHours();
-    return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  }, []);
-
   const visibleModules = useMemo(() => {
     if (!activeCompanyContext) return [];
     return moduleRegistry
@@ -168,157 +114,83 @@ const ModulesDashboard = () => {
           subtitle: isLandlordMode ? `${termLandlord} Workspace` : m.subtitle,
         };
       })
-      .filter((m) => hasCompanyModule(activeCompanyContext, m.moduleKey));
+      .filter((m) => hasCompanyModule(activeCompanyContext, m.moduleKey))
+      .sort((a, b) => Number(a.id === SHARED_MODULE_ID) - Number(b.id === SHARED_MODULE_ID));
   }, [activeCompanyContext, isLandlordMode, termLandlord, saleModuleName]);
 
-  const filteredModules = useMemo(() => {
-    let list = visibleModules;
-    if (activeCategory !== "All") list = list.filter((m) => m.category === activeCategory);
-    const q = search.trim().toLowerCase();
-    if (q) list = list.filter((m) => m.title.toLowerCase().includes(q) || m.subtitle.toLowerCase().includes(q) || m.category.toLowerCase().includes(q));
-    return list;
-  }, [visibleModules, activeCategory, search]);
-
-  // only show categories that have at least one visible module
-  const availableCategories = useMemo(() => {
-    const cats = new Set(visibleModules.map((m) => m.category));
-    return CATEGORIES.filter((c) => c === "All" || cats.has(c));
-  }, [visibleModules]);
-
   const handleOpen = useCallback((m) => {
-    if (m.status === "active" && m.route) {
-      const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
-      localStorage.setItem("recentModules", JSON.stringify([m.id, ...recent.filter((id) => id !== m.id)].slice(0, 5)));
-      navigate(m.route);
-      return;
-    }
-    if (m.status === "coming") {
-      toast.info(`${m.title} is coming soon for this company.`);
-      return;
-    }
-    toast.warning(`${m.title} is currently unavailable.`);
+    const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
+    localStorage.setItem("recentModules", JSON.stringify([m.id, ...recent.filter((id) => id !== m.id)].slice(0, 5)));
+    navigate(m.route);
   }, [navigate]);
 
   return (
-    <div className="odoo-page">
-      {/* ── Subtle ambient layer ── */}
-      <div className="odoo-bg" aria-hidden="true">
-        <div className="odoo-orb odoo-orb-a" />
-        <div className="odoo-orb odoo-orb-b" />
-      </div>
-
-      {/* ── Top bar ── */}
-      <header className="odoo-topbar">
-        <div className="odoo-topbar-left">
-          <StartMenu darkMode={false} variant="corner" />
+    <div className="flex min-h-screen flex-col bg-slate-50">
+      <header className="flex h-[52px] flex-shrink-0 items-stretch gap-3 bg-[#0B3B2E] text-white">
+        <div className="flex items-center gap-3">
+          <StartMenu variant="corner" />
           <img
             src={activeCompanyContext?.logo || "/MIIK CUBES.png"}
             alt={activeCompanyContext?.companyName || "Milik"}
-            className="odoo-topbar-logo"
+            className="h-8 w-8 flex-shrink-0 bg-white object-contain p-0.5"
           />
-          <div className="odoo-topbar-company">
-            <span className="odoo-topbar-name">{activeCompanyContext?.companyName || "Milik"}</span>
-            {companySubtitle && <span className="odoo-topbar-mode">{companySubtitle}</span>}
+          <div className="flex min-w-0 flex-col leading-tight">
+            <span className="truncate text-sm font-black uppercase tracking-wide">{activeCompanyContext?.companyName || "Milik"}</span>
+            {companySubtitle && <span className="truncate text-[11px] font-bold uppercase tracking-wider text-emerald-200">{companySubtitle}</span>}
           </div>
-        </div>
-        <div className="odoo-topbar-search">
-          <FaSearch className="odoo-search-ico" size={13} />
-          <input
-            className="odoo-search-input"
-            type="text"
-            placeholder="Search apps…"
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setActiveCategory("All"); }}
-          />
         </div>
       </header>
 
-      {/* ── Category tab strip (only worth having with a handful of apps) ── */}
-      {visibleModules.length >= 5 && (
-      <div className="odoo-tabs-bar">
-        <div className="odoo-tabs">
-          {availableCategories.map((cat) => (
-            <button
-              key={cat}
-              className={`odoo-tab ${activeCategory === cat ? "odoo-tab-active" : ""}`}
-              onClick={() => { setActiveCategory(cat); setSearch(""); }}
-            >
-              {cat}
-              {cat !== "All" && (
-                <span className="odoo-tab-count">
-                  {visibleModules.filter((m) => m.category === cat).length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-      )}
-
-      {/* ── App grid ── */}
-      <main className="odoo-main">
-        <div className="odoo-greeting">
-          <h1 className="odoo-greeting-title">{greeting}{firstName ? `, ${firstName}` : ""}</h1>
-          <p className="odoo-greeting-sub">Choose an app to get started.</p>
-        </div>
-        {isFetchingCompany && filteredModules.length === 0 ? (
-          <div className="odoo-grid">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+        {isFetchingCompany && visibleModules.length === 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="odoo-tile odoo-tile-skeleton" aria-hidden="true">
-                <div className="odoo-icon-panel odoo-skeleton-block" />
-                <div className="odoo-tile-body">
-                  <div className="odoo-skeleton-line odoo-skeleton-line-title" />
-                  <div className="odoo-skeleton-line odoo-skeleton-line-sub" />
+              <div key={i} className="border border-slate-200 bg-white" aria-hidden="true">
+                <div className="h-14 animate-pulse bg-slate-200" />
+                <div className="space-y-2 px-3 py-3">
+                  <div className="h-2.5 w-3/4 animate-pulse bg-slate-200" />
+                  <div className="h-2 w-1/2 animate-pulse bg-slate-100" />
                 </div>
               </div>
             ))}
           </div>
-        ) : filteredModules.length > 0 ? (
-          <div className="odoo-grid">
-            {filteredModules.map((m, i) => (
-              <button
-                key={m.id}
-                className={`odoo-tile ${m.status === "coming" ? "odoo-tile-soon" : ""}`}
-                style={{ animationDelay: `${i * 20}ms` }}
-                onClick={() => handleOpen(m)}
-                aria-label={`${m.title} — ${m.subtitle}`}
-              >
-                {m.status !== "active" && <span className="odoo-soon-pill">Soon</span>}
-
-                {/* Icon panel — top half of card */}
-                <div className="odoo-icon-panel" style={{ background: m.color }}>
-                  {m.icon ? (
-                    <span className="odoo-icon"><m.icon /></span>
-                  ) : (
-                    <img src="/logo.png" alt="Milik" className="odoo-logo-img" />
-                  )}
-                </div>
-
-                {/* Text panel — bottom half */}
-                <div className="odoo-tile-body">
-                  <div className="odoo-tile-name">{m.title}</div>
-                  <div className="odoo-tile-sub">{m.subtitle}</div>
-                </div>
-
-                {/* Hover overlay — "Open" button */}
-                <div className="odoo-hover-overlay">
-                  <span className="odoo-open-btn">
-                    {m.status === "active" ? "Open" : "Coming soon"}
-                    {m.status === "active" && <FaArrowRight size={11} />}
-                  </span>
-                </div>
-              </button>
-            ))}
+        ) : visibleModules.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {visibleModules.map((m) => {
+              const Icon = m.icon;
+              const isShared = m.id === SHARED_MODULE_ID;
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleOpen(m)}
+                  aria-label={`${m.title} — ${m.subtitle}`}
+                  className="group flex flex-col overflow-hidden border border-slate-200 bg-white text-left transition hover:border-[#0B3B2E] hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF8C00]"
+                >
+                  <div className={`flex h-14 items-center justify-center ${isShared ? "bg-[#FF8C00]" : "bg-[#0B3B2E]"}`}>
+                    <Icon className="text-2xl text-white" />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-black uppercase tracking-wide text-slate-900">{m.title}</div>
+                      <div className="truncate text-xs font-semibold text-slate-600">{m.subtitle}</div>
+                    </div>
+                    <FaArrowRight className="flex-shrink-0 text-[10px] text-[#FF8C00] opacity-0 transition group-hover:opacity-100" />
+                  </div>
+                </button>
+              );
+            })}
           </div>
         ) : (
-          <div className="odoo-empty">
-            <div className="odoo-empty-ico"><FaLock /></div>
-            <p className="odoo-empty-title">{search ? "No apps match your search" : "No modules available"}</p>
-            <p className="odoo-empty-sub">{search ? "Try searching something else" : "No business modules are assigned to this company."}</p>
+          <div className="border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center bg-slate-100 text-slate-400">
+              <FaLock />
+            </div>
+            <p className="text-sm font-bold text-slate-700">No modules available</p>
+            <p className="mt-1 text-sm text-slate-600">No business modules are assigned to this company.</p>
           </div>
         )}
       </main>
-
     </div>
   );
 };

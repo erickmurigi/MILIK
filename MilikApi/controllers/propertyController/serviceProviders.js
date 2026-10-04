@@ -43,7 +43,9 @@ export const createServiceProvider = async (req, res, next) => {
       accountNumber: req.body?.accountNumber || "",
       paybillNumber: req.body?.paybillNumber || "",
       bankName: req.body?.bankName || "",
+      branchName: req.body?.branchName || "",
       accountName: req.body?.accountName || "",
+      mobileNumber: req.body?.mobileNumber || "",
       subjectToWht: Boolean(req.body?.subjectToWht) && whtRate > 0,
       whtRate:      Boolean(req.body?.subjectToWht) && whtRate > 0 ? whtRate : 0,
       whtCategory:  String(req.body?.whtCategory || "").trim(),
@@ -108,7 +110,7 @@ export const updateServiceProvider = async (req, res, next) => {
     const row = await ServiceProvider.findOne({ _id: req.params.id, business: businessId });
     if (!row) return next(createError(404, "Service provider not found"));
 
-    const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "accountName", "subjectToWht", "whtRate", "whtCategory", "isActive", "notes"];
+    const allowed = ["name", "contactPerson", "email", "phone", "category", "kraPin", "accountNumber", "paybillNumber", "bankName", "branchName", "accountName", "mobileNumber", "subjectToWht", "whtRate", "whtCategory", "isActive", "notes"];
     allowed.forEach((field) => {
       if (!Object.prototype.hasOwnProperty.call(req.body || {}, field)) return;
       if (field === "name") { row[field] = String(req.body[field] || "").trim(); return; }

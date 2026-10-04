@@ -1,8 +1,10 @@
 import CompanySettings from "../../models/CompanySettings.js";
+import ChartOfAccount from "../../models/ChartOfAccount.js";
 import mongoose from "mongoose";
 import { createError } from "../../utils/error.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import {
+  resolveConfiguredAccountingDefaultAccount,
   validateAccountingDefaultAccount,
   validateHrAccountingDefaultAccount,
   validateInvAccountingDefaultAccount,
@@ -177,6 +179,7 @@ const ACCOUNTING_DEFAULT_FIELDS = [
   "depositLiabilityAccount",
   "managementCommissionIncomeAccount",
   "leaseAgreementFeeIncomeAccount",
+  "accountsPayableAccount",
 ];
 
 const HR_ACCOUNTING_DEFAULT_FIELDS = [
@@ -342,6 +345,14 @@ export const getCompanySettings = async (req, res, next) => {
     if (data.terminology instanceof Map) {
       data.terminology = Object.fromEntries(data.terminology);
     }
+    // The ledger each general default resolves to, whether the company chose it or the system falls back
+    const resolvedEntries = await Promise.all(
+      ACCOUNTING_DEFAULT_FIELDS.map(async (field) => {
+        const account = await resolveConfiguredAccountingDefaultAccount({ businessId, field });
+        return [field, account ? { _id: String(account._id), code: account.code, name: account.name } : null];
+      })
+    );
+    data.accountingDefaultsResolved = Object.fromEntries(resolvedEntries);
     settingsCache.set(cacheKey, { data, expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS });
     res.status(200).json(data);
   } catch (err) {
@@ -475,10 +486,13 @@ export const addUnitType = async (req, res, next) => {
       isActive: true,
     };
 
-    settings.unitTypes.push(newUnitType);
-    await settings.save();
+    // Atomic push, not save(): Load Defaults sends several of these at once, and a full save()
+    // of the shared settings document collides on its version (VersionError). updateOne only
+    // writes the unitTypes array, so the requests can't clash.
+    await CompanySettings.updateOne({ _id: settings._id }, { $push: { unitTypes: newUnitType } });
+    const fresh = await findCompanySettings(businessId);
 
-    res.status(201).json({ unitType: newUnitType, settings, message: "Unit type added successfully" });
+    res.status(201).json({ unitType: newUnitType, settings: fresh, message: "Unit type added successfully" });
   } catch (err) {
     next(err);
   }
@@ -772,6 +786,20 @@ export const deleteBillingPeriod = async (req, res, next) => {
   }
 };
 
+const resolvePostingAccountId = async (businessId, value, { type, label }) => {
+  const accountId = normalizeText(value);
+  if (!accountId) return null;
+  const account = await ChartOfAccount.findOne({
+    _id: accountId,
+    business: businessId,
+    type,
+    isHeader: { $ne: true },
+    isPosting: { $ne: false },
+  }).select("_id").lean();
+  if (!account) throw createError(400, `${label} must be an active ${type} posting account in the chart of accounts`);
+  return account._id;
+};
+
 export const addExpenseItem = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
@@ -785,6 +813,8 @@ export const addExpenseItem = async (req, res, next) => {
       return next(createError(400, "Expense item name is required"));
     }
 
+    const expenseAccount = await resolvePostingAccountId(businessId, req.body?.expenseAccount, { type: "expense", label: "Expense account" });
+    const payableAccount = await resolvePostingAccountId(businessId, req.body?.payableAccount, { type: "liability", label: "Payable account" });
     const settings = await ensureSettingsDocument(businessId);
     ensureUniqueCollectionName({ items: settings.expenseItems, name, label: "Expense item" });
 
@@ -795,6 +825,8 @@ export const addExpenseItem = async (req, res, next) => {
       code,
       category,
       defaultAmount,
+      expenseAccount,
+      payableAccount,
       isActive: true,
     };
 
@@ -838,6 +870,12 @@ export const updateExpenseItem = async (req, res, next) => {
     if (req.body?.code !== undefined) expenseItem.code = normalizeText(req.body.code);
     if (req.body?.category !== undefined) expenseItem.category = normalizeText(req.body.category) || "other";
     if (req.body?.defaultAmount !== undefined) expenseItem.defaultAmount = toNumber(req.body.defaultAmount, 0);
+    if (req.body?.expenseAccount !== undefined) {
+      expenseItem.expenseAccount = await resolvePostingAccountId(businessId, req.body.expenseAccount, { type: "expense", label: "Expense account" });
+    }
+    if (req.body?.payableAccount !== undefined) {
+      expenseItem.payableAccount = await resolvePostingAccountId(businessId, req.body.payableAccount, { type: "liability", label: "Payable account" });
+    }
     if (req.body?.isActive !== undefined) expenseItem.isActive = Boolean(req.body.isActive);
 
     await settings.save();

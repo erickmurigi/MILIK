@@ -211,7 +211,7 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
               </th>
             )}
             {hasExpand && (
-              <th className="w-7 px-1 py-1.5 border-r border-white/10" />
+              <th className="w-16 px-2 py-1.5 text-[10px] font-black uppercase tracking-widest text-left whitespace-nowrap border-r border-white/10">Details</th>
             )}
             {columns.map((col, ci) => (
               <th

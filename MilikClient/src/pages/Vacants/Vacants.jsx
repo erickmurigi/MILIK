@@ -25,6 +25,8 @@ import {
   FaUndo,
   FaCheckCircle,
   FaTag,
+  FaTimes,
+  FaUserCheck,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { getUnits, updateUnit } from "../../redux/unitRedux";
@@ -329,7 +331,7 @@ const Vacants = () => {
       let availabilityStatus = "vacant";
       if (isOffMarket) {
         availabilityStatus = "off_market";
-      } else if (unit?.ownerOccupied) {
+      } else if (unit?.status === "owner_occupied") {
         availabilityStatus = "owner_occupied";
       } else if (isMaintenance) {
         availabilityStatus = "under_maintenance";
@@ -718,7 +720,7 @@ const Vacants = () => {
       title: "Mark as Owner Occupied",
       message: `Mark ${row.unitNo} as owner occupied? The ${termUnit} will be excluded from rental availability and occupancy calculations.`,
       confirmText: "Mark Owner Occupied",
-      unitData: { ownerOccupied: true, status: "occupied", isVacant: false },
+      unitData: { status: "owner_occupied", isVacant: false },
     });
   };
 
@@ -728,7 +730,7 @@ const Vacants = () => {
       title: `Release Owner Occupied ${termUnit}`,
       message: `Release ${row.unitNo} back into the letting stock as vacant?`,
       confirmText: "Release Unit",
-      unitData: { ownerOccupied: false, status: "vacant", isVacant: true, vacantSince: new Date().toISOString() },
+      unitData: { status: "vacant", isVacant: true, vacantSince: new Date().toISOString() },
     });
   };
 
@@ -847,77 +849,44 @@ const Vacants = () => {
             <ListToolbar.Divider />
             <ListToolbar.Input value={draftFilters.search} onChange={(event) => setDraftFilters((prev) => ({ ...prev, search: event.target.value }))} onKeyDown={handleFilterEnter} placeholder="Search…" width="w-28" />
             <ListToolbar.Input value={draftFilters.tenant} onChange={(event) => setDraftFilters((prev) => ({ ...prev, tenant: event.target.value }))} onKeyDown={handleFilterEnter} placeholder={termTenant} width="w-20" />
-          </ListToolbar>
-
-          {/* Context action bar — shows when a row is selected */}
-          <div className={`flex items-center gap-1.5 overflow-x-auto border-t px-2 py-1 transition-all ${selectedRow ? "border-gray-200 bg-[#f5faf8]" : "border-transparent bg-transparent"}`} style={{ minHeight: "34px" }}>
-            {selectedRow ? (
+            {selectedRow && (
               <>
-                <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">{termUnit}:</span>
-                <span className="shrink-0 inline-flex items-center gap-1 rounded bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-bold text-white">{selectedRow.unitNo}</span>
-                <span className="shrink-0 text-[10px] font-semibold text-slate-600 truncate max-w-[140px]" title={selectedRow.propertyName}>{selectedRow.propertyName}</span>
-                <span className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${getAvailabilityTone(selectedRow.status)}`}>{selectedRow.statusLabel}</span>
-                <span className="shrink-0 text-[10px] font-bold text-slate-700">{selectedRow.rentLabel}</span>
-                <div className="mx-1 h-4 w-px shrink-0 bg-gray-300" />
-                {canUpdateUnit && (
-                  <button onClick={() => navigate(`/units/${selectedRow.id}`)} className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-                    <FaUserEdit size={9} /> View {termUnit}
-                  </button>
-                )}
-                {selectedRow.status !== "owner_occupied" && (
-                  selectedRow.tenantId ? (
-                    <button onClick={() => navigate(`/tenant/${selectedRow.tenantId}/statement`, { state: { tabTitle: `${selectedRow.unitNo} ${termTenant}` } })} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-700 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-800">
-                      <FaUserEdit size={9} /> Review {termTenant}
-                    </button>
-                  ) : canCreateTenant && (
-                    <button
-                      onClick={() => openTenantTakeOn(selectedRow)}
-                      disabled={!["vacant", "reserved"].includes(selectedRow.status)}
-                      className={`h-7 shrink-0 flex items-center gap-1 rounded-md px-2 text-[10px] font-bold text-white shadow-sm ${["vacant", "reserved"].includes(selectedRow.status) ? `${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}` : "cursor-not-allowed bg-gray-400"}`}
-                    >
-                      <FaUserPlus size={9} /> {selectedRow.status === "reserved" ? "Complete Take-On" : `Add ${termTenant}`}
-                    </button>
-                  )
-                )}
+                <ListToolbar.Divider />
+                <span className="shrink-0 text-xs font-bold text-slate-900">{termUnit} {selectedRow.unitNo} · {selectedRow.propertyName} · {selectedRow.statusLabel}</span>
+                {canUpdateUnit && <ListToolbar.Button icon={FaUserEdit} onClick={() => navigate(`/units/${selectedRow.id}`)}>View {termUnit}</ListToolbar.Button>}
+                {selectedRow.status !== "owner_occupied" && (selectedRow.tenantId ? (
+                  <ListToolbar.Button icon={FaUserEdit} variant="outline" onClick={() => navigate(`/tenant/${selectedRow.tenantId}/statement`, { state: { tabTitle: `${selectedRow.unitNo} ${termTenant}` } })}>Review {termTenant}</ListToolbar.Button>
+                ) : canCreateTenant && (
+                  <ListToolbar.Button icon={FaUserPlus} variant="accent" disabled={!["vacant", "reserved"].includes(selectedRow.status)} onClick={() => openTenantTakeOn(selectedRow)}>
+                    {selectedRow.status === "reserved" ? "Complete take-on" : `Add ${termTenant}`}
+                  </ListToolbar.Button>
+                ))}
                 {canUpdateUnit && ["vacant", "notice_given"].includes(selectedRow.status) && (
-                  <button onClick={() => handleReserve(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-violet-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-violet-700">
-                    <FaTag size={9} /> Reserve
-                  </button>
+                  <ListToolbar.Button icon={FaTag} variant="outline" onClick={() => handleReserve(selectedRow)}>Reserve</ListToolbar.Button>
                 )}
                 {canUpdateUnit && ["vacant", "notice_given", "reserved"].includes(selectedRow.status) && (
-                  <button onClick={() => handleMaintenance(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-amber-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-amber-700">
-                    <FaWrench size={9} /> Maintenance
-                  </button>
+                  <ListToolbar.Button icon={FaWrench} variant="outline" onClick={() => handleMaintenance(selectedRow)}>Maintenance</ListToolbar.Button>
                 )}
                 {canUpdateUnit && ["reserved", "under_maintenance"].includes(selectedRow.status) && (
-                  <button onClick={() => handleReady(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-green-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-green-700">
-                    <FaCheckCircle size={9} /> Mark Ready
-                  </button>
+                  <ListToolbar.Button icon={FaCheckCircle} variant="outline" onClick={() => handleReady(selectedRow)}>Mark ready</ListToolbar.Button>
                 )}
-                {canUpdateUnit && selectedRow.status === "owner_occupied" ? (
-                  <button onClick={() => handleReleaseOwner(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-emerald-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-emerald-700">
-                    <FaUndo size={9} /> Release Unit
-                  </button>
-                ) : canUpdateUnit && (selectedRow.status === "off_market" ? (
-                  <button onClick={() => handleRestore(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-emerald-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-emerald-700">
-                    <FaUndo size={9} /> Restore
-                  </button>
-                ) : (
-                  <>
-                    <button onClick={() => handleOffMarket(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-slate-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-slate-700">
-                      <FaArchive size={9} /> Off Market
-                    </button>
-                    <button onClick={() => handleOwnerOccupied(selectedRow)} className="h-7 shrink-0 flex items-center gap-1 rounded-md bg-pink-600 px-2 text-[10px] font-bold text-white shadow-sm hover:bg-pink-700">
-                      Owner Occupied
-                    </button>
-                  </>
-                ))}
-                <button onClick={() => setSelectedRowId(null)} className="ml-auto h-7 shrink-0 flex items-center justify-center rounded border border-gray-300 px-2 text-[10px] font-bold text-slate-500 hover:bg-gray-100" title="Deselect">✕</button>
+                {canUpdateUnit && selectedRow.status === "owner_occupied" && (
+                  <ListToolbar.Button icon={FaUndo} variant="outline" onClick={() => handleReleaseOwner(selectedRow)}>Release unit</ListToolbar.Button>
+                )}
+                {canUpdateUnit && selectedRow.status === "off_market" && (
+                  <ListToolbar.Button icon={FaUndo} variant="outline" onClick={() => handleRestore(selectedRow)}>Restore</ListToolbar.Button>
+                )}
+                {canUpdateUnit && ["vacant", "notice_given", "reserved", "maintenance", "under_maintenance"].includes(selectedRow.status) && (
+                  <ListToolbar.Button icon={FaArchive} variant="outline" onClick={() => handleOffMarket(selectedRow)}>Off market</ListToolbar.Button>
+                )}
+                {canUpdateUnit && ["vacant", "notice_given"].includes(selectedRow.status) && (
+                  <ListToolbar.Button icon={FaUserCheck} variant="outline" onClick={() => handleOwnerOccupied(selectedRow)}>Owner occupied</ListToolbar.Button>
+                )}
+                <ListToolbar.Button icon={FaTimes} variant="outline" onClick={() => setSelectedRowId(null)}>Deselect</ListToolbar.Button>
               </>
-            ) : (
-              <span className="text-[10px] text-slate-400 select-none">Click a row to reveal actions</span>
             )}
-          </div>
+          </ListToolbar>
+
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden px-2 pb-2">

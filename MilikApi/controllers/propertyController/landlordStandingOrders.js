@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import LandlordStandingOrder from "../../models/LandlordStandingOrder.js";
+import Landlord from "../../models/Landlord.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
@@ -45,24 +46,16 @@ const buildDestination = (payload = {}, existing = {}) => ({
   mobileNumber: String(payload?.mobileNumber ?? existing?.mobileNumber ?? "").trim(),
 });
 
-const validateDestination = ({ paymentMethod, destination }) => {
-  const normalizedMethod = normalizePaymentMethod(paymentMethod);
-  if (normalizedMethod === "mobile_money") {
-    if (!String(destination?.mobileNumber || "").trim()) {
-      return "M-Pesa / mobile money standing orders require a destination mobile number.";
-    }
+// Fills any destination field the request left empty from the landlord's record. Missing details
+// are never an error: the system records payments, it does not stop a save for them.
+const DESTINATION_FIELDS = ["accountName", "accountNumber", "bankName", "branchName", "mobileNumber"];
+const fillDestinationFromLandlord = (destination = {}, landlord = null) => {
+  if (!landlord) return destination;
+  const filled = { ...destination };
+  for (const field of DESTINATION_FIELDS) {
+    if (!String(filled[field] || "").trim() && landlord[field]) filled[field] = landlord[field];
   }
-
-  if (["bank_transfer", "check", "credit_card"].includes(normalizedMethod)) {
-    const hasAccountName = Boolean(String(destination?.accountName || "").trim());
-    const hasBankName = Boolean(String(destination?.bankName || "").trim());
-    const hasAccountNumber = Boolean(String(destination?.accountNumber || "").trim());
-    if (!hasAccountName || (!hasBankName && !hasAccountNumber)) {
-      return "Bank standing orders require the payee name and either bank name or account number.";
-    }
-  }
-
-  return "";
+  return filled;
 };
 
 const getActiveRunHistory = (runHistory = [], frequency = "monthly") =>
@@ -348,11 +341,11 @@ export const createLandlordStandingOrder = async (req, res, next) => {
     const referenceNo = String(req.body?.referenceNo || "").trim() || (await generateOrderNo(businessId));
     const dayOfMonth = Number(req.body?.dayOfMonth || startDate.getDate() || 5);
     const paymentMethod = normalizePaymentMethod(req.body?.paymentMethod);
-    const destination = buildDestination(req.body?.destination || req.body);
-    const destinationError = validateDestination({ paymentMethod, destination });
-    if (destinationError) {
-      return next(createError(400, destinationError));
-    }
+    // Destination starts from what the request sends, then fills gaps from the landlord's record
+    const landlordRecord = await Landlord.findOne({ _id: accountingContext.landlordId, company: businessId })
+      .select("bankName branchName accountName accountNumber mobileNumber")
+      .lean();
+    const destination = fillDestinationFromLandlord(buildDestination(req.body?.destination || req.body), landlordRecord);
 
     const doc = await LandlordStandingOrder.create({
       business: accountingContext.businessId,
@@ -514,12 +507,15 @@ export const updateLandlordStandingOrder = async (req, res, next) => {
         Object.prototype.hasOwnProperty.call(req.body || {}, key)
       )
     ) {
-      row.destination = buildDestination(req.body?.destination || req.body, row.destination || {});
-    }
-
-    const destinationError = validateDestination({ paymentMethod: row.paymentMethod, destination: row.destination || {} });
-    if (destinationError) {
-      return next(createError(400, destinationError));
+      const landlordForRow = row.landlord
+        ? await Landlord.findOne({ _id: row.landlord, company: businessId })
+          .select("bankName branchName accountName accountNumber mobileNumber")
+          .lean()
+        : null;
+      row.destination = fillDestinationFromLandlord(
+        buildDestination(req.body?.destination || req.body, row.destination || {}),
+        landlordForRow
+      );
     }
 
     row.updatedBy = actorUserId;
@@ -556,10 +552,6 @@ export const updateLandlordStandingOrderStatus = async (req, res, next) => {
     row.updatedBy = actorUserId;
 
     if (status === "active") {
-      const destinationError = validateDestination({ paymentMethod: row.paymentMethod, destination: row.destination || {} });
-      if (destinationError) {
-        return next(createError(400, destinationError));
-      }
       row.nextRunDate = serializeStandingOrder(row).nextEligiblePeriod?.dueDate || row.startDate || new Date();
     }
     if (status === "stopped") {
@@ -644,14 +636,6 @@ export const runLandlordStandingOrder = async (req, res, next) => {
 
     if (!remittancePayableAccount?._id || !cashbookAccount?._id) {
       return next(createError(400, "Standing order posting accounts could not be resolved."));
-    }
-
-    const destinationError = validateDestination({
-      paymentMethod: req.body?.paymentMethod || row.paymentMethod,
-      destination: row.destination || {},
-    });
-    if (destinationError) {
-      return next(createError(400, destinationError));
     }
 
     const runDate = normalizeToStartOfDay(req.body?.runDate || selectedPeriod.dueDate || new Date());

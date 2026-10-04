@@ -18,10 +18,8 @@ import {
   FaEdit,
   FaTrash,
   FaFilter,
-  FaMoneyBillWave,
   FaTimes,
-  FaSave,
-  FaWrench,
+  FaSave,
   FaUpload,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -339,7 +337,7 @@ function TakeOnBalanceModal({
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
                     placeholder="0.00"
-                    className="w-full border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
               </div>
@@ -365,7 +363,7 @@ function TakeOnBalanceModal({
                     type="date"
                     value={form.effectiveDate}
                     onChange={(e) => setForm((prev) => ({ ...prev, effectiveDate: e.target.value }))}
-                    className="w-full border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                    className="w-full border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                   />
                 </div>
                 <div />
@@ -378,14 +376,14 @@ function TakeOnBalanceModal({
                   value={form.description}
                   onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
                   placeholder="Optional narration for this take-on balance"
-                  className="w-full border border-slate-300 px-3 py-2 text-xs shadow-sm outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
+                  className="w-full border border-slate-300 px-3 py-2 text-xs outline-none transition focus:border-[#0B3B2E] focus:ring-2 focus:ring-[#0B3B2E]/10"
                 />
               </div>
             </div>
 
             {/* Right — preview + guide */}
             <div className="space-y-3">
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <div className="border border-slate-200 bg-slate-50 p-4">
                 <p className="text-[9px] font-bold uppercase tracking-[0.24em] text-slate-400">
                   Selection Preview
                 </p>
@@ -405,7 +403,7 @@ function TakeOnBalanceModal({
                 </div>
               </div>
 
-              <div className="rounded-xl border border-[#0B3B2E]/10 bg-[#0B3B2E]/5 p-4">
+              <div className="border border-[#0B3B2E]/10 bg-[#0B3B2E]/5 p-4">
                 <p className="text-[10px] font-bold text-[#0B3B2E]">How this works</p>
                 <ul className="mt-2 space-y-1.5">
                   {[
@@ -438,7 +436,7 @@ function TakeOnBalanceModal({
             type="button"
             onClick={onSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase text-white shadow-sm transition bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-black uppercase text-white transition bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FaSave size={11} />
             {saving ? "Saving…" : mode === "edit" ? "Save Changes" : "Save Take-On Balance"}
@@ -477,14 +475,14 @@ function TakeOnViewModal({ open, row, onClose }) {
             ["Effective Date", fmtDate(row.effectiveDate)],
             [row.entryModel === "receipt" ? "Receipt Number" : "Invoice Number", row.invoiceNumber || "—"],
           ].map(([label, value]) => (
-            <div key={label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div key={label} className="border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 {label}
               </p>
               <p className="mt-2 text-[10px] font-semibold text-slate-900">{value}</p>
             </div>
           ))}
-          <div className="md:col-span-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="md:col-span-2 border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Description
             </p>
@@ -526,7 +524,6 @@ const TakeOnBalances = () => {
   const [pageSize, setPageSize] = useState(50);
   const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
-  const [fixingDeposits, setFixingDeposits] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
   // The global tenant list is one server page (100, newest first), so tenants of older
@@ -947,63 +944,18 @@ const TakeOnBalances = () => {
     }
   };
 
-  const handleFixTakeOnDeposits = async () => {
-    if (!currentCompany?._id) return;
-    try {
-      setFixingDeposits(true);
-      const res = await adminRequests.post(`/rent-payments/fix-takeon-deposits/${currentCompany._id}`);
-      const { fixed, tenants: affectedTenants = [], errors = 0 } = res.data || {};
-      if (fixed === 0) {
-        toast.success("No misclassified take-on deposit receipts found — everything is already correct.");
-      } else {
-        toast.success(`Fixed ${fixed} take-on deposit receipt(s) across ${affectedTenants.length} tenant(s).${errors > 0 ? ` ${errors} recompute error(s).` : ""}`);
-        await loadRows();
-      }
-    } catch (error) {
-      toast.error(error?.response?.data?.message || error?.message || "Failed to fix take-on deposit classification.");
-    } finally {
-      setFixingDeposits(false);
-    }
-  };
-
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
-        <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="grid grid-cols-3 gap-1">
-            {[
-              ["Total Amount", totals.amount],
-              ["Allocated", totals.allocated],
-              ["Remaining Balance", totals.balance],
-            ].map(([label, value], idx) => (
-              <div
-                key={label}
-                className={`rounded-md border px-2 py-1 shadow-sm ${
-                  idx === 2 ? "border-orange-200 bg-orange-50" : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-                      {label}
-                    </p>
-                    <p className="text-[10px] font-bold leading-tight text-slate-900">{formatCurrency(value)}</p>
-                  </div>
-                  <div
-                    className={`hidden rounded-md p-1 ${
-                      idx === 2 ? "bg-orange-100 text-orange-700" : "bg-slate-100 text-slate-700"
-                    }`}
-                  >
-                    <FaMoneyBillWave className="text-base" />
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50">
+        <div className="flex h-full min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ListToolbar>
-              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold uppercase tracking-wide text-slate-500">Rows <span className="text-slate-900 normal-case">{filteredRows.length}</span></span>
+              <span className="shrink-0 text-[10px] font-bold text-slate-500">Rows <span className="text-slate-900">{filteredRows.length}</span></span>
+              <ListToolbar.Divider />
+              <span className="shrink-0 text-[10px] font-bold text-slate-500">Total <span className="text-slate-900">{formatCurrency(totals.amount)}</span></span>
+              <span className="shrink-0 text-[10px] font-bold text-slate-500">Allocated <span className="text-slate-900">{formatCurrency(totals.allocated)}</span></span>
+              <span className="shrink-0 text-[10px] font-bold text-slate-500">Remaining <span className="text-slate-900">{formatCurrency(totals.balance)}</span></span>
+              <ListToolbar.Divider />
               <ListToolbar.Divider />
               <ListToolbar.Input width="w-32" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" />
               <AppSelect
@@ -1060,33 +1012,24 @@ const TakeOnBalances = () => {
               <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows}>Refresh</ListToolbar.Button>
               <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>Add Take-On</ListToolbar.Button>
               <ListToolbar.Button icon={FaUpload} onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
-              <ListToolbar.Button
-                icon={FaWrench}
-                variant="outline"
-                className="!border-amber-300 !bg-amber-50 !text-amber-800 hover:!bg-amber-100"
-                onClick={handleFixTakeOnDeposits}
-                disabled={fixingDeposits}
-                title="Re-classify take-on deposit receipts that were incorrectly saved as rent"
-              >{fixingDeposits ? "Fixing…" : "Fix Deposits"}</ListToolbar.Button>
             </ListToolbar>
 
             <MilikTable
               columns={[
-                { label: termTenant },
-                { label: termProperty },
-                { label: termUnit },
-                { label: "Bill Item" },
-                { label: "Type" },
-                { label: "Amount", align: "right" },
-                { label: "Allocated", align: "right" },
-                { label: "Balance", align: "right" },
-                { label: "Effective Date" },
+                { label: termTenant, width: "14%" },
+                { label: termProperty, width: "12%" },
+                { label: termUnit, width: "6%" },
+                { label: "Bill Item", width: "16%" },
+                { label: "Type", width: "8%" },
+                { label: "Amount", align: "right", width: "9%" },
+                { label: "Allocated", align: "right", width: "9%" },
+                { label: "Balance", align: "right", width: "12%" },
+                { label: "Effective Date", width: "9%" },
               ]}
               rows={paginatedRows}
               rowKey="_id"
               loading={loading}
               empty="No take-on balances found for the selected filters."
-              minWidth={1120}
               renderRow={(row) => {
                 const meta = getTakeOnStatusMeta(row);
                 return (
@@ -1124,9 +1067,9 @@ const TakeOnBalances = () => {
               }}
               renderActions={(row) => (
                 <div className="inline-flex flex-wrap justify-end gap-1">
-                  <button type="button" onClick={() => setSelectedRow(row)} className="rounded-lg border border-slate-300 bg-white p-1.5 text-slate-600 transition hover:bg-slate-100" title="View"><FaEye size={11} /></button>
-                  <button type="button" onClick={() => openEditModal(row)} disabled={!row.canEdit} className="rounded-lg border border-orange-200 bg-orange-50 p-1.5 text-orange-600 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-40" title={row.canEdit ? "Edit" : "Allocated rows cannot be edited"}><FaEdit size={11} /></button>
-                  <button type="button" onClick={() => setRowToDelete(row)} disabled={!row.canDelete} className="rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-600 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40" title={row.canDelete ? "Delete" : "Allocated rows cannot be deleted"}><FaTrash size={11} /></button>
+                  <button type="button" onClick={() => setSelectedRow(row)} className="h-6 border border-slate-300 bg-white px-1.5 text-slate-700 hover:bg-slate-50" title="View"><FaEye size={11} /></button>
+                  <button type="button" onClick={() => openEditModal(row)} disabled={!row.canEdit} className="h-6 border border-slate-300 bg-white px-1.5 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40" title={row.canEdit ? "Edit" : "Allocated rows cannot be edited"}><FaEdit size={11} /></button>
+                  <button type="button" onClick={() => setRowToDelete(row)} disabled={!row.canDelete} className="h-6 border border-slate-300 bg-white px-1.5 text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40" title={row.canDelete ? "Delete" : "Allocated rows cannot be deleted"}><FaTrash size={11} /></button>
                 </div>
               )}
             />

@@ -2,6 +2,28 @@ import { adminRequests } from "../../utils/requestMethods";
 import { extractList } from "./shared";
 import { printPdfBlob } from "../../utils/printKit";
 
+// Download or print a debit/credit note PDF
+export const downloadNotePdf = async (noteId, { preview = false, filename } = {}) => {
+  const res = await adminRequests.get(`/tenant-invoices/notes/${noteId}/pdf${preview ? "?preview=true" : ""}`, {
+    responseType: "blob",
+  });
+  const blob = new Blob([res.data], { type: "application/pdf" });
+  const url = window.URL.createObjectURL(blob);
+  if (preview) {
+    window.URL.revokeObjectURL(url);
+    await printPdfBlob(blob);
+  } else {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename || `Note-${noteId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+  return true;
+};
+
 // Download invoice PDF
 export const downloadInvoicePdf = async (invoiceId, { preview = false, filename } = {}) => {
   const res = await adminRequests.get(`/tenant-invoices/${invoiceId}/pdf${preview ? "?preview=true" : ""}`, {

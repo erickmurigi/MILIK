@@ -35,7 +35,7 @@ import { toast } from "react-toastify";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
 import { useTerm } from "../../hooks/useTerm";
-import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
+import { toListingCaps } from "../../utils/listingPageUtils";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from '../../components/PaginationBar';
@@ -47,14 +47,7 @@ const DEFAULT_PAGE_SIZE = 50;
 
 const emptyFilters = {
   status: "Active",
-  portal: "any",
-  location: "",
-  code: "",
-  name: "",
-  regId: "",
-  pin: "",
-  email: "",
-  phone: "",
+  text: "",
 };
 
 const MILIK_GREEN = "bg-[#0B3B2E]"; // deep MILIK-ish green
@@ -72,7 +65,6 @@ const Landlords = () => {
   const dispatch = useDispatch();
   const termLandlords = useTerm("landlords");
   const termLandlord = useTerm("landlord");
-  const termProperty = useTerm("property");
   const termProperties = useTerm("properties");
   
   // Redux state
@@ -124,12 +116,10 @@ const Landlords = () => {
       { key: "code", label: `${termLandlord} Code` },
       { key: "name", label: `${termLandlord} Name` },
       { key: "status", label: "Status" },
-      { key: "location", label: "Location" },
+      { key: "pin", label: "KRA PIN" },
       { key: "email", label: "Email" },
-      { key: "phone", label: "Phone Nos." },
-      { key: "active", label: `Active ${termProperties}` },
-      { key: "archived", label: `Archived ${termProperties}` },
-      { key: "portal", label: "Portal Access" },
+      { key: "phone", label: "Phone" },
+      { key: "properties", label: termProperties },
     ],
     [termLandlord, termProperties]
   );
@@ -138,12 +128,7 @@ const Landlords = () => {
     const params = { page, limit: pageSize };
     if (currentCompany?._id) params.company = currentCompany._id;
     if (appliedFilters.status !== "any") params.status = appliedFilters.status;
-    if (appliedFilters.portal !== "any") params.portal = appliedFilters.portal;
-    if (appliedFilters.location.trim()) params.location = appliedFilters.location.trim();
-    const textSearch = [
-      appliedFilters.name, appliedFilters.code, appliedFilters.regId,
-      appliedFilters.pin, appliedFilters.email, appliedFilters.phone,
-    ].map((v) => v.trim()).find(Boolean);
+    const textSearch = String(appliedFilters.text || "").trim();
     if (textSearch) params.search = textSearch;
     return params;
   }, [currentCompany?._id, appliedFilters, pageSize]);
@@ -181,13 +166,8 @@ const Landlords = () => {
   // --- APPLY SEARCH (button) ---
   const applySearch = useCallback(() => {
     setAppliedFilters({
-      ...draftFilters,
-      code: draftFilters.code.trim(),
-      name: draftFilters.name.trim(),
-      regId: draftFilters.regId.trim(),
-      pin: draftFilters.pin.trim(),
-      email: draftFilters.email.trim(),
-      phone: draftFilters.phone.trim(),
+      status: draftFilters.status,
+      text: String(draftFilters.text || "").trim(),
     });
     setCurrentPage(1);
     setSelectedLandlords([]);
@@ -498,7 +478,7 @@ const Landlords = () => {
         { label: `${termLandlord} Code`, value: (row) => row?.landlordCode || row?.code || "-" },
         { label: `${termLandlord} Name`, value: (row) => row?.fullName || row?.name || row?.landlordName || row?.firstName || "-" },
         { label: "Status", value: (row) => row?.status || "Active" },
-        { label: "Location", value: (row) => row?.location || "-" },
+        { label: "KRA PIN", value: (row) => row?.taxPin || "-" },
         { label: "Email", value: (row) => row?.email || "-" },
         { label: "Phone", value: (row) => row?.phone || row?.phoneNumber || "-" },
       ],
@@ -523,27 +503,9 @@ const Landlords = () => {
             compact
           />
 
-          <AppSelect
-            value={draftFilters.portal === "any" ? null : draftFilters.portal}
-            onChange={(v) => setDraftFilters((p) => ({ ...p, portal: v ?? "any" }))}
-            options={[
-              { value: "Enabled", label: "Enabled" },
-              { value: "Disabled", label: "Disabled" },
-            ]}
-            placeholder="Portal"
-            clearable
-            compact
-          />
-
-          <ListToolbar.Input value={draftFilters.location} onChange={(e) => setDraftFilters((p) => ({ ...p, location: e.target.value }))} onKeyDown={onFilterEnter} placeholder="Location" width="w-24" />
-
           <ListToolbar.Divider />
 
-          <ListToolbar.Input value={draftFilters.code} onChange={(e) => setDraftFilters((p) => ({ ...p, code: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Code" width="w-20" />
-          <ListToolbar.Input value={draftFilters.name} onChange={(e) => setDraftFilters((p) => ({ ...p, name: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Name" width="w-28" />
-          <ListToolbar.Input value={draftFilters.regId} onChange={(e) => setDraftFilters((p) => ({ ...p, regId: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Reg/ID" width="w-20" />
-          <ListToolbar.Input value={draftFilters.email} onChange={(e) => setDraftFilters((p) => ({ ...p, email: e.target.value }))} onKeyDown={onFilterEnter} placeholder="Email" width="w-28" />
-          <ListToolbar.Input value={draftFilters.phone} onChange={(e) => setDraftFilters((p) => ({ ...p, phone: normalizeUppercaseInput(e.target.value) }))} onKeyDown={onFilterEnter} placeholder="Phone" width="w-24" />
+          <ListToolbar.Input value={draftFilters.text} onChange={(e) => setDraftFilters((p) => ({ ...p, text: e.target.value }))} onKeyDown={onFilterEnter} placeholder="Search name, code, phone, email" width="w-64" />
 
           <ListToolbar.Divider />
 
@@ -574,6 +536,18 @@ const Landlords = () => {
                   className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedArchivableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
                   <FaArchive className="text-xs text-gray-700" /> Archive
                 </button>
+                <button onClick={() => { setShowCommunicationModal(true); setActionMenuOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50">
+                  <FaSms className="text-xs text-gray-700" /> SMS
+                </button>
+                <button onClick={() => { navigate("/landlord-payments"); setActionMenuOpen(false); }}
+                  className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-gray-50">
+                  <FaMoneyBillWave className="text-xs text-gray-700" /> Payments
+                </button>
+                <button onClick={() => { deleteSelected(); setActionMenuOpen(false); }} disabled={!canDelete || selectedDeletableLandlords.length === 0}
+                  className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${canDelete && selectedDeletableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
+                  <FaTrash className="text-xs text-gray-700" /> Delete
+                </button>
                 <button onClick={restoreSelected} disabled={selectedRestorableLandlords.length === 0}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 ${selectedRestorableLandlords.length > 0 ? "hover:bg-gray-50" : "cursor-not-allowed bg-gray-50 text-gray-400"}`}>
                   <FaUndo className="text-xs text-gray-700" /> Restore
@@ -582,10 +556,7 @@ const Landlords = () => {
             )}
           </div>
 
-          <ListToolbar.Button icon={FaSms} variant="accent" disabled={selectedCount === 0} onClick={() => setShowCommunicationModal(true)}>SMS</ListToolbar.Button>
-          <ListToolbar.Button icon={FaTrash} variant="danger" disabled={!canDelete || selectedCount === 0 || selectedDeletableLandlords.length === 0} onClick={deleteSelected}>Delete</ListToolbar.Button>
           <ListToolbar.Button icon={FaPlus} disabled={!canCreate} onClick={openAddModal}>Add</ListToolbar.Button>
-          <ListToolbar.Button icon={FaMoneyBillWave} variant="accent" onClick={() => navigate("/landlord-payments")}>Payments</ListToolbar.Button>
           <ListToolbar.Button icon={FaFileImport} variant="outlineOk" onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
           <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrintList}>Print</ListToolbar.Button>
           <ListToolbar.Button icon={FaFileExport} variant="outline" onClick={handleExport}>Export</ListToolbar.Button>
@@ -597,14 +568,12 @@ const Landlords = () => {
             <MilikTable
               columns={[
                 { label: columns[0].label, width: "120px" },
-                { label: columns[1].label, width: "220px" },
+                { label: columns[1].label },
                 { label: columns[2].label, width: "110px" },
-                { label: columns[3].label, width: "160px" },
+                { label: columns[3].label, width: "140px" },
                 { label: columns[4].label, width: "220px" },
                 { label: columns[5].label, width: "160px" },
                 { label: columns[6].label, width: "140px", align: "center" },
-                { label: columns[7].label, width: "160px", align: "center" },
-                { label: columns[8].label, width: "140px" },
               ]}
               rows={currentLandlords}
               rowKey="_id"
@@ -635,7 +604,7 @@ const Landlords = () => {
               renderRow={(landlord) => (
                 <>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}</span>
+                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                     <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}</span>
@@ -650,32 +619,19 @@ const Landlords = () => {
                     </span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="text-slate-600 truncate block">{toListingCaps(landlord.location || "—")}</span>
+                    <span className="text-slate-700 truncate block">{landlord.taxPin || "—"}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="text-slate-600 truncate block">{landlord.email || "—"}</span>
+                    <span className="text-slate-700 truncate block">{landlord.email || "—"}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="font-medium text-slate-700 truncate block">{landlord.phoneNumber || landlord.phone || "—"}</span>
+                    <span className="text-slate-700 truncate block">{landlord.phoneNumber || landlord.phone || "—"}</span>
                   </td>
-                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-200">
-                      {landlord.activeProperties ?? "0"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border bg-slate-100 text-slate-500 border-slate-200">
-                      {landlord.archivedProperties ?? "0"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1.5">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      landlord.portalAccess === "Enabled"
-                        ? "bg-blue-50 text-blue-700 border-blue-200"
-                        : "bg-slate-100 text-slate-500 border-slate-200"
-                    }`}>
-                      {landlord.portalAccess || "Disabled"}
-                    </span>
+                  <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
+                    <span className="text-slate-900 tabular-nums">{landlord.activeProperties ?? 0}</span>
+                    {Number(landlord.archivedProperties || 0) > 0 && (
+                      <span className="ml-1 text-[10px] text-slate-500">({landlord.archivedProperties} archived)</span>
+                    )}
                   </td>
                 </>
               )}

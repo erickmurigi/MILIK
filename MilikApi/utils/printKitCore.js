@@ -78,6 +78,20 @@ export const amountInWords = (amount, currency = "KES") => {
   return `${major} ${integerToWords(whole)}${cents ? ` and ${integerToWords(cents)} ${minor}` : ""} Only`;
 };
 
+// ── supplier identity ───────────────────────────────────────────────────────────────────────────────────────────────────
+// The landlord is the supplier on every rent document (invoice, receipt, note). The letterhead prints the landlord's
+// name, address and KRA PIN; the company (the managing agent) is only the fallback when no landlord is linked.
+export const resolveSupplier = ({ landlord = null, company = {} } = {}) =>
+  landlord && typeof landlord === "object"
+    ? {
+        companyName: landlord.landlordName || "",
+        taxPIN: landlord.taxPin || "",
+        postalAddress: landlord.postalAddress || landlord.location || "",
+        phone: landlord.phoneNumber || "",
+        email: landlord.email || "",
+      }
+    : company;
+
 // ── company identity ────────────────────────────────────────────────────────────────────────────────────────────────────
 export const getCompanyDetails = (company = {}) => {
   const logo = typeof company?.logo === "string" ? company.logo.trim() : "";

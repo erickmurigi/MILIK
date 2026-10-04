@@ -1,5 +1,5 @@
 // Shared list-page toolbar — the compact filter/action row standardized on the
-// Properties/Units/Tenants pages: h-[20px] controls, text-[9px] labels, no rounded
+// Properties/Units/Tenants pages: h-[22px] controls, text-[10px] labels, no rounded
 // corners, a single horizontally-scrollable row. Pairs with MilikTable + PaginationBar.
 import React from "react";
 
@@ -8,7 +8,7 @@ const VARIANTS = {
   accent: "bg-[#FF8C00] hover:bg-[#e67e00] text-white",
   danger: "bg-red-600 hover:bg-red-700 text-white",
   toggle: "bg-orange-600 hover:bg-orange-700 text-white",
-  dark: "bg-slate-700 hover:bg-slate-800 text-white",
+  dark: "border border-[#0B3B2E] text-[#0B3B2E] hover:bg-[#0B3B2E]/5",
   outline: "border border-gray-300 text-gray-600 hover:bg-gray-50",
   outlineOk: "border border-green-300 bg-green-50 text-green-700 hover:bg-green-100",
 };
@@ -16,7 +16,7 @@ const VARIANTS = {
 export function ListToolbar({ children, className = "" }) {
   return (
     <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-      <div className={`filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1 ${className}`}>
+      <div className={`filter-bar flex flex-wrap items-center gap-1 px-2 py-1 ${className}`}>
         {children}
       </div>
     </div>
@@ -24,7 +24,7 @@ export function ListToolbar({ children, className = "" }) {
 }
 
 ListToolbar.Divider = function Divider() {
-  return <div className="h-3 w-px shrink-0 bg-slate-200" />;
+  return <div className="h-3.5 w-px shrink-0 bg-slate-200" />;
 };
 
 ListToolbar.Input = React.forwardRef(function Input({ className = "", width = "w-24", ...props }, ref) {
@@ -32,7 +32,7 @@ ListToolbar.Input = React.forwardRef(function Input({ className = "", width = "w
     <input
       ref={ref}
       {...props}
-      className={`h-[20px] ${width} shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] ${className}`}
+      className={`h-[22px] ${width} shrink-0 border border-slate-200 bg-white px-2 text-[10px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E] ${className}`}
     />
   );
 });
@@ -43,16 +43,16 @@ ListToolbar.Button = React.forwardRef(function ToolbarButton({
   variant = "primary",
   disabled,
   className = "",
-  iconSize = 7,
+  iconSize = 9,
   ...props
 }, ref) {
-  const styleClass = disabled ? "bg-gray-400 text-white cursor-not-allowed" : (VARIANTS[variant] || VARIANTS.primary);
+  const styleClass = disabled ? "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed" : (VARIANTS[variant] || VARIANTS.primary);
   return (
     <button
       ref={ref}
       type="button"
       disabled={disabled}
-      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-2.5 text-[9px] font-semibold ${styleClass} ${className}`}
+      className={`h-[22px] shrink-0 flex items-center gap-1 px-2.5 text-[10px] font-semibold ${styleClass} ${className}`}
       {...props}
     >
       {Icon && <Icon size={iconSize} />} {children}

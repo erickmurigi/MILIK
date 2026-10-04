@@ -57,7 +57,7 @@ export const generateManagementFeeInvoicePdf = async (statement) => {
     status: { label: "Deducted from disbursement", tone: "info" },
     meta: [["Invoice date", invoiceDate], ["Billing period", periodRange]],
     parties: [
-      { heading: "Billed to", name: landlordName, lines: [landlord.email || "", landlord.contact ? String(landlord.contact) : ""] },
+      { heading: "Billed to", name: landlordName, lines: [landlord.taxPin ? `KRA PIN: ${landlord.taxPin}` : "", landlord.email || "", landlord.contact ? String(landlord.contact) : ""] },
       { heading: "Property", name: propLabel, lines: [] },
     ],
     details: { heading: "Reference", rows: [["Statement ref", statement.sourceStatementNumber || "—"], ["Fee basis", basisLabel]] },

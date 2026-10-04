@@ -82,6 +82,14 @@ const ACCOUNTING_DEFAULT_KEYS = {
       { nameRegex: "other income", type: "income" },
     ],
   },
+  accountsPayableAccount: {
+    label: "Accounts Payable (supplier vouchers)",
+    allowedTypes: ["liability"],
+    fallbackCandidates: [
+      { nameRegex: "^accounts payable", type: "liability" },
+      { nameRegex: "trade creditors", type: "liability" },
+    ],
+  },
 };
 
 const HR_ACCOUNTING_DEFAULT_KEYS = {

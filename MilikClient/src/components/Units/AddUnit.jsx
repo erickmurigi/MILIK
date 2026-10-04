@@ -1,3 +1,4 @@
+import MilikSelect from "../common/MilikSelect";
 // components/Units/AddUnit.jsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
@@ -7,7 +8,7 @@ import { FaSave, FaTimes, FaChevronDown, FaSpinner, FaPlus, FaTrash, FaCalculato
 import { toast } from "react-toastify";
 import { createUnit, getUnits, updateUnit } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
-import { selectCurrentCompany, selectCurrentUser, selectAllProperties, selectAllUnits, selectUnitIsFetching } from "../../redux/selectors";
+import { selectCurrentCompany, selectAllProperties, selectAllUnits, selectUnitIsFetching } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import ListingImagesField from "../common/ListingImagesField";
@@ -47,111 +48,6 @@ const MILIK_ORANGE_BG_HOVER = "hover:bg-[#0A3127]";
 const MILIK_ORANGE_RING = "";
 const MILIK_ORANGE_BORDER_FOCUS = "";
 
-/**
- * Custom dropdown with orange highlighting
- */
-function MilikSelect({
-  label,
-  required,
-  placeholder = "Select...",
-  items = [],
-  value,
-  onChange,
-  getLabel,
-  getValue,
-  disabled,
-  error,
-  className = "",
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef(null);
-
-  const selectedItem = useMemo(
-    () => items.find((it) => getValue(it) === value) || null,
-    [items, value, getValue]
-  );
-
-  useEffect(() => {
-    const onClickOutside = (e) => {
-      if (!wrapRef.current) return;
-      if (!wrapRef.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open]);
-
-  return (
-    <div className={`${className} relative`} ref={wrapRef}>
-      {label ? (
-        <label className="mb-0.5 block text-xs font-semibold text-slate-700">
-          {label} {required ? <span className="text-red-500">*</span> : ""}
-        </label>
-      ) : null}
-
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((s) => !s)}
-        className={[
-          "w-full h-8 px-3 rounded border bg-white text-slate-900",
-          error ? "border-red-500" : "border-slate-200",
-          "transition focus:outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20",
-          "flex items-center justify-between gap-2",
-          disabled ? "opacity-50 cursor-not-allowed" : "",
-        ].join(" ")}
-      >
-        <span className="text-xs font-semibold truncate">
-          {selectedItem ? getLabel(selectedItem) : <span className="text-slate-400">{placeholder}</span>}
-        </span>
-        <FaChevronDown className="text-slate-600" size={10} />
-      </button>
-
-      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
-
-      {open && !disabled && (
-        <div className="absolute z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-          <div className="max-h-56 overflow-auto">
-            {items.length === 0 ? (
-              <div className="px-3 py-3 text-sm text-slate-500">No items available</div>
-            ) : (
-              items.map((it) => {
-                const v = getValue(it);
-                const isSelected = v === value;
-                return (
-                  <button
-                    type="button"
-                    key={v}
-                    onClick={() => {
-                      onChange?.(v, it);
-                      setOpen(false);
-                    }}
-                    className={[
-                      "w-full text-left px-3 py-1.5 text-xs font-semibold transition-colors",
-                      isSelected
-                        ? `${MILIK_ORANGE_BG} text-white`
-                        : "text-slate-800 hover:bg-slate-50",
-                    ].join(" ")}
-                  >
-                    {getLabel(it)}
-                  </button>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 const AddUnit = () => {
   const dispatch = useDispatch();
@@ -160,14 +56,11 @@ const AddUnit = () => {
   const isEditMode = Boolean(unitId);
   
   const currentCompany = useSelector(selectCurrentCompany);
-  const currentUser = useSelector(selectCurrentUser);
   const loading = useSelector(selectUnitIsFetching);
   const {
     unit: termUnit,
-    units: termUnits,
     rent: termRent,
     property: termProperty,
-    tenant: termTenant,
     invoice: termInvoice,
     lease: termLease,
   } = useTerms("unit", "units", "rent", "property", "tenant", "invoice", "lease");
@@ -193,7 +86,6 @@ const AddUnit = () => {
     billingFrequency: "monthly",
     furnished: "unfurnished",
     listingEnabled: false,
-    ownerOccupied: false,
     listingTitle: "",
     bedrooms: "",
     bathrooms: "",
@@ -292,7 +184,6 @@ const AddUnit = () => {
           billingFrequency: canonicalBillingPeriodKey(existingUnit.billingPeriodKey || existingUnit.billingFrequency || "monthly"),
           furnished: existingUnit.furnished || "unfurnished",
           listingEnabled: Boolean(existingUnit.listingEnabled),
-          ownerOccupied: Boolean(existingUnit.ownerOccupied),
           listingTitle: existingUnit.listingTitle || "",
           bedrooms: existingUnit.bedrooms ?? "",
           bathrooms: existingUnit.bathrooms ?? "",
@@ -476,9 +367,9 @@ const AddUnit = () => {
 
   // Input classes for consistency
   const inputClass =
-    "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+    "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
-  const labelClass = "mb-0.5 block text-xs font-semibold text-slate-700";
+  const labelClass = "mb-1 block text-xs font-bold text-slate-900";
 
   const uppercaseUnitFields = new Set(["unitNumber", "description", "amenities"]);
 
@@ -673,7 +564,7 @@ const AddUnit = () => {
       areaSqFt: parseFloat(formData.areaSqFt) || 0,
       rent: parseFloat(formData.rent),
       deposit: parseFloat(formData.deposit),
-      ...(isEditMode ? { status: formData.status || "vacant" } : {}),
+      status: formData.status || "vacant",
       description: formData.description?.trim() || "",
       amenities: formData.amenities
         ? formData.amenities.split(",").map((a) => a.trim()).filter(Boolean)
@@ -698,7 +589,6 @@ const AddUnit = () => {
       billingPeriodKey: canonicalBillingPeriodKey(formData.billingFrequency || "monthly"),
       furnished: formData.furnished || "unfurnished",
       listingEnabled: Boolean(formData.listingEnabled),
-      ownerOccupied: Boolean(formData.ownerOccupied),
       listingTitle: formData.listingTitle?.trim() || "",
       bedrooms: formData.bedrooms === "" ? null : Number(formData.bedrooms),
       bathrooms: formData.bathrooms === "" ? null : Number(formData.bathrooms),
@@ -767,7 +657,7 @@ const AddUnit = () => {
     setFormData({
       unitNumber: "", property: "", unitType: "", areaSqFt: "", rent: "", deposit: "",
       status: "vacant", description: "", amenities: "", utilities: [], deposits: [], billingFrequency: "monthly",
-      furnished: "unfurnished", listingEnabled: false, ownerOccupied: false,
+      furnished: "unfurnished", listingEnabled: false,
       listingTitle: "", bedrooms: "", bathrooms: "", parkingSpaces: "", floorNumber: "",
       petsAllowed: false, rentNegotiable: false, minimumLeaseTermMonths: "",
       videoUrl: "", virtualTourUrl: "", availableFrom: "",
@@ -810,7 +700,7 @@ const AddUnit = () => {
       { value: "reserved", label: "Reserved" },
     ];
 
-    if (isEditMode && formData.status === "occupied") {
+    if (formData.status === "occupied") {
       return [
         { value: "vacant", label: "Vacant" },
         { value: "occupied", label: "Occupied" },
@@ -825,765 +715,421 @@ const AddUnit = () => {
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
-        {/* Sticky dark header */}
-        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-          <div className="flex items-center gap-3">
-            <button type="button" onClick={handleCancel} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
-              <FaArrowLeft /> Back
-            </button>
-            <div className="h-4 w-px bg-[#2A5C4A]" />
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">{termUnits}</div>
-              <h1 className="text-sm font-black text-white leading-none">{isEditMode ? `Edit ${termUnit}` : `New ${termUnit}`}</h1>
-            </div>
-          </div>
-        </div>
-
-        {/* Scrollable content */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {/* Form Card */}
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <form id="unit-form" onSubmit={handleSubmit} className="p-3 grid grid-cols-1 xl:grid-cols-12 gap-3">
-            {/* Property Selection */}
-            <div className="xl:col-span-5">
-              <MilikSelect
-                label={termProperty}
-                required
-                placeholder={`Select ${termProperty.toLowerCase()}`}
-                items={activeProperties}
-                value={formData.property}
-                onChange={(val) => handleInputChange({ target: { name: "property", value: val } })}
-                getLabel={(p) => `${p.propertyCode} - ${p.propertyName}`}
-                getValue={(p) => p._id}
-                disabled={loading}
-                error={fieldErrors.property}
-              />
-            </div>
-
-            {selectedProperty && (
-              <div className="xl:col-span-7 rounded-lg border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 p-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Measurement Basis</div>
-                    <div className="mt-0.5 text-xs font-bold text-slate-900">{measurementLabel}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default {termRent} Rate</div>
-                    <div className="mt-0.5 text-xs font-bold text-slate-900">
-                      {Number(selectedProperty.rentPerMeasure || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      {" "}{selectedProperty.rentCurrency || "KES"} / {measurementLabel}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-wide text-[#0B3B2E]/70">Default {termRent} Deposit</div>
-                    <div className="mt-0.5 text-xs font-bold text-slate-900">
-                      {(() => {
-                        const rentDeposit = (selectedProperty.securityDeposits || []).find(
-                          (item) => String(item?.depositType || "").toLowerCase().includes("rent")
-                        );
-                        if (!rentDeposit) return `Falls back to ${termUnit.toLowerCase()} ${termRent.toLowerCase()}`;
-                        return String(rentDeposit.chargeMode || "Fixed Amount") === "Percentage"
-                          ? `${Number(rentDeposit.amount || 0).toLocaleString()}% of ${termRent.toLowerCase()}`
-                          : `${Number(rentDeposit.amount || 0).toLocaleString()} ${rentDeposit.currency || "KES"}`;
-                      })()}
-                    </div>
-                  </div>
-                </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <form id="unit-form" onSubmit={handleSubmit} className="space-y-2">
+            <div className="border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">{isEditMode ? `Edit ${termUnit}` : `${termUnit} details`}</span>
               </div>
-            )}
-
-            {/* Unit Number and Type */}
-            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-              <div>
-                <label className={labelClass}>
-                  {termUnit} Number <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  name="unitNumber"
-                  value={formData.unitNumber}
-                  onChange={handleInputChange}
-                  placeholder="e.g., A101, 5B, Unit 12"
-                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} ${
-                    fieldErrors.unitNumber ? "border-red-500" : ""
-                  }`}
-                  disabled={loading}
-                />
-                {fieldErrors.unitNumber && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.unitNumber}</p>
-                )}
-              </div>
-
-              <div>
-                <MilikSelect
-                  label={`${termUnit} Type`}
-                  required
-                  placeholder={`Select ${termUnit.toLowerCase()} type`}
-                  items={unitTypes}
-                  value={formData.unitType}
-                  onChange={(val) => handleInputChange({ target: { name: "unitType", value: val } })}
-                  getLabel={(t) => t.label}
-                  getValue={(t) => t.value}
-                  disabled={loading}
-                  error={fieldErrors.unitType}
-                />
-              </div>
-            </div>
-
-            {/* Area, Furnished, Rent and Deposit */}
-            <div className="xl:col-span-12 grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
-              <div>
-                <label className={labelClass}>Area ({measurementLabel})</label>
-                <input
-                  type="number"
-                  name="areaSqFt"
-                  value={formData.areaSqFt}
-                  onChange={handleInputChange}
-                  placeholder={`e.g., ${measurementLabel === "Sq Ft" ? "500" : "100"}`}
-                  min="0"
-                  step="0.01"
-                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                  disabled={loading}
-                />
-                <p className="mt-1 text-xs text-slate-500">
-                  Enter the measured {termUnit.toLowerCase()} area to let the property pricing defaults calculate {termRent.toLowerCase()}.
-                </p>
-              </div>
-
-              <div>
-                <label className={labelClass}>Furnishing</label>
-                <select
-                  name="furnished"
-                  value={formData.furnished}
-                  onChange={handleInputChange}
-                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} appearance-none`}
-                  disabled={loading}
-                >
-                  <option value="unfurnished">Unfurnished</option>
-                  <option value="semi-furnished">Semi-Furnished</option>
-                  <option value="furnished">Furnished</option>
-                </select>
-              </div>
-
-              <div>
-                <label className={labelClass}>
-                  Monthly {termRent} (KES) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="rent"
-                  value={formData.rent}
-                  onChange={handleInputChange}
-                  placeholder="e.g., 25000"
-                  min="0"
-                  step="0.01"
-                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} ${
-                    fieldErrors.rent ? "border-red-500" : ""
-                  }`}
-                  disabled={loading}
-                />
-                {fieldErrors.rent && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.rent}</p>
-                )}
-              </div>
-
-              <div>
-                <label className={labelClass}>
-                  Security Deposit (KES) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="deposit"
-                  value={formData.deposit}
-                  onChange={handleInputChange}
-                  placeholder="e.g., 50000"
-                  min="0"
-                  step="0.01"
-                  className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} ${
-                    fieldErrors.deposit ? "border-red-500" : ""
-                  }`}
-                  disabled={loading}
-                />
-                {fieldErrors.deposit && (
-                  <p className="mt-1 text-xs text-red-600">{fieldErrors.deposit}</p>
-                )}
-              </div>
-            </div>
-            {/* Status - edit mode only. New units are created as vacant by backend. */}
-            {isEditMode && (
-              <div className="xl:col-span-4">
-                <MilikSelect
-                  label="Status"
-                  placeholder="Select status"
-                  items={statusOptions}
-                  value={formData.status}
-                  onChange={(val) => handleInputChange({ target: { name: "status", value: val } })}
-                  getLabel={(s) => s.label}
-                  getValue={(s) => s.value}
-                  disabled={loading}
-                />
-              </div>
-            )}
-
-            {/* ============================================= */}
-            {/* UTILITIES & BILLING SECTION */}
-            {/* ============================================= */}
-
-            {/* Unit-Specific Utilities */}
-            <div className="xl:col-span-7 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900 tracking-tight">{termUnit}-Specific Utilities</h3>
-                <button
-                  type="button"
-                  onClick={addUtility}
-                  className="h-8 px-3 text-xs font-semibold bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded-md flex items-center gap-2 transition-colors"
-                >
-                  <FaPlus /> Add Utility
-                </button>
-              </div>
-
-              {formData.utilities.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-sm">
-                  No utilities added yet. Click "Add Utility" to include utilities for this {termUnit.toLowerCase()}.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {formData.utilities.map((util, idx) => {
-                    return (
-                      <div
-                        key={idx}
-                        className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end p-3 bg-white border border-slate-200 rounded-lg hover:shadow-sm transition-shadow"
-                      >
-                        {/* Utility Selection */}
-                        <div>
-                          <MilikSelect
-                            label="Service Charge/Utility"
-                            placeholder="Select Type"
-                            items={utilityOptions.length ? utilityOptions : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]}
-                            value={util.utility}
-                            onChange={(val) => updateUtility(idx, "utility", val)}
-                            getLabel={(x) => x}
-                            getValue={(x) => x}
-                            disabled={loading}
-                          />
-                        </div>
-
-                        {/* Unit Charge */}
-                        <div>
-                          <label className={labelClass}>{termUnit} Charge (KES)</label>
-                          <input
-                            type="number"
-                            value={util.unitCharge}
-                            onChange={(e) => updateUtility(idx, "unitCharge", e.target.value)}
-                            placeholder="0.00"
-                            min="0"
-                            step="0.01"
-                            className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                            disabled={loading}
-                          />
-                        </div>
-
-                        {/* Include in Rent */}
-                        <div className="flex items-center h-10">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={util.isIncluded}
-                              onChange={(e) => updateUtility(idx, "isIncluded", e.target.checked)}
-                              className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
-                              disabled={loading}
-                            />
-                            <span className="text-xs font-medium text-slate-700">Include in {termRent}</span>
-                          </label>
-                        </div>
-
-                        {/* Remove Button */}
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => removeUtility(idx)}
-                            className="h-10 px-3 rounded-md bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors flex items-center justify-center"
-                            disabled={loading}
-                          >
-                            <FaTrash className="text-xs" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Billing Calculation Summary */}
-            <div className="xl:col-span-5 bg-gradient-to-br from-[#0B3B2E]/5 via-white to-slate-50 border border-[#0B3B2E]/20 rounded-lg p-4 space-y-4">
-              <h3 className="text-base font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                <FaCalculator className="text-[#0B3B2E]" />
-                Billing Calculation Summary
-              </h3>
-
-              {/* Breakdown Cards — only shown when utilities are charged separately */}
-              {monthlyUtilityBill > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* Utility Charges */}
-                  <div className="bg-white border border-slate-200 rounded-lg p-4 shadow-sm">
-                    <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide mb-1">
-                      Utilities (Not in {termRent})
-                    </div>
-                    <div className="text-xl font-bold text-[#0B3B2E]">
-                      KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-2">Additional monthly charges</div>
-                  </div>
-
-                  {/* Total Monthly Bill */}
-                  <div className="bg-gradient-to-br from-[#0B3B2E] to-[#0A3127] border border-[#0B3B2E] rounded-lg p-4 shadow-md">
-                    <div className="text-xs font-semibold text-white/70 uppercase tracking-wide mb-1">
-                      Total Monthly Bill
-                    </div>
-                    <div className="text-xl font-bold text-white">
-                      KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                    <div className="text-xs text-white/50 mt-2">{termRent} + utilities</div>
-                  </div>
-                </div>
-              )}
-
-              {/* Billing Frequency Selector */}
-              <div className="bg-white border border-slate-200 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                  <div>
-                    <label className={labelClass}>Billing Frequency</label>
-                    <select
-                      value={formData.billingFrequency}
-                      onChange={(e) =>
-                        setFormData((prev) => ({ ...prev, billingFrequency: e.target.value }))
-                      }
-                      className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      disabled={loading}
-                    >
-                      {billingPeriodOptions.map((period) => (
-                        <option key={period.key} value={period.key}>
-                          {period.name}{Number(period.durationInMonths || 1) > 1 ? ` (Every ${Number(period.durationInMonths || 1)} Months)` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Billing Amount Display */}
-                  <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-lg p-4 text-white shadow-lg">
-                    <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-                      {(() => {
-                        const selectedPeriod = billingPeriodOptions.find((item) => item.key === canonicalBillingPeriodKey(formData.billingFrequency || "monthly"));
-                        return `${selectedPeriod?.name || "Configured"} ${termInvoice} Amount`;
-                      })()}
-                    </div>
-                    <div className="text-2xl font-bold text-white">
-                      KES {billingAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Utilities Included in Rent Notice */}
-              {formData.utilities.some((u) => u.isIncluded) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex gap-3">
-                    <div className="text-blue-600 text-sm font-semibold">ℹ️</div>
-                    <div className="text-sm text-blue-800">
-                      <strong>Included Utilities:</strong> {
-                        formData.utilities
-                          .filter((u) => u.isIncluded)
-                          .map(
-                            (u) =>
-                              String(u.utility || "Unknown")
-                          )
-                          .join(", ")
-                      }{" "}
-                      are already included in the monthly rent.
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Unit-Specific Deposits */}
-            <div className="xl:col-span-12 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-4">
-              <div className="flex justify-between items-center">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 tracking-tight">{termUnit}-Specific Deposits</h3>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Auto-filled from the {termProperty.toLowerCase()}'s configured deposit types (excluding the {termRent.toLowerCase()} deposit above) — edit or remove any row.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={addDeposit}
-                  className="h-8 px-3 text-xs font-semibold bg-[#0B3B2E] hover:bg-[#0A3127] text-white rounded-md flex items-center gap-2 transition-colors"
-                >
-                  <FaPlus /> Add Deposit
-                </button>
-              </div>
-
-              {formData.deposits.length === 0 ? (
-                <div className="text-center py-6 text-slate-500 text-sm">
-                  No additional deposits. Select a {termProperty.toLowerCase()} with configured deposit types to auto-fill, or click "Add Deposit".
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {formData.deposits.map((dep, idx) => {
-                    return (
-                      <div
-                        key={idx}
-                        className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end p-3 bg-white border border-slate-200 rounded-lg hover:shadow-sm transition-shadow"
-                      >
-                        <div>
-                          <MilikSelect
-                            label="Deposit Type"
-                            placeholder="Select Type"
-                            items={depositTypeOptions.length ? depositTypeOptions : ["Water Security Deposit", "Electricity Security Deposit", "Others"]}
-                            value={dep.depositType}
-                            onChange={(val) => updateDeposit(idx, "depositType", val)}
-                            getLabel={(x) => x}
-                            getValue={(x) => x}
-                            disabled={loading}
-                          />
-                        </div>
-
-                        <div>
-                          <label className={labelClass}>{dep.chargeMode === "Percentage" ? `Percentage (% of ${termRent})` : "Amount (KES)"}</label>
-                          <input
-                            type="number"
-                            value={dep.amount}
-                            onChange={(e) => updateDeposit(idx, "amount", e.target.value)}
-                            placeholder="0.00"
-                            min="0"
-                            step="0.01"
-                            className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                            disabled={loading}
-                          />
-                        </div>
-
-                        <div>
-                          <MilikSelect
-                            label="Charge Mode"
-                            placeholder="Select Mode"
-                            items={["Fixed Amount", "Percentage"]}
-                            value={dep.chargeMode}
-                            onChange={(val) => updateDeposit(idx, "chargeMode", val)}
-                            getLabel={(x) => x}
-                            getValue={(x) => x}
-                            disabled={loading}
-                          />
-                        </div>
-
-                        <div className="flex items-center h-10">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={dep.refundable}
-                              onChange={(e) => updateDeposit(idx, "refundable", e.target.checked)}
-                              className="rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
-                              disabled={loading}
-                            />
-                            <span className="text-xs font-medium text-slate-700">Refundable</span>
-                          </label>
-                        </div>
-
-                        <div className="flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => removeDeposit(idx)}
-                            className="h-10 px-3 rounded-md bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-colors flex items-center justify-center"
-                            disabled={loading}
-                          >
-                            <FaTrash className="text-xs" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* ============================================= */}
-            {/* PUBLIC LISTING DETAILS */}
-            {/* ============================================= */}
-            <div className="xl:col-span-12 bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-200 rounded-lg p-4 space-y-3">
-              <h3 className="text-base font-bold text-slate-900 tracking-tight">Public Listing Details</h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3">
-                <div className="md:col-span-3 xl:col-span-2">
-                  <label className={labelClass}>Listing Title</label>
-                  <input
-                    type="text"
-                    name="listingTitle"
-                    value={formData.listingTitle}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Bright 2BR near Junction Mall"
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
+              <div className="grid grid-cols-1 gap-x-3 gap-y-2 p-2.5 md:grid-cols-2 xl:grid-cols-4">
+                <div className="md:col-span-2">
+                  <MilikSelect
+                    label={termProperty}
+                    required
+                    placeholder={`Select ${termProperty.toLowerCase()}`}
+                    items={activeProperties}
+                    value={formData.property}
+                    onChange={(val) => handleInputChange({ target: { name: "property", value: val } })}
+                    getLabel={(p) => `${p.propertyCode} - ${p.propertyName}`}
+                    getValue={(p) => p._id}
                     disabled={loading}
+                    error={fieldErrors.property}
                   />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Bedrooms</label>
-                  <input
-                    type="number"
-                    name="bedrooms"
-                    value={formData.bedrooms}
-                    onChange={handleInputChange}
-                    min="0"
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Bathrooms</label>
-                  <input
-                    type="number"
-                    name="bathrooms"
-                    value={formData.bathrooms}
-                    onChange={handleInputChange}
-                    min="0"
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Parking Spaces</label>
-                  <input
-                    type="number"
-                    name="parkingSpaces"
-                    value={formData.parkingSpaces}
-                    onChange={handleInputChange}
-                    min="0"
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Floor</label>
-                  <input
-                    type="text"
-                    name="floorNumber"
-                    value={formData.floorNumber}
-                    onChange={handleInputChange}
-                    placeholder="e.g., Ground, 3rd"
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
-                </div>
-
-                <div>
-                  <label className={labelClass}>Minimum {termLease} Term (months)</label>
-                  <input
-                    type="number"
-                    name="minimumLeaseTermMonths"
-                    value={formData.minimumLeaseTermMonths}
-                    onChange={handleInputChange}
-                    min="0"
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
-                </div>
-
-                {isEditMode && (
-                  <div>
-                    <label className={labelClass}>Available From</label>
-                    <input
-                      type="date"
-                      name="availableFrom"
-                      value={formData.availableFrom}
-                      onChange={handleInputChange}
-                      className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                      disabled={loading}
-                    />
-                    <p className="mt-1 text-xs text-slate-500">
-                      Set this when a {termTenant.toLowerCase()} gives notice, to list the {termUnit.toLowerCase()} before it's actually vacant.
+                  {selectedProperty && (
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Basis: {measurementLabel} · Default {termRent.toLowerCase()}: {Number(selectedProperty.rentPerMeasure || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {selectedProperty.rentCurrency || "KES"} per {measurementLabel}
                     </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className={labelClass}>{termUnit} number <span className="text-red-600">*</span></label>
+                  <input
+                    type="text"
+                    name="unitNumber"
+                    value={formData.unitNumber}
+                    onChange={handleInputChange}
+                    placeholder="e.g. A101, 5B, Unit 12"
+                    className={`${inputClass} ${fieldErrors.unitNumber ? "border-red-500" : ""}`}
+                    disabled={loading}
+                  />
+                  {fieldErrors.unitNumber && <p className="mt-0.5 text-[11px] font-semibold text-red-600">{fieldErrors.unitNumber}</p>}
+                </div>
+
+                <div>
+                  <MilikSelect
+                    label={`${termUnit} type`}
+                    required
+                    placeholder={`Select ${termUnit.toLowerCase()} type`}
+                    items={unitTypes}
+                    value={formData.unitType}
+                    onChange={(val) => handleInputChange({ target: { name: "unitType", value: val } })}
+                    getLabel={(t) => t.label}
+                    getValue={(t) => t.value}
+                    disabled={loading}
+                    error={fieldErrors.unitType}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Area ({measurementLabel})</label>
+                  <input
+                    type="number"
+                    name="areaSqFt"
+                    value={formData.areaSqFt}
+                    onChange={handleInputChange}
+                    placeholder={`e.g. ${measurementLabel === "Sq Ft" ? "500" : "100"}`}
+                    min="0"
+                    step="0.01"
+                    className={inputClass}
+                    disabled={loading}
+                  />
+                </div>
+
+                <div>
+                  <label className={labelClass}>Furnishing</label>
+                  <select name="furnished" value={formData.furnished} onChange={handleInputChange} className={inputClass} disabled={loading}>
+                    <option value="unfurnished">Unfurnished</option>
+                    <option value="semi-furnished">Semi-furnished</option>
+                    <option value="furnished">Furnished</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Monthly {termRent} (KES){formData.status !== "owner_occupied" && <span className="text-red-600"> *</span>}</label>
+                  <input
+                    type="number"
+                    name="rent"
+                    value={formData.rent}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 25000"
+                    min="0"
+                    step="0.01"
+                    className={`${inputClass} ${fieldErrors.rent ? "border-red-500" : ""}`}
+                    disabled={loading}
+                  />
+                  {fieldErrors.rent && <p className="mt-0.5 text-[11px] font-semibold text-red-600">{fieldErrors.rent}</p>}
+                </div>
+
+                <div>
+                  <label className={labelClass}>Security deposit (KES){formData.status !== "owner_occupied" && <span className="text-red-600"> *</span>}</label>
+                  <input
+                    type="number"
+                    name="deposit"
+                    value={formData.deposit}
+                    onChange={handleInputChange}
+                    placeholder="e.g. 50000"
+                    min="0"
+                    step="0.01"
+                    className={`${inputClass} ${fieldErrors.deposit ? "border-red-500" : ""}`}
+                    disabled={loading}
+                  />
+                  {fieldErrors.deposit && <p className="mt-0.5 text-[11px] font-semibold text-red-600">{fieldErrors.deposit}</p>}
+                </div>
+
+                {formData.status !== "owner_occupied" && (
+                  <div>
+                    <MilikSelect
+                      label="Status"
+                      placeholder="Select status"
+                      items={statusOptions}
+                      value={formData.status}
+                      onChange={(val) => handleInputChange({ target: { name: "status", value: val } })}
+                      getLabel={(s) => s.label}
+                      getValue={(s) => s.value}
+                      disabled={loading}
+                    />
                   </div>
                 )}
-
                 <div>
-                  <label className={labelClass}>Video URL</label>
-                  <input
-                    type="text"
-                    name="videoUrl"
-                    value={formData.videoUrl}
-                    onChange={handleInputChange}
-                    placeholder="https://..."
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
+                  <label className={labelClass}>Available from</label>
+                  <input type="date" name="availableFrom" value={formData.availableFrom} onChange={handleInputChange} className={inputClass} disabled={loading} />
                 </div>
-
-                <div>
-                  <label className={labelClass}>Virtual Tour URL</label>
-                  <input
-                    type="text"
-                    name="virtualTourUrl"
-                    value={formData.virtualTourUrl}
-                    onChange={handleInputChange}
-                    placeholder="https://..."
-                    className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                    disabled={loading}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-6 pt-1">
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={Boolean(formData.petsAllowed)}
-                      onChange={(e) => setFormData((p) => ({ ...p, petsAllowed: e.target.checked }))}
-                      disabled={loading}
-                    />
-                    <div className={`w-10 h-5 rounded-full transition-colors ${formData.petsAllowed ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
-                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.petsAllowed ? "translate-x-5" : "translate-x-0"}`} />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">Pets Allowed</span>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer select-none">
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={Boolean(formData.rentNegotiable)}
-                      onChange={(e) => setFormData((p) => ({ ...p, rentNegotiable: e.target.checked }))}
-                      disabled={loading}
-                    />
-                    <div className={`w-10 h-5 rounded-full transition-colors ${formData.rentNegotiable ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
-                    <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.rentNegotiable ? "translate-x-5" : "translate-x-0"}`} />
-                  </div>
-                  <span className="text-xs font-semibold text-slate-700">{termRent} Negotiable</span>
-                </label>
-              </div>
-
-              <ListingImagesField
-                label={`${termUnit} Photos`}
-                existingImages={existingImages}
-                stagedFiles={stagedImageFiles}
-                onFilesSelected={handleImageFilesSelected}
-                onRemoveExisting={handleRemoveExistingImage}
-                onRemoveStaged={handleRemoveStagedImage}
-                disabled={loading || imagesSaving}
-                maxImages={12}
-              />
-            </div>
-
-            {/* Amenities */}
-            <div className="xl:col-span-6">
-              <label className={labelClass}>Amenities</label>
-              <input
-                type="text"
-                name="amenities"
-                value={formData.amenities}
-                onChange={handleInputChange}
-                placeholder="e.g., Parking, Balcony, WiFi (comma separated)"
-                className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS}`}
-                disabled={loading}
-              />
-              <p className="mt-1 text-xs text-slate-500">Separate multiple amenities with commas</p>
-            </div>
-
-            {/* Description */}
-            <div className="xl:col-span-6">
-              <label className={labelClass}>Description</label>
-              <textarea
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                placeholder="Additional details about the unit..."
-                rows="4"
-                className={`${inputClass} ${MILIK_ORANGE_RING} ${MILIK_ORANGE_BORDER_FOCUS} resize-none`}
-                disabled={loading}
-              />
-            </div>
-
-            {/* Toggles row */}
-            <div className="xl:col-span-6 flex flex-wrap gap-6">
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <div className="relative">
+                <label className="flex h-7 items-center gap-2 text-xs font-bold text-slate-900">
                   <input
                     type="checkbox"
-                    className="sr-only"
-                    checked={Boolean(formData.listingEnabled)}
-                    onChange={(e) => setFormData((p) => ({ ...p, listingEnabled: e.target.checked, ownerOccupied: e.target.checked ? false : p.ownerOccupied }))}
-                    disabled={loading || Boolean(formData.ownerOccupied)}
-                  />
-                  <div className={`w-10 h-5 rounded-full transition-colors ${formData.listingEnabled ? "bg-[#0B3B2E]" : "bg-slate-200"}`} />
-                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.listingEnabled ? "translate-x-5" : "translate-x-0"}`} />
-                </div>
-                <span className="text-xs font-semibold text-slate-700">
-                  List this unit publicly
-                  <span className="ml-1.5 font-normal text-slate-400">— shows on the public vacancy page</span>
-                </span>
-              </label>
-
-              <label className="flex items-center gap-3 cursor-pointer select-none">
-                <div className="relative">
-                  <input
-                    type="checkbox"
-                    className="sr-only"
-                    checked={Boolean(formData.ownerOccupied)}
+                    checked={formData.status === "owner_occupied"}
                     onChange={(e) => setFormData((p) => ({
                       ...p,
-                      ownerOccupied: e.target.checked,
                       listingEnabled: e.target.checked ? false : p.listingEnabled,
-                      status: e.target.checked ? "occupied" : (p.status === "occupied" ? "vacant" : p.status),
+                      status: e.target.checked ? "owner_occupied" : (p.status === "owner_occupied" ? "vacant" : p.status),
                     }))}
                     disabled={loading}
                   />
-                  <div className={`w-10 h-5 rounded-full transition-colors ${formData.ownerOccupied ? "bg-pink-600" : "bg-slate-200"}`} />
-                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${formData.ownerOccupied ? "translate-x-5" : "translate-x-0"}`} />
-                </div>
-                <span className="text-xs font-semibold text-slate-700">
-                  Owner Occupied
-                  <span className="ml-1.5 font-normal text-slate-400">— excluded from rent income & occupancy rate</span>
-                </span>
-              </label>
+                  Owner occupied
+                </label>
+              </div>
             </div>
 
+            <div className="border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">Utilities</span>
+                <button type="button" onClick={addUtility} disabled={loading} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+                  <FaPlus size={9} /> Add utility
+                </button>
+              </div>
+              {formData.utilities.length === 0 ? (
+                <p className="px-2.5 py-2 text-[11px] italic text-slate-500">No utilities. Add one if this {termUnit.toLowerCase()} is charged for utilities separately.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {formData.utilities.map((util, idx) => (
+                    <div key={idx} className="grid grid-cols-1 items-end gap-x-3 gap-y-2 p-2.5 md:grid-cols-[1fr_1fr_auto_auto]">
+                      <MilikSelect
+                        label="Utility"
+                        placeholder="Select type"
+                        items={utilityOptions.length ? utilityOptions : ["Water", "Garbage", "Electricity", "Service Charge", "Security", "Others"]}
+                        value={util.utility}
+                        onChange={(val) => updateUtility(idx, "utility", val)}
+                        getLabel={(x) => x}
+                        getValue={(x) => x}
+                        disabled={loading}
+                      />
+                      <div>
+                        <label className={labelClass}>{termUnit} charge (KES)</label>
+                        <input
+                          type="number"
+                          value={util.unitCharge}
+                          onChange={(e) => updateUtility(idx, "unitCharge", e.target.value)}
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                          className={inputClass}
+                          disabled={loading}
+                        />
+                      </div>
+                      <label className="flex h-7 items-center gap-2 text-xs font-bold text-slate-900">
+                        <input
+                          type="checkbox"
+                          checked={util.isIncluded}
+                          onChange={(e) => updateUtility(idx, "isIncluded", e.target.checked)}
+                          disabled={loading}
+                        />
+                        Included in {termRent.toLowerCase()}
+                      </label>
+                      <button type="button" onClick={() => removeUtility(idx)} disabled={loading} title="Remove" className="flex h-7 items-center px-2 text-slate-400 hover:text-rose-600">
+                        <FaTrash size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <div>
+                  <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">Deposits</span>
+                  <span className="ml-2 text-[11px] text-slate-500">Filled from the {termProperty.toLowerCase()}'s deposit types. Rent deposit is above.</span>
+                </div>
+                <button type="button" onClick={addDeposit} disabled={loading} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+                  <FaPlus size={9} /> Add deposit
+                </button>
+              </div>
+              {formData.deposits.length === 0 ? (
+                <p className="px-2.5 py-2 text-[11px] italic text-slate-500">No additional deposits.</p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {formData.deposits.map((dep, idx) => (
+                    <div key={idx} className="grid grid-cols-1 items-end gap-x-3 gap-y-2 p-2.5 md:grid-cols-[1fr_1fr_1fr_auto_auto]">
+                      <MilikSelect
+                        label="Deposit type"
+                        placeholder="Select type"
+                        items={depositTypeOptions.length ? depositTypeOptions : ["Water Security Deposit", "Electricity Security Deposit", "Others"]}
+                        value={dep.depositType}
+                        onChange={(val) => updateDeposit(idx, "depositType", val)}
+                        getLabel={(x) => x}
+                        getValue={(x) => x}
+                        disabled={loading}
+                      />
+                      <MilikSelect
+                        label="Mode"
+                        placeholder="Select mode"
+                        items={["Fixed Amount", "Percentage"]}
+                        value={dep.chargeMode}
+                        onChange={(val) => updateDeposit(idx, "chargeMode", val)}
+                        getLabel={(x) => x}
+                        getValue={(x) => x}
+                        disabled={loading}
+                      />
+                      <div>
+                        <label className={labelClass}>{dep.chargeMode === "Percentage" ? `% of ${termRent.toLowerCase()}` : "Amount (KES)"}</label>
+                        <input
+                          type="number"
+                          value={dep.amount}
+                          onChange={(e) => updateDeposit(idx, "amount", e.target.value)}
+                          placeholder="0.00"
+                          min="0"
+                          step="0.01"
+                          className={inputClass}
+                          disabled={loading}
+                        />
+                      </div>
+                      <label className="flex h-7 items-center gap-2 text-xs font-bold text-slate-900">
+                        <input type="checkbox" checked={dep.refundable} onChange={(e) => updateDeposit(idx, "refundable", e.target.checked)} disabled={loading} />
+                        Refundable
+                      </label>
+                      <button type="button" onClick={() => removeDeposit(idx)} disabled={loading} title="Remove" className="flex h-7 items-center px-2 text-slate-400 hover:text-rose-600">
+                        <FaTrash size={10} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">Billing</span>
+              </div>
+              <div className="grid grid-cols-1 items-end gap-x-3 gap-y-2 p-2.5 md:grid-cols-3">
+                <div>
+                  <label className={labelClass}>Billing frequency</label>
+                  <select
+                    value={formData.billingFrequency}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, billingFrequency: e.target.value }))}
+                    className={inputClass}
+                    disabled={loading}
+                  >
+                    {billingPeriodOptions.map((period) => (
+                      <option key={period.key} value={period.key}>
+                        {period.name}{Number(period.durationInMonths || 1) > 1 ? ` (every ${Number(period.durationInMonths || 1)} months)` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="md:col-span-2 text-sm">
+                  {(() => {
+                    const selectedPeriod = billingPeriodOptions.find((item) => item.key === canonicalBillingPeriodKey(formData.billingFrequency || "monthly"));
+                    return (
+                      <>
+                        <span className="text-xs font-bold text-slate-900">{selectedPeriod?.name || "Configured"} {termInvoice.toLowerCase()} amount: </span>
+                        <span className="font-black tabular-nums text-slate-900">KES {billingAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </>
+                    );
+                  })()}
+                  {monthlyUtilityBill > 0 && (
+                    <p className="mt-1 text-[11px] text-slate-600">
+                      Utilities KES {monthlyUtilityBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} a month on top of {termRent.toLowerCase()}. Total KES {totalMonthlyBill.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.
+                    </p>
+                  )}
+                  {formData.utilities.some((u) => u.isIncluded) && (
+                    <p className="mt-1 text-[11px] text-slate-600">
+                      Included in {termRent.toLowerCase()}: {formData.utilities.filter((u) => u.isIncluded).map((u) => String(u.utility || "Unknown")).join(", ")}.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">Public listing</span>
+                <label className="flex items-center gap-2 text-xs font-bold text-slate-900">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.listingEnabled)}
+                    onChange={(e) => setFormData((p) => ({ ...p, listingEnabled: e.target.checked }))}
+                    disabled={loading || formData.status === "owner_occupied"}
+                  />
+                  List this unit publicly
+                </label>
+              </div>
+
+              {formData.listingEnabled && (
+                <div className="space-y-2 p-2.5">
+                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-3 xl:grid-cols-4">
+                    <div className="md:col-span-3 xl:col-span-2">
+                      <label className={labelClass}>Listing title</label>
+                      <input type="text" name="listingTitle" value={formData.listingTitle} onChange={handleInputChange} placeholder="e.g. Bright 2-bedroom near the mall" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Bedrooms</label>
+                      <input type="number" name="bedrooms" value={formData.bedrooms} onChange={handleInputChange} min="0" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Bathrooms</label>
+                      <input type="number" name="bathrooms" value={formData.bathrooms} onChange={handleInputChange} min="0" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Parking spaces</label>
+                      <input type="number" name="parkingSpaces" value={formData.parkingSpaces} onChange={handleInputChange} min="0" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Floor</label>
+                      <input type="text" name="floorNumber" value={formData.floorNumber} onChange={handleInputChange} placeholder="e.g. Ground, 3rd" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Minimum {termLease.toLowerCase()} term (months)</label>
+                      <input type="number" name="minimumLeaseTermMonths" value={formData.minimumLeaseTermMonths} onChange={handleInputChange} min="0" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Video URL</label>
+                      <input type="text" name="videoUrl" value={formData.videoUrl} onChange={handleInputChange} placeholder="https://" className={inputClass} disabled={loading} />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Virtual tour URL</label>
+                      <input type="text" name="virtualTourUrl" value={formData.virtualTourUrl} onChange={handleInputChange} placeholder="https://" className={inputClass} disabled={loading} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-6 text-xs font-bold text-slate-900">
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={Boolean(formData.petsAllowed)} onChange={(e) => setFormData((p) => ({ ...p, petsAllowed: e.target.checked }))} disabled={loading} />
+                      Pets allowed
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={Boolean(formData.rentNegotiable)} onChange={(e) => setFormData((p) => ({ ...p, rentNegotiable: e.target.checked }))} disabled={loading} />
+                      {termRent} negotiable
+                    </label>
+                  </div>
+
+                  <ListingImagesField
+                    label={`${termUnit} photos`}
+                    existingImages={existingImages}
+                    stagedFiles={stagedImageFiles}
+                    onFilesSelected={handleImageFilesSelected}
+                    onRemoveExisting={handleRemoveExistingImage}
+                    onRemoveStaged={handleRemoveStagedImage}
+                    disabled={loading || imagesSaving}
+                    maxImages={12}
+                  />
+
+                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 md:grid-cols-2">
+                    <div>
+                      <label className={labelClass}>Amenities</label>
+                      <input type="text" name="amenities" value={formData.amenities} onChange={handleInputChange} placeholder="e.g. Parking, Balcony, WiFi" className={inputClass} disabled={loading} />
+                      <p className="mt-1 text-[11px] text-slate-500">Separate with commas</p>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Description</label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        placeholder="Additional details about the unit"
+                        rows={2}
+                        className={`${inputClass} h-auto py-1.5 resize-none`}
+                        disabled={loading}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </form>
         </div>
-        </div>
 
-        {/* Sticky footer */}
-        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={loading}
-              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-            >
+            <button type="button" onClick={handleCancel} disabled={loading} className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
               Cancel
             </button>
             {!isEditMode && (
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={loading}
-                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
+              <button type="button" onClick={handleReset} disabled={loading} className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
                 Reset
               </button>
             )}
-            <button
-              type="submit"
-              form="unit-form"
-              disabled={loading}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
-            >
+            <button type="submit" form="unit-form" disabled={loading} className="flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
               {loading ? <FaSpinner className="animate-spin" /> : <FaSave />}
               {loading ? "Saving…" : isEditMode ? `Update ${termUnit}` : `Save ${termUnit}`}
             </button>

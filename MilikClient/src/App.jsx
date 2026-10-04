@@ -919,8 +919,6 @@ function App() {
             <Route path="/tenant/:id/edit"      element={<Guard resource="tenants" action="update" moduleKey="propertyManagement"><AddTenant /></Guard>} />
             <Route path="/tenants/deposits"         element={<Guard resource="deposits" moduleKey="propertyManagement"><TenantDeposits /></Guard>} />
             <Route path="/tenants/take-on-balances" element={<Guard resource="takeOnBalances" moduleKey="propertyManagement"><TakeOnBalances /></Guard>} />
-            <Route path="/tenants/financing"        element={<Navigate to="/tenants/take-on-balances" replace />} />
-            <Route path="/tenants/journals"         element={<Navigate to="/financial/journals" replace />} />
             <Route path="/invoices/rental"          element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></Guard>} />
             <Route path="/invoices/new"             element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices initialOpenSingleBooking /></Guard>} />
             <Route path="/invoices/rental/:id"      element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></Guard>} />
