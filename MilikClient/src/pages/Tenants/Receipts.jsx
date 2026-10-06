@@ -1661,9 +1661,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 </ListToolbar.Button>
               )}
               <span className="shrink-0 border border-slate-300 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} {termReceipts}</span>
-              <span className="shrink-0 border border-green-300 bg-green-50 px-1 py-0.5 text-[8px] font-bold text-green-700">Ksh {stats.total.toLocaleString()}</span>
-              <span className="shrink-0 border border-blue-300 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">{stats.confirmedCount} Conf.</span>
-              <span className="shrink-0 border border-orange-300 bg-orange-50 px-1 py-0.5 text-[8px] font-bold text-orange-700">{stats.pendingCount} Pend.</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Total: Ksh {stats.total.toLocaleString()}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Confirmed: {stats.confirmedCount}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pending: {stats.pendingCount}</span>
               <ListToolbar.Divider />
               <ListToolbar.Input
                 width="w-[4.5rem]"
@@ -1763,16 +1763,17 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 placeholder="Actions"
                 compact
               />
-              {canExportReceipt && <ListToolbar.Button icon={FaPrint} className="!bg-indigo-600 hover:!bg-indigo-700" onClick={handlePrintList} title="Print list">Print</ListToolbar.Button>}
+              {canExportReceipt && <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList} title="Print list">Print</ListToolbar.Button>}
               <ListToolbar.Button
                 icon={FaSms}
-                className="!bg-teal-600 hover:!bg-teal-700"
+                variant="outline"
                 onClick={() => setShowSmsModal(true)}
                 disabled={selectedIds.length === 0}
                 title={selectedIds.length > 0 ? `SMS ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to SMS`}
               >SMS</ListToolbar.Button>
               <ListToolbar.Button
                 icon={FaEnvelope}
+                variant="outline"
                 onClick={() => setShowEmailModal(true)}
                 disabled={selectedIds.length === 0}
                 title={selectedIds.length > 0 ? `Email ${selectedIds.length} ${selectedIds.length !== 1 ? termReceipts : termReceipt}` : `Select ${termReceipts.toLowerCase()} to email`}
@@ -1782,30 +1783,26 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   Batch
                 </ListToolbar.Button>
               )}
-              {canCreateReceipt && <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openCreateForm} title={pageCreateLabel}>New</ListToolbar.Button>}
+              {canCreateReceipt && <ListToolbar.Button icon={FaPlus} onClick={openCreateForm} title={pageCreateLabel}>New</ListToolbar.Button>}
             </ListToolbar>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
             <MilikTable
               columns={[
-                { label: `${termReceipt} #` },
-                { label: "Date" },
-                { label: termTenant },
-                { label: termProperty },
-                { label: termUnit },
-                { label: "Cashbook" },
-                { label: "Method" },
-                { label: "Amount", align: "right" },
-                { label: "Status" },
-                { label: "Done By" },
-                { label: "Reversed By" },
-                { label: "Reference" },
+                { label: `${termReceipt} #`, width: "10%" },
+                { label: "Date", width: "9%" },
+                { label: termTenant, width: "13%" },
+                { label: `${termProperty} / ${termUnit}`, width: "14%" },
+                { label: "Cashbook", width: "12%" },
+                { label: "Amount", align: "right", width: "9%" },
+                { label: "Status", align: "center", width: "9%" },
+                { label: "Reference", width: "11%" },
+                { label: "Done By", width: "13%" },
               ]}
               rows={currentPageReceipts}
               rowKey="_id"
               empty={`No ${termReceipts.toLowerCase()} found.`}
-              minWidth={1200}
               checkboxes
               allChecked={currentPageReceipts.length > 0 && visibleReceiptIds.every((id) => selectedIdsSet.has(id))}
               someChecked={visibleReceiptIds.some((id) => selectedIdsSet.has(id))}
@@ -1820,13 +1817,15 @@ const Receipts = ({ viewMode = "tenant" }) => {
                     <button type="button" className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none" onClick={(e) => { e.stopPropagation(); openView(receipt); }}>
                       {receipt.receiptNumber || "-"}
                     </button>
+                    {receipt.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(receipt.lastSmsAt)}`}>SMS</span>}{receipt.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(receipt.lastEmailAt)}`}>EMAIL</span>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{fmtDate(receipt.paymentDate)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getTenantName(receipt, tenants)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getPropertyName(receipt, tenants)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getUnitName(receipt, tenants)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold capitalize text-slate-900">{(receipt.paymentMethod || "-").replace("_", " ")}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                    {getPropertyName(receipt, tenants)}
+                    <span className="ml-1.5 font-normal text-slate-500">· {getUnitName(receipt, tenants)}</span>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-semibold text-slate-900">{getCashbookLabel(receipt)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">
                     Ksh {Math.abs(Number(receipt.amount || 0)).toLocaleString()}
                   </td>
@@ -1839,22 +1838,23 @@ const Receipts = ({ viewMode = "tenant" }) => {
                       {receipt.isReversed ? "Reversed" : receipt.isConfirmed ? "Confirmed" : "Pending"}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.confirmedBy, receipt)}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{getActorDisplayName(receipt.reversedBy)}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{receipt.referenceNumber || "-"}</td>
+                  <td className="max-w-0 px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                    <div className="truncate" title={getActorDisplayName(receipt.confirmedBy, receipt)}>{getActorDisplayName(receipt.confirmedBy, receipt)}</div>
+                  </td>
                 </>
               )}
               renderActions={(receipt) => (
                 <div className="flex items-center justify-end gap-1">
-                  <button onClick={() => openView(receipt)} className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700" title="View"><FaEye size={11} /></button>
-                  {!receipt.isReversed && <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 rounded bg-[#0B3B2E] hover:bg-[#0A3127] text-white" title="Allocate to Invoices"><FaListAlt size={11} /></button>}
-                  {!receipt.isConfirmed && !receipt.isReversed && <button onClick={() => openEditForm(receipt)} className="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white" title="Edit"><FaEdit size={11} /></button>}
-                  {!receipt.isConfirmed && <button onClick={() => handleConfirmOne(receipt)} className="px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white" title="Confirm"><FaCheck size={11} /></button>}
-                  {canExportReceipt && <button onClick={() => handlePrintReceipt(receipt)} className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-700 text-white" title="Print Receipt"><FaPrint size={11} /></button>}
-                  {!receipt.reversalOf && <button onClick={() => handleDeleteOne(receipt._id, receipt)} className="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white" title="Delete"><FaTrash size={11} /></button>}
-                  {receipt.isConfirmed && !receipt.isReversed && <button onClick={() => handleReverseOne(receipt)} className="px-2 py-1 rounded bg-amber-600 hover:bg-amber-700 text-white" title="Reverse"><FaUndo size={11} /></button>}
-                  {receipt.isReversed && canReverseReceipt && <button onClick={() => handleCancelReversalOpen(receipt)} className="px-2 py-1 rounded bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] font-semibold leading-none" title="Cancel Reversal — restore this receipt">Undo Rev</button>}
-                  {canExportReceipt && <button onClick={() => handleDownloadReceiptPdf(receipt)} className="px-2 py-1 rounded bg-slate-600 hover:bg-slate-700 text-white" title="Download PDF"><FaDownload size={11} /></button>}
+                  <button onClick={() => openView(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="View"><FaEye size={11} /></button>
+                  {!receipt.isReversed && <button onClick={() => openAllocationDrawer(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Allocate to Invoices"><FaListAlt size={11} /></button>}
+                  {!receipt.isConfirmed && !receipt.isReversed && <button onClick={() => openEditForm(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Edit"><FaEdit size={11} /></button>}
+                  {!receipt.isConfirmed && <button onClick={() => handleConfirmOne(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Confirm"><FaCheck size={11} /></button>}
+                  {canExportReceipt && <button onClick={() => handlePrintReceipt(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Print Receipt"><FaPrint size={11} /></button>}
+                  {!receipt.reversalOf && <button onClick={() => handleDeleteOne(receipt._id, receipt)} className="px-2 py-1 border border-red-300 bg-white text-red-600 hover:bg-red-50" title="Delete"><FaTrash size={11} /></button>}
+                  {receipt.isConfirmed && !receipt.isReversed && <button onClick={() => handleReverseOne(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Reverse"><FaUndo size={11} /></button>}
+                  {receipt.isReversed && canReverseReceipt && <button onClick={() => handleCancelReversalOpen(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 text-[10px] font-semibold leading-none" title="Cancel Reversal — restore this receipt">Undo Rev</button>}
+                  {canExportReceipt && <button onClick={() => handleDownloadReceiptPdf(receipt)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Download PDF"><FaDownload size={11} /></button>}
                 </div>
               )}
             />

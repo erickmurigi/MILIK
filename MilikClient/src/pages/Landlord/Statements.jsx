@@ -19,6 +19,8 @@ import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
+import ListToolbar from "../../components/common/ListToolbar";
+import AppSelect from "../../components/common/AppSelect";
 
 const _KES_FMT = new Intl.NumberFormat("en-KE", {
   style: "currency",
@@ -513,89 +515,6 @@ const paidCellDisplay = (val, isVacant, isNoBill) => {
     : { text: "—", cls: "text-slate-300" };
 };
 
-const SearchableSelect = ({ value, onChange, options, placeholder = "Select..." }) => {
-  const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const containerRef = useRef(null);
-
-  const selected = options.find((o) => o.value === value) || null;
-  const filtered = query.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(query.trim().toLowerCase()))
-    : options;
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setOpen(false);
-        setQuery("");
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
-
-  const handleSelect = (opt) => {
-    onChange(opt.value);
-    setOpen(false);
-    setQuery("");
-  };
-
-  return (
-    <div ref={containerRef} className="relative">
-      <div
-        onClick={() => { setOpen((prev) => !prev); setQuery(""); }}
-        className={`flex h-8 w-full cursor-pointer items-center justify-between rounded-md border px-2.5 shadow-sm transition-colors ${
-          open
-            ? "border-orange-500 bg-white ring-1 ring-orange-400"
-            : "border-orange-400 bg-orange-50 hover:border-orange-500"
-        }`}
-      >
-        {open ? (
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onClick={(e) => e.stopPropagation()}
-            placeholder={selected?.label || placeholder}
-            className="w-full bg-transparent text-xs font-semibold text-slate-800 outline-none placeholder:font-normal placeholder:text-slate-400"
-            autoFocus
-          />
-        ) : (
-          <span className={`truncate text-xs font-semibold ${selected ? "text-slate-800" : "text-slate-400"}`}>
-            {selected?.label || placeholder}
-          </span>
-        )}
-        <svg
-          className={`ml-1 h-3 w-3 flex-shrink-0 text-orange-500 transition-transform ${open ? "rotate-180" : ""}`}
-          viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.8"
-        >
-          <path d="M1 1l4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </div>
-      {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-0.5 max-h-56 overflow-y-auto rounded-md border border-orange-200 bg-white shadow-xl">
-          {filtered.length === 0 ? (
-            <div className="px-3 py-2.5 text-xs text-slate-400">No matches</div>
-          ) : (
-            filtered.map((opt) => (
-              <div
-                key={opt.value}
-                onMouseDown={(e) => { e.preventDefault(); handleSelect(opt); }}
-                className={`cursor-pointer px-3 py-2 text-xs transition-colors hover:bg-orange-50 ${
-                  opt.value === value ? "bg-orange-100 font-bold text-orange-700" : "text-slate-700"
-                }`}
-              >
-                {opt.label}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
 const PdfPreviewModal = React.memo(function PdfPreviewModal({
   open, statementId, propertyLabel, periodStart, periodEnd, onClose, isSelfManaged = false,
 }) {
@@ -716,11 +635,11 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
       <div className="relative z-10 flex h-full flex-col">
 
         {/* Toolbar */}
-        <div className="flex flex-none items-center gap-3 bg-[#0B3B2E] px-5 py-3 shadow-xl">
+        <div className="flex flex-none items-center gap-3 border-b border-slate-200 bg-white px-4 py-2">
           <div className="flex min-w-0 flex-col">
-            <span className="text-xs font-black uppercase tracking-widest text-white">{isSelfManaged ? "Property Performance Statement" : "Landlord Statement"}</span>
+            <span className="text-xs font-black uppercase tracking-widest text-slate-900">{isSelfManaged ? "Property Performance Statement" : "Landlord Statement"}</span>
             {(propertyLabel || periodLabel) && (
-              <span className="truncate text-[10px] text-white/50">
+              <span className="truncate text-[10px] text-slate-500">
                 {propertyLabel}{periodLabel ? ` · ${periodLabel}` : ""}
               </span>
             )}
@@ -732,7 +651,7 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
               onClick={handlePrint}
               disabled={!iframeLoaded}
               title="Print"
-              className="inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-white/20 disabled:opacity-35"
+              className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-35"
             >
               <FaPrint size={11} /> Print
             </button>
@@ -741,16 +660,16 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
               onClick={handleDownload}
               disabled={phase !== "ready"}
               title="Save PDF to device"
-              className="inline-flex items-center gap-1.5 rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-[11px] font-semibold text-white transition-all hover:bg-white/20 disabled:opacity-35"
+              className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 transition-all hover:bg-slate-50 disabled:opacity-35"
             >
               <FaDownload size={11} /> Save PDF
             </button>
-            <div className="mx-1 h-5 w-px bg-white/15" />
+            <div className="mx-1 h-5 w-px bg-slate-200" />
             <button
               type="button"
               onClick={handleClose}
               title="Close (Esc)"
-              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/50 transition-all hover:bg-white/15 hover:text-white"
+              className="inline-flex h-7 w-7 items-center justify-center text-slate-500 transition-all hover:bg-slate-100 hover:text-slate-900"
             >
               <FaTimes size={14} />
             </button>
@@ -786,7 +705,7 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
               src={blobUrl}
               title="Statement PDF Preview"
               onLoad={() => setIframeLoaded(true)}
-              className={`h-full w-full rounded-lg border-0 shadow-2xl transition-opacity duration-500 ${iframeLoaded ? "opacity-100" : "opacity-0"}`}
+              className={`h-full w-full border-0 shadow-2xl transition-opacity duration-500 ${iframeLoaded ? "opacity-100" : "opacity-0"}`}
             />
           )}
         </div>
@@ -1619,23 +1538,6 @@ const Statements = () => {
     }
   };
 
-  const handleRegenerateDraft = async () => {
-    if (!canCreateStatement) {
-      toast.warning("You do not have permission to generate landlord statements");
-      return;
-    }
-    if (!selectedPropertyId || !hasValidPeriodSelection) {
-      toast.error("Select a valid statement period first");
-      return;
-    }
-    try {
-      await loadDraftWorkspace({ refresh: true });
-      toast.success("Draft regenerated successfully");
-    } catch (error) {
-      toast.error(error?.response?.data?.message || "Failed to regenerate draft");
-    }
-  };
-
   const handlePreviewPdf = () => {
     if (!canExportStatement) {
       toast.warning("You do not have permission to view landlord statements");
@@ -1710,203 +1612,123 @@ const Statements = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
 
-        {/* ── TOP CONTROLS ─────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 bg-white shadow-[0_1px_4px_rgba(0,0,0,0.08)]">
-          <div className="h-0.5 bg-[#0B3B2E]" />
-
-          {/* Filter row — grouped: Type/Property, then Quick Period (drives Period
-              Start's suggestion below — see buildPeriod effect), then the actual
-              Statement Period (Locked/Custom badges unchanged), then Generate.
-              Every field, value, handler and conditional below is unchanged from
-              before — only the grouping/spacing changed. */}
-          <div className="flex flex-wrap items-end gap-3 px-3 py-1">
-            <div className="w-32">
-              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Statement Type</label>
-              <SearchableSelect
+        {/* ── TOP CONTROLS: filter/action row, then tabs + workspace summary row ── */}
+        <div className="flex-none">
+          <ListToolbar>
+            <div className="w-28">
+              <AppSelect
                 value={statementType}
                 onChange={setStatementType}
                 options={[
                   { value: "provisional", label: "Provisional" },
                   { value: "final", label: "Final" },
                 ]}
-                placeholder="Select type"
+                placeholder="Type"
+                compact
               />
             </div>
-
             <div className="w-56">
-              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Property</label>
-              <SearchableSelect
+              <AppSelect
                 value={selectedPropertyId}
                 onChange={setSelectedPropertyId}
                 options={propertyOptions}
-                placeholder="Select property"
+                placeholder="Property"
+                searchable
+                compact
               />
             </div>
-
-            <div className="h-7 w-px shrink-0 bg-slate-200" />
-
-            <div>
-              <label className="mb-0.5 block text-[10px] font-bold uppercase tracking-widest text-slate-400">Quick Period</label>
-              <div className="flex items-center gap-1">
-                <div className="w-28">
-                  <SearchableSelect
-                    value={month}
-                    onChange={setMonth}
-                    options={MONTH_SELECT_OPTIONS}
-                    placeholder="Select month"
-                  />
-                </div>
-                <input
-                  type="number"
-                  value={year}
-                  onChange={(e) => setYear(e.target.value)}
-                  className="h-6 w-16 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                />
-              </div>
+            <ListToolbar.Divider />
+            <div className="w-24">
+              <AppSelect
+                value={month}
+                onChange={setMonth}
+                options={MONTH_SELECT_OPTIONS}
+                placeholder="Month"
+                compact
+              />
             </div>
+            <ListToolbar.Input type="number" width="w-16" value={year} onChange={(e) => setYear(e.target.value)} />
+            <ListToolbar.Divider />
+            {latestProcessedCutoffAt ? (
+              // Locked — must continue from the day after the last statement closed.
+              <span className="flex h-[22px] shrink-0 items-center gap-1.5 border border-slate-200 bg-slate-100 px-2 text-[10px] font-semibold text-slate-500">
+                {periodStart || "—"}
+                <span className="bg-slate-200 px-1 text-[9px] font-bold uppercase">locked</span>
+              </span>
+            ) : (
+              <ListToolbar.Input
+                type="date"
+                width="w-[6.5rem]"
+                value={periodStart}
+                max={todayIso}
+                onChange={(e) => setPeriodStart(e.target.value)}
+                title="First statement — pick a start date"
+              />
+            )}
+            <span className="text-[10px] text-slate-400">to</span>
+            <ListToolbar.Input
+              type="date"
+              width="w-[6.5rem]"
+              value={periodEnd}
+              min={periodStart || undefined}
+              max={todayIso}
+              onChange={(e) => {
+                const v = e.target.value;
+                setPeriodEnd(v);
+                setPeriodEndIsCustom(v !== todayIso && v !== "");
+              }}
+              title="Defaults to today — change to close the period earlier"
+            />
+            {periodEnd && periodEnd !== todayIso && (
+              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 text-[9px] font-bold uppercase text-amber-700">Custom</span>
+            )}
+            <ListToolbar.Button
+              icon={FaSyncAlt}
+              onClick={() => loadDraftWorkspace({ refresh: true })}
+              disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
+            >
+              {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
+            </ListToolbar.Button>
 
-            <FaSyncAlt size={10} className="mb-1 shrink-0 rotate-90 text-slate-300 sm:rotate-0" />
-
-            <div>
-              <label className="mb-0.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-400">
-                Statement Period
-                {periodEnd && periodEnd !== todayIso && (
-                  <span className="rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-700 normal-case tracking-normal">
-                    Custom
-                  </span>
-                )}
-              </label>
-              <div className="flex items-center gap-1">
-                {latestProcessedCutoffAt ? (
-                  // Locked — must continue from the day after the last statement closed.
-                  // Wide enough (w-44) to show the full YYYY-MM-DD date AND the badge —
-                  // the previous w-32 truncated the date to "2026-09-..." to fit both.
-                  <div className="flex h-6 w-44 items-center gap-1.5 rounded-md border border-slate-300 bg-slate-100 px-2 text-[11px] font-semibold text-slate-500">
-                    <span className="whitespace-nowrap">{periodStart || "—"}</span>
-                    <span className="ml-auto shrink-0 rounded bg-slate-200 px-1 py-0.5 text-[9px] font-bold uppercase text-slate-500">locked</span>
-                  </div>
-                ) : (
-                  // First statement — freely editable
-                  <input
-                    type="date"
-                    value={periodStart}
-                    max={todayIso}
-                    onChange={(e) => setPeriodStart(e.target.value)}
-                    title="First statement — pick a start date"
-                    className="h-6 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                )}
-                <span className="text-slate-300">–</span>
-                <input
-                  type="date"
-                  value={periodEnd}
-                  min={periodStart || undefined}
-                  max={todayIso}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setPeriodEnd(v);
-                    setPeriodEndIsCustom(v !== todayIso && v !== "");
-                  }}
-                  className="h-6 w-32 rounded-md border border-orange-400 bg-orange-50 px-2 text-[11px] font-semibold text-slate-800 shadow-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  title="Defaults to today — change to close the period earlier"
-                />
-              </div>
-            </div>
-
-            <div className="ml-auto">
-              <button
-                type="button"
-                onClick={() => loadDraftWorkspace({ refresh: true })}
-                disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                className="inline-flex h-7 items-center justify-center gap-1.5 rounded-lg bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-55"
-              >
-                <FaSyncAlt className={loadingDraft ? "animate-spin" : ""} size={11} />
-                {loadingDraft ? "Loading…" : loadingProcessedContext ? "Checking…" : "Generate"}
-              </button>
-            </div>
-          </div>
-
-          {/* Tabs + action buttons */}
-          <div className="flex items-center justify-between border-t border-slate-100 px-3">
-            <div className="flex items-center">
-              {[
-                { id: "workspace", label: "Workspace" },
-                { id: "summary", label: "Summary" },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative px-3 py-1.5 text-[11px] font-bold transition-colors ${
-                    activeTab === tab.id ? "text-[#0B3B2E]" : "text-slate-400 hover:text-slate-600"
-                  }`}
-                >
-                  {tab.label}
-                  {activeTab === tab.id && (
-                    <span className="absolute bottom-0 left-2 right-2 h-0.5 rounded-t-full bg-[#0B3B2E]" />
-                  )}
-                </button>
-              ))}
+            <div className="ml-auto flex items-center gap-1">
               {draftStatement?.status && (
-                <span className={`ml-2 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                  draftStatement.status === "approved" ? "bg-emerald-100 text-emerald-700" :
-                  draftStatement.status === "sent"     ? "bg-sky-100 text-sky-700" :
-                  "bg-amber-100 text-amber-700"
+                <span className={`shrink-0 border px-1.5 text-[10px] font-bold uppercase ${
+                  draftStatement.status === "approved" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
+                  draftStatement.status === "sent"     ? "border-sky-200 bg-sky-50 text-sky-700" :
+                  "border-amber-200 bg-amber-50 text-amber-700"
                 }`}>
                   {draftStatement.status}
                 </span>
               )}
-            </div>
-
-            <div className="flex items-center gap-1 py-1">
-              {/* Tertiary: Regenerate */}
-              <button
-                type="button"
-                onClick={handleRegenerateDraft}
-                disabled={!canCreateStatement || !selectedPropertyId || loadingDraft || loadingProcessedContext || !hasValidPeriodSelection}
-                title="Regenerate draft from current ledger data"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-200 hover:bg-slate-50 hover:text-slate-700 disabled:opacity-35"
-              >
-                <FaSyncAlt size={10} className={loadingDraft ? "animate-spin" : ""} />
-              </button>
-
-              {/* Print → opens preview modal */}
-              <button
-                type="button"
+              <ListToolbar.Button
+                icon={FaPrint}
+                variant="outline"
                 onClick={handlePreviewPdf}
                 disabled={!canExportStatement || !draftStatement?._id || pdfPreviewOpen}
                 title="Preview & print statement"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-[#0B3B2E] disabled:opacity-35"
               >
-                <FaPrint size={10} />
-              </button>
-              {/* Download → saves PDF directly, no modal */}
-              <button
-                type="button"
+                Print
+              </ListToolbar.Button>
+              <ListToolbar.Button
+                icon={FaDownload}
+                variant="outline"
                 onClick={handleDownloadPdf}
                 disabled={!canExportStatement || !draftStatement?._id || downloadingPdf}
                 title="Download PDF to device"
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-[#0B3B2E] disabled:opacity-35"
               >
-                <FaDownload size={10} className={downloadingPdf ? "animate-bounce" : ""} />
-              </button>
-
-              <div className="mx-1 h-5 w-px bg-slate-200" />
-
-              {/* Secondary: Approve */}
-              <button
-                type="button"
+                Download
+              </ListToolbar.Button>
+              <ListToolbar.Divider />
+              <ListToolbar.Button
+                icon={FaCheckCircle}
+                variant="outlineOk"
                 onClick={handleApprove}
                 disabled={!canApproveStatement || !draftStatement?._id || draftStatement?.status === "approved"}
-                className="inline-flex h-7 items-center gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 text-[11px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-35"
               >
-                <FaCheckCircle size={9} />
                 {draftStatement?.status === "approved" ? "Approved ✓" : "Approve"}
-              </button>
-
-              {/* Primary: Process */}
-              <button
-                type="button"
+              </ListToolbar.Button>
+              <ListToolbar.Button
+                icon={FaFileAlt}
                 onClick={handleProcessStatement}
                 disabled={!canApproveStatement || !draftStatement?._id || processing || !hasValidPeriodSelection || draftStatement?.status !== "approved"}
                 title={
@@ -1915,20 +1737,85 @@ const Statements = () => {
                   !canApproveStatement ? "You do not have permission to process statements" :
                   "Finalise and post this statement to the landlord account"
                 }
-                className="inline-flex h-7 items-center gap-1.5 rounded-md bg-[#0B3B2E] px-4 text-[11px] font-bold text-white shadow-sm transition-colors hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-35"
               >
-                <FaFileAlt size={9} />
                 {processing ? "Processing…" : "Process"}
-              </button>
+              </ListToolbar.Button>
             </div>
-          </div>
+          </ListToolbar>
+
+          <ListToolbar>
+            {[
+              { id: "workspace", label: "Workspace" },
+              { id: "summary", label: "Summary" },
+            ].map((tab) => (
+              <ListToolbar.Button
+                key={tab.id}
+                variant={activeTab === tab.id ? "dark" : "outline"}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {tab.label}
+              </ListToolbar.Button>
+            ))}
+
+            {activeTab === "workspace" && draftStatement && (
+              <>
+                <ListToolbar.Divider />
+                <span className="text-xs font-black text-slate-900">
+                  {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
+                </span>
+                {landlord && (
+                  <span className="truncate text-[10px] text-slate-500">· {landlord.name || landlord.fullName || ""}</span>
+                )}
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] text-slate-700">{statementPeriodLabel}</span>
+                {collectionStats && collectionStats.rate !== null && (
+                  <span className={`shrink-0 text-[10px] font-bold ${
+                    collectionStats.rate >= 80 ? "text-emerald-700" :
+                    collectionStats.rate >= 50 ? "text-amber-700" : "text-red-700"
+                  }`}>
+                    {collectionStats.rate}% collected · {collectionStats.occupied} occ
+                    {collectionStats.vacant > 0 && ` · ${collectionStats.vacant} vac`}
+                    {collectionStats.nobill > 0 && ` · ${collectionStats.nobill} no bill`}
+                    {collectionStats.unpaid > 0 && ` · ${collectionStats.unpaid} unpaid`}
+                  </span>
+                )}
+                <ListToolbar.Divider />
+                {preparedRows.length > 0 && [
+                  { key: "all",     label: `All·${preparedRows.length}`,                cls: "border-slate-300 bg-white text-slate-700" },
+                  { key: "unpaid",  label: `Unpaid·${collectionStats?.unpaid ?? 0}`,   cls: "border-red-200 bg-red-50 text-red-700" },
+                  { key: "partial", label: `Partial·${collectionStats?.partial ?? 0}`, cls: "border-amber-200 bg-amber-50 text-amber-700" },
+                  { key: "paid",    label: `Paid·${collectionStats?.paid ?? 0}`,       cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+                  { key: "nobill",  label: `No Bill·${collectionStats?.nobill ?? 0}`,  cls: "border-slate-200 bg-slate-50 text-slate-500" },
+                  { key: "vacant",  label: `Vacant·${collectionStats?.vacant ?? 0}`,   cls: "border-slate-200 bg-slate-50 text-slate-500" },
+                ].map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    onClick={() => setRowFilter(chip.key)}
+                    className={`h-[22px] shrink-0 border px-2 text-[10px] font-semibold transition-colors ${chip.cls} ${
+                      rowFilter === chip.key ? "font-bold ring-1 ring-slate-700" : "opacity-70 hover:opacity-100"
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+                <ListToolbar.Divider />
+                <ListToolbar.Button
+                  variant={collapseAdditionalUnitRows ? "dark" : "outline"}
+                  onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
+                  title="Toggle multi-unit row collapsing"
+                >
+                  {collapseAdditionalUnitRows ? "Multi ▲" : "Multi ▼"}
+                </ListToolbar.Button>
+              </>
+            )}
+          </ListToolbar>
         </div>
 
         {/* ── MAIN CONTENT ─────────────────────────────────────────────── */}
         {!selectedPropertyId ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0B3B2E]/10">
-              <FaFileAlt className="text-[#0B3B2E]" size={22} />
+            <div className="flex h-14 w-14 items-center justify-center bg-slate-100">
+              <FaFileAlt className="text-slate-800" size={22} />
             </div>
             <div>
               <p className="text-sm font-bold text-slate-700">Select a Property</p>
@@ -1937,8 +1824,8 @@ const Statements = () => {
           </div>
         ) : !draftStatement ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
-            <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${loadingDraft ? "bg-[#0B3B2E]/10" : "bg-slate-200/60"}`}>
-              <FaSyncAlt className={`${loadingDraft ? "animate-spin text-[#0B3B2E]" : "text-slate-400"}`} size={22} />
+            <div className={`flex h-14 w-14 items-center justify-center ${loadingDraft ? "bg-slate-100" : "bg-slate-200/60"}`}>
+              <FaSyncAlt className={`${loadingDraft ? "animate-spin text-slate-800" : "text-slate-400"}`} size={22} />
             </div>
             <div>
               <p className="text-sm font-bold text-slate-700">{loadingDraft ? "Building Statement…" : "No Statement Loaded"}</p>
@@ -1951,28 +1838,18 @@ const Statements = () => {
 
               /* ══════════ SUMMARY TAB ══════════ */
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {/* Header banner */}
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-5 py-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">{isSelfManaged ? "Property Performance Statement · Summary" : "Landlord Statement · Summary"}</p>
-                      <h3 className="mt-1 text-sm font-bold text-white">
-                        {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Summary"}
-                      </h3>
-                      {landlord && (
-                        <p className="mt-0.5 text-xs text-green-100/60">{landlord.name || landlord.fullName || ""}</p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-right">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Period</p>
-                        <p className="mt-0.5 text-xs font-bold text-white">{statementPeriodLabel}</p>
-                      </div>
-                      <div className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-right">
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-green-200/50">Type</p>
-                        <p className="mt-0.5 text-xs font-bold capitalize text-white">{statementType}</p>
-                      </div>
-                    </div>
+                {/* Header */}
+                <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                  <div className="flex min-w-0 flex-wrap items-baseline gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{isSelfManaged ? "Property Performance Statement" : "Landlord Statement"}</span>
+                    <span className="text-[11px] font-bold text-slate-900">{selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Summary"}</span>
+                    {landlord && (
+                      <span className="text-[10px] text-slate-500">· {landlord.name || landlord.fullName || ""}</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-[10px] text-slate-600">
+                    <span>Period: <b className="text-slate-900">{statementPeriodLabel}</b></span>
+                    <span>Type: <b className="capitalize text-slate-900">{statementType}</b></span>
                   </div>
                 </div>
 
@@ -1994,11 +1871,11 @@ const Statements = () => {
                     <p className="text-[9px] font-bold uppercase tracking-widest text-amber-500">Unapplied Credits</p>
                     <p className="mt-1.5 text-base font-bold text-amber-700">{currency(summary.unappliedPayments || 0)}</p>
                   </div>
-                  <div className={`px-5 py-4 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
-                    <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
+                  <div className={`px-5 py-4 ${settlement.isNegative ? "bg-red-50" : "bg-slate-100"}`}>
+                    <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-slate-500"}`}>
                       {settlement.label}
                     </p>
-                    <p className={`mt-1.5 text-base font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
+                    <p className={`mt-1.5 text-base font-bold ${settlement.isNegative ? "text-red-700" : "text-slate-900"}`}>
                       {currency(settlement.amount)}
                     </p>
                   </div>
@@ -2008,8 +1885,8 @@ const Statements = () => {
                 <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50">
                   {Number(summary.unappliedPayments || 0) > 0 && (
                     <div className="px-5 pt-4">
-                      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                        <div className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-amber-400" />
+                      <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3">
+                        <div className="mt-0.5 h-2 w-2 flex-shrink-0 bg-amber-400" />
                         <p className="text-xs text-amber-800">
                           Unapplied tenant credits are carried separately from allocated rent and utility receipts. They reduce the tenant net position but do not count as paid until allocated to actual bills.
                         </p>
@@ -2017,7 +1894,7 @@ const Statements = () => {
                     </div>
                   )}
                   <div className="p-5">
-                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                    <div className="overflow-hidden border border-slate-200 bg-white shadow-sm">
                       <div className="border-b border-slate-100 bg-slate-50 px-5 py-2.5">
                         <p className="text-[9px] font-bold uppercase tracking-widest text-slate-500">Settlement Breakdown</p>
                       </div>
@@ -2083,9 +1960,9 @@ const Statements = () => {
                               <td className="px-5 py-3 text-right font-semibold text-red-600">({currency(Number(summary?.totalAdvanceRecoveries || 0))})</td>
                             </tr>
                           )}
-                          <tr className={settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}>
-                            <td className={`px-5 py-4 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{settlement.label}</td>
-                            <td className={`px-5 py-4 text-right text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-white"}`}>{currency(settlement.amount)}</td>
+                          <tr className={settlement.isNegative ? "bg-red-50" : "bg-slate-100"}>
+                            <td className={`px-5 py-4 text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-slate-900"}`}>{settlement.label}</td>
+                            <td className={`px-5 py-4 text-right text-sm font-bold ${settlement.isNegative ? "text-red-700" : "text-slate-900"}`}>{currency(settlement.amount)}</td>
                           </tr>
                         </tbody>
                       </table>
@@ -2099,107 +1976,6 @@ const Statements = () => {
               /* ══════════ WORKSPACE TAB ══════════ */
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
-                {/* ── Compact workspace info bar ── */}
-                <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-1">
-                  <div className="flex items-center gap-3">
-
-                    {/* Left: property name · landlord · period badge */}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="truncate text-[11px] font-bold text-white">
-                          {selectedProperty ? getPropertyLabel(selectedProperty) : "Statement Workspace"}
-                        </span>
-                        {landlord && (
-                          <span className="text-[10px] text-green-200/55 truncate">
-                            · {landlord.name || landlord.fullName || ""}
-                          </span>
-                        )}
-                        <span className="rounded border border-white/20 bg-white/10 px-1.5 py-0.5 text-[9px] font-bold text-green-100/80">
-                          {statementPeriodLabel}
-                        </span>
-                      </div>
-
-                      {/* Mini collection bar + inline stats */}
-                      {collectionStats && collectionStats.rate !== null && (
-                        <div className="mt-0.5 flex items-center gap-2">
-                          <div className="relative h-1.5 w-20 flex-shrink-0 overflow-hidden rounded-full bg-white/15">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                collectionStats.rate >= 80 ? "bg-emerald-400" :
-                                collectionStats.rate >= 50 ? "bg-amber-400" : "bg-red-400/80"
-                              }`}
-                              style={{ width: `${Math.max(0.5, Math.min(100, collectionStats.rate))}%` }}
-                            />
-                          </div>
-                          <span className={`text-[10px] font-bold tabular-nums ${
-                            collectionStats.rate >= 80 ? "text-emerald-300" :
-                            collectionStats.rate >= 50 ? "text-amber-300" : "text-red-300"
-                          }`}>
-                            {collectionStats.rate}%
-                          </span>
-                          <span className="text-[9px] text-green-200/50">
-                            {collectionStats.occupied} occ
-                            {collectionStats.vacant > 0 && ` · ${collectionStats.vacant} vac`}{collectionStats.nobill > 0 && ` · ${collectionStats.nobill} no bill`}
-                            {collectionStats.unpaid > 0 && (
-                              <span className="text-red-300/80"> · {collectionStats.unpaid} unpaid</span>
-                            )}
-                          </span>
-                          {/* "Net to Landlord" used to repeat here too — dropped since the
-                              KPI strip right below already shows it clearly. */}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right: filter chips + toggles */}
-                    <div className="flex flex-shrink-0 items-center gap-1.5">
-
-                      {/* Filter chips — styled for dark bar */}
-                      {draftStatement && preparedRows.length > 0 && (
-                        <div className="flex items-center gap-1">
-                          {[
-                            { key: "all",     label: `All·${preparedRows.length}`,                cls: "border-white/25 bg-white/10 text-white/80" },
-                            { key: "unpaid",  label: `Unpaid·${collectionStats?.unpaid ?? 0}`,   cls: "border-red-400/50 bg-red-900/40 text-red-200" },
-                            { key: "partial", label: `Partial·${collectionStats?.partial ?? 0}`, cls: "border-amber-400/50 bg-amber-900/40 text-amber-200" },
-                            { key: "paid",    label: `Paid·${collectionStats?.paid ?? 0}`,       cls: "border-emerald-400/50 bg-emerald-900/40 text-emerald-200" },
-                            { key: "nobill",  label: `No Bill·${collectionStats?.nobill ?? 0}`,  cls: "border-white/15 bg-white/5 text-slate-300" },
-                            { key: "vacant",  label: `Vacant·${collectionStats?.vacant ?? 0}`,   cls: "border-white/15 bg-white/5 text-slate-300" },
-                          ].map((chip) => (
-                            <button
-                              key={chip.key}
-                              type="button"
-                              onClick={() => setRowFilter(chip.key)}
-                              className={`border px-2 py-0.5 text-[9px] font-semibold transition-colors ${chip.cls} ${
-                                rowFilter === chip.key
-                                  ? "ring-1 ring-white/60 opacity-100"
-                                  : "opacity-50 hover:opacity-90"
-                              }`}
-                            >
-                              {chip.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Separator */}
-                      <div className="h-5 w-px bg-white/15" />
-
-                      {/* Collapse multi-unit rows toggle */}
-                      <button
-                        type="button"
-                        onClick={() => setCollapseAdditionalUnitRows(!collapseAdditionalUnitRows)}
-                        title="Toggle multi-unit row collapsing"
-                        className={`rounded border px-2 py-1 text-[9px] font-semibold transition-colors ${
-                          collapseAdditionalUnitRows
-                            ? "border-green-300/40 bg-green-500/30 text-white"
-                            : "border-white/20 bg-white/10 text-green-100/60 hover:bg-white/20"
-                        }`}
-                      >
-                        {collapseAdditionalUnitRows ? "Multi ▲" : "Multi ▼"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
                 {/* KPI strip removed — every figure it showed (occupancy, paid/partial/
                     unpaid counts, Net to Landlord) already appears either in the status
                     chips directly above or the totals footer below; showing it a third
@@ -2207,78 +1983,78 @@ const Statements = () => {
 
                 {/* Scrollable table + detail sections */}
                 <div className="min-h-0 flex-1 overflow-auto bg-white">
-                  <table className="min-w-max w-full whitespace-nowrap text-xs">
+                  <table className="w-max min-w-full whitespace-nowrap text-xs">
                     <thead className="sticky top-0 z-20">
                       {/* ── Row 1: Group span headers ── */}
-                      <tr className="bg-[#0B3B2E]">
-                        <th rowSpan={2} className="sticky left-0 z-30 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-b border-white/10">
-                          <div className="text-[11px] font-semibold text-white">Unit</div>
+                      <tr className="bg-slate-100">
+                        <th rowSpan={2} className="sticky left-0 z-30 w-[60px] min-w-[60px] max-w-[60px] overflow-hidden bg-slate-100 px-2 py-1 text-left align-bottom border-b border-slate-200">
+                          <div className="text-[11px] font-bold text-slate-800">Unit</div>
                         </th>
-                        <th rowSpan={2} className="sticky left-[56px] z-30 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden bg-[#0B3B2E] px-2 py-1 text-left align-bottom border-r border-white/10 border-b border-white/10">
-                          <div className="text-[11px] font-semibold text-white">Tenant</div>
+                        <th rowSpan={2} className="sticky left-[60px] z-30 w-[180px] min-w-[180px] max-w-[180px] overflow-hidden bg-slate-100 px-2 py-1 text-left align-bottom border-r border-slate-200 border-b border-slate-200">
+                          <div className="text-[11px] font-bold text-slate-800">Tenant</div>
                         </th>
-                        <th rowSpan={2} className="w-[88px] min-w-[88px] max-w-[88px] px-2 py-1 text-right align-bottom border-b border-white/10">
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Ledger</div>
-                          <div className="text-[11px] font-semibold text-white">Bal B/F</div>
+                        <th rowSpan={2} className="w-[88px] min-w-[88px] max-w-[88px] px-2 py-1 text-right align-bottom border-b border-slate-200">
+                          <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Ledger</div>
+                          <div className="text-[11px] font-bold text-slate-800">Bal B/F</div>
                         </th>
                         {/* INVOICED group */}
                         <th
                           colSpan={1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}
-                          className="border-l border-white/10 px-2 py-1 text-center"
+                          className="border-l border-slate-200 px-2 py-1 text-center"
                         >
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/40">Invoiced</div>
+                          <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Invoiced</div>
                         </th>
                         {/* PAID group */}
                         <th
                           colSpan={1 + (hasInvoiceVatColumn ? 1 : 0) + statementColumns.length}
-                          className="border-l border-white/10 px-2 py-1 text-center"
+                          className="border-l border-slate-200 px-2 py-1 text-center"
                         >
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-emerald-300/70">Paid</div>
+                          <div className="text-[9px] font-black uppercase tracking-widest text-emerald-700">Paid</div>
                         </th>
                         {/* SUMMARY group */}
                         <th
                           colSpan={2}
-                          className="border-l border-white/10 px-2 py-1 text-center"
+                          className="border-l border-slate-200 px-2 py-1 text-center"
                         >
-                          <div className="text-[8px] font-bold uppercase tracking-widest text-white/30">Summary</div>
+                          <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Summary</div>
                         </th>
                       </tr>
                       {/* ── Row 2: Individual column names ── */}
-                      <tr className="bg-[#0B3B2E] border-t border-white/10">
+                      <tr className="bg-slate-100 border-t border-slate-200">
                         {/* Invoiced sub-columns */}
-                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-white/10 px-2 py-1 text-right">
-                          <div className="text-[11px] font-semibold text-white/90">Rent</div>
+                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-slate-200 px-2 py-1 text-right">
+                          <div className="text-[11px] font-bold text-slate-900">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
                           <th className="w-[80px] min-w-[80px] max-w-[80px] px-2 py-1 text-right">
-                            <div className="text-[11px] font-semibold text-white/70">VAT</div>
+                            <div className="text-[11px] font-bold text-slate-500">VAT</div>
                           </th>
                         )}
                         {statementColumns.map((column) => (
                           <th key={`inv-head-${column.key}`} className="w-[100px] min-w-[100px] max-w-[100px] px-2 py-1 text-right" title={column.label}>
-                            <div className="truncate text-[11px] font-semibold text-white/90">{column.label}</div>
+                            <div className="truncate text-[11px] font-bold text-slate-900">{column.label}</div>
                           </th>
                         ))}
                         {/* Paid sub-columns */}
-                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-white/10 px-2 py-1 text-right">
-                          <div className="text-[11px] font-semibold text-emerald-200/90">Rent</div>
+                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-slate-200 px-2 py-1 text-right">
+                          <div className="text-[11px] font-bold text-emerald-700">Rent</div>
                         </th>
                         {hasInvoiceVatColumn && (
                           <th className="w-[80px] min-w-[80px] max-w-[80px] px-2 py-1 text-right">
-                            <div className="text-[11px] font-semibold text-emerald-200/70">VAT</div>
+                            <div className="text-[11px] font-bold text-emerald-600">VAT</div>
                           </th>
                         )}
                         {statementColumns.map((column) => (
                           <th key={`paid-head-${column.key}`} className="w-[100px] min-w-[100px] max-w-[100px] px-2 py-1 text-right" title={column.label}>
-                            <div className="truncate text-[11px] font-semibold text-emerald-200/90">{column.label}</div>
+                            <div className="truncate text-[11px] font-bold text-emerald-700">{column.label}</div>
                           </th>
                         ))}
                         {/* Summary sub-columns */}
-                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-white/10 px-2 py-1 text-right">
-                          <div className="text-[11px] font-semibold text-white/90">Total Paid</div>
+                        <th className="w-[100px] min-w-[100px] max-w-[100px] border-l border-slate-200 px-2 py-1 text-right">
+                          <div className="text-[11px] font-bold text-slate-900">Total Paid</div>
                         </th>
                         <th className="w-[90px] min-w-[90px] max-w-[90px] px-2 py-1 text-right">
-                          <div className="text-[11px] font-semibold text-white/90">Bal C/F</div>
+                          <div className="text-[11px] font-bold text-slate-900">Bal C/F</div>
                         </th>
                       </tr>
                     </thead>
@@ -2287,14 +2063,14 @@ const Statements = () => {
                         <tr>
                           <td colSpan={statementColSpan} className="px-4 py-10 text-center">
                             <div className="flex flex-col items-center gap-2">
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                              <div className="flex h-10 w-10 items-center justify-center bg-slate-100">
                                 <FaFileAlt className="text-slate-400" size={14} />
                               </div>
                               <p className="text-sm font-semibold text-slate-700">
                                 {rowFilter === "all" ? "No rows generated" : `No ${rowFilter} tenants`}
                               </p>
                               {rowFilter !== "all" && (
-                                <button type="button" onClick={() => setRowFilter("all")} className="text-xs text-[#0B3B2E] underline">Show all rows</button>
+                                <button type="button" onClick={() => setRowFilter("all")} className="text-xs text-slate-800 underline">Show all rows</button>
                               )}
                             </div>
                           </td>
@@ -2328,19 +2104,19 @@ const Statements = () => {
                           return (
                             <tr
                               key={row.unitId ? `u-${row.unitId}` : row._id ? `d-${row._id}` : `n-${row.unitNumber || index}`}
-                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-orange-50/70`}
+                              className={`${rowBase} border-b border-slate-100 transition-colors hover:bg-slate-100`}
                             >
-                              <td className={`sticky left-0 z-10 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden ${rowBase} ${st.border} px-2 py-0.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-0 z-10 w-[60px] min-w-[60px] max-w-[60px] overflow-hidden ${rowBase} ${st.border} px-2 py-0.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className={`truncate text-[11px] font-semibold ${isVacant ? "text-slate-400" : "text-slate-900"}`} title={row.displayUnitLabel || row.unit || row.unitNumber || ""}>{row.displayUnitLabel || row.unit || row.unitNumber || "—"}</div>
                               </td>
-                              <td className={`sticky left-[56px] z-10 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden ${rowBase} border-r border-slate-100 px-2 py-0.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
+                              <td className={`sticky left-[60px] z-10 w-[180px] min-w-[180px] max-w-[180px] overflow-hidden ${rowBase} border-r border-slate-100 px-2 py-0.5 shadow-[2px_0_5px_-3px_rgba(0,0,0,0.07)]`}>
                                 <div className="flex items-center gap-1.5">
                                   {showBadge && (
                                     <span className={`shrink-0 rounded px-1 py-px text-[8px] font-bold uppercase tracking-wide ${st.badge}`}>
                                       {st.label}
                                     </span>
                                   )}
-                                  <div className={`truncate text-[10.5px] font-semibold ${isVacant ? "text-slate-400 italic" : "text-slate-800"}`}>
+                                  <div className={`truncate text-[11px] font-semibold ${isVacant ? "text-slate-400 italic" : "text-slate-800"}`}>
                                     {row.tenantName || "—"}
                                   </div>
                                   {/* Account code, always shown when known — two rows can share a name
@@ -2353,7 +2129,7 @@ const Statements = () => {
                                 </div>
                                 {Number(row.multiUnitCount || 1) > 1 && (
                                   <div
-                                    className="mt-0.5 inline-flex rounded-full border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700"
+                                    className="mt-0.5 inline-flex border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700"
                                     title={Array.isArray(row.allUnitLabels) && row.allUnitLabels.length > 0 ? `Units: ${row.allUnitLabels.join(", ")}` : undefined}
                                   >
                                     {row.multiUnitCount} units
@@ -2365,37 +2141,37 @@ const Statements = () => {
                                 {isVacant ? "—" : compactAmount(row.openingBalance ?? row.balanceBF ?? 0)}
                               </td>
                               {/* ── INVOICED block ── */}
-                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
                                 {(isVacant || isNoBill) ? "—" : compactAmount(row.invoicedRent)}
                               </td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
+                                <td className={`px-2 py-0.5 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-500"}`}>
                                   {(isVacant || isNoBill) ? "—" : compactAmount(row.invoicedTax ?? 0)}
                                 </td>
                               )}
                               {statementColumns.map((column) => {
                                 const invVal = getPreparedStatementColumnValue(row, column.key, "invoiced");
                                 return (
-                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-0.5 text-right text-[10.5px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
+                                  <td key={`inv-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-0.5 text-right text-[11px] ${(isVacant || isNoBill) ? "text-slate-300" : "text-slate-700"}`}>
                                     {(isVacant || isNoBill) ? "—" : compactAmount(invVal)}
                                   </td>
                                 );
                               })}
                               {/* ── PAID block ── */}
-                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] ${paidRentCell.cls}`}>{paidRentCell.text}</td>
+                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[11px] ${paidRentCell.cls}`}>{paidRentCell.text}</td>
                               {hasInvoiceVatColumn && (
-                                <td className={`px-2 py-0.5 text-right text-[10.5px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
+                                <td className={`px-2 py-0.5 text-right text-[11px] ${paidTaxCell.cls}`}>{paidTaxCell.text}</td>
                               )}
                               {statementColumns.map((column) => {
                                 const padVal = paidCellDisplay(getPreparedStatementColumnValue(row, column.key, "paid"), isVacant, isNoBill);
                                 return (
-                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-0.5 text-right text-[10.5px] ${padVal.cls}`}>{padVal.text}</td>
+                                  <td key={`paid-${row.unitId || row.unitNumber || "row"}-${column.key}`} className={`px-2 py-0.5 text-right text-[11px] ${padVal.cls}`}>{padVal.text}</td>
                                 );
                               })}
                               {/* Total Paid */}
-                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[10.5px] font-semibold ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
+                              <td className={`border-l border-slate-100 px-2 py-0.5 text-right text-[11px] font-semibold ${totalPaidCell.cls}`}>{totalPaidCell.text}</td>
                               {/* Bal C/F — positive = arrears (red), negative = credit (green) */}
-                              <td className={`px-2 py-0.5 text-right text-[10.5px] ${balCls}`}>
+                              <td className={`px-2 py-0.5 text-right text-[11px] ${balCls}`}>
                                 {isVacant ? "—" : compactAmount(closingBal)}
                               </td>
                             </tr>
@@ -2404,28 +2180,28 @@ const Statements = () => {
                       )}
                       {/* Totals row */}
                       {preparedRows.length > 0 && (
-                        <tr className="border-t-2 border-[#0B3B2E] bg-[#0B3B2E]">
-                          <td className="sticky left-0 z-10 w-[56px] min-w-[56px] max-w-[56px] overflow-hidden bg-[#0B3B2E] px-2 py-1.5 text-[11px] font-bold text-white">Totals</td>
-                          <td className="sticky left-[56px] z-10 w-[130px] min-w-[130px] max-w-[130px] overflow-hidden border-r border-white/10 bg-[#0B3B2E] px-2 py-1.5"></td>
-                          <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
+                        <tr className="border-t-2 border-slate-300 bg-slate-100">
+                          <td className="sticky left-0 z-10 w-[60px] min-w-[60px] max-w-[60px] overflow-hidden bg-slate-100 px-2 py-1.5 text-[11px] font-bold text-slate-900">Totals</td>
+                          <td className="sticky left-[60px] z-10 w-[180px] min-w-[180px] max-w-[180px] overflow-hidden border-r border-slate-200 bg-slate-100 px-2 py-1.5"></td>
+                          <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-slate-600">{currency(totals.openingBalance ?? summary.openingBalance ?? 0)}</td>
                           {/* Invoiced totals */}
-                          <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-semibold text-white">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
+                          <td className="border-l border-slate-200 px-2 py-1.5 text-right text-[11px] font-semibold text-slate-900">{currency(totals.invoicedRent ?? summary.rentInvoiced ?? 0)}</td>
                           {hasInvoiceVatColumn && (
-                            <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
+                            <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-slate-600">{currency(totals.invoicedTax ?? summary.totalInvoiceVatInvoiced ?? 0)}</td>
                           )}
                           {statementColumns.map((column) => (
-                            <td key={`foot-inv-${column.key}`} className="px-2 py-1.5 text-right text-[11px] font-semibold text-white">{currency(Number(column?.invoiced || 0))}</td>
+                            <td key={`foot-inv-${column.key}`} className="px-2 py-1.5 text-right text-[11px] font-semibold text-slate-900">{currency(Number(column?.invoiced || 0))}</td>
                           ))}
                           {/* Paid totals */}
-                          <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
+                          <td className="border-l border-slate-200 px-2 py-1.5 text-right text-[11px] font-bold text-slate-900">{currency(totals.paidRent ?? summary.totalRentReceived ?? 0)}</td>
                           {hasInvoiceVatColumn && (
-                            <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-white/80">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
+                            <td className="px-2 py-1.5 text-right text-[11px] font-semibold text-slate-600">{currency(totals.paidTax ?? totalInvoiceVatReceived ?? 0)}</td>
                           )}
                           {statementColumns.map((column) => (
-                            <td key={`foot-paid-${column.key}`} className="px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(Number(column?.paid || 0))}</td>
+                            <td key={`foot-paid-${column.key}`} className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-900">{currency(Number(column?.paid || 0))}</td>
                           ))}
-                          <td className="border-l border-white/10 px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(totals.totalPaid ?? 0)}</td>
-                          <td className="px-2 py-1.5 text-right text-[11px] font-bold text-white">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
+                          <td className="border-l border-slate-200 px-2 py-1.5 text-right text-[11px] font-bold text-slate-900">{currency(totals.totalPaid ?? 0)}</td>
+                          <td className="px-2 py-1.5 text-right text-[11px] font-bold text-slate-900">{currency(totals.closingBalance ?? summary.closingBalance ?? 0)}</td>
                         </tr>
                       )}
                     </tbody>
@@ -2443,10 +2219,10 @@ const Statements = () => {
                               This section is purely informational (it doesn't feed the Net to
                               Landlord total anywhere) — it just records that you, not the
                               manager, now hold these tenants' deposits. */}
-                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
-                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Deposits You Now Hold</span>
-                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(depositSettlementTotals.additions)}</span>
+                          <div className="overflow-hidden border border-slate-200 bg-white">
+                            <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800">Deposits You Now Hold</span>
+                              <span className="text-[10px] font-black text-slate-800">{currency(depositSettlementTotals.additions)}</span>
                             </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
@@ -2458,7 +2234,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {depositSettlementAdditionRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `deposit-settlement-add-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-orange-50/50 transition-colors">
+                                  <tr key={item._id || item.id || `deposit-settlement-add-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-slate-100 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">
                                       {item.description || "Deposit remittance"}
@@ -2475,10 +2251,10 @@ const Statements = () => {
 
                       {broughtForwardCreditApplicationRows.length > 0 && (
                         <div>
-                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
-                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Brought Forward Prepayments</span>
-                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</span>
+                          <div className="overflow-hidden border border-slate-200 bg-white">
+                            <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800">Brought Forward Prepayments</span>
+                              <span className="text-[10px] font-black text-slate-800">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</span>
                             </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
@@ -2492,7 +2268,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {broughtForwardCreditApplicationRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `bf-credit-${index}`} className="odd:bg-white even:bg-sky-50/20 hover:bg-orange-50/50 transition-colors">
+                                  <tr key={item._id || item.id || `bf-credit-${index}`} className="odd:bg-white even:bg-sky-50/20 hover:bg-slate-100 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">{item.description || "B/F prepayment applied"}</td>
                                     <td className="px-2 py-0.5 text-slate-500">{item.receiptReference || "—"}</td>
@@ -2509,9 +2285,9 @@ const Statements = () => {
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>
-                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
-                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Deductions / Expenses</span>
+                          <div className="overflow-hidden border border-slate-200 bg-white">
+                            <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800">Deductions / Expenses</span>
                               <span className="text-[10px] font-black text-rose-700">{currency(nonDepositExpenseRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
                             </div>
                             <table className="min-w-full text-[11px]">
@@ -2524,7 +2300,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {nonDepositExpenseRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `expense-${index}`} className="odd:bg-white even:bg-slate-50/60 hover:bg-orange-50/50 transition-colors">
+                                  <tr key={item._id || item.id || `expense-${index}`} className="odd:bg-white even:bg-slate-50/60 hover:bg-slate-100 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">{item.description || item.name || "Expense"}</td>
                                     <td className="px-2 py-0.5 text-right font-semibold text-rose-700">{currency(item.amount)}</td>
@@ -2538,10 +2314,10 @@ const Statements = () => {
 
                       {nonDepositAdditionRows.length > 0 && (
                         <div>
-                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
-                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Additions</span>
-                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(nonDepositAdditionRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
+                          <div className="overflow-hidden border border-slate-200 bg-white">
+                            <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800">Additions</span>
+                              <span className="text-[10px] font-black text-slate-800">{currency(nonDepositAdditionRows.reduce((s, r) => s + Number(r.amount || 0), 0))}</span>
                             </div>
                             <table className="min-w-full text-[11px]">
                               <thead>
@@ -2553,7 +2329,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-slate-100">
                                 {nonDepositAdditionRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `addition-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-orange-50/50 transition-colors">
+                                  <tr key={item._id || item.id || `addition-${index}`} className="odd:bg-white even:bg-emerald-50/20 hover:bg-slate-100 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">{item.description || item.name || "Addition"}</td>
                                     <td className="px-2 py-0.5 text-right font-semibold text-emerald-700">{currency(item.amount)}</td>
@@ -2583,7 +2359,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-amber-100">
                                 {earlyPayoutRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `early-payout-${index}`} className="odd:bg-white even:bg-amber-50/30 hover:bg-orange-50/50 transition-colors">
+                                  <tr key={item._id || item.id || `early-payout-${index}`} className="odd:bg-white even:bg-amber-50/30 hover:bg-slate-100 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">{item.description || "Early payout"}</td>
                                     <td className="px-2 py-0.5 text-slate-500">{item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
@@ -2614,7 +2390,7 @@ const Statements = () => {
                               </thead>
                               <tbody className="divide-y divide-red-100">
                                 {advanceRecoveryRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `advance-recovery-${index}`} className="odd:bg-white even:bg-red-50/30 hover:bg-orange-50/50 transition-colors">
+                                  <tr key={item._id || item.id || `advance-recovery-${index}`} className="odd:bg-white even:bg-red-50/30 hover:bg-slate-100 transition-colors">
                                     <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
                                     <td className="px-2 py-0.5 text-slate-700">{item.description || "Advance recovery"}</td>
                                     <td className="px-2 py-0.5 text-slate-500">{item.date ? new Date(item.date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</td>
@@ -2631,10 +2407,10 @@ const Statements = () => {
                           distinguish "direct" collections from; everything is direct. */}
                       {!isSelfManaged && directToLandlordRows.length > 0 && (
                         <div>
-                          <div className="overflow-hidden border border-[#0B3B2E]/20 bg-white">
-                            <div className="flex items-center justify-between bg-[#EDF5F1] px-3 py-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">Payments Collected Directly by Landlord</span>
-                              <span className="text-[10px] font-black text-[#0B3B2E]">{currency(directToLandlordTableTotal)}</span>
+                          <div className="overflow-hidden border border-slate-200 bg-white">
+                            <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800">Payments Collected Directly by Landlord</span>
+                              <span className="text-[10px] font-black text-slate-800">{currency(directToLandlordTableTotal)}</span>
                             </div>
                             <div className="grid grid-cols-[80px_60px_1fr_80px_80px_90px] gap-0 border-b border-slate-200 bg-slate-50 px-3 py-1.5">
                               {["Date", "Unit", "Tenant", "A/C No.", "Reference", "Amount"].map((h) => (
@@ -2665,7 +2441,7 @@ const Statements = () => {
                   {/* Notes to landlord */}
                   {draftStatement && (
                     <div className="border-t border-slate-200 bg-slate-50 px-5 py-4">
-                      <h4 className="mb-2 border-l-2 border-[#0B3B2E] pl-2.5 text-[10px] font-bold uppercase tracking-widest text-[#0B3B2E]">
+                      <h4 className="mb-2 border-l-2 border-slate-400 pl-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-800">
                         Notes to Landlord
                       </h4>
                       <textarea
@@ -2673,7 +2449,7 @@ const Statements = () => {
                         onChange={(e) => setStatementNotes(e.target.value)}
                         placeholder="Add notes for the landlord — these will appear on the printed statement..."
                         rows={3}
-                        className="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        className="w-full resize-y border border-slate-200 bg-white px-3 py-2.5 text-xs text-slate-700 placeholder-slate-400 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                       <div className="mt-1.5 flex items-center justify-between">
                         <span className="text-[9px] text-slate-400">
@@ -2683,7 +2459,7 @@ const Statements = () => {
                           type="button"
                           onClick={handleSaveNotes}
                           disabled={savingNotes || !draftStatement?._id}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-[#0B3B2E] bg-[#0B3B2E] px-3 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[#0A3127] disabled:opacity-40"
+                          className="inline-flex items-center gap-1.5 border border-slate-400 bg-[#0B3B2E] px-3 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[#0A3127] disabled:opacity-40"
                         >
                           {savingNotes ? "Saving…" : "Save Notes"}
                         </button>
@@ -2734,14 +2510,14 @@ const Statements = () => {
                       </p>
                     </div>
                     {/* Net to Landlord */}
-                    <div className={`px-3 py-1.5 ${settlement.isNegative ? "bg-red-50" : "bg-[#0B3B2E]"}`}>
-                      <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-green-200/60"}`}>
+                    <div className={`px-3 py-1.5 ${settlement.isNegative ? "bg-red-50" : "bg-slate-100"}`}>
+                      <p className={`text-[9px] font-bold uppercase tracking-widest ${settlement.isNegative ? "text-red-500" : "text-slate-500"}`}>
                         {isSelfManaged ? "Net Operating Income" : "Net to Landlord"}
                       </p>
-                      <p className={`mt-0.5 text-base font-black ${settlement.isNegative ? "text-red-700" : "text-white"}`}>
+                      <p className={`mt-0.5 text-base font-black ${settlement.isNegative ? "text-red-700" : "text-slate-900"}`}>
                         {currency(settlement.amount)}
                       </p>
-                      <p className={`text-[9px] ${settlement.isNegative ? "text-red-400" : "text-green-200/40"}`}>
+                      <p className={`text-[9px] ${settlement.isNegative ? "text-red-400" : "text-slate-400"}`}>
                         {settlement.isNegative ? settlement.label : "Incl. b/f balances"}
                       </p>
                     </div>

@@ -16,7 +16,7 @@ const VARIANTS = {
 export function ListToolbar({ children, className = "" }) {
   return (
     <div className="flex-none sticky top-0 z-30 border-b border-gray-200 bg-white shadow-sm">
-      <div className={`filter-bar flex flex-wrap items-center gap-1 px-2 py-1 ${className}`}>
+      <div className={`filter-bar flex flex-nowrap items-center gap-1 overflow-x-auto px-2 py-1 ${className}`}>
         {children}
       </div>
     </div>

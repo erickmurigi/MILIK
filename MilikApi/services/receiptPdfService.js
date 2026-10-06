@@ -2,7 +2,7 @@ import RentPayment from '../models/RentPayment.js';
 import Unit from '../models/Unit.js';
 import Property from '../models/Property.js';
 import Landlord from '../models/Landlord.js';
-import { documentPageHtml, formatMoney, resolveSupplier } from '../utils/printKitCore.js';
+import { documentPageHtml, formatMoney } from '../utils/printKitCore.js';
 import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
 import { renderHtmlToPdf } from '../utils/pdfRender.js';
 
@@ -90,7 +90,7 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
     const landlord = landlordId
       ? await Landlord.findById(landlordId).select('landlordName taxPin postalAddress location phoneNumber email').lean()
       : null;
-    const supplier = resolveSupplier({ landlord, company });
+    const supplier = company;
     const tenant = receipt.tenant || {};
     const property = receipt.property || {};
     const unit = receipt.unit || {};
@@ -139,7 +139,7 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
         {
           heading: 'Property',
           name: property.propertyName || '',
-          lines: [unitNumber ? `Unit: ${unitNumber}` : ''],
+          lines: [landlord?.landlordName ? `Landlord: ${landlord.landlordName}` : '', unitNumber ? `Unit: ${unitNumber}` : ''],
         },
       ],
       details: { heading: 'Payment', rows: [['Cashbook', receipt.cashbook || ''], ['Status', confirmed ? 'Confirmed' : 'Pending confirmation']] },

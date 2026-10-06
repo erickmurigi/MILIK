@@ -123,6 +123,15 @@ const TenantInvoiceNoteSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    lines: [
+      {
+        category: { type: String, enum: TENANT_INVOICE_CATEGORIES, required: true },
+        description: { type: String, default: "", trim: true },
+        amount: { type: Number, required: true, min: [0.01, "Amount must be positive"] },
+        sourceInvoice: { type: mongoose.Schema.Types.ObjectId, ref: "TenantInvoice", default: null },
+        chartAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", required: true },
+      },
+    ],
     metadata: {
       type: mongoose.Schema.Types.Mixed,
       default: {},

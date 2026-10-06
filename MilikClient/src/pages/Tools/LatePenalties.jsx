@@ -1,6 +1,8 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
+import ListToolbar from '../../components/common/ListToolbar';
+import MilikTable from '../../components/common/MilikTable';
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import { getErrorMessage } from "../../utils/requestMethods";
@@ -529,210 +531,155 @@ const LatePenalties = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-100 via-slate-50 to-white p-2 md:p-3">
         <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col gap-2">
-          <div className={`${pageShellClass} flex-shrink-0`}>
-            <div className="flex items-center gap-0.5 overflow-x-auto border-b border-slate-200 bg-white px-2 py-1 shadow-sm">
-              <button
-                type="button"
-                onClick={() => { setWorkspaceView("processed_penalties"); setSelectedBatchRows({}); }}
-                className={`h-[20px] shrink-0 flex items-center border px-1.5 text-[9px] font-bold transition ${pillTabClass(workspaceView === "processed_penalties", "green")}`}
-              >
-                Processed Penalties
-              </button>
-              <button
-                type="button"
-                onClick={() => { setWorkspaceView("processed_batches"); setSelectedBatchRows({}); }}
-                className={`h-[20px] shrink-0 flex items-center border px-1.5 text-[9px] font-bold transition ${pillTabClass(workspaceView === "processed_batches", "slate")}`}
-              >
-                Processed Batches
-              </button>
-              <button
-                type="button"
-                onClick={() => { setWorkspaceView("rules"); setSelectedBatchRows({}); }}
-                className={`h-[20px] shrink-0 flex items-center border px-1.5 text-[9px] font-bold transition ${pillTabClass(workspaceView === "rules", "orange")}`}
-              >
-                Rules / Preview / Process
-              </button>
-              <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-              {[
-                { label: "Processed", value: processedPenaltyStats.totalRows, accent: "text-slate-900" },
-                { label: "Active", value: processedPenaltyStats.activeRows, accent: "text-emerald-700" },
-                { label: "Reversed", value: processedPenaltyStats.reversedRows, accent: "text-amber-700" },
-                { label: "Deleted", value: processedPenaltyStats.deletedRows, accent: "text-rose-700" },
-                { label: "Amount", value: formatCurrency(processedPenaltyStats.activeAmount), accent: "text-slate-900" },
-              ].map((item) => (
-                <span key={item.label} className="shrink-0 inline-flex h-7 items-center gap-1 border border-slate-200 bg-white px-1 text-[8px] font-bold uppercase tracking-[0.08em] text-slate-500">
-                  {item.label} <span className={`normal-case tracking-normal ${item.accent}`}>{item.value}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className={`${pageShellClass} flex min-h-0 flex-1 flex-col`}>
+          <ListToolbar>
+            <AppSelect
+              value={workspaceView}
+              onChange={(v) => { setWorkspaceView(v ?? "processed_penalties"); setSelectedBatchRows({}); }}
+              options={[
+                { value: "processed_penalties", label: "Processed penalties" },
+                { value: "processed_batches", label: "Processed batches" },
+                { value: "rules", label: "Rules / preview / process" },
+              ]}
+              compact
+            />
+            <ListToolbar.Divider />
+            {[
+              { label: "Processed", value: processedPenaltyStats.totalRows },
+              { label: "Active", value: processedPenaltyStats.activeRows },
+              { label: "Reversed", value: processedPenaltyStats.reversedRows },
+              { label: "Deleted", value: processedPenaltyStats.deletedRows },
+              { label: "Amount", value: formatCurrency(processedPenaltyStats.activeAmount) },
+            ].map((item) => (
+              <span key={item.label} className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                {item.label}: {item.value}
+              </span>
+            ))}
+            {workspaceView === "processed_penalties" && (
+              <>
+                  <ListToolbar.Input
+                    width="w-44"
+                    value={penaltySearch}
+                    onChange={(e) => setPenaltySearch(e.target.value)}
+                    placeholder="Batch, tenant, penalty invoice, property, unit"
+                  />
+                  <AppSelect
+                    value={penaltyStatusFilter !== "all" ? penaltyStatusFilter : ""}
+                    onChange={(v) => setPenaltyStatusFilter(v ?? "all")}
+                    options={[{ value: "processed", label: "Processed" }, { value: "reversed", label: "Reversed" }, { value: "deleted", label: "Deleted" }]}
+                    placeholder="All statuses"
+                    clearable
+                    compact
+                  />
+                  <AppSelect
+                    value={penaltyRuleFilter !== "all" ? penaltyRuleFilter : ""}
+                    onChange={(v) => setPenaltyRuleFilter(v ?? "all")}
+                    options={processedPenaltyRuleOptions.map((ruleName) => ({ value: ruleName, label: ruleName }))}
+                    placeholder="All rules"
+                    searchable
+                    clearable
+                    compact
+                  />
+                  <AppSelect
+                    value={penaltyPropertyFilter !== "all" ? penaltyPropertyFilter : ""}
+                    onChange={(v) => setPenaltyPropertyFilter(v ?? "all")}
+                    options={processedPenaltyPropertyOptions.map((propertyName) => ({ value: propertyName, label: propertyName }))}
+                    placeholder="All properties"
+                    searchable
+                    clearable
+                    compact
+                  />
+                  <ListToolbar.Divider />
+                  <ListToolbar.Button
+                    variant="outline"
+                    onClick={() => runReverseForItems(selectedProcessedItemIds)}
+                    disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
+                  >
+                    Reverse selected
+                  </ListToolbar.Button>
+                  <ListToolbar.Button
+                    variant="danger"
+                    onClick={() => runDeleteForItems(selectedProcessedItemIds)}
+                    disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
+                  >
+                    Delete selected
+                  </ListToolbar.Button>
+                  <ListToolbar.Button
+                    variant="outline"
+                    onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Notify ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
+                    disabled={selectedProcessedItemIds.length === 0}
+                  >
+                    SMS
+                  </ListToolbar.Button>
+                  <ListToolbar.Button
+                    variant="outline"
+                    onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Email ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via email.", allowedChannels: ["email"], defaultChannel: "email" })}
+                    disabled={selectedProcessedItemIds.length === 0}
+                  >
+                    Email
+                  </ListToolbar.Button>
+              </>
+            )}
+          </ListToolbar>
+          <div className="flex min-h-0 flex-1 flex-col">
             {workspaceView === "processed_penalties" ? (
               <>
-                <div className="flex-none sticky top-0 z-20 border-b border-slate-200 bg-white shadow-sm">
-                  <div className="filter-bar flex items-center gap-0.5 overflow-x-auto px-2 py-1">
-                    <input
-                      value={penaltySearch}
-                      onChange={(e) => setPenaltySearch(e.target.value)}
-                      placeholder="Batch, tenant, penalty invoice, property, unit"
-                      className="h-[20px] w-44 shrink-0 border border-slate-200 bg-white px-1.5 text-[9px] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20"
-                    />
-                    <AppSelect
-                      value={penaltyStatusFilter !== "all" ? penaltyStatusFilter : ""}
-                      onChange={(v) => setPenaltyStatusFilter(v ?? "all")}
-                      options={[{ value: "processed", label: "Processed" }, { value: "reversed", label: "Reversed" }, { value: "deleted", label: "Deleted" }]}
-                      placeholder="All statuses"
-                      clearable
-                      compact
-                    />
-                    <AppSelect
-                      value={penaltyRuleFilter !== "all" ? penaltyRuleFilter : ""}
-                      onChange={(v) => setPenaltyRuleFilter(v ?? "all")}
-                      options={processedPenaltyRuleOptions.map((ruleName) => ({ value: ruleName, label: ruleName }))}
-                      placeholder="All rules"
-                      searchable
-                      clearable
-                      compact
-                    />
-                    <AppSelect
-                      value={penaltyPropertyFilter !== "all" ? penaltyPropertyFilter : ""}
-                      onChange={(v) => setPenaltyPropertyFilter(v ?? "all")}
-                      options={processedPenaltyPropertyOptions.map((propertyName) => ({ value: propertyName, label: propertyName }))}
-                      placeholder="All properties"
-                      searchable
-                      clearable
-                      compact
-                    />
-                    <div className="mx-1 h-3 w-px shrink-0 bg-slate-200" />
-                    <button
-                      type="button"
-                      onClick={() => runReverseForItems(selectedProcessedItemIds)}
-                      disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
-                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${
-                        selectedProcessedItemIds.length > 0 ? "bg-orange-500 hover:bg-orange-600" : "bg-slate-400 cursor-not-allowed"
-                      }`}
-                    >
-                      <FaCheckSquare size={7} /> Reverse Selected
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => runDeleteForItems(selectedProcessedItemIds)}
-                      disabled={processingBatchAction || selectedProcessedItemIds.length === 0}
-                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${
-                        selectedProcessedItemIds.length > 0 ? "bg-rose-600 hover:bg-rose-700" : "bg-slate-400 cursor-not-allowed"
-                      }`}
-                    >
-                      <FaTrash size={7} /> Delete Selected
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Notify ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
-                      disabled={selectedProcessedItemIds.length === 0}
-                      title={selectedProcessedItemIds.length === 0 ? "Select penalties to SMS tenants" : `SMS ${selectedProcessedItemIds.length} tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`}
-                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-teal-600 hover:bg-teal-700" : "bg-slate-400 cursor-not-allowed"}`}
-                    >
-                      <FaSms size={7} /> SMS
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCommunicationModal({ contextType: "penalty_invoice", recordIds: selectedProcessedItemIds, title: `Email ${selectedProcessedItemIds.length} Tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`, subtitle: "Send late penalty notice via email.", allowedChannels: ["email"], defaultChannel: "email" })}
-                      disabled={selectedProcessedItemIds.length === 0}
-                      title={selectedProcessedItemIds.length === 0 ? "Select penalties to email tenants" : `Email ${selectedProcessedItemIds.length} tenant${selectedProcessedItemIds.length !== 1 ? "s" : ""}`}
-                      className={`h-[20px] shrink-0 flex items-center gap-0.5 px-1.5 text-[9px] font-bold text-white ${selectedProcessedItemIds.length > 0 ? "bg-blue-600 hover:bg-blue-700" : "bg-slate-400 cursor-not-allowed"}`}
-                    >
-                      <FaEnvelope size={7} /> Email
-                    </button>
-                  </div>
-                </div>
 
-                <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full min-w-[1500px] text-[11px] border-collapse">
-                    <thead className="sticky top-0 z-10 shadow-sm">
-                      <tr className="bg-[#0B3B2E] text-white">
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">
-                          <input
-                            type="checkbox"
-                            checked={selectableProcessedRows.length > 0 && allProcessedRowsSelected}
-                            onChange={toggleAllProcessedPenaltyRows}
-                          />
-                        </th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Batch</th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Source Invoice</th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Penalty Invoice</th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Tenant</th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Property</th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Unit</th>
-                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Penalty</th>
-                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Run Date</th>
-                        <th className="px-3 py-1 text-center font-bold border-r border-white/10">Status</th>
-                        <th className="px-3 py-1 text-left font-bold">Reason</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentProcessedPenaltyRows.length === 0 ? (
-                        <tr>
-                          <td colSpan={11} className="px-4 py-10 text-center text-slate-500">
-                            No processed late penalties match the current filters.
-                          </td>
-                        </tr>
-                      ) : (
-                        currentProcessedPenaltyRows.map((row, index) => {
-                          const selectable = String(row?.displayStatus || "").toLowerCase() === "processed";
-                          const isSelected = !!selectedBatchRows[String(row._id)];
-                          return (
-                            <tr
-                              key={row._id}
-                              className={`border-b border-gray-100 transition-colors ${
-                                isSelected
-                                  ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E] hover:bg-emerald-50"
-                                  : index % 2 === 0
-                                  ? "bg-white hover:bg-blue-50/40"
-                                  : "bg-slate-50/60 hover:bg-blue-50/40"
-                              }`}
-                            >
-                              <td className="px-3 py-1 border-r border-gray-100">
-                                <input
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  disabled={!selectable}
-                                  onChange={() => toggleProcessedPenaltyRow(String(row._id))}
-                                />
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setWorkspaceView("processed_batches");
-                                    openBatch(row.batchId);
-                                  }}
-                                  className="font-bold text-blue-700 hover:underline"
-                                >
-                                  {row.batchName}
-                                </button>
-                                <p className="mt-1 text-[11px] text-slate-500">{row.ruleName}</p>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.sourceInvoiceNumber}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.penaltyInvoiceNumber}</td>
-                              <td className="px-3 py-1 border-r border-gray-100">
-                                <p className="font-semibold text-slate-900">{row.tenantName}</p>
-                                <p className="mt-0.5 text-[10px] text-slate-500">{row.tenantCode || "-"}</p>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{row.propertyName}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.unitNumber}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-center text-slate-700">{fmtDate(row.batchRunDate)}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-center">
-                                <StatusBadge status={row.displayStatus} map={PENALTY_STATUS_MAP} />
-                              </td>
-                              <td className="px-3 py-1 text-slate-600">{row.reason || "-"}</td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                <MilikTable
+                  columns={[
+                    { label: "Batch", width: "15%" },
+                    { label: "Tenant", width: "15%" },
+                    { label: "Property / Unit", width: "15%" },
+                    { label: "Penalty invoice", width: "14%" },
+                    { label: "Penalty", align: "right", width: "9%" },
+                    { label: "Run date", align: "center", width: "9%" },
+                    { label: "Status", align: "center", width: "8%" },
+                    { label: "Reason", width: "15%" },
+                  ]}
+                  rows={currentProcessedPenaltyRows}
+                  rowKey="_id"
+                  loading={loading}
+                  empty="No processed late penalties match the current filters."
+                  checkboxes
+                  allChecked={allProcessedRowsSelected}
+                  someChecked={selectedProcessedItemIds.length > 0 && !allProcessedRowsSelected}
+                  onCheckAll={toggleAllProcessedPenaltyRows}
+                  isChecked={(row) => !!selectedBatchRows[String(row._id)]}
+                  isSelected={(row) => !!selectedBatchRows[String(row._id)]}
+                  onCheckRow={(row) => String(row?.displayStatus || "").toLowerCase() === "processed" && toggleProcessedPenaltyRow(String(row._id))}
+                  onRowClick={(row) => String(row?.displayStatus || "").toLowerCase() === "processed" && toggleProcessedPenaltyRow(String(row._id))}
+                  renderRow={(row) => (
+                    <>
+                      <td className="px-3 py-1.5 border-r border-gray-100">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setWorkspaceView("processed_batches"); openBatch(row.batchId); }}
+                          className="font-bold text-[#0B3B2E] hover:underline"
+                        >
+                          {row.batchName}
+                        </button>
+                        <span className="ml-2 text-[10px] text-slate-500">{row.ruleName}</span>
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100">
+                        <span className="font-semibold text-slate-900">{row.tenantName}</span>
+                        <span className="ml-2 text-[10px] text-slate-500">{row.tenantCode || "-"}</span>
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                        {row.propertyName}
+                        <span className="ml-1.5 font-normal text-slate-500">· {row.unitNumber}</span>
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                        {row.penaltyInvoiceNumber}
+                        {row.sourceInvoiceNumber && <span className="ml-1.5 font-normal text-slate-500">from {row.sourceInvoiceNumber}</span>}
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold tabular-nums text-slate-900">{formatCurrency(row.calculatedPenalty)}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{fmtDate(row.batchRunDate)}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                        <StatusBadge status={row.displayStatus} map={PENALTY_STATUS_MAP} />
+                      </td>
+                      <td className="px-3 py-1.5 text-slate-600">{row.reason || "-"}</td>
+                    </>
+                  )}
+                />
 
                 <PaginationBar
                   page={safeProcessedPenaltyPage}

@@ -14,13 +14,11 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaArrowRight,
-  FaEnvelope,
   FaEye,
   FaMoneyBillWave,
   FaPrint,
   FaRedoAlt,
-  FaSms,
-} from "react-icons/fa";
+  } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import ListToolbar from "../../components/common/ListToolbar";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -378,13 +376,13 @@ const UtilityBills = () => {
     <DashboardLayout lockContentScroll>
       <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
 
             {/* FILTER BAR */}
             <ListToolbar>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700">Bills: {totals.count}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700">O/S: {formatCurrency(totals.outstanding)}</span>
-              {selectedCount > 0 && <span className="shrink-0 border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[9px] font-bold text-emerald-800">{selectedCount} selected</span>}
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Bills: {totals.count}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">O/S: {formatCurrency(totals.outstanding)}</span>
+              {selectedCount > 0 && <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{selectedCount} selected</span>}
               <ListToolbar.Divider />
               {STATUS_FILTERS.map(({ val, label }) => (
                 <ListToolbar.Button
@@ -405,36 +403,34 @@ const UtilityBills = () => {
               <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadData} disabled={loading}>Refresh</ListToolbar.Button>
               <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={filteredRows.length === 0}>Print</ListToolbar.Button>
               <ListToolbar.Button
-                className="!bg-teal-600 hover:!bg-teal-700"
                 onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `SMS ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["sms"], defaultChannel: "sms" })}
                 disabled={selectedCount === 0}
-              ><FaSms size={7} /> SMS</ListToolbar.Button>
+              >SMS</ListToolbar.Button>
               <ListToolbar.Button
                 onClick={() => setCommunicationModal({ contextType: "invoice", recordIds: selectedRows, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, allowedChannels: ["email"], defaultChannel: "email" })}
                 disabled={selectedCount === 0}
-              ><FaEnvelope size={7} /> Email</ListToolbar.Button>
+              >Email</ListToolbar.Button>
             </ListToolbar>
 
             {/* TABLE */}
             <MilikTable
               columns={[
-                { label: "Invoice #" },
-                { label: termTenant },
-                { label: termProperty },
-                { label: termUnit },
-                { label: "Utility Type" },
-                { label: "Invoice Date", align: "center" },
-                { label: "Due Date", align: "center" },
-                { label: "Amount", align: "right" },
-                { label: "Paid", align: "right" },
-                { label: "Balance", align: "right" },
-                { label: "Status", align: "center" },
+                { label: "Invoice #", width: "9%" },
+                { label: termTenant, width: "13%" },
+                { label: termProperty, width: "11%" },
+                { label: termUnit, width: "6%" },
+                { label: "Utility Type", width: "10%" },
+                { label: "Invoice Date", align: "center", width: "8%" },
+                { label: "Due Date", align: "center", width: "8%" },
+                { label: "Amount", align: "right", width: "9%" },
+                { label: "Paid", align: "right", width: "8%" },
+                { label: "Balance", align: "right", width: "9%" },
+                { label: "Status", align: "center", width: "8%" },
               ]}
               rows={currentPageRows}
               rowKey="key"
               loading={loading && currentPageRows.length === 0}
               empty="No utility bills found. Utility invoices and service charges will appear here."
-              minWidth={1380}
               checkboxes
               allChecked={currentPageRows.length > 0 && selectAll}
               someChecked={selectedRows.length > 0 && !selectAll}
@@ -450,7 +446,7 @@ const UtilityBills = () => {
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.unitName}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100">
-                    <span className="rounded bg-sky-50 px-1.5 py-px text-[10px] font-semibold text-sky-700">{row.utilityTypeLabel}</span>
+                    <span className="text-[10px] font-semibold text-slate-700">{row.utilityTypeLabel}</span>
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{row.invoiceDateLabel}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{row.dueDateLabel}</td>
@@ -470,7 +466,7 @@ const UtilityBills = () => {
                 <>
                   <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="rounded p-1 text-slate-500 hover:bg-slate-50 hover:text-slate-700" title="View Statement"><FaEye size={12} /></button>
                   {row.tenantId && (
-                    <button onClick={() => navigate(`/receipts/new?tenantId=${row.tenantId}&invoiceId=${row.invoiceId}`)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Create Receipt"><FaMoneyBillWave size={12} /></button>
+                    <button onClick={() => navigate(`/receipts/new?tenantId=${row.tenantId}&invoiceId=${row.invoiceId}`)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Create Receipt"><FaMoneyBillWave size={12} /></button>
                   )}
                   <button onClick={() => navigate(`/tenant/${row.tenantId}/statement`)} className="rounded p-1 text-slate-400 hover:bg-slate-50" title="Open Statement"><FaArrowRight size={12} /></button>
                 </>

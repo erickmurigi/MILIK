@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from "react"
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { FaArrowLeft, FaSave } from "react-icons/fa";
 import Spinner from "../../components/common/Spinner";
-import { inputClass, labelClass } from "../../utils/formStyles";
+const inputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
 import { useDispatch, useSelector } from "react-redux";
 import {
   selectCurrentUser,
@@ -963,43 +964,24 @@ const AddReceipt = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
-        {/* Sticky header */}
-        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <button type="button" onClick={() => navigate(backToPath)} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#B7C9C0] hover:text-white transition">
-                <FaArrowLeft /> Back
-              </button>
-              <div className="h-4 w-px bg-[#2A5C4A]" />
-              <div>
-                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-[#B7C9C0]">
-                  {isLandlordMode ? termLandlord : isInstantMode ? "Instant" : termTenant} Receipts
-                </div>
-                <h1 className="text-sm font-black text-white leading-none">New Receipt</h1>
-              </div>
-            </div>
-            <span className="rounded-lg border border-[#2A5C4A] bg-[#0A3127] px-2.5 py-1 text-[10px] font-bold text-[#B7C9C0]">Posting-Safe Entry</span>
-          </div>
-        </div>
-
         {/* Scrollable content */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
 
               {/* ── COLLECTION FORM ── */}
-              <div className="mb-3 overflow-hidden border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-                  <h2 className="text-[11px] font-bold uppercase tracking-wide text-slate-700">Collection Details</h2>
+              <div className="mb-2 border border-slate-200 bg-white">
+                <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                  <h2 className="text-[11px] font-black uppercase tracking-wide text-slate-800">Collection Details</h2>
                   {isCompanyLandlordMode && (
                     <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{termLandlord} Mode — Auto-Confirmed</span>
                   )}
                 </div>
-                <div className="p-3">
+                <div className="p-2.5">
 
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
                   {/* Property */}
                   <div>
                     <label className={labelClass}>{termProperty} <span className="text-red-500">*</span></label>
-                    <AppSelect
+                    <AppSelect size="sm"
                       value={formData.propertyId}
                       onChange={(v) => onPropertyChange(v ?? "")}
                       options={activeProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Unnamed Property" }))}
@@ -1030,7 +1012,7 @@ const AddReceipt = () => {
                         Include terminated
                       </label>
                     </div>
-                    <AppSelect
+                    <AppSelect size="sm"
                       value={formData.tenantId}
                       onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
                       options={tenantOptions.map((t) => buildTenantOption(t))}
@@ -1081,7 +1063,7 @@ const AddReceipt = () => {
                   {/* Amount Due — read-only */}
                   <div>
                     <label className={labelClass}>Amount Due</label>
-                    <div className={`flex h-8 items-center border px-3 text-xs font-black ${amountDueColor}`}>
+                    <div className="flex h-7 items-center border border-slate-300 bg-slate-50 px-2.5 text-xs font-bold text-slate-900">
                       {formData.tenantId
                         ? balanceSummary.balance < -0.009
                           ? `Ksh ${Math.abs(balanceSummary.balance).toLocaleString()} CR`
@@ -1092,7 +1074,7 @@ const AddReceipt = () => {
 
                   {/* Payment Method */}
                   <div>
-                    <AppSelect
+                    <AppSelect size="sm"
                       label="Payment Method *"
                       value={formData.paymentMethod}
                       onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "mobile_money" }))}
@@ -1108,7 +1090,7 @@ const AddReceipt = () => {
                         { value: "credit_card", label: "Card (Debit / Credit)" },
                         { value: "deposit_applied", label: "Deposit Applied" },
                       ]}
-                      size="md"
+                      size="sm"
                     />
                   </div>
 
@@ -1118,7 +1100,7 @@ const AddReceipt = () => {
                       {refLabel}{refRequired ? " *" : ""}
                     </label>
                     {isDepositApplied ? (
-                      <div className="flex h-8 items-center border border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-800">
+                      <div className="flex h-7 items-center border border-slate-300 bg-slate-50 px-2.5 text-xs text-slate-900">
                         Auto-generated on save (e.g. DEP-REC00412)
                       </div>
                     ) : (
@@ -1143,11 +1125,11 @@ const AddReceipt = () => {
                   <div>
                     <label className={labelClass}>{isDirectToLandlord || isDepositApplied ? "Cashbook" : "Cashbook *"}</label>
                     {isDepositApplied ? (
-                      <div className="flex h-8 items-center border border-emerald-200 bg-emerald-50 px-3 text-xs text-emerald-800">
+                      <div className="flex h-7 items-center border border-slate-300 bg-slate-50 px-2.5 text-xs text-slate-900">
                         Deposit applied — no cash movement, not posted to a cashbook.
                       </div>
                     ) : isDirectToLandlord ? (
-                      <div className="flex h-8 items-center border border-amber-200 bg-amber-50 px-3 text-xs text-amber-800">
+                      <div className="flex h-7 items-center border border-slate-300 bg-slate-50 px-2.5 text-xs text-slate-900">
                         Direct-to-landlord — not posted to cashbooks.
                       </div>
                     ) : cashbookOptions.length === 1 ? (
@@ -1155,14 +1137,14 @@ const AddReceipt = () => {
                         {cashbookOptions[0].code ? `${cashbookOptions[0].code} · ${cashbookOptions[0].name}` : cashbookOptions[0].name}
                       </div>
                     ) : (
-                      <AppSelect
+                      <AppSelect size="sm"
                         value={formData.cashbook}
                         onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
                         options={cashbookOptions.map((option) => ({
                           value: option.name,
                           label: option.code ? `${option.code} · ${option.name}` : option.name,
                         }))}
-                        size="md"
+                        size="sm"
                       />
                     )}
                   </div>
@@ -1220,8 +1202,8 @@ const AddReceipt = () => {
                     <label className={labelClass}>
                       Description <span className="font-normal text-slate-400">(appears in ledger narration)</span>
                     </label>
-                    <textarea
-                      rows={2}
+                    <input
+                      type="text"
                       value={formData.description}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -1303,10 +1285,10 @@ const AddReceipt = () => {
                   {/* Flat invoice ledger */}
                   <div className="overflow-hidden border border-slate-200 shadow-sm">
                     {/* Table header bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0B3B2E] px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Invoice Preview</p>
-                        <p className="mt-0.5 text-[11px] text-white/75">
+                        <p className="text-[11px] font-black uppercase tracking-wide text-slate-800">Invoice Preview</p>
+                        <p className="mt-0.5 text-[11px] text-slate-500">
                           {creditOnAccountMode
                             ? "Credit on account — full amount held in 2130 (Unallocated Receipts). Apply to a future invoice manually."
                             : manualSelectionMode
@@ -1321,14 +1303,14 @@ const AddReceipt = () => {
                           onClick={() => setCreditOnAccountMode(!creditOnAccountMode)}
                           className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[10px] font-bold transition-colors ${
                             creditOnAccountMode
-                              ? "border-emerald-300/60 bg-emerald-500/30 text-white"
-                              : "border-white/20 bg-white/10 text-white/70 hover:bg-white/20"
+                              ? "border-slate-700 bg-slate-700 text-white"
+                              : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                           }`}
                         >
                           {creditOnAccountMode ? "✓ Credit on Account" : "Credit on Account"}
                         </button>
 
-                        <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-white/70">
+                        <label className="inline-flex cursor-pointer items-center gap-2 text-[11px] font-semibold text-slate-600">
                           <input
                             type="checkbox"
                             checked={manualSelectionMode && !creditOnAccountMode}
@@ -1341,7 +1323,7 @@ const AddReceipt = () => {
                           <button
                             type="button"
                             onClick={() => setPriorityInvoiceKeys([])}
-                            className="text-[11px] font-semibold text-white/70 underline hover:text-white"
+                            className="text-[11px] font-semibold text-slate-600 underline hover:text-slate-900"
                           >
                             Clear Priority
                           </button>
@@ -1373,7 +1355,7 @@ const AddReceipt = () => {
                     ) : outstandingInvoices.length > 0 ? (
                       <div className="overflow-auto">
                         <table className="w-full border-collapse text-[11px]">
-                          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
+                          <thead className="sticky top-0 z-10 bg-slate-50 text-slate-600">
                             <tr>
                               <th className="w-9 px-3 py-1 border-r border-white/10" />
                               <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice</th>
@@ -1394,11 +1376,11 @@ const AddReceipt = () => {
                                 <tr
                                   key={`${invoice.invoiceKey}-${index}`}
                                   onClick={() => togglePriorityInvoice(invoice.invoiceKey)}
-                                  className={`cursor-pointer border-b border-gray-100 transition-colors hover:bg-[#0B3B2E]/5 ${
+                                  className={`cursor-pointer border-b border-gray-100 transition-colors hover:bg-slate-50 ${
                                     isSelected ? "bg-[#0B3B2E]/5" : index % 2 === 0 ? "bg-white" : "bg-slate-50/40"
                                   }`}
                                 >
-                                  <td className="px-3 py-1.5 align-middle">
+                                  <td className="px-3 py-1 align-middle">
                                     <input
                                       type="checkbox"
                                       checked={isSelected}
@@ -1407,7 +1389,7 @@ const AddReceipt = () => {
                                       className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
                                     />
                                   </td>
-                                  <td className="max-w-[220px] px-3 py-1.5" title={invoice.narration || invoice.invoiceLabel}>
+                                  <td className="max-w-[220px] px-3 py-1" title={invoice.narration || invoice.invoiceLabel}>
                                     <p className="truncate font-semibold text-slate-800">
                                       {invoice.narration || invoice.invoiceLabel || invoice.period}
                                     </p>
@@ -1417,22 +1399,22 @@ const AddReceipt = () => {
                                       </p>
                                     )}
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5 text-slate-500">{invoice.period}</td>
-                                  <td className="whitespace-nowrap px-3 py-1.5">
+                                  <td className="whitespace-nowrap px-3 py-1 text-slate-500">{invoice.period}</td>
+                                  <td className="whitespace-nowrap px-3 py-1">
                                     <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
                                       {invoice.chargeTypeLabel || getChargeTypeLabel(invoice.chargeType)}
                                     </span>
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5 text-right text-slate-500">
+                                  <td className="whitespace-nowrap px-3 py-1 text-right text-slate-500">
                                     Ksh {invoice.billedAmount.toLocaleString()}
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5 text-right text-slate-500">
+                                  <td className="whitespace-nowrap px-3 py-1 text-right text-slate-500">
                                     Ksh {invoice.paid.toLocaleString()}
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-bold text-slate-900">
+                                  <td className="whitespace-nowrap px-3 py-1 text-right font-bold text-slate-900">
                                     Ksh {invoice.outstanding.toLocaleString()}
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5">
+                                  <td className="whitespace-nowrap px-3 py-1">
                                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                                       invoice.status === "Open"
                                         ? "border-amber-200 bg-amber-50 text-amber-700"
@@ -1443,9 +1425,9 @@ const AddReceipt = () => {
                                       {invoice.status}
                                     </span>
                                   </td>
-                                  <td className="whitespace-nowrap px-3 py-1.5 text-center">
+                                  <td className="whitespace-nowrap px-3 py-1 text-center">
                                     {priorityIndex ? (
-                                      <span className="rounded-full bg-[#0B3B2E] px-2 py-0.5 text-[10px] font-black text-white">
+                                      <span className="border border-slate-300 bg-white px-2 py-0.5 text-[10px] font-black text-slate-700">
                                         #{priorityIndex}
                                       </span>
                                     ) : (
@@ -1483,22 +1465,22 @@ const AddReceipt = () => {
                   </div>
 
                   {/* Receipt allocation preview */}
-                  <div className="border border-amber-200 bg-amber-50 px-4 py-3">
-                    <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-700">Receipt Allocation Preview</p>
+                  <div className="border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                    <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-slate-800">Receipt Allocation Preview</p>
                     {Number(formData.amount) > 0 ? (
                       <div className="space-y-1">
                         {allocationPreview.lines.map((line, idx) =>
                           line.apply > 0 ? (
                             <div
                               key={`${line.period}-${line.chargeType}-${idx}`}
-                              className="flex items-center justify-between border border-amber-100 bg-white px-3 py-1.5 text-xs text-amber-900"
+                              className="flex items-center justify-between gap-3 border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-900"
                             >
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate font-medium">
+                              <span className="flex min-w-0 flex-1 items-baseline gap-1.5 truncate">
+                                <span className="truncate font-medium">
                                   {line.narration || `${line.period} — ${line.chargeTypeLabel || line.chargeType}`}
                                 </span>
                                 {line.invoiceNumber && (
-                                  <span className="block text-[10px] text-amber-700/70">{line.invoiceNumber}</span>
+                                  <span className="flex-shrink-0 text-[10px] text-slate-500">{line.invoiceNumber}</span>
                                 )}
                               </span>
                               <span className="flex-shrink-0 whitespace-nowrap pl-3 font-semibold">
@@ -1510,7 +1492,7 @@ const AddReceipt = () => {
                           ) : null
                         )}
                         {allocationPreview.lines.every((l) => l.apply === 0) && (
-                          <p className="text-xs text-amber-800">
+                          <p className="text-xs text-slate-700">
                             {manualSelectionMode
                               ? "No selected invoice will receive this receipt yet. Save to hold as prepayment."
                               : "Entered amount does not apply to any open invoice yet."}
@@ -1518,17 +1500,17 @@ const AddReceipt = () => {
                         )}
                       </div>
                     ) : (
-                      <p className="text-xs text-amber-700">Enter an amount to preview how this receipt clears open invoices.</p>
+                      <p className="text-xs text-slate-500">Enter an amount to preview how this receipt clears open invoices.</p>
                     )}
                   </div>
 
                   {/* ── PREPAYMENT ALLOCATION ── */}
                   {!creditOnAccountMode && allocationPreview.unappliedAmount > 0.005 && (
-                    <div className="overflow-hidden border border-[#0B3B2E]/30 shadow-sm">
-                      <div className="flex items-center gap-3 bg-[#0B3B2E] px-4 py-2.5">
+                    <div className="border border-slate-200 bg-white">
+                      <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                         <div>
-                          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Prepayment Allocation</p>
-                          <p className="text-[11px] font-semibold text-white">
+                          <p className="text-[11px] font-black uppercase tracking-wide text-slate-800">Prepayment Allocation</p>
+                          <p className="text-[11px] font-semibold text-slate-600">
                             KES {allocationPreview.unappliedAmount.toLocaleString("en-KE", { minimumFractionDigits: 2 })} excess — tag how this should apply to future invoices
                           </p>
                         </div>
@@ -1544,7 +1526,7 @@ const AddReceipt = () => {
                             return (
                               <div key={idx} className="flex items-center gap-2">
                                 <div className="flex-1">
-                                  <AppSelect
+                                  <AppSelect size="sm"
                                     value={line.billItemKey}
                                     onChange={(v) => {
                                       const opt = prepaymentTypeOptions.find((o) => o.billItemKey === v);
@@ -1555,7 +1537,7 @@ const AddReceipt = () => {
                                       });
                                     }}
                                     options={availableOptions.map((opt) => ({ value: opt.billItemKey, label: opt.label }))}
-                                    size="md"
+                                    size="sm"
                                   />
                                 </div>
                                 <div className="w-36">
@@ -1626,11 +1608,11 @@ const AddReceipt = () => {
         </div>
 
         {/* Sticky footer */}
-        <div className="flex-shrink-0 border-t border-slate-200 bg-[#F6FAF8] px-4 py-2.5">
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center justify-end gap-2">
             <button
               onClick={() => navigate(backToPath)}
-              className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               Cancel
             </button>
@@ -1638,7 +1620,7 @@ const AddReceipt = () => {
               onClick={handleSubmit}
               disabled={!canSaveReceipt || isSaving}
               title={canSaveReceipt ? "Save receipt" : "You do not have permission to record receipts"}
-              className={`inline-flex items-center gap-1.5 px-4 py-2 text-xs font-black text-white transition ${
+              className={`inline-flex h-7 items-center gap-1.5 px-3 text-xs font-black text-white transition ${
                 canSaveReceipt && !isSaving ? `${MILIK_GREEN} ${MILIK_GREEN_HOVER}` : "cursor-not-allowed bg-gray-400"
               }`}
             >

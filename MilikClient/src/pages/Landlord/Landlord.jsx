@@ -1,4 +1,5 @@
 ﻿// pages/Landlord/Landlord.jsx
+import { fmtDate } from "../../utils/dates";
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useNavigate } from "react-router-dom";
@@ -604,7 +605,7 @@ const Landlords = () => {
               renderRow={(landlord) => (
                 <>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
-                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}</span>
+                    <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.landlordCode || landlord.code)}{landlord.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(landlord.lastSmsAt)}`}>SMS</span>}{landlord.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(landlord.lastEmailAt)}`}>EMAIL</span>}</span>
                   </td>
                   <td className="px-3 py-1 border-r border-gray-100 overflow-hidden">
                     <span className="font-semibold text-slate-900 truncate block">{toListingCaps(landlord.fullName || landlord.landlordName || landlord.name || landlord.firstName || "-")}</span>

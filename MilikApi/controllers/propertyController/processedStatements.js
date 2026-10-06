@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import Property from "../../models/Property.js";
 import Landlord from "../../models/Landlord.js";
@@ -1315,9 +1316,12 @@ export const getStatementsByBusiness = async (req, res, next) => {
       }
     }
 
+    const lastSmsByStatement = await getLastSentByRecord({ businessId: scopedBusinessId, contextTypes: ["processed_statement", "management_fee_invoice", "landlord_payment"], recordIds: statements.map((st) => st._id) });
+    const statementsWithSms = statements.map((st) => ({ ...st, lastSmsAt: lastSmsByStatement.get(String(st._id))?.sms || null, lastEmailAt: lastSmsByStatement.get(String(st._id))?.email || null }));
+
     res.status(200).json({
       success: true,
-      statements,
+      statements: statementsWithSms,
       total,
       page: pageNum,
       pages: Math.ceil(total / limitNum),

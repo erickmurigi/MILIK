@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { printTabularList } from "../../utils/printList";
 import { fmtDate } from "../../utils/dates";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -6,17 +7,15 @@ import {
   selectCurrentCompany,
   selectAllTenants,
 } from "../../redux/selectors";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { buildTenantOption } from "../../utils/tenantUtils";
 import {
-  FaEnvelope,
   FaFileInvoice,
   FaPlus,
   FaRedoAlt,
   FaSave,
   FaSearch,
-  FaSms,
   FaTimes,
   FaPrint,
   FaUndo,
@@ -266,7 +265,7 @@ const STANDALONE_CHARGE_ITEMS = [
   },
 ];
 
-const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
+const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentCompany = useSelector(selectCurrentCompany);
@@ -274,8 +273,9 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
   const tenants = useSelector(selectAllTenants);
   const { tenant: termTenant, tenants: termTenants, property: termProperty, unit: termUnit, invoice: termInvoice } = useTerms("tenant", "tenants", "property", "unit", "invoice");
 
+  const navigate = useNavigate();
   const requestedType = String(searchParams.get("type") || "").trim().toLowerCase();
-  const initialNoteType = requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";
+  const initialNoteType = Boolean(lockedBillItemKey) || requestedType === "debit" ? "DEBIT_NOTE" : "CREDIT_NOTE";
   const isLocked = Boolean(lockedBillItemKey);
 
   const invoiceNotesDraftKey = buildScopedDraftKey({
@@ -731,13 +731,6 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
     [propertyScopedTenants]
   );
 
-  const sourceInvoiceSelectOptions = useMemo(
-    () => sourceInvoiceOptions.map((invoice) => ({
-      value: String(invoice._id),
-      label: `${invoice.invoiceNumber || "-"} | ${invoice.category || "-"} | ${formatCurrency(invoice.remainingCreditableAmount ?? 0)}`,
-    })),
-    [sourceInvoiceOptions]
-  );
 
   const debitItemSelectOptions = useMemo(
     () => filteredDebitInvoiceItemOptions.map((item) => ({
@@ -757,7 +750,16 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
     [postingAccounts]
   );
 
+  const [creditApplied, setCreditApplied] = useState({});
+  const creditTotal = sourceInvoiceOptions.reduce((sum, invoice) => sum + Number(creditApplied[String(invoice._id)] || 0), 0);
+  const [debitLines, setDebitLines] = useState([{ id: 1, itemKey: "", amount: "", description: "" }]);
+  const addDebitLine = () => setDebitLines((prev) => [...prev, { id: Date.now() + Math.random(), itemKey: "", amount: "", description: "" }]);
+  const updateDebitLine = (id, patch) => setDebitLines((prev) => prev.map((line) => (line.id === id ? { ...line, ...patch } : line)));
+  const removeDebitLine = (id) => setDebitLines((prev) => (prev.length > 1 ? prev.filter((line) => line.id !== id) : prev));
+
   const resetModalForm = () => {
+    setCreditApplied({});
+    setDebitLines([{ id: Date.now(), itemKey: "", amount: "", description: "" }]);
     setPropertyId("");
     setTenantScope("active");
     setTenantId("");
@@ -771,56 +773,122 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
     setChartAccountId("");
   };
 
+  const handlePrintNotes = () => {
+    printTabularList({
+      title: lockedBillItemKey === "lease_fee" ? "Lease Fees" : "Debit & Credit Notes",
+      subtitle: `Notes listed: ${filteredNotes.length}`,
+      company: currentCompany || {},
+      columns: [
+        { label: "Note #", value: (n) => n.noteNumber || n.invoiceNumber || "" },
+        { label: termTenant, value: (n) => n?.tenant?.name || n?.tenantName || "-" },
+        { label: "Property / Unit", value: (n) => `${resolvePropertyName(n, propertyMap)} · ${resolveUnitName(n, tenantMap)}` },
+        { label: "Description", value: (n) => n.description || n.metadata?.billItemLabel || "" },
+        { label: "Note Date", value: (n) => fmtDate(n.noteDate || n.invoiceDate || n.createdAt) },
+        { label: "Source Invoice", value: (n) => n.sourceInvoiceNumber || n?.sourceInvoice?.invoiceNumber || "-" },
+        { label: "Amount", align: "right", value: (n) => fmtAmountKE(n.amount) },
+        { label: "Balance", align: "right", value: (n) => fmtAmountKE(Number(n?.balance ?? n?.outstanding ?? 0)) },
+        { label: "Status", value: (n) => getNotePaymentLabel(n) },
+      ],
+      rows: filteredNotes,
+    });
+  };
+
+  const addFormHome = lockedBillItemKey === "lease_fee" ? "/invoices/lease-fee" : "/invoices/notes";
+  const closeAddForm = () => {
+    if (newNotePage) navigate(addFormHome);
+    else closeAddForm();
+  };
+  useEffect(() => {
+    if (newNotePage) {
+      resetModalForm();
+      if (lockedBillItemKey) setNoteType("DEBIT_NOTE");
+    }
+    // the page mounts fresh for each new note
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const openAddModal = () => {
-    resetModalForm();
-    setShowAddModal(true);
+    if (lockedBillItemKey === "lease_fee") {
+      navigate("/invoices/lease-fee/new");
+      return;
+    }
+    navigate(`/invoices/notes/new?type=${noteType === "CREDIT_NOTE" ? "credit" : "debit"}`);
   };
 
   const handleSave = async () => {
     if (!currentCompany?._id) return;
 
     const isCreditNote = noteType === "CREDIT_NOTE";
-    const resolvedSourceInvoiceId = isCreditNote
-      ? sourceInvoiceId
-      : sourceInvoiceId || selectedInvoiceItem?.anchorInvoiceId || "";
 
-    if (!propertyId || !tenantId || !amount || Number(amount) <= 0) {
-      toast.error("Property, tenant and a positive amount are required.");
-      return;
-    }
-
-    if (Number(amount) > 10_000_000) {
-      toast.error("Amount exceeds KES 10,000,000 — please verify for any typos.");
-      return;
-    }
-
-    if (!noteDate) {
-      toast.error("Note date is required.");
-      return;
-    }
-
-    if (new Date(noteDate) > new Date()) {
-      toast.error("Note date cannot be in the future.");
-      return;
-    }
-
-    if (isCreditNote && !resolvedSourceInvoiceId) {
-      toast.error("A source invoice is required for credit notes.");
-      return;
-    }
-
-    if (isCreditNote && selectedSourceInvoice) {
-      const sourceAmount = Number(selectedSourceInvoice.amount || 0);
-      if (sourceAmount > 0 && Number(amount) > sourceAmount) {
-        toast.error(
-          `Credit note amount (${formatCurrency(amount)}) exceeds the source invoice total (${formatCurrency(sourceAmount)}). Verify the amount.`
-        );
+    if (!isCreditNote) {
+      const lines = debitLines.map((line) => {
+        const item = isLocked ? LEASE_FEE_CHARGE_ITEM : debitInvoiceItemOptions.find((option) => option.key === line.itemKey);
+        return item
+          ? { category: item.category, description: [item.label, line.description.trim()].filter(Boolean).join(" — "), amount: Number(line.amount) }
+          : null;
+      });
+      if (!propertyId || !tenantId) {
+        toast.error("Property and tenant are required.");
         return;
       }
+      if (!noteDate || new Date(noteDate) > new Date()) {
+        toast.error("Enter a note date that is not in the future.");
+        return;
+      }
+      if (lines.some((line) => !line || !(line.amount > 0))) {
+        toast.error("Every debit line needs a charge item and a positive amount.");
+        return;
+      }
+      try {
+        setSaving(true);
+        await createTenantInvoiceNote(isLocked
+          ? {
+              business: currentCompany._id,
+              noteType: "DEBIT_NOTE",
+              tenantId,
+              propertyId,
+              noteDate,
+              amount: lines[0].amount,
+              category: LEASE_FEE_CHARGE_ITEM.category,
+              description: lines[0].description,
+              metadata: LEASE_FEE_CHARGE_ITEM.metadata,
+            }
+          : { business: currentCompany._id, noteType: "DEBIT_NOTE", tenantId, propertyId, noteDate, lines });
+        toast.success("Debit note created successfully.");
+        closeAddForm();
+        resetModalForm();
+        clearInvoiceNotesDraft();
+        await loadData();
+        window.dispatchEvent(new Event("invoicesUpdated"));
+      } catch (error) {
+        toast.error(error?.response?.data?.error || error?.response?.data?.message || error.message || "Failed to create note");
+      } finally {
+        setSaving(false);
+      }
+      return;
     }
 
-    if (!isCreditNote && !selectedInvoiceItem) {
-      toast.error("Select a charge item for the debit note.");
+    const creditLines = sourceInvoiceOptions
+      .map((invoice) => ({ sourceInvoice: String(invoice._id), amount: Number(creditApplied[String(invoice._id)] || 0) }))
+      .filter((line) => line.amount > 0);
+
+    if (!propertyId || !tenantId) {
+      toast.error("Property and tenant are required.");
+      return;
+    }
+    if (!noteDate || new Date(noteDate) > new Date()) {
+      toast.error("Enter a note date that is not in the future.");
+      return;
+    }
+    if (!creditLines.length) {
+      toast.error("Apply an amount to at least one open invoice.");
+      return;
+    }
+    const overApplied = sourceInvoiceOptions.find(
+      (invoice) => Number(creditApplied[String(invoice._id)] || 0) > Number(invoice.remainingCreditableAmount || 0) + 0.005
+    );
+    if (overApplied) {
+      toast.error(`Credit for ${overApplied.invoiceNumber} exceeds its remaining creditable amount.`);
       return;
     }
 
@@ -828,36 +896,15 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
       setSaving(true);
       await createTenantInvoiceNote({
         business: currentCompany._id,
-        noteType,
-        sourceInvoiceId: resolvedSourceInvoiceId || undefined,
-        anchorSourceInvoiceId: !isCreditNote && resolvedSourceInvoiceId ? resolvedSourceInvoiceId : undefined,
+        noteType: "CREDIT_NOTE",
         tenantId,
         propertyId,
-        amount: Number(amount),
         noteDate,
-        description,
-        category: category || selectedSourceInvoice?.category,
-        chartAccountId: chartAccountId || undefined,
-        metadata: !isCreditNote && selectedInvoiceItem
-          ? {
-              ...(selectedInvoiceItem?.metadata || {}),
-              billItemKey:
-                selectedInvoiceItem?.metadata?.billItemKey ||
-                selectedInvoiceItem?.anchorInvoice?.metadata?.billItemKey ||
-                undefined,
-              billItemLabel: selectedInvoiceItem?.metadata?.billItemLabel || selectedInvoiceItem?.label || undefined,
-              utilityType:
-                selectedInvoiceItem?.metadata?.utilityType ||
-                selectedInvoiceItem?.anchorInvoice?.metadata?.utilityType ||
-                selectedInvoiceItem?.anchorInvoice?.metadata?.meterUtilityType ||
-                selectedInvoiceItem?.anchorInvoice?.metadata?.statementUtilityType ||
-                undefined,
-            }
-          : undefined,
+        lines: creditLines,
+        description: description.trim() || undefined,
       });
-
-      toast.success(`${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} note created successfully.`);
-      setShowAddModal(false);
+      toast.success("Credit note created successfully.");
+      closeAddForm();
       resetModalForm();
       clearInvoiceNotesDraft();
       await loadData();
@@ -867,6 +914,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
     } finally {
       setSaving(false);
     }
+
   };
 
   const handleReverseNote = (note) => {
@@ -915,15 +963,16 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
 
   return (
     <DashboardLayout lockContentScroll>
+      {!newNotePage && (
       <div className="h-[calc(100dvh-152px)] max-h-[calc(100dvh-152px)] overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
 
             <ListToolbar>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Notes: {filteredNotes.length}</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Total: {formatCurrency(summaryCards.totalValue)}</span>
-              {selectedNotes.length > 0 && <span className="shrink-0 border border-emerald-300 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-800">{selectedNotes.length} selected</span>}
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Notes: {filteredNotes.length}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Active: {formatCurrency(summaryCards.activeValue)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Total: {formatCurrency(summaryCards.totalValue)}</span>
+              {selectedNotes.length > 0 && <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{selectedNotes.length} selected</span>}
               {!isLocked && <ListToolbar.Divider />}
               {!isLocked && (
                 <ListToolbar.Button
@@ -977,44 +1026,42 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                 ]}
                 compact
               />
-              <ListToolbar.Button variant="accent" onClick={handleSearchFilters}><FaSearch size={7} /></ListToolbar.Button>
-              <ListToolbar.Button onClick={resetWorkspaceFilters}><FaRedoAlt size={7} /></ListToolbar.Button>
-              <ListToolbar.Button onClick={loadData}><FaRedoAlt size={7} /></ListToolbar.Button>
-              <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openAddModal}>Add Note</ListToolbar.Button>
+              <ListToolbar.Button icon={FaSearch} onClick={handleSearchFilters}>Search</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetWorkspaceFilters}>Reset</ListToolbar.Button>
+              <ListToolbar.Button variant="outline" onClick={loadData}>Refresh</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPlus} onClick={openAddModal}>{lockedBillItemKey === "lease_fee" ? "Add Lease Fee" : "Add Note"}</ListToolbar.Button>
               <ListToolbar.Button icon={FaUpload} onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
+              <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintNotes} disabled={filteredNotes.length === 0}>Print</ListToolbar.Button>
               <ListToolbar.Button
-                className="!bg-teal-600 hover:!bg-teal-700"
                 onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Notify ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                 disabled={selectedNoteTenantIds.length === 0}
                 title={selectedNotes.length === 0 ? `Select notes to SMS ${termTenants}` : `SMS ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
-              ><FaSms size={7} /></ListToolbar.Button>
+              >SMS</ListToolbar.Button>
               <ListToolbar.Button
                 onClick={() => setCommunicationModal({ contextType: "tenant_bulk", recordIds: selectedNoteTenantIds, title: `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`, subtitle: "Send credit/debit note notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                 disabled={selectedNoteTenantIds.length === 0}
                 title={selectedNotes.length === 0 ? `Select notes to email ${termTenants}` : `Email ${selectedNoteTenantIds.length} ${termTenant}${selectedNoteTenantIds.length !== 1 ? "s" : ""}`}
-              ><FaEnvelope size={7} /></ListToolbar.Button>
+              >Email</ListToolbar.Button>
             </ListToolbar>
 
             {/* ── TABLE ── */}
             <MilikTable
               columns={[
-                { label: "Note #" },
-                { label: termTenant },
-                { label: termProperty },
-                { label: termUnit },
-                { label: "Description" },
-                { label: "Note Date", align: "center" },
-                { label: "Source Invoice", align: "center" },
-                { label: "Amount", align: "right" },
-                { label: "Paid", align: "right" },
-                { label: "Balance", align: "right" },
-                { label: "Status", align: "center" },
+                { label: "Note #", width: "9%" },
+                { label: termTenant, width: "13%" },
+                { label: `${termProperty} / ${termUnit}`, width: "14%" },
+                { label: "Description", width: "17%" },
+                { label: "Note Date", align: "center", width: "7%" },
+                { label: "Source Invoice", align: "center", width: "9%" },
+                { label: "Amount", align: "right", width: "8%" },
+                { label: "Paid", align: "right", width: "7%" },
+                { label: "Balance", align: "right", width: "8%" },
+                { label: "Status", align: "center", width: "7%" },
               ]}
               rows={paginatedNotes}
               rowKey="_id"
               loading={loading}
               empty="No invoice notes found. Adjust filters or add a new note."
-              minWidth={1320}
               checkboxes
               allChecked={paginatedNotes.length > 0 && paginatedNotes.every((n) => selectedNotesSet.has(String(n._id)))}
               someChecked={paginatedNotes.some((n) => selectedNotesSet.has(String(n._id)))}
@@ -1033,8 +1080,10 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                       <p className="font-semibold text-blue-700">{note.noteNumber || note.invoiceNumber}</p>
                     </td>
                     <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{note?.tenant?.name || note?.tenantName || "-"}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{resolvePropertyName(note, propertyMap)}</td>
-                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{resolveUnitName(note, tenantMap)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+                      {resolvePropertyName(note, propertyMap)}
+                      <span className="ml-1.5 font-normal text-slate-500">· {resolveUnitName(note, tenantMap)}</span>
+                    </td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-orange-700">{note.description || note.metadata?.billItemLabel || `${humanizeCategory(note.noteType || note.documentType)} - ${humanizeCategory(note.category || "Charge")}`}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{fmtDate(note.noteDate || note.invoiceDate || note.createdAt)}</td>
                     <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-700">{note.sourceInvoiceNumber || note?.sourceInvoice?.invoiceNumber || "-"}</td>
@@ -1119,42 +1168,24 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
           </div>
         </div>
       </div>
+      )}
 
-      {showAddModal ? (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-            <div className="max-h-[92vh] w-full max-w-4xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
-              <div className="flex items-center justify-between bg-[#0B3B2E] px-5 py-3 text-white">
+      {(newNotePage || showAddModal) ? (
+          <div className={newNotePage ? "min-h-full" : "fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4"}>
+            <div className={`${newNotePage ? "w-full" : "max-h-[92vh] w-full max-w-4xl"} overflow-hidden border border-slate-300 bg-white shadow-xl`}>
+              <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100">Add invoice note</p>
-                  <h3 className="text-sm font-black uppercase tracking-wide">{noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Add invoice note</p>
+                  <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{lockedBillItemKey === "lease_fee" ? "Lease Fee" : noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note"}</h3>
                 </div>
-                <button onClick={() => !saving && setShowAddModal(false)} className="text-white/70 transition-colors hover:text-white">
+                <button onClick={() => !saving && closeAddForm()} className="text-slate-500 transition-colors hover:text-slate-900">
                   <FaTimes />
                 </button>
               </div>
 
-              <div className="max-h-[calc(92vh-78px)] overflow-y-auto px-5 py-5">
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    <span>Note Type</span>
-                    <AppSelect
-                      value={noteType}
-                      onChange={(v) => {
-                        const nextValue = v ?? "CREDIT_NOTE";
-                        setNoteType(nextValue);
-                        const nextParams = new URLSearchParams(searchParams);
-                        nextParams.set("type", nextValue === "DEBIT_NOTE" ? "debit" : "credit");
-                        setSearchParams(nextParams, { replace: true });
-                      }}
-                      options={[
-                        { value: "CREDIT_NOTE", label: "Credit Note" },
-                        { value: "DEBIT_NOTE", label: "Debit Note" },
-                      ]}
-                      size="md"
-                    />
-                  </label>
-
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
+              <div className={`${newNotePage ? "" : "max-h-[calc(92vh-78px)] "}overflow-y-auto p-2.5`}>
+                <div className="grid gap-x-3 gap-y-2 md:grid-cols-2 xl:grid-cols-3">
+                  <label className="block space-y-1 text-xs font-bold text-slate-900">
                     <span>{termProperty}</span>
                     <AppSelect
                       value={propertyId}
@@ -1162,28 +1193,24 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                       options={propertySelectOptions}
                       placeholder="Select property"
                       searchable
-                      size="md"
+                      size="sm"
                     />
                   </label>
 
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    <span>Date</span>
-                    <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                  </label>
-
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    <span>{termTenant}</span>
-                    <AppSelect
-                      value={tenantScope}
-                      onChange={(v) => setTenantScope(v ?? "active")}
-                      options={[
-                        { value: "active", label: `Active ${termTenants}` },
-                        { value: "terminated", label: `Terminated ${termTenants}` },
-                        { value: "all", label: `All ${termTenants}` },
-                      ]}
-                      disabled={!propertyId}
-                      size="md"
-                    />
+                  <label className="block space-y-1 text-xs font-bold text-slate-900">
+                    <span className="flex items-center justify-between">
+                      <span>{termTenant}</span>
+                      <span className="inline-flex cursor-pointer items-center gap-1.5 text-[10px] font-semibold text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={tenantScope === "all"}
+                          onChange={(e) => setTenantScope(e.target.checked ? "all" : "active")}
+                          disabled={!propertyId}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]/30"
+                        />
+                        Include terminated
+                      </span>
+                    </span>
                     <AppSelect
                       value={tenantId}
                       onChange={(v) => setTenantId(v ?? "")}
@@ -1191,94 +1218,130 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                       placeholder={propertyId ? `Select ${termTenant}` : `Select ${termProperty} first`}
                       searchable
                       disabled={!propertyId}
-                      size="md"
-                    />
-                    {tenantScope === "terminated" ? (
-                      <p className="text-[11px] font-semibold text-amber-700">You are selecting from terminated tenants for a deliberate final adjustment.</p>
-                    ) : null}
-                  </label>
-
-                  {noteType === "CREDIT_NOTE" ? (
-                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 md:col-span-2">
-                      <span>Source Invoice</span>
-                      <AppSelect
-                        value={sourceInvoiceId}
-                        onChange={(v) => setSourceInvoiceId(v ?? "")}
-                        options={sourceInvoiceSelectOptions}
-                        placeholder={tenantId ? (sourceInvoiceOptions.length ? "Select source invoice" : "No matching open posted invoices") : "Select tenant first"}
-                        searchable
-                        disabled={!tenantId}
-                        size="md"
-                      />
-                    </label>
-                  ) : (
-                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 md:col-span-2">
-                      <span>Charge Item</span>
-                      <input
-                        type="text"
-                        value={chargeItemSearch}
-                        onChange={(e) => setChargeItemSearch(e.target.value)}
-                        disabled={!tenantId}
-                        placeholder="Search rent month, utility, deposit, late payment..."
-                        className="mb-2 w-full border border-slate-200 bg-white px-3 py-1.5 text-xs normal-case text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20 disabled:bg-slate-50 disabled:cursor-not-allowed"
-                      />
-                      <AppSelect
-                        value={invoiceItemSelection}
-                        onChange={(v) => setInvoiceItemSelection(v ?? "")}
-                        options={debitItemSelectOptions}
-                        placeholder={tenantId ? (debitInvoiceItemOptions.length ? "Select charge item" : "No charge items available") : "Select tenant first"}
-                        disabled={!tenantId}
-                        searchable
-                        size="md"
-                      />
-                    </label>
-                  )}
-
-                  {noteType === "CREDIT_NOTE" ? (
-                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                      <span>Charge Type</span>
-                      <AppSelect
-                        value={category}
-                        onChange={(v) => setCategory(v ?? "")}
-                        options={chargeTypeOptions}
-                        placeholder="Select charge type"
-                        searchable
-                        size="md"
-                      />
-                    </label>
-                  ) : (
-                    <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                      <span>Charge Category</span>
-                      <input
-                        type="text"
-                        value={selectedInvoiceItem ? humanizeCategory(selectedInvoiceItem.category) : ""}
-                        readOnly
-                        className="w-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none"
-                      />
-                    </label>
-                  )}
-
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                    <span>Amount</span>
-                    <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                  </label>
-
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 xl:col-span-3">
-                    <span>Posting Account (optional)</span>
-                    <AppSelect
-                      value={chartAccountId}
-                      onChange={(v) => setChartAccountId(v ?? "")}
-                      options={postingAccountOptions}
-                      placeholder="Use existing charge mapping"
-                      searchable
-                      size="md"
+                      size="sm"
                     />
                   </label>
 
-                  <label className="space-y-0.5 block text-[10px] font-black uppercase tracking-wide text-slate-500 xl:col-span-3">
+                  <label className="block space-y-1 text-xs font-bold text-slate-900">
+                    <span>Date</span>
+                    <input type="date" value={noteDate} onChange={(e) => setNoteDate(e.target.value)} className="h-7 w-full border border-slate-300 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  </label>
+
+                  <label className="block space-y-1 text-xs font-bold text-slate-900">
                     <span>Description</span>
-                    <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs normal-case text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                    <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="h-7 w-full border border-slate-300 bg-white px-2.5 text-xs normal-case text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </label>
+
+                  {noteType === "CREDIT_NOTE" ? (
+                    <div className="md:col-span-3 border border-slate-200">
+                      <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_1fr] gap-x-3 border-b border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px] font-bold text-slate-600">
+                        <span>Invoice</span>
+                        <span>Charge type</span>
+                        <span>Invoice date</span>
+                        <span className="text-right">Invoice amount</span>
+                        <span className="text-right">Remaining credit</span>
+                        <span className="text-right">Apply credit</span>
+                      </div>
+                      {!tenantId ? (
+                        <p className="text-xs text-slate-500">Select a tenant to see open invoices.</p>
+                      ) : sourceInvoiceOptions.length === 0 ? (
+                        <p className="text-xs text-slate-500">No open invoices for this tenant.</p>
+                      ) : (
+                        sourceInvoiceOptions.map((invoice) => {
+                          const id = String(invoice._id);
+                          const remaining = Number(invoice.remainingCreditableAmount ?? 0);
+                          const applied = Number(creditApplied[id] || 0);
+                          const over = applied > remaining + 0.005;
+                          return (
+                            <div key={id} className="grid grid-cols-[2fr_1.5fr_1fr_1fr_1fr_1fr] items-center gap-x-3 border-b border-slate-200 px-2 py-1.5 text-xs">
+                              <span className="font-semibold text-slate-900">{invoice.invoiceNumber || "-"}</span>
+                              <span className="text-slate-700">{humanizeCategory(invoice.category)}</span>
+                              <span className="text-slate-700">{fmtDate(invoice.invoiceDate)}</span>
+                              <span className="text-right tabular-nums text-slate-700">{formatCurrency(invoice.amount)}</span>
+                              <span className="text-right tabular-nums text-slate-900">{formatCurrency(remaining)}</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={creditApplied[id] ?? ""}
+                                onChange={(e) => setCreditApplied((prev) => ({ ...prev, [id]: e.target.value }))}
+                                className={`h-7 w-full border bg-white px-2.5 text-right text-xs text-slate-900 outline-none transition focus:ring-1 focus:ring-[#0B3B2E]/20 ${over ? "border-red-400" : "border-slate-300 focus:border-[#0B3B2E]"}`}
+                              />
+                            </div>
+                          );
+                        })
+                      )}
+                      <div className="flex items-center justify-end bg-slate-50 px-2 py-1.5">
+                        <span className="text-xs font-bold text-slate-900">Total credit: {formatCurrency(creditTotal)}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="md:col-span-3 space-y-2">
+                      <div className="grid grid-cols-[2fr_1fr_2fr_auto] gap-x-3 text-[11px] font-bold text-slate-500">
+                        <span>Charge Item</span>
+                        <span>Amount</span>
+                        <span>Description</span>
+                        <span />
+                      </div>
+                      {debitLines.map((line) => (
+                        <div key={line.id} className="grid grid-cols-[2fr_1fr_2fr_auto] items-center gap-x-3">
+                          {isLocked ? (
+                            <span className="text-xs font-bold text-slate-900">Lease fee</span>
+                          ) : (
+                          <AppSelect
+                            value={line.itemKey}
+                            onChange={(v) => updateDebitLine(line.id, { itemKey: v ?? "" })}
+                            options={debitItemSelectOptions}
+                            placeholder={tenantId ? "Select charge item" : "Select tenant first"}
+                            disabled={!tenantId}
+                            searchable
+                            size="sm"
+                          />
+                          )}
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={line.amount}
+                            onChange={(e) => updateDebitLine(line.id, { amount: e.target.value })}
+                            className="h-7 w-full border border-slate-300 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          />
+                          <input
+                            type="text"
+                            value={line.description}
+                            onChange={(e) => updateDebitLine(line.id, { description: e.target.value })}
+                            placeholder="Optional"
+                            className="h-7 w-full border border-slate-300 bg-white px-2.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeDebitLine(line.id)}
+                            disabled={debitLines.length === 1}
+                            className="h-7 px-2 text-xs font-bold text-red-600 hover:underline disabled:opacity-40"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between">
+                        {!isLocked && (
+                        <button
+                          type="button"
+                          onClick={addDebitLine}
+                          disabled={!tenantId}
+                          className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                        >
+                          Add line
+                        </button>
+                        )}
+                        <span className="text-xs font-bold text-slate-900">
+                          Total: {formatCurrency(debitLines.reduce((sum, line) => sum + Number(line.amount || 0), 0))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+
                 </div>
 
                 {selectedSourceInvoice ? (() => {
@@ -1287,7 +1350,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                   const remainingAfterNote = remainingCreditable - enteredAmount;
                   const overCrediting = noteType === "CREDIT_NOTE" && enteredAmount > 0 && remainingAfterNote < -0.009;
                   return (
-                    <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${overCrediting ? "border-red-300 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
+                    <div className={`mt-2 border px-2.5 py-2 text-xs ${overCrediting ? "border-red-300 bg-red-50 text-red-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
                       <p><span className="font-semibold">{noteType === "CREDIT_NOTE" ? "Source Invoice" : "Linked Invoice"}:</span> {selectedSourceInvoice.invoiceNumber}</p>
                       <p><span className="font-semibold">{termProperty}:</span> {resolvePropertyName(selectedSourceInvoice, propertyMap)}</p>
                       <p><span className="font-semibold">Original Amount:</span> {formatCurrency(selectedSourceInvoice.amount)}</p>
@@ -1312,11 +1375,11 @@ const InvoiceNotes = ({ lockedBillItemKey = "" } = {}) => {
                 })() : null}
               </div>
 
-              <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
-                <button type="button" onClick={() => setShowAddModal(false)} className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-50">
+              <div className="flex items-center justify-end gap-2 border-t border-slate-200 bg-white px-3 py-2">
+                <button type="button" onClick={() => closeAddForm()} className="h-7 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   Cancel
                 </button>
-                <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-bold uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                <button type="button" onClick={handleSave} disabled={saving} className="flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
                   <FaSave /> {saving ? "Saving..." : `Save ${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} Note`}
                 </button>
               </div>

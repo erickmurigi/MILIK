@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import Landlord from "../../models/Landlord.js";
 import Property from "../../models/Property.js";
@@ -360,9 +361,12 @@ export const getLandlords = async (req, res, next) => {
       };
     });
 
+    const lastSmsByLandlord = await getLastSentByRecord({ businessId, contextTypes: ["landlord_bulk"], recordIds: landlordsWithCounts.map((l) => l._id) });
+    const dataWithSms = landlordsWithCounts.map((l) => ({ ...l, lastSmsAt: lastSmsByLandlord.get(String(l._id))?.sms || null, lastEmailAt: lastSmsByLandlord.get(String(l._id))?.email || null }));
+
     return res.status(200).json({
       success: true,
-      data: landlordsWithCounts,
+      data: dataWithSms,
       total,
       page: pageNum,
       pages: Math.ceil(total / limitNum),

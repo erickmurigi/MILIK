@@ -1,6 +1,6 @@
 import TenantInvoice from '../models/TenantInvoice.js';
 import Landlord from '../models/Landlord.js';
-import { documentPageHtml, formatMoney, resolveSupplier } from '../utils/printKitCore.js';
+import { documentPageHtml, formatMoney } from '../utils/printKitCore.js';
 import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
 import { renderHtmlToPdf } from '../utils/pdfRender.js';
 
@@ -90,7 +90,7 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
     // The landlord is the supplier on every rent and utility invoice, so the letterhead carries
     // the landlord's name, address and KRA PIN. The company (the managing agent) is only the
     // fallback when no landlord is linked to the invoice.
-    const supplier = resolveSupplier({ landlord: invoice.landlord, company });
+    const supplier = company;
     const tenant = invoice.tenant || {};
     const property = invoice.property || {};
     const unit = invoice.unit || {};
@@ -142,7 +142,7 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
         {
           heading: 'Property',
           name: property.propertyName ? `${property.propertyName}${property.propertyCode ? ` (${property.propertyCode})` : ''}` : '',
-          lines: [unitNumber ? `Unit: ${unitNumber}` : ''],
+          lines: [invoice.landlord?.landlordName ? `Landlord: ${invoice.landlord.landlordName}` : '', unitNumber ? `Unit: ${unitNumber}` : ''],
         },
       ],
       details: { heading: 'Invoice details', rows: [['Category', categoryLabel(invoice.category)], ['Currency', currency]] },

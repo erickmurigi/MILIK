@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import { round2 } from "../../utils/math.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import Tenant from "../../models/Tenant.js";
@@ -1129,6 +1130,12 @@ export const getTenants = async (req, res, next) => {
         t.depositReceipted = depositReceiptedMap.get(String(t._id)) || 0;
       });
     }
+
+    const lastSmsByTenant = await getLastSentByRecord({ businessId, contextTypes: ["tenant_bulk"], recordIds: enrichedTenants.map((t) => t._id) });
+    enrichedTenants.forEach((t) => {
+      t.lastSmsAt = lastSmsByTenant.get(String(t._id))?.sms || null;
+      t.lastEmailAt = lastSmsByTenant.get(String(t._id))?.email || null;
+    });
 
     return res.status(200).json({
       success: true,

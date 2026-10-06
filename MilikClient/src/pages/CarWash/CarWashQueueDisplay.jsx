@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import { MILIK_STAMP_LOGO } from "../../utils/printKitLogo.js";
 
 const POLL_INTERVAL = 8_000;
 
@@ -238,6 +239,17 @@ const CarWashQueueDisplay = () => {
             );
           })}
         </main>
+
+        {/* ── Footer: same Powered by Milik stamp as the printed documents ── */}
+        <footer className="flex flex-shrink-0 justify-end px-6 pb-3">
+          <div
+            aria-label="Powered by Milik"
+            className="inline-flex items-center gap-2 border border-white/15 bg-white px-2.5 py-1"
+          >
+            <span className="text-[9px] font-semibold uppercase tracking-widest text-slate-500">Powered by</span>
+            <img src={MILIK_STAMP_LOGO} alt="Milik" className="h-4 w-auto" />
+          </div>
+        </footer>
 
       </div>
     </div>

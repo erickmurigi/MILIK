@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { canAccessCompanyId, normalizeCompanyId } from "../verifyToken.js";
@@ -912,22 +913,23 @@ const getActiveNotesForTenant = async ({ businessId, tenantId, asOfDate = null }
 const attachNoteTotalsToInvoices = (invoices = [], notes = []) => {
   const totalsByInvoice = new Map();
 
-  notes.forEach((note) => {
-    const sourceInvoiceId = String(note?.sourceInvoice || "");
+  const addTotal = (sourceInvoiceId, noteType, amount) => {
     if (!sourceInvoiceId) return;
-
-    const current = totalsByInvoice.get(sourceInvoiceId) || {
-      creditNoteTotal: 0,
-      debitNoteTotal: 0,
-    };
-
-    const noteType = String(note?.noteType || "").toUpperCase();
-    const amount = round2(Math.abs(Number(note?.amount || 0)));
-
+    const current = totalsByInvoice.get(sourceInvoiceId) || { creditNoteTotal: 0, debitNoteTotal: 0 };
     if (noteType === "CREDIT_NOTE") current.creditNoteTotal += amount;
     if (noteType === "DEBIT_NOTE") current.debitNoteTotal += amount;
-
     totalsByInvoice.set(sourceInvoiceId, current);
+  };
+
+  notes.forEach((note) => {
+    const noteType = String(note?.noteType || "").toUpperCase();
+    if (Array.isArray(note?.lines) && note.lines.length) {
+      note.lines.forEach((line) => {
+        addTotal(String(line?.sourceInvoice || ""), noteType, round2(Math.abs(Number(line?.amount || 0))));
+      });
+      return;
+    }
+    addTotal(String(note?.sourceInvoice || ""), noteType, round2(Math.abs(Number(note?.amount || 0))));
   });
 
   return invoices.map((invoice) => {
@@ -955,6 +957,19 @@ const attachNoteTotalsToInvoices = (invoices = [], notes = []) => {
 const buildDebitNoteAllocationSnapshots = (notes = []) =>
   notes
     .filter((note) => String(note?.noteType || "").toUpperCase() === "DEBIT_NOTE")
+    .flatMap((note) => {
+      if (Array.isArray(note?.lines) && note.lines.length) {
+        return note.lines.map((line) => ({
+          ...note,
+          _id: line?._id,
+          amount: line?.amount,
+          category: line?.category || note?.category,
+          description: [note?.noteNumber, line?.description].filter(Boolean).join(" · "),
+          sourceInvoice: null,
+        }));
+      }
+      return [note];
+    })
     .map((note) => {
       const sourceInvoiceId = String(note?.sourceInvoice || "");
       const metadata = note?.metadata && typeof note.metadata === "object" ? note.metadata : {};
@@ -1539,6 +1554,7 @@ const TENANT_SNAPSHOT_NOTE_FIELDS = [
   "_id",
   "tenant",
   "sourceInvoice",
+  "lines",
   "noteNumber",
   "noteType",
   "category",
@@ -2045,94 +2061,106 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
 
 const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, postingAccount }) => {
   const receivableAccount = await resolveTenantReceivableAccount(note.business);
-  const amount = Math.abs(Number(note.amount || 0));
   const { start, end } = buildStatementPeriod(note.noteDate);
   const txDate = normalizeDate(note.noteDate);
   const journalGroupId = new mongoose.Types.ObjectId();
-  const ledgerCategory = mapInvoiceCategoryToLedgerCategory(note.category);
   const isCreditNote = String(note.noteType || "").toUpperCase() === "CREDIT_NOTE";
   const _noteLabel = note.noteType === "CREDIT_NOTE" ? "Credit Note" : "Debit Note";
   const _srcRef = note.sourceInvoiceNumber ? ` — against ${note.sourceInvoiceNumber}` : "";
+  const legs = note.lines?.length
+    ? note.lines.map((line) => ({
+        category: line.category,
+        amount: Math.abs(Number(line.amount || 0)),
+        accountId: line.chartAccount,
+        description: line.description || "",
+      }))
+    : [{ category: note.category, amount: Math.abs(Number(note.amount || 0)), accountId: postingAccount._id, description: "" }];
 
-  let receivableLeg;
+  const entries = [];
+  const receivableLegs = [];
   try {
-    receivableLeg = await postEntry({
-      business: note.business,
-      property: note.property,
-      landlord: note.landlord,
-      tenant: note.tenant,
-      unit: note.unit,
-      sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
-      sourceTransactionId: String(note._id),
-      transactionDate: txDate,
-      statementPeriodStart: start,
-      statementPeriodEnd: end,
-      category: ledgerCategory,
-      amount,
-      direction: isCreditNote ? "credit" : "debit",
-      debit: isCreditNote ? 0 : amount,
-      credit: isCreditNote ? amount : 0,
-      accountId: receivableAccount._id,
-      journalGroupId,
-      payer: "tenant",
-      receiver: "manager",
-      notes: `${_noteLabel}${_srcRef} (${note.noteNumber})`,
-      metadata: {
-        noteType: note.noteType,
-        noteNumber: note.noteNumber,
-        sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
-        sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
-        postingRole: "tenant_receivable",
-        ...(note.metadata || {}),
-      },
-      createdBy,
-      approvedBy: createdBy,
-      approvedAt: new Date(),
-      status: "approved",
-    });
+    for (const leg of legs) {
+      const ledgerCategory = mapInvoiceCategoryToLedgerCategory(leg.category);
+      const receivableLeg = await postEntry({
+        business: note.business,
+        property: note.property,
+        landlord: note.landlord,
+        tenant: note.tenant,
+        unit: note.unit,
+        sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
+        sourceTransactionId: String(note._id),
+        transactionDate: txDate,
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        category: ledgerCategory,
+        amount: leg.amount,
+        direction: isCreditNote ? "credit" : "debit",
+        debit: isCreditNote ? 0 : leg.amount,
+        credit: isCreditNote ? leg.amount : 0,
+        accountId: receivableAccount._id,
+        journalGroupId,
+        payer: "tenant",
+        receiver: "manager",
+        notes: `${_noteLabel}${_srcRef} (${note.noteNumber})`,
+        metadata: {
+          noteType: note.noteType,
+          noteNumber: note.noteNumber,
+          sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
+          sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
+          postingRole: "tenant_receivable",
+          lineDescription: leg.description || null,
+          ...(note.metadata || {}),
+        },
+        createdBy,
+        approvedBy: createdBy,
+        approvedAt: new Date(),
+        status: "approved",
+      });
+      receivableLegs.push(receivableLeg);
+      entries.push(receivableLeg);
 
-    const offsetLeg = await postEntry({
-      business: note.business,
-      property: note.property,
-      landlord: note.landlord,
-      tenant: note.tenant,
-      unit: note.unit,
-      sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
-      sourceTransactionId: String(note._id),
-      transactionDate: txDate,
-      statementPeriodStart: start,
-      statementPeriodEnd: end,
-      category: ledgerCategory,
-      amount,
-      direction: isCreditNote ? "debit" : "credit",
-      debit: isCreditNote ? amount : 0,
-      credit: isCreditNote ? 0 : amount,
-      accountId: postingAccount._id,
-      journalGroupId,
-      payer: "tenant",
-      receiver: "manager",
-      notes: `${_noteLabel} Offset${_srcRef} (${note.noteNumber})`,
-      metadata: {
-        noteType: note.noteType,
-        noteNumber: note.noteNumber,
-        sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
-        sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
-        postingRole: "income_or_charge",
-        offsetOfEntryId: String(receivableLeg._id),
-        ...(note.metadata || {}),
-      },
-      createdBy,
-      approvedBy: createdBy,
-      approvedAt: new Date(),
-      status: "approved",
-    });
+      const offsetLeg = await postEntry({
+        business: note.business,
+        property: note.property,
+        landlord: note.landlord,
+        tenant: note.tenant,
+        unit: note.unit,
+        sourceTransactionType: TENANT_INVOICE_NOTE_SOURCE_TYPE,
+        sourceTransactionId: String(note._id),
+        transactionDate: txDate,
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        category: ledgerCategory,
+        amount: leg.amount,
+        direction: isCreditNote ? "debit" : "credit",
+        debit: isCreditNote ? leg.amount : 0,
+        credit: isCreditNote ? 0 : leg.amount,
+        accountId: leg.accountId,
+        journalGroupId,
+        payer: "tenant",
+        receiver: "manager",
+        notes: `${_noteLabel} Offset${_srcRef} (${note.noteNumber})`,
+        metadata: {
+          noteType: note.noteType,
+          noteNumber: note.noteNumber,
+          sourceInvoiceId: sourceInvoice?._id ? String(sourceInvoice._id) : null,
+          sourceInvoiceNumber: sourceInvoice?.invoiceNumber || null,
+          postingRole: "income_or_charge",
+          offsetOfEntryId: String(receivableLeg._id),
+          lineDescription: leg.description || null,
+          ...(note.metadata || {}),
+        },
+        createdBy,
+        approvedBy: createdBy,
+        approvedAt: new Date(),
+        status: "approved",
+      });
+      entries.push(offsetLeg);
+    }
 
-    return {
-      journalGroupId,
-      entries: [receivableLeg, offsetLeg],
-    };
+    return { journalGroupId, entries };
   } catch (error) {
-    if (receivableLeg?._id) {
+    for (const receivableLeg of receivableLegs) {
       await postReversal({ entryId: receivableLeg._id, reason: `Auto-reversal: GL balance protection for failed note journal ${note.noteNumber}`, userId: createdBy }).catch(() => null);
     }
     throw error;
@@ -2792,9 +2820,16 @@ export const getTenantInvoicesList = async (req, res, next) => {
       ),
     };
 
+    const lastSmsByInvoice = await getLastSentByRecord({
+      businessId,
+      contextTypes: ["invoice", "penalty_invoice"],
+      recordIds: hydratedInvoices.map((invoice) => invoice._id),
+    });
+    const itemsWithSms = hydratedInvoices.map((invoice) => ({ ...invoice, lastSmsAt: lastSmsByInvoice.get(String(invoice._id))?.sms || null, lastEmailAt: lastSmsByInvoice.get(String(invoice._id))?.email || null }));
+
     return res.status(200).json(
       buildTenantInvoiceListPayload({
-        items: hydratedInvoices,
+        items: itemsWithSms,
         paginate,
         page,
         limit,
@@ -2849,7 +2884,181 @@ export const getTenantInvoiceById = async (req, res, next) => {
   }
 };
 
+const createMultiLineNote = async (req, res, next) => {
+  try {
+    const scopedBusinessId = resolveAuthorizedBusinessId(req);
+    const noteType = String(req.body.noteType || "").toUpperCase() === "CREDIT_NOTE" ? "CREDIT_NOTE" : "DEBIT_NOTE";
+    const requestedTenantId = req.body.tenantId || req.body.tenant || null;
+    const requestedPropertyId = req.body.propertyId || req.body.property || null;
+    if (!isValidObjectId(requestedTenantId)) return next(createError(400, "A valid tenant is required."));
+    if (!isValidObjectId(requestedPropertyId)) return next(createError(400, "A valid property is required."));
+
+    const [tenant, property] = await Promise.all([
+      Tenant.findOne({ _id: requestedTenantId, ...(scopedBusinessId ? { business: scopedBusinessId } : {}) }).lean(),
+      Property.findOne({ _id: requestedPropertyId, ...(scopedBusinessId ? { business: scopedBusinessId } : {}) }).lean(),
+    ]);
+    if (!tenant) return next(createError(404, "Tenant not found."));
+    if (!property) return next(createError(404, "Property not found."));
+
+    const resolvedBusinessId = tenant.business || property.business || scopedBusinessId;
+    const resolvedUnitId = tenant.unit || req.body.unitId || req.body.unit || null;
+    if (!isValidObjectId(resolvedUnitId)) return next(createError(400, "A valid unit could not be resolved for this tenant."));
+
+    const unit = await Unit.findOne({ _id: resolvedUnitId, ...(resolvedBusinessId ? { business: resolvedBusinessId } : {}) }).lean();
+    if (!unit) return next(createError(404, "Tenant unit not found."));
+
+    const resolvedLandlordId = resolvePrimaryLandlordId({ sourceInvoice: null, property, tenant });
+    if (!isValidObjectId(resolvedLandlordId)) {
+      return next(createError(400, "This property has no valid landlord linked. Open the property, add/select a landlord, mark one as primary, then save the debit note again."));
+    }
+
+    let actorUserId;
+    try {
+      actorUserId = await resolveActorUserId({ req, business: resolvedBusinessId, bodyCreatedBy: req.body.createdBy || tenant.createdBy });
+    } catch (actorError) {
+      return next(createError(400, actorError.message));
+    }
+
+    const creditInvoices = new Map();
+    const snapshotsByInvoice = new Map();
+    if (noteType === "CREDIT_NOTE") {
+      const invoiceIds = req.body.lines.map((line) => String(line?.sourceInvoice || "")).filter((id) => isValidObjectId(id));
+      const invoices = await TenantInvoice.find({
+        _id: { $in: invoiceIds },
+        business: resolvedBusinessId,
+        tenant: requestedTenantId,
+        postingStatus: "posted",
+        status: { $nin: ["cancelled", "reversed"] },
+      }).lean();
+      invoices.forEach((invoice) => creditInvoices.set(String(invoice._id), invoice));
+      const { invoiceSnapshots } = await computeTenantInvoiceSnapshots({ businessId: resolvedBusinessId, tenantId: requestedTenantId });
+      invoiceSnapshots.forEach((snapshot) => snapshotsByInvoice.set(String(snapshot._id), snapshot));
+    }
+
+    const creditUsed = new Map();
+    const lines = [];
+    for (const raw of req.body.lines) {
+      const amount = Math.abs(Number(raw?.amount || 0));
+      if (amount <= 0) return next(createError(400, "Each note line needs a positive amount."));
+
+      let category = String(raw?.category || "").toUpperCase();
+      let sourceInvoiceId = null;
+      let chartAccountValue = raw?.chartAccountId || raw?.chartAccount || null;
+
+      if (noteType === "CREDIT_NOTE") {
+        const invoiceId = String(raw?.sourceInvoice || "");
+        const invoice = creditInvoices.get(invoiceId);
+        if (!invoice) return next(createError(400, "Each credit line needs an open invoice for this tenant."));
+
+        const snapshot = snapshotsByInvoice.get(invoiceId);
+        const status = String(snapshot?.computedStatus || invoice.status || "").toLowerCase();
+        if (!["pending", "partially_paid"].includes(status)) {
+          return next(createError(400, `Invoice ${invoice.invoiceNumber} is not open for credit.`));
+        }
+
+        const used = round2((creditUsed.get(invoiceId) || 0) + amount);
+        const remaining = round2(Number(snapshot?.remainingCreditableAmount || 0));
+        if (used > remaining + 0.005) {
+          return next(createError(400, `Credit for ${invoice.invoiceNumber} exceeds its remaining creditable amount of ${remaining}.`));
+        }
+        creditUsed.set(invoiceId, used);
+
+        sourceInvoiceId = invoice._id;
+        category = invoice.category;
+        chartAccountValue = invoice.chartAccount;
+      }
+
+      if (!TENANT_INVOICE_CATEGORIES.includes(category)) {
+        return next(createError(400, "Invalid charge type on a note line."));
+      }
+
+      let chartAccount;
+      try {
+        chartAccount = await resolveInvoiceIncomeAccount({ businessId: resolvedBusinessId, category, chartAccountValue });
+      } catch (accountError) {
+        accountError.statusCode = accountError.statusCode || 400;
+        throw accountError;
+      }
+      lines.push({ category, description: String(raw?.description || "").trim(), amount, sourceInvoice: sourceInvoiceId, chartAccount: chartAccount._id });
+    }
+
+    const total = round2(lines.reduce((sum, line) => sum + line.amount, 0));
+    const noteNumber = await resolveNoteNumber(resolvedBusinessId, noteType, req.body.noteNumber);
+    const duplicate = await TenantInvoiceNote.findOne({
+      business: resolvedBusinessId,
+      noteNumber: { $regex: `^${escapeRegExp(noteNumber)}$`, $options: "i" },
+    }).lean();
+    if (duplicate) return next(createError(409, "Note number already exists for this business."));
+
+    const note = await TenantInvoiceNote.create({
+      business: resolvedBusinessId,
+      property: requestedPropertyId,
+      landlord: resolvedLandlordId,
+      tenant: requestedTenantId,
+      unit: resolvedUnitId,
+      sourceInvoice: null,
+      noteNumber,
+      noteType,
+      category: lines[0].category,
+      amount: total,
+      lines,
+      description: String(req.body.description || "").trim() || `${noteType === "CREDIT_NOTE" ? "Credit" : "Debit"} Note — ${noteNumber}`,
+      noteDate: normalizeDate(req.body.noteDate || new Date()),
+      status: "posted",
+      createdBy: actorUserId,
+      chartAccount: lines[0].chartAccount,
+      ledgerEntries: [],
+      postingStatus: "unposted",
+      postingError: null,
+      metadata: noteType === "CREDIT_NOTE"
+        ? { noteSourceMode: "invoice", multiInvoiceCredit: true }
+        : {
+            noteSourceMode: "standalone",
+            standaloneDebitNote: true,
+            includeInLandlordStatement: true,
+            includeInCategoryTotals: true,
+          },
+    });
+
+    const posting = await postInvoiceNoteJournal({
+      note,
+      createdBy: actorUserId,
+      sourceInvoice: null,
+      postingAccount: { _id: lines[0].chartAccount },
+    });
+
+    note.journalGroupId = posting.journalGroupId;
+    note.ledgerEntries = posting.entries.map((entry) => entry._id);
+    note.postingStatus = "posted";
+    note.postingError = null;
+    await note.save();
+
+    await aggregateChartOfAccountBalances(
+      note.business,
+      posting.entries.map((entry) => entry.accountId)
+    );
+
+    await recomputeTenantFinancialState({ businessId: note.business, tenantId: note.tenant });
+
+    const populated = await TenantInvoiceNote.findById(note._id)
+      .populate("chartAccount", "code name type")
+      .populate("ledgerEntries")
+      .populate("createdBy", "surname otherNames email profile")
+      .lean();
+
+    return res.status(201).json(buildNoteStatementRow(populated));
+  } catch (error) {
+    if (error?.code === 11000) {
+      return next(createError(409, "Note number already exists for this business. Please retry so a new number can be reserved safely."));
+    }
+    return next(error);
+  }
+};
+
 export const createTenantInvoiceNote = async (req, res, next) => {
+  if (Array.isArray(req.body?.lines) && req.body.lines.length) {
+    return createMultiLineNote(req, res, next);
+  }
   try {
     const noteType = String(req.body.noteType || "").toUpperCase();
     if (!TENANT_NOTE_TYPES.includes(noteType)) {

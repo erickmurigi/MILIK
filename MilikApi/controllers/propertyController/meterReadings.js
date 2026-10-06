@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import MeterReading from "../../models/MeterReading.js";
@@ -473,9 +474,12 @@ export const getMeterReadings = async (req, res, next) => {
       MeterReading.countDocuments(query),
     ]);
 
+    const lastSmsByReading = await getLastSentByRecord({ businessId, contextTypes: ["meter_reading"], recordIds: readings.map((r) => r._id) });
+    const readingsWithSms = readings.map((r) => ({ ...(r.toObject ? r.toObject() : r), lastSmsAt: lastSmsByReading.get(String(r._id))?.sms || null, lastEmailAt: lastSmsByReading.get(String(r._id))?.email || null }));
+
     return res.status(200).json({
       success: true,
-      data: readings,
+      data: readingsWithSms,
       total,
       page: pageNum,
       pages: Math.ceil(total / limitNum),

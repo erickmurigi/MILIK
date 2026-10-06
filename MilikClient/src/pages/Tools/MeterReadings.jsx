@@ -1208,29 +1208,8 @@ const MeterReadings = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
-        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col gap-2">
-          <div className="flex-shrink-0 flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-white px-2 py-1.5 shadow-sm">
-            <span className="text-xs font-black uppercase tracking-[0.1em] text-slate-800">Meter Readings</span>
-            <div className="h-3.5 w-px bg-slate-300" />
-            <div className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
-              <span className="opacity-70">Readings</span> <span className="font-black text-blue-900">{filteredReadings.length}</span>
-            </div>
-            <div className="flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-semibold text-red-700">
-              <span className="opacity-70">Unpaid</span> <span className="font-black text-red-900">KES {unpaidAmount.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-1 rounded border border-green-200 bg-green-50 px-2 py-0.5 text-[10px] font-semibold text-green-700">
-              <span className="opacity-70">Paid</span> <span className="font-black text-green-900">KES {paidAmount.toLocaleString()}</span>
-            </div>
-            {vacantCount > 0 && (
-              <div className="flex items-center gap-1 rounded border border-slate-300 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600" title="Not counted as receivable — no active tenant to bill yet">
-                <span className="opacity-70">Vacant</span> <span className="font-black text-slate-800">KES {vacantAmount.toLocaleString()} ({vacantCount})</span>
-              </div>
-            )}
-            <div className="ml-auto rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
-              {currentCompany?.companyName || currentCompany?.name || "No company selected"}
-            </div>
-          </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gray-50">
+        <div className="flex min-h-0 flex-1 flex-col">
 
           {showAddModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
@@ -1752,28 +1731,37 @@ const MeterReadings = () => {
             </div>
           )}
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
             <ListToolbar>
-                {[{val:"ALL",label:"All"},{val:"paid",label:"Paid"},{val:"unpaid",label:"Unpaid"},{val:"partial",label:"Partial"},{val:"vacant",label:"Vacant"},{val:"voided",label:"Voided"}].map(({val,label}) => (
-                  <ListToolbar.Button
-                    key={val}
-                    variant={draftFilters.status === val ? "primary" : "outline"}
-                    onClick={() => {
-                      // Status tabs are quick filters — apply immediately rather than
-                      // waiting for the Search button (unlike property/unit/search/period,
-                      // which stay staged in draftFilters until Search is pressed).
-                      setDraftFilters((prev) => ({ ...prev, status: val }));
-                      setAppliedFilters((prev) => ({ ...prev, status: val }));
-                    }}
-                  >{label}</ListToolbar.Button>
-                ))}
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Readings: {filteredReadings.length}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Unpaid: KES {unpaidAmount.toLocaleString()}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Paid: KES {paidAmount.toLocaleString()}</span>
+              {vacantCount > 0 && <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Vacant: KES {vacantAmount.toLocaleString()} ({vacantCount})</span>}
+              <ListToolbar.Divider />
+                <AppSelect
+                  compact
+                  value={draftFilters.status}
+                  onChange={(v) => {
+                    const status = v ?? "ALL";
+                    setDraftFilters((prev) => ({ ...prev, status }));
+                    setAppliedFilters((prev) => ({ ...prev, status }));
+                  }}
+                  options={[
+                    { value: "ALL", label: "All statuses" },
+                    { value: "paid", label: "Paid" },
+                    { value: "unpaid", label: "Unpaid" },
+                    { value: "partial", label: "Partial" },
+                    { value: "vacant", label: "Vacant" },
+                    { value: "voided", label: "Voided" },
+                  ]}
+                />
                 <ListToolbar.Divider />
                 <ListToolbar.Input type="text" value={draftFilters.search} onChange={setFilter("search")} placeholder="Search…" width="w-36" />
                 <AppSelect value={draftFilters.property} onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "any", unit: "any" }))} options={propertyOptions} placeholder="Property" clearable searchable compact />
                 <AppSelect value={draftFilters.unit} onChange={(v) => setDraftFilters((prev) => ({ ...prev, unit: v ?? "any" }))} options={unitsForSelectedProperty.map((unit) => ({ value: unit._id, label: unit.unitNumber }))} placeholder="Unit" clearable compact />
                 <AppSelect value={draftFilters.utilityType} onChange={(v) => setDraftFilters((prev) => ({ ...prev, utilityType: v ?? "any" }))} options={utilityOptions.map((utility) => ({ value: utility, label: utility }))} placeholder="Utility" clearable compact />
                 <ListToolbar.Input type="month" value={draftFilters.billingPeriod} onChange={setFilter("billingPeriod")} width="w-[5.5rem]" />
-                <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
+                <ListToolbar.Button icon={FaSearch} onClick={applySearch}>Search</ListToolbar.Button>
                 <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
                 <ListToolbar.Button icon={FaEdit} onClick={handleEditSelected} disabled={!canEditSelected}>Edit</ListToolbar.Button>
                 <ListToolbar.Button
@@ -1786,7 +1774,6 @@ const MeterReadings = () => {
                 </ListToolbar.Button>
                 <ListToolbar.Button
                   icon={FaSms}
-                  className="!bg-teal-600 hover:!bg-teal-700"
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Notify ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via SMS.", allowedChannels: ["sms", "email"], defaultChannel: "sms" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select readings to SMS tenants" : `SMS ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
@@ -1795,7 +1782,6 @@ const MeterReadings = () => {
                 </ListToolbar.Button>
                 <ListToolbar.Button
                   icon={FaEnvelope}
-                  className="!bg-blue-600 hover:!bg-blue-700"
                   onClick={() => setCommunicationModal({ contextType: "meter_reading", recordIds: selectedReadingIds, title: `Email ${selectedCount} Tenant${selectedCount !== 1 ? "s" : ""}`, subtitle: "Send meter reading notification via email.", allowedChannels: ["email"], defaultChannel: "email" })}
                   disabled={selectedCount === 0}
                   title={selectedCount === 0 ? "Select readings to email tenants" : `Email ${selectedCount} tenant${selectedCount !== 1 ? "s" : ""}`}
@@ -1804,28 +1790,27 @@ const MeterReadings = () => {
                 </ListToolbar.Button>
                 <ListToolbar.Button icon={FaPrint} onClick={handlePrintList} disabled={filteredReadings.length === 0}>Print</ListToolbar.Button>
                 <ListToolbar.Button icon={FaSync} onClick={loadPageData}>Refresh</ListToolbar.Button>
-                <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openAddSectionForNew} disabled={!canCreateReading}>Add</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPlus} onClick={openAddSectionForNew} disabled={!canCreateReading}>Add</ListToolbar.Button>
                 <ListToolbar.Button icon={FaBolt} onClick={openBatchModal} disabled={!canCreateReading}>Batch Add</ListToolbar.Button>
             </ListToolbar>
 
             <MilikTable
               columns={[
-                { label: 'Period' },
-                { label: 'Tenant' },
-                { label: 'Property' },
-                { label: 'Unit' },
-                { label: 'Utility' },
-                { label: 'Previous', align: 'right' },
-                { label: 'Current', align: 'right' },
-                { label: 'Consumed', align: 'right' },
-                { label: 'Rate', align: 'right' },
-                { label: 'Amount', align: 'right' },
-                { label: 'Status', align: 'center' },
+                { label: 'Period', width: '8%' },
+                { label: 'Tenant', width: '13%' },
+                { label: 'Property', width: '11%' },
+                { label: 'Unit', width: '6%' },
+                { label: 'Utility', width: '9%' },
+                { label: 'Previous', align: 'right', width: '7%' },
+                { label: 'Current', align: 'right', width: '7%' },
+                { label: 'Consumed', align: 'right', width: '7%' },
+                { label: 'Rate', align: 'right', width: '7%' },
+                { label: 'Amount', align: 'right', width: '9%' },
+                { label: 'Status', align: 'center', width: '8%' },
               ]}
               rows={currentPageReadings}
               loading={loading}
               empty="No meter readings found. Add a new reading or adjust the filters."
-              minWidth="1540px"
               checkboxes
               allChecked={currentPageReadings.length > 0 && selectAll}
               someChecked={selectedReadingIds.length > 0 && !selectAll}
@@ -1854,6 +1839,7 @@ const MeterReadings = () => {
                     <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap">
                       <span className="font-semibold text-orange-700">{reading.utilityType || "-"}</span>
                       {reading.meterNumber && <span className="ml-1.5 text-[10px] text-slate-400">· {reading.meterNumber}</span>}
+                      {reading.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(reading.lastSmsAt)}`}>SMS</span>}{reading.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(reading.lastEmailAt)}`}>EMAIL</span>}
                     </td>
                     <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700 tabular-nums">
                       {formatNumber(reading.previousReading)}
@@ -1898,22 +1884,22 @@ const MeterReadings = () => {
                 return (
                   <div className="flex justify-end gap-1">
                     {!isVoid && (
-                      <button onClick={() => handleEdit(reading)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit meter reading" disabled={!canUpdateReading}>
+                      <button onClick={() => handleEdit(reading)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Edit meter reading" disabled={!canUpdateReading}>
                         <FaEdit size={12} />
                       </button>
                     )}
                     {canBillThis && (
-                      <button onClick={() => handleBillSingle(reading)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Generate utility invoice" disabled={!canProcessReading || billBusy}>
+                      <button onClick={() => handleBillSingle(reading)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Generate utility invoice" disabled={!canProcessReading || billBusy}>
                         <FaFileInvoiceDollar size={12} />
                       </button>
                     )}
                     {reading.status === "billed" && reading?.billedInvoice && (
-                      <button onClick={() => handlePrintInvoice(reading)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print invoice">
+                      <button onClick={() => handlePrintInvoice(reading)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Print invoice">
                         <FaPrint size={12} />
                       </button>
                     )}
                     {!isVoid && (
-                      <button onClick={() => handleVoidSingle(reading)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Void meter reading" disabled={!canDeleteReading || voidBusy}>
+                      <button onClick={() => handleVoidSingle(reading)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Void meter reading" disabled={!canDeleteReading || voidBusy}>
                         <FaBan size={12} />
                       </button>
                     )}
@@ -1929,24 +1915,6 @@ const MeterReadings = () => {
                 );
               }}
             />
-
-            <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-700">
-              <p>
-                <span className="font-semibold">Showing:</span> {filteredReadings.length === 0 ? 0 : startIndex + 1}
-                {" - "}
-                {Math.min(endIndex, filteredReadings.length)} of {filteredReadings.length} reading(s)
-                {appliedFilters.status !== "ALL" && ` · Status: ${PAYMENT_LABEL[appliedFilters.status] || appliedFilters.status}`}
-              </p>
-              <p>
-                <span className="font-semibold">Selected:</span> {selectedCount}
-                {filteredReadings.length > 0 && (
-                  <>
-                    {" · "}
-                    <span className="font-semibold">Total:</span> KES {totalAmount.toLocaleString()}
-                  </>
-                )}
-              </p>
-            </div>
 
             <PaginationBar
               page={currentSafePage}

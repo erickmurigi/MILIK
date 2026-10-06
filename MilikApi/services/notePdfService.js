@@ -1,5 +1,5 @@
 import TenantInvoiceNote from '../models/TenantInvoiceNote.js';
-import { documentPageHtml, formatMoney, resolveSupplier } from '../utils/printKitCore.js';
+import { documentPageHtml, formatMoney } from '../utils/printKitCore.js';
 import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
 import { renderHtmlToPdf } from '../utils/pdfRender.js';
 
@@ -36,7 +36,7 @@ export const generateNotePdf = async (noteId, businessId) => {
 
   const company = note.business || {};
   const landlord = note.landlord && typeof note.landlord === 'object' ? note.landlord : null;
-  const supplier = resolveSupplier({ landlord, company });
+  const supplier = company;
   const tenant = note.tenant || {};
   const property = note.property || {};
   const unit = note.unit || {};
@@ -77,7 +77,7 @@ export const generateNotePdf = async (noteId, businessId) => {
       {
         heading: 'Property',
         name: propertyLabel,
-        lines: [unitNumber ? `Unit: ${unitNumber}` : ''],
+        lines: [landlord?.landlordName ? `Landlord: ${landlord.landlordName}` : '', unitNumber ? `Unit: ${unitNumber}` : ''],
       },
     ],
     details: {

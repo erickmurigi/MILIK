@@ -1037,6 +1037,8 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
       return {
         id: tenant._id,
         tenantCode: tenant.tenantCode || "-",
+        lastSmsAt: tenant.lastSmsAt || null,
+        lastEmailAt: tenant.lastEmailAt || null,
         tenantName: tenant.name || "-",
         unitNumber: getTenantUnitLabel(tenant),
         propertyName: resolveTenantPropertyName(tenant),
@@ -2310,7 +2312,7 @@ const confirmTransferUnit = useCallback(async () => {
                 <span className="font-medium text-slate-700 truncate block">{toListingCaps(tenant.unitNumber)}</span>
               </td>
               <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
-                <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(tenant.tenantCode)}</span>
+                <span className="font-mono text-[10px] text-slate-500 tracking-wide truncate block">{toListingCaps(tenant.tenantCode)}{tenant.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(tenant.lastSmsAt)}`}>SMS</span>}{tenant.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(tenant.lastEmailAt)}`}>EMAIL</span>}</span>
               </td>
               <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden group/name">
                 <div className="flex items-center gap-1 min-w-0">

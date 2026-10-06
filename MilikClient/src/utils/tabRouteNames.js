@@ -23,6 +23,8 @@ const routeNames = {
   '/invoices/rental': 'Rental Invoices',
   '/invoices/new': 'New Invoice',
   '/invoices/notes': 'Credit & Debit Notes',
+  '/invoices/notes/new': 'New Note',
+  '/invoices/lease-fee/new': 'New Lease Fee',
   '/receipts': 'Receipts',
   '/receipts/new': 'New Receipt',
   '/receipts/landlord': 'Landlord Receipts',

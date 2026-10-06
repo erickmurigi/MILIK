@@ -924,6 +924,8 @@ function App() {
             <Route path="/invoices/rental/:id"      element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoices /></Guard>} />
             <Route path="/invoices/notes"           element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes /></Guard>} />
             <Route path="/invoices/lease-fee"       element={<Guard resource="invoices" moduleKey="propertyManagement"><LeaseFeeInvoices /></Guard>} />
+            <Route path="/invoices/lease-fee/new"   element={<Guard resource="invoices" moduleKey="propertyManagement"><InvoiceNotes lockedBillItemKey="lease_fee" newNotePage /></Guard>} />
+            <Route path="/invoices/notes/new"       element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><InvoiceNotes newNotePage /></Guard>} />
             <Route path="/invoices/utility-bills"   element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><UtilityBills /></Guard>} />
             <Route path="/invoices/vat"             element={<Guard resource="tenantInvoices" moduleKey="propertyManagement"><RentalInvoiceVATReport /></Guard>} />
             <Route path="/invoices/withholding-vat" element={<Navigate to="/reports/tax-reports" replace />} />

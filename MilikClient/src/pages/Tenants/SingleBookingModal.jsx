@@ -259,6 +259,13 @@ const SingleBookingModal = ({
     [activeProperties]
   );
 
+  const tenantPropertyId = (tenant) => {
+    const direct = tenant?.property?._id || tenant?.property || tenant?.unit?.property?._id || tenant?.unit?.property;
+    if (direct) return String(direct);
+    const unitRecord = unitMap.get(String(tenant?.unit?._id || tenant?.unit || ""));
+    return String(unitRecord?.property?._id || unitRecord?.property || "");
+  };
+
   const tenantOptions = useMemo(() => {
     if (isLocked) return [];
     const normalizedSearch = String(tenantSearch || "").trim().toLowerCase();
@@ -267,8 +274,7 @@ const SingleBookingModal = ({
       .filter((t) => {
         if (!BOOKABLE_STATUSES.has(String(t?.status || "active").toLowerCase())) return false;
         if (propertyFilter !== "all") {
-          const propId = String(t?.property?._id || t?.property || t?.unit?.property?._id || t?.unit?.property || "");
-          if (propId !== String(propertyFilter)) return false;
+          if (tenantPropertyId(t) !== String(propertyFilter)) return false;
         }
         return true;
       })
@@ -287,7 +293,7 @@ const SingleBookingModal = ({
       : mapped;
 
     return filtered.sort((a, b) => a.name.localeCompare(b.name));
-  }, [tenants, isLocked, tenantSearch, propertyFilter, unitsFromStore, propertiesFromStore]);
+  }, [tenants, isLocked, tenantSearch, propertyFilter, unitsFromStore, propertiesFromStore, unitMap]);
 
   const selectedTenant = useMemo(
     () => (lockedTenant ? lockedTenant : tenantLookup[form.tenantId] || null),

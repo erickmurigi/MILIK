@@ -540,7 +540,7 @@ const ProcessedStatements = () => {
                   return (
                     <>
                       <td className="px-3 py-1 border-r border-gray-100">
-                        <div className="font-mono text-slate-500">{statement.sourceStatementNumber || '—'}</div>
+                        <div className="font-mono text-slate-500">{statement.sourceStatementNumber || '—'}{statement.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(statement.lastSmsAt)}`}>SMS</span>}{statement.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(statement.lastEmailAt)}`}>EMAIL</span>}</div>
                         {statement.managementFeeInvoiceNumber && (
                           <div className="font-mono text-[10px] text-orange-600 font-semibold">{statement.managementFeeInvoiceNumber}</div>
                         )}

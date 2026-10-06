@@ -42,5 +42,6 @@ const SmsLogSchema = new mongoose.Schema(
 SmsLogSchema.index({ business: 1, sentAt: -1 });
 SmsLogSchema.index({ business: 1, channel: 1, sentAt: -1 });
 SmsLogSchema.index({ business: 1, status: 1, sentAt: -1 });
+SmsLogSchema.index({ business: 1, contextType: 1, recordId: 1, status: 1 });
 
 export default mongoose.model('SmsLog', SmsLogSchema);

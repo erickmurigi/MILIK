@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import { getFieldOfficerPropertyIds } from "../../utils/fieldOfficerScope.js";
 import RentPayment from "../../models/RentPayment.js";
 import Tenant from "../../models/Tenant.js";
@@ -3280,8 +3281,11 @@ export const getPayments = async (req, res, next) => {
       };
     }
 
+    const lastSmsByReceipt = await getLastSentByRecord({ businessId: business, contextTypes: ["receipt"], recordIds: items.map((item) => item._id) });
+    const itemsWithSms = items.map((item) => ({ ...item, lastSmsAt: lastSmsByReceipt.get(String(item._id))?.sms || null, lastEmailAt: lastSmsByReceipt.get(String(item._id))?.email || null }));
+
     return res.status(200).json({
-      items,
+      items: itemsWithSms,
       pagination: {
         page: safePage,
         limit: parsedLimit,

@@ -2,7 +2,7 @@ import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import { printTabularList, formatMoney as formatPrintMoney } from "../../utils/printKit";
 import { buildInvoiceNarration } from "../../utils/invoiceNarrationUtils";
 import PaginationBar from '../../components/PaginationBar';
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { useEntityCache } from "../../hooks/useEntityCache";
@@ -35,6 +35,7 @@ import CommunicationComposerModal from "../../components/Communications/Communic
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import ListToolbar from "../../components/common/ListToolbar";
+import { fmtDate } from "../../utils/dates";
 import { getTenants } from "../../redux/tenantsRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { getUnits } from "../../redux/unitRedux";
@@ -451,6 +452,8 @@ const buildInvoiceRows = ({ invoices = [], tenantLookup = {}, unitsFromStore = [
         id: invoice?.invoiceNumber || invoice?._id,
         period: formatPeriodLabel(month, year),
         invoiceDescription: buildInvoiceNarration(invoice, unitName) || formatPeriodLabel(month, year),
+        lastSmsAt: invoice?.lastSmsAt || null,
+        lastEmailAt: invoice?.lastEmailAt || null,
         storagePeriodKey: formatPeriodLabel(month, year),
         chargeType,
         chargeTypeLabel: getInvoiceChargeTypeLabel(chargeType),
@@ -595,7 +598,7 @@ function InvoiceTableRowBase({
         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
           <button
             onClick={() => onView(invoice)}
-            className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800"
+            className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             title="View Invoice"
           >
             <FaEye size={12} />
@@ -603,7 +606,7 @@ function InvoiceTableRowBase({
           {canExportInvoice && (
             <button
               onClick={() => onPrint(invoice)}
-              className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800"
+              className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               title="Print Invoice"
             >
               <FaPrint size={12} />
@@ -612,7 +615,7 @@ function InvoiceTableRowBase({
           {canExportInvoice && (
             <button
               onClick={() => onDownload(invoice)}
-              className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800"
+              className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               title="Download Invoice"
             >
               <FaDownload size={12} />
@@ -621,7 +624,7 @@ function InvoiceTableRowBase({
           {canDeleteInvoice && (
             <button
               onClick={() => onDelete(invoice)}
-              className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
+              className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
               title="Delete Invoice"
             >
               <FaTrash size={12} />
@@ -630,7 +633,7 @@ function InvoiceTableRowBase({
           {showTenantColumns && (
             <button
               onClick={() => onViewStatement(invoice.tenantId)}
-              className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800"
+              className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               title="View Tenant Statement"
             >
               <FaArrowRight size={12} />
@@ -693,6 +696,8 @@ const RentalInvoices = ({ initialOpenSingleBooking = false }) => {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [currentPage, setCurrentPage] = useTabState("/invoices/rental:currentPage", 1);
   const [bookingAction, setBookingAction] = useState("");
+  const [bookingMenuOpen, setBookingMenuOpen] = useState(false);
+  const bookingMenuBtnRef = useRef(null);
   const [showSingleBooking, setShowSingleBooking] = useState(false);
   const [showBatchBooking, setShowBatchBooking] = useState(false);
   const [invoiceDetailOpen, setInvoiceDetailOpen] = useState(false);
@@ -2240,9 +2245,9 @@ const createInvoiceForTenant = async (
                   Back
                 </ListToolbar.Button>
               )}
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
               <ListToolbar.Divider />
               <AppSelect
                 value={draftFilters.status}
@@ -2271,7 +2276,9 @@ const createInvoiceForTenant = async (
                 clearable
                 compact
               />
+              <span className="shrink-0 text-[10px] font-semibold text-slate-500">From</span>
               <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.fromDate} onChange={setFilter("fromDate")} />
+              <span className="shrink-0 text-[10px] font-semibold text-slate-500">To</span>
               <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} />
               <ListToolbar.Divider />
               <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
@@ -2284,11 +2291,10 @@ const createInvoiceForTenant = async (
                 <ListToolbar.Button icon={FaTrash} variant="danger" onClick={handleDeleteSelected} disabled={selectedCount === 0}>Delete</ListToolbar.Button>
               )}
               {canExportInvoice && (
-                <ListToolbar.Button icon={FaPrint} onClick={handlePrintList} disabled={totalFilteredCount === 0}>Print</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList} disabled={totalFilteredCount === 0}>Print</ListToolbar.Button>
               )}
               <ListToolbar.Button
                 icon={FaSms}
-                className="!bg-emerald-600 hover:!bg-emerald-700"
                 onClick={() => setShowSmsModal(true)}
                 disabled={selectedCount === 0}
                 title={selectedCount === 0 ? "Select invoices to SMS" : `SMS ${selectedCount} invoice${selectedCount !== 1 ? "s" : ""}`}
@@ -2304,36 +2310,33 @@ const createInvoiceForTenant = async (
                 <ListToolbar.Button type="button" onClick={() => navigate("/tenants/deposits")}>Deposit</ListToolbar.Button>
               )}
               {canCreateInvoice && (
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <FaPlus className="text-[9px] text-[#0B3B2E]" />
-                  <AppSelect
-                    value={bookingAction}
-                    onChange={(v) => handleBookingActionChange(v ?? "")}
-                    options={[{ value: "single", label: "Single Booking" }, { value: "batch", label: "Batch Booking" }]}
-                    placeholder="Booking"
-                    compact
-                  />
-                </div>
+                <>
+                  <ListToolbar.Button ref={bookingMenuBtnRef} icon={FaPlus} onClick={() => setBookingMenuOpen((open) => !open)}>New booking</ListToolbar.Button>
+                  <ListToolbar.Menu open={bookingMenuOpen} onClose={() => setBookingMenuOpen(false)} anchorRef={bookingMenuBtnRef} width="w-48">
+                    <ListToolbar.MenuItem onClick={() => { setBookingMenuOpen(false); handleBookingActionChange("single"); }}>Single tenant</ListToolbar.MenuItem>
+                    <ListToolbar.MenuItem onClick={() => { setBookingMenuOpen(false); handleBookingActionChange("batch"); }}>Batch by property</ListToolbar.MenuItem>
+                  </ListToolbar.Menu>
+                </>
               )}
             </ListToolbar>
 
             <MilikTable
               columns={[
-                { label: "Invoice #" },
-                ...(!tenantId ? [{ label: termTenant }, { label: termProperty }] : []),
-                { label: termUnit },
-                { label: "Description" },
-                { label: "Invoice Date", align: "center" },
-                { label: "Due Date", align: "center" },
-                { label: "Amount", align: "right" },
-                { label: "Paid", align: "right" },
-                { label: "Balance", align: "right" },
-                { label: "Status", align: "center" },
+                { label: "Invoice #", width: "8%" },
+                ...(!tenantId
+                  ? [{ label: termTenant, width: "13%" }, { label: `${termProperty} / ${termUnit}`, width: "15%" }]
+                  : [{ label: termUnit, width: "6%" }]),
+                { label: "Description", width: !tenantId ? "20%" : "42%" },
+                { label: "Invoice Date", align: "center", width: "7%" },
+                { label: "Due Date", align: "center", width: "7%" },
+                { label: "Amount", align: "right", width: "8%" },
+                { label: "Paid", align: "right", width: "7%" },
+                { label: "Balance", align: "right", width: "8%" },
+                { label: "Status", align: "center", width: "7%" },
               ]}
               rows={currentPageInvoices}
               rowKey="key"
               empty={tenantId ? "Create invoices from billing schedule." : "Create invoices and apply filters to see results."}
-              minWidth={1200}
               checkboxes
               allChecked={currentPageInvoices.length > 0 && selectAll}
               someChecked={selectedInvoices.length > 0 && !selectAll}
@@ -2345,12 +2348,20 @@ const createInvoiceForTenant = async (
               renderRow={(invoice) => (
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100">
-                    <button type="button" className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none" onClick={(e) => { e.stopPropagation(); handleViewInvoice(invoice); }}>{invoice.id}</button>
+                    <button type="button" className="font-bold text-blue-700 hover:text-blue-900 hover:underline focus:outline-none" onClick={(e) => { e.stopPropagation(); handleViewInvoice(invoice); }}>{invoice.id}</button>{invoice.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(invoice.lastSmsAt)}`}>SMS</span>}{invoice.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(invoice.lastEmailAt)}`}>EMAIL</span>}
                   </td>
                   {!tenantId && <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{invoice.tenantName}</td>}
-                  {!tenantId && <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{invoice.propertyName}</td>}
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{invoice.unitName}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-orange-700">{invoice.invoiceDescription || invoice.period}</td>
+                  {!tenantId ? (
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-semibold text-slate-900">
+                      {invoice.propertyName}
+                      <span className="ml-1.5 font-normal text-slate-500">· {invoice.unitName}</span>
+                    </td>
+                  ) : (
+                    <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-semibold text-slate-900">{invoice.unitName}</td>
+                  )}
+                  <td className="max-w-0 px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800">
+                    <div className="truncate" title={invoice.invoiceDescription || invoice.period}>{invoice.invoiceDescription || invoice.period}</div>
+                  </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{invoice.invoiceDateLabel}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-center text-gray-700">{invoice.dueDateLabel}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900 tabular-nums">{fmtAmountKE(invoice.amount)}</td>
@@ -2367,11 +2378,11 @@ const createInvoiceForTenant = async (
               )}
               renderActions={(invoice) => (
                 <div className="flex justify-end gap-1">
-                  <button onClick={() => handleViewInvoice(invoice)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View Invoice"><FaEye size={12} /></button>
-                  {canExportInvoice && <button onClick={() => handlePrintInvoice(invoice)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print Invoice"><FaPrint size={12} /></button>}
-                  {canExportInvoice && <button onClick={() => handleDownloadInvoice(invoice)} className="rounded p-1 text-green-600 hover:bg-green-50 hover:text-green-800" title="Download Invoice"><FaDownload size={12} /></button>}
-                  {canDeleteInvoice && <button onClick={() => handleDeleteSingle(invoice)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete Invoice"><FaTrash size={12} /></button>}
-                  {!tenantId && <button onClick={() => handleViewTenantStatement(invoice.tenantId)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title={`View ${termTenant} Statement`}><FaArrowRight size={12} /></button>}
+                  <button onClick={() => handleViewInvoice(invoice)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="View Invoice"><FaEye size={12} /></button>
+                  {canExportInvoice && <button onClick={() => handlePrintInvoice(invoice)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Print Invoice"><FaPrint size={12} /></button>}
+                  {canExportInvoice && <button onClick={() => handleDownloadInvoice(invoice)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Download Invoice"><FaDownload size={12} /></button>}
+                  {canDeleteInvoice && <button onClick={() => handleDeleteSingle(invoice)} className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete Invoice"><FaTrash size={12} /></button>}
+                  {!tenantId && <button onClick={() => handleViewTenantStatement(invoice.tenantId)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title={`View ${termTenant} Statement`}><FaArrowRight size={12} /></button>}
                 </div>
               )}
             />
