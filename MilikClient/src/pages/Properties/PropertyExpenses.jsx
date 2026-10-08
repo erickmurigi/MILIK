@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-toastify';
 import {
   FaPlus, FaSync, FaEdit, FaTrash, FaDownload,
-  FaSearch, FaTimes, FaReceipt, FaMoneyBillWave, FaCalendarAlt,
+  FaSearch, FaTimes, FaReceipt, FaCalendarAlt,
 } from 'react-icons/fa';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllUnits, selectAllExpenseProperties } from '../../redux/selectors';
@@ -45,15 +45,24 @@ const CATEGORY_COLORS = {
 const humanize = (s) => String(s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: humanize(c) }));
 const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: humanize(m) }));
-const CATEGORY_DOT = {
-  maintenance: 'bg-orange-400', repair: 'bg-red-400', utility: 'bg-blue-400',
-  tax: 'bg-purple-400', insurance: 'bg-teal-400', supplies: 'bg-yellow-400', other: 'bg-slate-400',
-};
 const toInput = (d) => { try { return new Date(d).toISOString().split('T')[0]; } catch { return ''; } };
 const today = () => toInput(new Date());
 const normalizeId = (v) => (typeof v === 'string' ? v : v?._id || v?.id || '');
 
 const defaultStart = toInput(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+
+// Full-page/modal add-form conventions — matches AddLandlord.jsx and the Meter
+// Readings add modal (grey Section header bar, h-7 compact inputs, bold labels).
+const formInputClass = 'h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20';
+const formLabelClass = 'mb-1 block text-xs font-bold text-slate-900';
+const FormSection = ({ title, children }) => (
+  <div className="border border-slate-200 bg-white">
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 
 
 const EMPTY_FORM = {
@@ -144,119 +153,123 @@ const ExpenseModal = ({ open, editing, properties, units, businessId, onClose, o
   }));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl">
-          <h2 className="text-sm font-black">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
+      <div className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+          <h2 className="text-sm font-black uppercase tracking-wide">
             {editing ? 'Edit Expense' : `Record ${termProperty} Expense`}
           </h2>
-          <button onClick={onClose} className="rounded-full border border-white/30 p-1.5 hover:bg-white/10 transition">
-            <FaTimes size={12} />
+          <button onClick={onClose} className="text-white/70 transition-colors hover:text-white">
+            <FaTimes size={14} />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="max-h-[78vh] overflow-y-auto px-6 py-5 space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termProperty}</label>
-              <AppSelect
-                value={form.property || null}
-                onChange={(v) => setForm((f) => ({ ...f, property: v ?? '', unit: '' }))}
-                options={propertyOptions}
-                placeholder={`— All ${termProperties.toLowerCase()} —`}
-                searchable
-                clearable
-                size="md"
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+            <FormSection title="Expense Details">
+              <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+                <div>
+                  <label className={formLabelClass}>{termProperty}</label>
+                  <AppSelect
+                    value={form.property || null}
+                    onChange={(v) => setForm((f) => ({ ...f, property: v ?? '', unit: '' }))}
+                    options={propertyOptions}
+                    placeholder={`— All ${termProperties.toLowerCase()} —`}
+                    searchable
+                    clearable
+                    size="md"
+                  />
+                </div>
 
-            <div className="col-span-2 sm:col-span-1">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termUnit} <span className="font-normal text-gray-400">(optional)</span></label>
-              <AppSelect
-                value={form.unit || null}
-                onChange={(v) => setForm((f) => ({ ...f, unit: v ?? '' }))}
-                options={filteredUnits.map((u) => ({ value: u._id, label: u.unitNumber || u.name }))}
-                placeholder={`— No specific ${termUnit.toLowerCase()} —`}
-                searchable
-                clearable
-                size="md"
-              />
-            </div>
+                <div>
+                  <label className={formLabelClass}>{termUnit} <span className="font-normal text-slate-400">(optional)</span></label>
+                  <AppSelect
+                    value={form.unit || null}
+                    onChange={(v) => setForm((f) => ({ ...f, unit: v ?? '' }))}
+                    options={filteredUnits.map((u) => ({ value: u._id, label: u.unitNumber || u.name }))}
+                    placeholder={`— No specific ${termUnit.toLowerCase()} —`}
+                    searchable
+                    clearable
+                    size="md"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Category <span className="text-red-500">*</span></label>
-              <AppSelect
-                value={form.category || null}
-                onChange={(v) => setForm((f) => ({ ...f, category: v ?? '' }))}
-                options={CATEGORY_OPTIONS}
-                size="md"
-              />
-            </div>
+                <div>
+                  <label className={formLabelClass}>Category<span className="ml-0.5 font-black text-red-600">*</span></label>
+                  <AppSelect
+                    value={form.category || null}
+                    onChange={(v) => setForm((f) => ({ ...f, category: v ?? '' }))}
+                    options={CATEGORY_OPTIONS}
+                    size="md"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Amount (KES) <span className="text-red-500">*</span></label>
-              <input type="number" min="0.01" step="0.01" value={form.amount} onChange={set('amount')} required placeholder="0.00"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            </div>
+                <div>
+                  <label className={formLabelClass}>Amount (KES)<span className="ml-0.5 font-black text-red-600">*</span></label>
+                  <input type="number" min="0.01" step="0.01" value={form.amount} onChange={set('amount')} required placeholder="0.00"
+                    className={formInputClass} />
+                </div>
 
-            <div className="col-span-2">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Description <span className="text-red-500">*</span></label>
-              <input type="text" value={form.description} onChange={set('description')} required placeholder="What was this expense for?"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            </div>
+                <div className="col-span-2">
+                  <label className={formLabelClass}>Description<span className="ml-0.5 font-black text-red-600">*</span></label>
+                  <input type="text" value={form.description} onChange={set('description')} required placeholder="What was this expense for?"
+                    className={formInputClass} />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Date <span className="text-red-500">*</span></label>
-              <input type="date" value={form.date} onChange={set('date')} required
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            </div>
+                <div>
+                  <label className={formLabelClass}>Date<span className="ml-0.5 font-black text-red-600">*</span></label>
+                  <input type="date" value={form.date} onChange={set('date')} required
+                    className={formInputClass} />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Payment Method</label>
-              <AppSelect
-                value={form.paymentMethod || null}
-                onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? '' }))}
-                options={PAYMENT_METHOD_OPTIONS}
-                size="md"
-              />
-            </div>
+                <div>
+                  <label className={formLabelClass}>Payment Method</label>
+                  <AppSelect
+                    value={form.paymentMethod || null}
+                    onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? '' }))}
+                    options={PAYMENT_METHOD_OPTIONS}
+                    size="md"
+                  />
+                </div>
 
-            <div className="col-span-2">
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">
-                Cashbook <span className="text-red-500">*</span>
-              </label>
-              <AppSelect
-                value={form.cashbook || null}
-                onChange={(v) => setForm((f) => ({ ...f, cashbook: v ?? '' }))}
-                options={cashbookSelectOptions}
-                placeholder="Select cashbook paid from…"
-                searchable
-                clearable
-                size="md"
-                emptyMessage="No cashbooks found — check Chart of Accounts"
-              />
-            </div>
+                <div className="col-span-2">
+                  <label className={formLabelClass}>
+                    Cashbook<span className="ml-0.5 font-black text-red-600">*</span>
+                  </label>
+                  <AppSelect
+                    value={form.cashbook || null}
+                    onChange={(v) => setForm((f) => ({ ...f, cashbook: v ?? '' }))}
+                    options={cashbookSelectOptions}
+                    placeholder="Select cashbook paid from…"
+                    searchable
+                    clearable
+                    size="md"
+                    emptyMessage="No cashbooks found — check Chart of Accounts"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">{termReceipt} / Ref No.</label>
-              <input type="text" value={form.receiptNumber} onChange={set('receiptNumber')} placeholder="Optional"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            </div>
+                <div>
+                  <label className={formLabelClass}>{termReceipt} / Ref No.</label>
+                  <input type="text" value={form.receiptNumber} onChange={set('receiptNumber')} placeholder="Optional"
+                    className={formInputClass} />
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-extrabold uppercase tracking-widest text-[#4a6b5e] mb-1">Paid By</label>
-              <input type="text" value={form.paidBy} onChange={set('paidBy')} placeholder="Name or account"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-            </div>
+                <div>
+                  <label className={formLabelClass}>Paid By</label>
+                  <input type="text" value={form.paidBy} onChange={set('paidBy')} placeholder="Name or account"
+                    className={formInputClass} />
+                </div>
+              </div>
+            </FormSection>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-100">
+          <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
             <button type="button" onClick={onClose} disabled={saving}
-              className="rounded-lg border border-gray-200 px-4 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 transition disabled:opacity-50">
+              className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
               Cancel
             </button>
             <button type="submit" disabled={saving}
-              className="rounded-lg bg-[#0B3B2E] px-5 py-2 text-xs font-extrabold text-white hover:bg-[#0A3127] transition disabled:opacity-50">
+              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50">
               {saving ? 'Saving…' : editing ? 'Update Expense' : 'Record Expense'}
             </button>
           </div>
@@ -420,28 +433,20 @@ const PropertyExpenses = () => {
 
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50">
 
-        {/* ─── Summary chips ──────────────────────────────────────────────── */}
-        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          <div className="inline-flex items-center gap-2 border border-slate-200 bg-slate-50 px-3 py-1.5">
-            <FaMoneyBillWave size={9} className="text-slate-500 shrink-0" />
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
-            <span className="text-sm font-black text-[#0B3B2E]">{formatMoney(summary.total)}</span>
-          </div>
-          {summary.byCat.slice(0, 4).map(({ cat, total, count }) => (
-            <div key={cat} className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
-              <span className={`h-2 w-2 shrink-0 rounded-full ${CATEGORY_DOT[cat] || 'bg-slate-400'}`} />
-              <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{humanize(cat)}</span>
-              <span className="text-xs font-black text-slate-700">{formatMoney(total)}</span>
-              <span className="text-[10px] text-slate-400">{count}</span>
-            </div>
-          ))}
-          <span className="ml-auto text-[10px] font-semibold text-slate-400">
-            {summary.count} expense{summary.count !== 1 ? 's' : ''} in period
-          </span>
-        </div>
-
         {/* ─── Filter bar ─────────────────────────────────────────────────── */}
         <ListToolbar>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Expenses: {summary.count}
+          </span>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Total: {formatMoney(summary.total)}
+          </span>
+          {summary.byCat.slice(0, 4).map(({ cat, total, count }) => (
+            <span key={cat} className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              {humanize(cat)}: {formatMoney(total)} ({count})
+            </span>
+          ))}
+          <ListToolbar.Divider />
           <ListToolbar.Input type="date" value={filters.startDate} onChange={setFilter('startDate')} />
           <span className="shrink-0 text-[9px] text-slate-400">—</span>
           <ListToolbar.Input type="date" value={filters.endDate} onChange={setFilter('endDate')} />
@@ -475,7 +480,7 @@ const PropertyExpenses = () => {
         </ListToolbar>
 
         {/* ─── Table ──────────────────────────────────────────────────────── */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white m-2 rounded-lg shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
           <MilikTable
             columns={[
               { label: 'Date' },
@@ -497,7 +502,7 @@ const PropertyExpenses = () => {
                 <p className="text-xs font-semibold text-slate-400">No expenses found for this period</p>
                 {canCreateExpense && (
                   <button onClick={() => { setEditing(null); setModalOpen(true); }}
-                    className="mt-1 inline-flex items-center gap-1.5 rounded bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0A3127]">
+                    className="mt-1 inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0A3127]">
                     <FaPlus size={10} /> Record your first expense
                   </button>
                 )}
@@ -529,7 +534,7 @@ const PropertyExpenses = () => {
                     {unitNum && <div className="text-[10px] text-slate-500">{termUnit} {unitNum}</div>}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100">
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
+                    <span className={`inline-flex border px-2 py-0.5 text-[10px] font-bold ${CATEGORY_COLORS[exp.category] || CATEGORY_COLORS.other}`}>
                       {humanize(exp.category)}
                     </span>
                   </td>
@@ -548,17 +553,18 @@ const PropertyExpenses = () => {
                 </>
               );
             }}
+            actionsWidth="80px"
             renderActions={(exp) => (
               <div className="flex items-center gap-1">
                 {canUpdateExpense && (
                   <button onClick={() => { setEditing(exp); setModalOpen(true); }}
-                    className="rounded p-1.5 text-[#0B3B2E] hover:bg-[#ECF6F1]" title="Edit">
+                    className="h-6 border border-slate-300 bg-white px-2 text-slate-700 hover:bg-slate-50" title="Edit">
                     <FaEdit size={11} />
                   </button>
                 )}
                 {canDeleteExpense && (
                   <button onClick={() => handleDelete(exp)} disabled={deleting === exp._id}
-                    className="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-40" title="Delete">
+                    className="h-6 border border-red-300 bg-white px-2 text-red-600 hover:bg-red-50 disabled:opacity-40" title="Delete">
                     <FaTrash size={11} />
                   </button>
                 )}

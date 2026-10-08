@@ -205,11 +205,11 @@ const TENANT_PHONE_ERROR = "Enter one valid mobile number, e.g. 0712 345 678, or
 
 const resolveTenantPhone = (raw) => {
   if (isPlaceholder(raw)) return { value: null };
-  const digits = String(raw).replace(/D/g, "");
+  const digits = String(raw).replace(/\D/g, "");
   let local = digits;
   if (digits.length === 12 && digits.startsWith("254")) local = `0${digits.slice(3)}`;
   else if (digits.length === 9) local = `0${digits}`;
-  return /^0[17]d{8}$/.test(local) ? { value: local } : { error: TENANT_PHONE_ERROR };
+  return /^0[17]\d{8}$/.test(local) ? { value: local } : { error: TENANT_PHONE_ERROR };
 };
 
 const normalizeLower = (value) =>
