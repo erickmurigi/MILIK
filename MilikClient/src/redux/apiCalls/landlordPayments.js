@@ -105,6 +105,8 @@ export const getPaymentVouchers = async (filters = {}) => {
   if (filters.propertyId && filters.propertyId !== "all") params.append("property", filters.propertyId);
   if (filters.landlordId && filters.landlordId !== "all") params.append("landlord", filters.landlordId);
   if (filters.search) params.append("search", filters.search);
+  if (filters.startDate) params.append("startDate", filters.startDate);
+  if (filters.endDate) params.append("endDate", filters.endDate);
   if (filters.page) params.append("page", filters.page);
   if (filters.limit) params.append("limit", filters.limit);
 

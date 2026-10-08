@@ -41,9 +41,12 @@ describe("payment voucher reversal", () => {
     expect(reversed.payload.status).toBe("reversed");
 
     const { rows, debit, credit } = await net(voucher._id);
-    expect(rows.length).toBe(8); // 4 original legs + 4 reversing legs
+    // Created directly as "paid" (company_operational, no property/landlord), this is a
+    // same-step "direct payment": Dr Expense / Cr Cashbook only, no liability leg — see
+    // paymentVoucher.js's `direct` posting path. 2 original legs + 2 reversing legs.
+    expect(rows.length).toBe(4);
     expect(debit).toBe(credit);
-    expect(rows.filter((r) => r.category === "REVERSAL").length).toBe(4);
+    expect(rows.filter((r) => r.category === "REVERSAL").length).toBe(2);
 
     const read = await call(getPaymentVoucher, { params: { id: String(voucher._id) } });
     expect(read.statusCode).toBe(200);

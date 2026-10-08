@@ -279,6 +279,11 @@ const addDays = (dateValue, days = 0) => {
   return date;
 };
 
+// Syncs the ONE Lease record for a single tenant+unit pair. A tenant occupying
+// several units needs one of these calls per unit (see
+// syncTenantLeaseRecordsForUnits below) — every lookup here is scoped by
+// {business, tenant, unit}, not just {business, tenant}, so syncing a second
+// unit can never find and overwrite the first unit's lease.
 const syncTenantLeaseRecord = async ({
   tenantDoc,
   unitDoc = null,
@@ -292,9 +297,16 @@ const syncTenantLeaseRecord = async ({
   const businessId = tenantDoc.business;
   const normalizedLeaseType = normalizeLower(tenantDoc.leaseType || "at_will");
   const normalizedTenantStatus = normalizeTenantStatus(tenantDoc.status || "active");
+
+  const resolvedUnit =
+    unitDoc ||
+    (tenantDoc.unit ? await Unit.findById(toObjectIdString(tenantDoc.unit)).populate("property", "landlords").lean() : null);
+  if (!resolvedUnit?._id) return null;
+
   const activeLease = await Lease.findOne({
     business: businessId,
     tenant: tenantId,
+    unit: resolvedUnit._id,
     status: { $in: ["draft", "pending_signature", "active"] },
   }).sort({ createdAt: -1 });
 
@@ -313,11 +325,6 @@ const syncTenantLeaseRecord = async ({
     activeLease.terminationReason = terminationReason || tenantDoc.terminationReason || activeLease.terminationReason || "";
     return saveLeaseWithUniqueAgreementNumber(activeLease, { businessId });
   }
-
-  const resolvedUnit =
-    unitDoc ||
-    (tenantDoc.unit ? await Unit.findById(tenantDoc.unit).populate("property", "landlords").lean() : null);
-  if (!resolvedUnit?._id) return activeLease || null;
 
   const startDate = tenantDoc.moveInDate ? new Date(tenantDoc.moveInDate) : new Date(tenantDoc.createdAt || Date.now());
   if (Number.isNaN(startDate.getTime())) {
@@ -342,8 +349,13 @@ const syncTenantLeaseRecord = async ({
     leaseType: normalizedLeaseType === "fixed" ? "fixed" : "at_will",
     startDate,
     endDate,
-    rentAmount: Number(tenantDoc.rent || resolvedUnit.rent || 0),
-    depositAmount: Number(tenantDoc.depositAmount || 0),
+    // This unit's own rent/deposit, NOT tenantDoc.rent/depositAmount — those are the
+    // tenant's combined total across every unit they occupy. Using the combined total
+    // here would make a multi-unit tenant's per-unit leases each bill the full
+    // combined amount, over-invoicing them by a multiple of their unit count once
+    // auto-invoicing sums every active lease.
+    rentAmount: Number(resolvedUnit.rent ?? tenantDoc.rent ?? 0),
+    depositAmount: Number(resolvedUnit.deposit ?? tenantDoc.depositAmount ?? 0),
     paymentDueDay: 5,
     noticePeriodDays: 30,
     lateFee: Number(activeLease?.lateFee || 0),
@@ -358,9 +370,15 @@ const syncTenantLeaseRecord = async ({
     return saveLeaseWithUniqueAgreementNumber(activeLease, { businessId });
   }
 
-  // On restore, re-activate the terminated lease rather than creating a duplicate record
+  // On restore, re-activate this unit's own terminated lease rather than creating
+  // a duplicate record.
   if (action === "restore") {
-    const terminatedLease = await Lease.findOne({ business: businessId, tenant: tenantId, status: "terminated" }).sort({ createdAt: -1 });
+    const terminatedLease = await Lease.findOne({
+      business: businessId,
+      tenant: tenantId,
+      unit: resolvedUnit._id,
+      status: "terminated",
+    }).sort({ createdAt: -1 });
     if (terminatedLease) {
       Object.assign(terminatedLease, { ...payload, terminatedAt: null, terminationReason: "" });
       return saveLeaseWithUniqueAgreementNumber(terminatedLease, { businessId });
@@ -369,6 +387,64 @@ const syncTenantLeaseRecord = async ({
 
   const newLease = new Lease(payload);
   return saveLeaseWithUniqueAgreementNumber(newLease, { businessId, dateValue: startDate });
+};
+
+// Keeps one Lease per occupied unit in sync for a tenant with multiple units —
+// a single syncTenantLeaseRecord call only ever covers one unit. `unitIds` get
+// upserted/restored (action); `terminateUnitIds` get their lease terminated
+// regardless of `action` (units the tenant no longer occupies, e.g. after a
+// transfer or a partial unit removal). Pass `preloadedUnitDocs` when the caller
+// already has the unit documents (avoids a redundant query).
+const syncTenantLeaseRecordsForUnits = async ({
+  tenantDoc,
+  unitIds = [],
+  terminateUnitIds = [],
+  preloadedUnitDocs = [],
+  action = "upsert",
+  effectiveDate = null,
+  terminationReason = "",
+} = {}) => {
+  if (!tenantDoc?._id || !tenantDoc?.business) return [];
+
+  const targetIds = uniqueUnitIds(unitIds);
+  const terminateIds = uniqueUnitIds(terminateUnitIds).filter((id) => !targetIds.includes(id));
+  const allIds = uniqueUnitIds([...targetIds, ...terminateIds]);
+  if (!allIds.length) return [];
+
+  const unitById = new Map(
+    (Array.isArray(preloadedUnitDocs) ? preloadedUnitDocs : [])
+      .filter((u) => u && u._id)
+      .map((u) => [String(u._id), u])
+  );
+  const missingIds = allIds.filter((id) => !unitById.has(id));
+  if (missingIds.length) {
+    const fetched = await Unit.find({ _id: { $in: missingIds } }).populate("property", "landlords").lean();
+    fetched.forEach((u) => unitById.set(String(u._id), u));
+  }
+
+  const results = [];
+
+  for (const unitId of terminateIds) {
+    const unitDoc = unitById.get(unitId);
+    if (!unitDoc) continue;
+    try {
+      results.push(await syncTenantLeaseRecord({ tenantDoc, unitDoc, action: "terminate", effectiveDate, terminationReason }));
+    } catch (err) {
+      console.error(`Lease termination failed for tenant ${tenantDoc._id} unit ${unitId}:`, err?.message);
+    }
+  }
+
+  for (const unitId of targetIds) {
+    const unitDoc = unitById.get(unitId);
+    if (!unitDoc) continue;
+    try {
+      results.push(await syncTenantLeaseRecord({ tenantDoc, unitDoc, action, effectiveDate, terminationReason }));
+    } catch (err) {
+      console.error(`Lease sync failed for tenant ${tenantDoc._id} unit ${unitId}:`, err?.message);
+    }
+  }
+
+  return results.filter(Boolean);
 };
 
 const sanitizeUtilities = (utilities = []) => {
@@ -882,9 +958,10 @@ export const createTenant = async (req, res, next) => {
     // into thinking the tenant was never created (which causes a re-submit loop).
     let leaseWarning = null;
     try {
-      await syncTenantLeaseRecord({
+      await syncTenantLeaseRecordsForUnits({
         tenantDoc: populatedTenant,
-        unitDoc: unit,
+        unitIds: requestedUnits.all,
+        preloadedUnitDocs: unitDocs,
         action: "upsert",
       });
     } catch (leaseErr) {
@@ -1463,18 +1540,24 @@ export const updateTenant = async (req, res, next) => {
       ).lean()
     );
 
+    const nextAssignedUnitIds = nextOccupiesUnits ? getTenantAssignedUnitIds(updatedTenant) : [];
+
     if (isChangingUnit || isChangingAdditionalUnits || currentOccupiesUnits !== nextOccupiesUnits) {
       await syncTenantAssignedUnitOccupancy({
         previousUnitIds: currentOccupiesUnits ? currentAssignedUnitIds : [],
-        nextUnitIds: nextOccupiesUnits ? getTenantAssignedUnitIds(updatedTenant) : [],
+        nextUnitIds: nextAssignedUnitIds,
         tenantId: tenant._id,
         effectiveDate: new Date(),
       });
     }
 
-    await syncTenantLeaseRecord({
+    // One Lease per occupied unit: upsert every unit the tenant now occupies (new
+    // or existing, in case rent/terms changed) and terminate any unit they no
+    // longer occupy.
+    await syncTenantLeaseRecordsForUnits({
       tenantDoc: updatedTenant,
-      unitDoc: targetUnit || updatedTenant.unit || null,
+      unitIds: nextAssignedUnitIds,
+      terminateUnitIds: currentAssignedUnitIds.filter((id) => !nextAssignedUnitIds.includes(id)),
       action: "upsert",
     });
 
@@ -1768,9 +1851,14 @@ export const updateTenantStatus = async (req, res, next) => {
     }
 
     const isRestore = shouldTenantOccupyUnits(status) && !shouldTenantOccupyUnits(tenant);
-    await syncTenantLeaseRecord({
+    const isTerminate = status === "terminated";
+    // Every unit this tenant occupies gets its lease terminated/restored together —
+    // not just the primary unit's.
+    await syncTenantLeaseRecordsForUnits({
       tenantDoc: updatedTenantDoc,
-      action: status === "terminated" ? "terminate" : isRestore ? "restore" : "upsert",
+      unitIds: isTerminate ? [] : nextOccupiedUnitIds,
+      terminateUnitIds: isTerminate ? previousOccupiedUnitIds : [],
+      action: isRestore ? "restore" : "upsert",
       effectiveDate: updateData.terminationDate || updateData.moveOutDate || null,
       terminationReason,
     });
@@ -2198,8 +2286,16 @@ export const transferTenantUnit = async (req, res, next) => {
       ).lean()
     );
 
-    // Sync the lease to reflect the new unit and updated rent
-    await syncTenantLeaseRecord({ tenantDoc: updatedTenant, action: "upsert" }).catch((err) =>
+    // Sync leases to reflect the new unit set: upsert a lease for every unit the
+    // tenant now occupies, terminate the lease for any unit they moved out of.
+    await syncTenantLeaseRecordsForUnits({
+      tenantDoc: updatedTenant,
+      unitIds: requestedUnits.all,
+      terminateUnitIds: getTenantAssignedUnitIds(tenant).filter((id) => !requestedUnits.all.includes(id)),
+      preloadedUnitDocs: requestedUnitDocs,
+      action: "upsert",
+      effectiveDate,
+    }).catch((err) =>
       console.error("Lease sync after unit transfer failed:", err?.message)
     );
 
@@ -2317,7 +2413,13 @@ export const rollbackTenantTransfer = async (req, res, next) => {
       ).lean()
     );
 
-    await syncTenantLeaseRecord({ tenantDoc: updatedTenant, action: "upsert" }).catch((err) =>
+    await syncTenantLeaseRecordsForUnits({
+      tenantDoc: updatedTenant,
+      unitIds: requestedUnits.all,
+      terminateUnitIds: getTenantAssignedUnitIds(tenant).filter((id) => !requestedUnits.all.includes(id)),
+      preloadedUnitDocs: requestedUnitDocs,
+      action: "upsert",
+    }).catch((err) =>
       console.error("Lease sync after transfer rollback failed:", err?.message)
     );
 
@@ -2682,11 +2784,18 @@ export const bulkImportTenants = async (req, res, next) => {
         // Capture closure values now; execution is deferred until after unit writes.
         const capturedTenant = savedTenant;
         const capturedEntry = successEntry;
-        const capturedUnitDoc = item.primaryUnitDoc;
+        const capturedUnitDocs = item.requestedUnitDocs;
+        const capturedPrimaryUnitId = item.primaryUnitDoc?._id ? String(item.primaryUnitDoc._id) : "";
         leaseSyncFns.push(async () => {
           try {
-            const lease = await syncTenantLeaseRecord({ tenantDoc: capturedTenant, unitDoc: capturedUnitDoc, action: "upsert" });
-            capturedEntry.agreementNumber = lease?.agreementNumber || "";
+            const leases = await syncTenantLeaseRecordsForUnits({
+              tenantDoc: capturedTenant,
+              unitIds: capturedUnitDocs.map((u) => String(u._id)),
+              preloadedUnitDocs: capturedUnitDocs,
+              action: "upsert",
+            });
+            const primaryLease = leases.find((l) => String(l.unit) === capturedPrimaryUnitId) || leases[0];
+            capturedEntry.agreementNumber = primaryLease?.agreementNumber || "";
           } catch (err) {
             console.error(`Lease sync failed for ${capturedTenant.tenantCode || capturedTenant._id}:`, err);
           }
@@ -2726,28 +2835,49 @@ export const backfillMissingLeases = async (req, res, next) => {
       return next(createError(400, "Business context is required"));
     }
 
-    // Find tenants with no active/pending lease
-    const [tenantsWithLease, tenants] = await Promise.all([
+    // Find every (tenant, unit) assignment that doesn't have its own active/pending
+    // lease yet — not just tenants with zero leases. A multi-unit tenant who already
+    // has a lease for their primary unit but none for their additional units would
+    // never surface under a tenant-only check, which is exactly the gap that let
+    // auto-invoicing silently skip every unit but one for multi-unit tenants.
+    const [existingLeases, tenants] = await Promise.all([
       Lease.find({
         business: businessId,
         status: { $in: ["draft", "pending_signature", "active"] },
-      }).distinct("tenant"),
+      })
+        .select("tenant unit")
+        .lean(),
       Tenant.find({
         business: businessId,
         status: { $in: ACTIVE_TENANT_STATUSES },
       })
         .populate({ path: "unit", populate: { path: "property", select: "landlords depositHeldBy letManage propertyCode" } })
+        .populate({ path: "additionalUnits", populate: { path: "property", select: "landlords depositHeldBy letManage propertyCode" } })
         .lean(),
     ]);
 
-    const tenantIdsWithLease = new Set(tenantsWithLease.map(String));
+    const existingLeaseKeys = new Set(
+      existingLeases.map((l) => `${String(l.tenant)}|${String(l.unit)}`)
+    );
 
-    const missing = tenants.filter((t) => !tenantIdsWithLease.has(String(t._id)));
+    const missing = [];
+    for (const tenant of tenants) {
+      const assignedUnitDocs = [
+        tenant.unit,
+        ...(Array.isArray(tenant.additionalUnits) ? tenant.additionalUnits : []),
+      ].filter((u) => u && u._id);
+
+      for (const unitDoc of assignedUnitDocs) {
+        if (!existingLeaseKeys.has(`${String(tenant._id)}|${String(unitDoc._id)}`)) {
+          missing.push({ tenant, unitDoc });
+        }
+      }
+    }
 
     if (missing.length === 0) {
       return res.status(200).json({
         success: true,
-        message: "All active tenants already have lease agreements",
+        message: "Every active tenant already has a lease for each of their units",
         created: 0,
         failed: 0,
         details: [],
@@ -2757,16 +2887,28 @@ export const backfillMissingLeases = async (req, res, next) => {
     const results = [];
 
     // Sequential — avoids generateAgreementNumber race condition
-    for (const tenant of missing) {
+    for (const { tenant, unitDoc } of missing) {
       try {
         const lease = await syncTenantLeaseRecord({
           tenantDoc: tenant,
-          unitDoc: tenant.unit || null,
+          unitDoc,
           action: "upsert",
         });
-        results.push({ tenantCode: tenant.tenantCode, name: tenant.name, agreementNumber: lease?.agreementNumber || "", status: "created" });
+        results.push({
+          tenantCode: tenant.tenantCode,
+          name: tenant.name,
+          unit: unitDoc.unitNumber || unitDoc.unitName || unitDoc.name || "",
+          agreementNumber: lease?.agreementNumber || "",
+          status: "created",
+        });
       } catch (err) {
-        results.push({ tenantCode: tenant.tenantCode, name: tenant.name, error: err.message, status: "failed" });
+        results.push({
+          tenantCode: tenant.tenantCode,
+          name: tenant.name,
+          unit: unitDoc.unitNumber || unitDoc.unitName || unitDoc.name || "",
+          error: err.message,
+          status: "failed",
+        });
       }
     }
 

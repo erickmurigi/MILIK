@@ -1560,7 +1560,7 @@ export const getPaymentVouchers = async (req, res, next) => {
       return next(createError(400, "User must have a company context"));
     }
 
-    const { category, status, property, landlord, search } = req.query;
+    const { category, status, property, landlord, search, startDate, endDate } = req.query;
     const filter = { business };
 
     // filters arrive from the query string: only plain, valid values are accepted (no objects, no malformed ids)
@@ -1582,6 +1582,21 @@ export const getPaymentVouchers = async (req, res, next) => {
     if (landlord) {
       if (typeof landlord !== "string" || !OBJECT_ID.test(landlord)) return next(createError(400, "Invalid landlord filter"));
       filter.landlord = landlord;
+    }
+
+    if (startDate || endDate) {
+      filter.dueDate = {};
+      if (startDate) {
+        const from = new Date(startDate);
+        if (Number.isNaN(from.getTime())) return next(createError(400, "Invalid start date filter"));
+        filter.dueDate.$gte = from;
+      }
+      if (endDate) {
+        const to = new Date(endDate);
+        if (Number.isNaN(to.getTime())) return next(createError(400, "Invalid end date filter"));
+        to.setHours(23, 59, 59, 999);
+        filter.dueDate.$lte = to;
+      }
     }
 
     const term = typeof search === "string" ? search.trim().slice(0, 100) : "";

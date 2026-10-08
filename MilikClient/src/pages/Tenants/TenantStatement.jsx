@@ -37,7 +37,6 @@ import {
 } from "../../redux/apiCalls";
 import { deleteTenantInvoicesBatch } from "../../redux/invoiceApi";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import Spinner from "../../components/common/Spinner";
 import SingleBookingModal from "./SingleBookingModal";
 import AppSelect from "../../components/common/AppSelect";
 import { toast } from "react-toastify";
@@ -101,8 +100,8 @@ const formatFrequency = (frequency) => {
 
 const fmtMoney = (n) => `KES ${Number(n || 0).toLocaleString()}`;
 
-const reviewInputCls = "h-8 w-full border border-slate-300 bg-white px-2 text-xs font-semibold text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-const reviewLabelCls = "mb-1 block text-[10px] font-black uppercase tracking-wide text-slate-500";
+const reviewInputCls = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const reviewLabelCls = "mb-1 block text-xs font-bold text-slate-900";
 
 const formatPeriodLabel = (dateValue) => {
   const dt = new Date(dateValue);
@@ -324,6 +323,11 @@ const TenantStatement = () => {
     `${location.pathname}:activeTab`,
     ["statement", "billing", "reviews"].includes(initialRequestedTab) ? initialRequestedTab : "statement"
   );
+  // Which of a multi-unit tenant's several leases Billing Schedule / Rent Reviews /
+  // the header badge operate on. Empty string = no explicit pick yet, falls back to
+  // the auto-picked "best" lease (see tenantLease below) — single-unit tenants never
+  // see a selector and this stays unused.
+  const [selectedLeaseId, setSelectedLeaseId] = useTabState(`${location.pathname}:selectedLeaseId`, "");
   // Lifted filter state — shared between the statement tab view and print/PDF.
   const [stmtFrom,       setStmtFrom]       = useState("2000-01-01");
   const [stmtTo,         setStmtTo]         = useState(formatInputDate(new Date()));
@@ -373,7 +377,7 @@ const TenantStatement = () => {
 
   const currentCompany = useSelector(selectCurrentCompany);
   const { tenant: termTenant, rent: termRent, landlord: termLandlord, unit: termUnit } = useTerms("tenant", "rent", "landlord", "unit");
-  const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
+  const { propertiesLoaded, unitsLoaded, utilitiesLoaded } = useEntityCache(currentCompany?._id);
   const [tenantData, setTenantData] = useState(null);
   const [tenantLoading, setTenantLoading] = useState(true);
   const leasesFromStore = useSelector(selectAllLeases);
@@ -537,19 +541,20 @@ const TenantStatement = () => {
     };
   };
 
-  const tenantLease = useMemo(() => {
+  // Every lease belonging to this tenant (one per occupied unit for a multi-unit
+  // tenant), best-first: active > pending > draft > renewed > expired > terminated
+  // > cancelled, then most-recently-started within a status tier.
+  const tenantLeases = useMemo(() => {
     const tenantKey = safeId(tenantId);
     const tenantUnitKey = safeId(tenant?.unit?._id || tenant?.unit);
-    const tenantLeases = (Array.isArray(leasesFromStore) ? leasesFromStore : []).filter((lease) => {
+    const matches = (Array.isArray(leasesFromStore) ? leasesFromStore : []).filter((lease) => {
       const leaseTenantKey = safeId(lease?.tenant);
       const leaseUnitKey = safeId(lease?.unit);
       return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
     });
 
-    if (tenantLeases.length === 0) return null;
-
     const preferredStatuses = ["active", "pending_signature", "draft", "renewed", "expired", "terminated", "cancelled"];
-    tenantLeases.sort((a, b) => {
+    matches.sort((a, b) => {
       const statusRankA = preferredStatuses.indexOf(String(a?.status || "").toLowerCase());
       const statusRankB = preferredStatuses.indexOf(String(b?.status || "").toLowerCase());
       const normalizedRankA = statusRankA === -1 ? preferredStatuses.length : statusRankA;
@@ -561,8 +566,21 @@ const TenantStatement = () => {
       return startB - startA;
     });
 
-    return tenantLeases[0] || null;
+    return matches;
   }, [leasesFromStore, tenantId, tenant?.unit]);
+
+  // The lease every other computation/mutation on this page actually operates on —
+  // whichever one is explicitly selected (multi-unit tenants only), falling back to
+  // the best-ranked lease from tenantLeases above when nothing's selected yet, or the
+  // selection no longer matches any of this tenant's leases (e.g. it was terminated
+  // and dropped out of the list).
+  const tenantLease = useMemo(() => {
+    if (tenantLeases.length === 0) return null;
+    const selected = selectedLeaseId
+      ? tenantLeases.find((lease) => safeId(lease?._id) === safeId(selectedLeaseId))
+      : null;
+    return selected || tenantLeases[0];
+  }, [tenantLeases, selectedLeaseId]);
 
   useEffect(() => {
     const rows = Array.isArray(tenantLease?.billingScheduleAdjustments)
@@ -598,7 +616,7 @@ const TenantStatement = () => {
 
     if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
-    getUtilities(dispatch, currentCompany._id);
+    if (!utilitiesLoaded) getUtilities(dispatch, currentCompany._id);
 
     getTenantStatementBundle(tenantId)
       .then((data) => {
@@ -1646,11 +1664,15 @@ const TenantStatement = () => {
             : [];
           const tenantKey = safeId(tenantId);
           const tenantUnitKey = safeId(tenant?.unit?._id || tenant?.unit);
-          const matchedLease = refreshedLeaseList.find((lease) => {
-            const leaseTenantKey = safeId(lease?.tenant);
-            const leaseUnitKey = safeId(lease?.unit);
-            return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
-          });
+          // Prefer whatever lease was explicitly selected (multi-unit tenants) before
+          // falling back to the generic tenant/primary-unit match.
+          const matchedLease =
+            (selectedLeaseId && refreshedLeaseList.find((lease) => safeId(lease?._id) === safeId(selectedLeaseId))) ||
+            refreshedLeaseList.find((lease) => {
+              const leaseTenantKey = safeId(lease?.tenant);
+              const leaseUnitKey = safeId(lease?.unit);
+              return (tenantKey && leaseTenantKey === tenantKey) || (tenantUnitKey && leaseUnitKey === tenantUnitKey);
+            });
           targetLeaseId = safeId(matchedLease?._id);
         }
 
@@ -2552,8 +2574,6 @@ const TenantStatement = () => {
 
 
     const isEscalation = reviewForm.reviewType === "escalation";
-    const accentBg = isEscalation ? "bg-blue-700" : "bg-amber-600";
-    const accentBorder = isEscalation ? "border-blue-700" : "border-amber-500";
     const isFormDecrease = reviewForm.direction === "decrease";
     const isFormFixed = reviewForm.type === "fixed_rent";
     const previewRent = computeNewRent(currentEffectiveRent, reviewForm.type, reviewForm.value, reviewForm.direction || "increase");
@@ -2634,9 +2654,9 @@ const TenantStatement = () => {
 
         {/* ── form panel ──────────────────────────────────────────────── */}
         {reviewFormOpen && (
-            <div className={`border ${accentBorder} bg-white shadow-sm`}>
+            <div className="border border-slate-200 bg-white shadow-sm">
               {/* Header */}
-              <div className={`flex items-center justify-between border-b border-white/10 ${accentBg} px-4 py-2.5`}>
+              <div className="flex items-center justify-between border-b border-white/10 bg-[#0B3B2E] px-4 py-2.5">
                 <div className="flex items-center gap-2 text-white">
                   {isEscalation ? <FaChartLine size={11} /> : <FaSearch size={11} />}
                   <span className="text-xs font-black uppercase tracking-widest">
@@ -2650,20 +2670,20 @@ const TenantStatement = () => {
                 </button>
               </div>
 
-              <div className="p-4">
+              <div className="p-2.5">
                 {/* ── Category toggle ── */}
-                <div className="mb-4">
+                <div className="mb-2.5">
                   <p className={reviewLabelCls}>Category</p>
                   <div className="flex overflow-hidden border border-slate-200">
                     <button type="button"
                       onClick={() => setReviewForm((p) => ({ ...p, reviewType: "escalation", direction: "increase", type: p.type === "fixed_rent" ? "percentage" : p.type, frequency: p.frequency === "once" ? "yearly" : p.frequency }))}
-                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-black transition-colors ${isEscalation ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-blue-50"}`}>
+                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-black transition-colors ${isEscalation ? "bg-blue-600 text-white" : "bg-white text-slate-500 hover:bg-blue-50"}`}>
                       <div className="flex items-center gap-1"><FaChartLine size={9} /> Escalation</div>
                       <span className={`font-normal ${isEscalation ? "text-blue-200" : "text-slate-400"}`}>Predetermined — lease clause</span>
                     </button>
                     <button type="button"
                       onClick={() => setReviewForm((p) => ({ ...p, reviewType: "review", frequency: "once" }))}
-                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-black transition-colors border-l border-slate-200 ${!isEscalation ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-amber-50"}`}>
+                      className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-black transition-colors border-l border-slate-200 ${!isEscalation ? "bg-amber-500 text-white" : "bg-white text-slate-500 hover:bg-amber-50"}`}>
                       <div className="flex items-center gap-1"><FaSearch size={9} /> Review</div>
                       <span className={`font-normal ${!isEscalation ? "text-amber-100" : "text-slate-400"}`}>Discretionary — market assessed</span>
                     </button>
@@ -2676,7 +2696,7 @@ const TenantStatement = () => {
                 </div>
 
                 {/* ── Fields grid ── */}
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 lg:grid-cols-6">
                   {/* Adjustment Type */}
                   <div>
                     <label className={reviewLabelCls}>Adjustment Type</label>
@@ -2696,7 +2716,7 @@ const TenantStatement = () => {
                   {!isEscalation && !isFormFixed ? (
                     <div>
                       <label className={reviewLabelCls}>Direction</label>
-                      <div className="flex h-8 overflow-hidden border border-slate-300">
+                      <div className="flex h-7 overflow-hidden border border-slate-300">
                         <button type="button"
                           onClick={() => setReviewForm((p) => ({ ...p, direction: "increase" }))}
                           className={`flex flex-1 items-center justify-center gap-1 text-[10px] font-black transition-colors ${!isFormDecrease ? "bg-emerald-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"}`}>
@@ -2712,7 +2732,7 @@ const TenantStatement = () => {
                   ) : isEscalation ? (
                     <div>
                       <label className={reviewLabelCls}>Direction</label>
-                      <div className="flex h-8 items-center gap-1.5 border border-blue-200 bg-blue-50 px-2 text-[10px] font-black text-blue-700">
+                      <div className="flex h-7 items-center gap-1.5 border border-blue-200 bg-blue-50 px-2 text-[10px] font-black text-blue-700">
                         <FaArrowUp size={8} /> Always Increase
                       </div>
                     </div>
@@ -2755,7 +2775,7 @@ const TenantStatement = () => {
                   {/* Preview */}
                   <div>
                     <label className={reviewLabelCls}>New Rent</label>
-                    <div className={`flex h-8 items-center border px-2 text-xs font-black ${isFormDecrease && !isFormFixed ? "border-red-300 bg-red-50 text-red-700" : isEscalation ? "border-blue-300 bg-blue-50 text-blue-700" : "border-[#0B3B2E] bg-[#EDF5F1] text-[#0B3B2E]"}`}>
+                    <div className={`flex h-7 items-center border px-2 text-xs font-black ${isFormDecrease && !isFormFixed ? "border-red-300 bg-red-50 text-red-700" : "border-[#0B3B2E] bg-[#EDF5F1] text-[#0B3B2E]"}`}>
                       {fmtMoney(previewRent)}
                     </div>
                   </div>
@@ -2763,7 +2783,7 @@ const TenantStatement = () => {
                   {/* Change */}
                   <div>
                     <label className={reviewLabelCls}>Change</label>
-                    <div className={`flex h-8 items-center gap-1 border px-2 text-xs font-black ${isFormDecrease && !isFormFixed ? "border-red-200 bg-red-50 text-red-600" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
+                    <div className={`flex h-7 items-center gap-1 border px-2 text-xs font-black ${isFormDecrease && !isFormFixed ? "border-red-200 bg-red-50 text-red-600" : "border-orange-200 bg-orange-50 text-orange-700"}`}>
                       {isFormFixed
                         ? <><FaLock size={8} /> Fixed</>
                         : isFormDecrease
@@ -2774,7 +2794,7 @@ const TenantStatement = () => {
                 </div>
 
                 {/* Notes */}
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <label className={reviewLabelCls}>Notes / Reason</label>
                   <input type="text" value={reviewForm.note}
                     onChange={(e) => setReviewForm((p) => ({ ...p, note: e.target.value }))}
@@ -2784,13 +2804,13 @@ const TenantStatement = () => {
                 </div>
 
                 {/* Footer */}
-                <div className="mt-4 flex items-center justify-end gap-2 border-t border-slate-100 pt-3">
+                <div className="mt-3 flex items-center justify-end gap-2 border-t border-slate-100 pt-2.5">
                   <button onClick={resetReviewForm}
-                    className="inline-flex items-center gap-1.5 border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                    className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors">
                     <FaTimes size={9} /> Cancel
                   </button>
                   <button onClick={handleSaveReview} disabled={reviewSaving}
-                    className={`inline-flex items-center gap-1.5 px-4 py-1.5 text-xs font-black text-white disabled:opacity-60 transition-colors ${isEscalation ? "bg-blue-700 hover:bg-blue-800" : "bg-amber-600 hover:bg-amber-700"}`}>
+                    className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60 transition-colors">
                     {reviewSaving ? "Saving…" : editingReviewId ? `Update ${isEscalation ? "Escalation" : "Review"}` : `Schedule ${isEscalation ? "Escalation" : "Review"}`}
                   </button>
                 </div>
@@ -2845,11 +2865,11 @@ const TenantStatement = () => {
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
                           {isEscalationRecord
-                            ? <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700"><FaChartLine size={7} /> Escalation</span>
-                            : <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700"><FaSearch size={7} /> Review</span>}
+                            ? <span className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-black text-blue-700"><FaChartLine size={7} /> Escalation</span>
+                            : <span className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black text-amber-700"><FaSearch size={7} /> Review</span>}
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                          <span className={`inline-flex border px-2 py-0.5 text-[10px] font-black ${
                             isFixedRent   ? "border-purple-200 bg-purple-50 text-purple-700" :
                             record.type === "percentage" ? "border-blue-200 bg-blue-50 text-blue-700" :
                                             "border-violet-200 bg-violet-50 text-violet-700"
@@ -2877,7 +2897,7 @@ const TenantStatement = () => {
                           {fmtMoney(record.resultingRent)}
                         </td>
                         <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
-                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${
+                          <span className={`inline-flex border px-2 py-0.5 text-[10px] font-black ${
                             isApplied  ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
                             isOverdue  ? "border-red-300 bg-red-50 text-red-700" :
                                          "border-amber-200 bg-amber-50 text-amber-700"
@@ -2964,17 +2984,11 @@ const TenantStatement = () => {
     }
   };
 
-  if (tenantLoading) {
-    return (
-      <DashboardLayout>
-        <div className="flex h-full items-center justify-center">
-          <Spinner size="lg" />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  if (!tenant) {
+  // No full-page blocking spinner: the page shell (header, toolbar, table) renders
+  // immediately and backfills as getTenantStatementBundle resolves, matching the
+  // "never blank already-structured content" convention used across the PMS pages —
+  // every tenant-dependent value below is already null-safe via optional chaining.
+  if (!tenantLoading && !tenant) {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-full">
@@ -2983,9 +2997,9 @@ const TenantStatement = () => {
             <p className="text-gray-600 mb-4">The tenant you're looking for doesn't exist.</p>
             <button
               onClick={() => navigate("/tenants")}
-              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 rounded font-semibold flex items-center gap-2 mx-auto`}
+              className={`${MILIK_GREEN} hover:bg-[#0A3127] text-white px-3 py-1.5 text-xs font-bold flex items-center gap-2 mx-auto`}
             >
-              <FaArrowLeft />
+              <FaArrowLeft size={11} />
               Back to Tenants
             </button>
           </div>
@@ -3130,6 +3144,24 @@ const TenantStatement = () => {
               <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                 {resolveTenantPropertyName(tenant)}
               </span>
+              {/* Lease/unit picker — only shown for multi-unit tenants. Billing Schedule,
+                  Rent Reviews/Escalations and the lease badge/dates above all operate on
+                  whichever lease is picked here; single-unit tenants never see this and
+                  nothing changes for them. */}
+              {tenantLeases.length > 1 && (
+                <div className="flex shrink-0 items-center gap-1">
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Lease:</span>
+                  <AppSelect
+                    value={safeId(tenantLease?._id) || null}
+                    onChange={(v) => setSelectedLeaseId(v || "")}
+                    options={tenantLeases.map((lease) => ({
+                      value: safeId(lease?._id),
+                      label: `${termUnit} ${lease?.unit?.unitNumber || lease?.unit?.unitName || lease?.unit?.name || "—"}`,
+                    }))}
+                    compact
+                  />
+                </div>
+              )}
               {tenant?.phone && (
                 <span className="shrink-0 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-600">
                   {tenant.phone}
@@ -3142,13 +3174,13 @@ const TenantStatement = () => {
               )}
               <div className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 ml-auto" />
               {/* Always-visible actions */}
-              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#FF8C00] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#e67e00] active:scale-95 transition-all">
+              <button onClick={() => navigate(`/receipts/${tenantId}`)} className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors">
                 <FaMoneyBillWave size={9} /> Receipts
               </button>
-              <button onClick={handlePrint} className="h-6 shrink-0 flex items-center gap-1 rounded bg-[#0B3B2E] px-2 text-[9px] font-black text-white shadow-sm hover:bg-[#0A3127] active:scale-95 transition-all">
+              <button onClick={handlePrint} className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors">
                 <FaPrint size={9} /> Print
               </button>
-              <button onClick={handleDownload} className="h-6 shrink-0 flex items-center gap-1 rounded bg-slate-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-slate-700 active:scale-95 transition-all">
+              <button onClick={handleDownload} className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors">
                 <FaDownload size={9} /> PDF
               </button>
               <div className="mx-0.5 h-3.5 w-px shrink-0 bg-slate-200" />
@@ -3156,7 +3188,7 @@ const TenantStatement = () => {
                 onClick={handleSendStatementSms}
                 disabled={sendingStatementSms || !tenant?.phone}
                 title={!tenant?.phone ? "No phone number on record" : "Send statement summary via SMS"}
-                className="h-6 shrink-0 flex items-center gap-1 rounded bg-emerald-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-emerald-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
+                className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
               >
                 <FaSms size={9} /> {sendingStatementSms ? "Sending…" : "SMS"}
               </button>
@@ -3164,7 +3196,7 @@ const TenantStatement = () => {
                 onClick={handleSendStatementEmail}
                 disabled={sendingStatementEmail || !tenant?.email}
                 title={!tenant?.email ? "No email address on record" : "Email statement to tenant"}
-                className="h-6 shrink-0 flex items-center gap-1 rounded bg-blue-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 transition-all"
+                className="h-6 shrink-0 flex items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
               >
                 <FaEnvelope size={9} /> {sendingStatementEmail ? "Sending…" : "Email"}
               </button>

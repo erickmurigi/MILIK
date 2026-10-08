@@ -29,7 +29,7 @@
  *                         filter state; falls back to local state if omitted
  */
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import AppSelect from "./AppSelect";
 import { FaLink } from "react-icons/fa";
 import { fmtDate } from "../../utils/dates";
@@ -49,7 +49,7 @@ const fmtMoney = (n) =>
     maximumFractionDigits: 2,
   })}`;
 
-const balSuffix = (n) => (n > 0.005 ? " DR" : n < -0.005 ? " CR" : "");
+const balSuffix = (n) => (n > 0.005 ? " Owing" : n < -0.005 ? " Credit" : "");
 
 const DEFAULT_TYPE_META = {
   CHARGE:      { label: "Invoice",    cls: "text-red-700 bg-red-50 ring-1 ring-red-200"          },
@@ -139,6 +139,21 @@ export default function StatementLedgerTab({
       .map((t) => ({ ...t, balance: t.balance + bbf })),
     [allTx, fromBoundary, toBoundary, typeFilter, bbf]
   );
+
+  // On open, jump straight to the most recent activity + closing balance instead of
+  // the oldest transaction — ascending/running-balance order is kept (reversing it
+  // would make the running balance read backwards), only the initial scroll position
+  // changes. Fires once per mount, not on every later filter change, so a user who
+  // deliberately scrolls up to review older rows isn't yanked back down.
+  const tableScrollRef = useRef(null);
+  const hasAutoScrolledRef = useRef(false);
+  useEffect(() => {
+    if (hasAutoScrolledRef.current || visibleTx.length === 0) return;
+    const el = tableScrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    hasAutoScrolledRef.current = true;
+  }, [visibleTx]);
 
   const openingBalance = hasBbf ? bbf : null;
   const closingBalance = useMemo(() =>
@@ -328,11 +343,11 @@ export default function StatementLedgerTab({
               </span>
             )}
             <span className="shrink-0 flex flex-col items-start px-4 py-1.5">
-              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Period Debits</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Period Charges</span>
               <span className="text-[11px] font-black text-red-700">{fmtMoney(periodDebits)}</span>
             </span>
             <span className="shrink-0 flex flex-col items-start px-4 py-1.5">
-              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Period Credits</span>
+              <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400">Period Payments</span>
               <span className="text-[11px] font-black text-emerald-700">{fmtMoney(periodCredits)}</span>
             </span>
             {closingBalance !== null && (
@@ -348,7 +363,7 @@ export default function StatementLedgerTab({
       </div>
 
       {/* ── Statement table ──────────────────────────────────────────────────── */}
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
         <table className="min-w-full text-[11.5px] border-collapse">
           <colgroup>
             <col style={{ width: "9%" }} />
@@ -366,8 +381,8 @@ export default function StatementLedgerTab({
                 { label: "Description",align: "left"  },
                 { label: "Type",       align: "left"  },
                 { label: "Reference",  align: "left"  },
-                { label: "Debit (Dr)", align: "right" },
-                { label: "Credit (Cr)",align: "right" },
+                { label: "Charges",    align: "right" },
+                { label: "Payments",   align: "right" },
                 { label: "Balance",    align: "right" },
               ].map(({ label, align }) => (
                 <th key={label} className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.16em] text-white/80 text-${align} whitespace-nowrap`}>

@@ -3,6 +3,7 @@ import { createTenant, getTenant, getTenants, updateTenant, updateTenantStatus, 
 import { callController } from "../../test/callController.js";
 import Unit from "../../models/Unit.js";
 import Tenant from "../../models/Tenant.js";
+import Lease from "../../models/Lease.js";
 import {
   createTestUnit,
   createTestTenant,
@@ -12,6 +13,89 @@ import {
   createTestProperty,
 } from "../../test/factories.js";
 import { createTestInvoice } from "../../test/factories.landlord.js";
+
+// Regression test: a tenant occupying more than one unit used to get exactly ONE
+// Lease record (tied to their primary unit only) — syncTenantLeaseRecord resolved
+// only tenantDoc.unit and never looped tenantDoc.additionalUnits. Since
+// autoRentInvoicingService.js bills strictly off active Lease records, every unit
+// beyond the tenant's primary one was silently skipped by auto-invoicing, even
+// though it had been billed correctly every month before auto-invoicing replaced
+// manual booking. Fixed with syncTenantLeaseRecordsForUnits — one Lease per
+// occupied unit, each billing only that unit's own rent (not the tenant's combined
+// total, which would double/triple-bill once auto-invoicing sums every active lease).
+describe("multi-unit tenant lease sync", () => {
+  it("creates one Lease per occupied unit, each carrying only that unit's own rent", async () => {
+    const { property, company } = await createTestProperty({});
+    const { unit: unitA } = await createTestUnit({ property, company, rent: 8000 });
+    const { unit: unitB } = await createTestUnit({ property, company, rent: 12000 });
+    const user = await createTestUser({ company });
+
+    const { statusCode, payload } = await callController(createTenant, {
+      body: {
+        unit: String(unitA._id),
+        additionalUnits: [String(unitB._id)],
+        name: "Multi Unit Tenant",
+        rent: 20000, // the tenant's COMBINED rent across both units
+        moveInDate: new Date().toISOString(),
+        leaseType: "at_will",
+      },
+      user,
+    });
+
+    expect(statusCode).toBe(201);
+
+    const leases = await Lease.find({
+      business: company._id,
+      tenant: payload.data._id,
+      status: "active",
+    }).lean();
+    expect(leases).toHaveLength(2);
+
+    const leaseByUnit = new Map(leases.map((l) => [String(l.unit), l]));
+    expect(leaseByUnit.get(String(unitA._id))?.rentAmount).toBe(8000);
+    expect(leaseByUnit.get(String(unitB._id))?.rentAmount).toBe(12000);
+  });
+
+  it("terminates every occupied unit's lease when the tenant is terminated, and restores them all", async () => {
+    const { property, company } = await createTestProperty({});
+    const { unit: unitA } = await createTestUnit({ property, company, rent: 5000 });
+    const { unit: unitB } = await createTestUnit({ property, company, rent: 7000 });
+    const user = await createTestUser({ company });
+
+    const created = await callController(createTenant, {
+      body: {
+        unit: String(unitA._id),
+        additionalUnits: [String(unitB._id)],
+        name: "Terminate Restore Tenant",
+        rent: 12000,
+        moveInDate: new Date().toISOString(),
+        leaseType: "at_will",
+      },
+      user,
+    });
+    const tenantId = created.payload.data._id;
+
+    await callController(updateTenantStatus, {
+      params: { id: String(tenantId) },
+      body: { status: "terminated" },
+      user,
+    });
+
+    const afterTerminate = await Lease.find({ business: company._id, tenant: tenantId }).lean();
+    expect(afterTerminate).toHaveLength(2);
+    expect(afterTerminate.every((l) => l.status === "terminated")).toBe(true);
+
+    await callController(updateTenantStatus, {
+      params: { id: String(tenantId) },
+      body: { status: "active" },
+      user,
+    });
+
+    const afterRestore = await Lease.find({ business: company._id, tenant: tenantId }).lean();
+    expect(afterRestore).toHaveLength(2);
+    expect(afterRestore.every((l) => l.status === "active")).toBe(true);
+  });
+});
 
 // Regression test: getTenants used to paginate with `.sort({ createdAt: -1 })` while the
 // frontend re-sorted only the received page into property/unit order for display. Because
@@ -26,10 +110,13 @@ describe("getTenants pagination order", () => {
 
     // Deliberately create units/tenants OUT OF unit-number order, so a createdAt-based
     // sort would not coincidentally match the expected ascending-by-unit display order.
+    // tenantCode is explicit (not auto-generated outside the createTenant controller) —
+    // the schema default is a shared `null`, which collides on the unique
+    // {business, tenantCode} index once more than one tenant exists per business.
     const unitNumbers = ["305", "101", "204", "102", "306", "103"];
     for (const unitNumber of unitNumbers) {
       const { unit } = await createTestUnit({ property, company, unitNumber });
-      await createTestTenant({ unit, property, company, name: `Tenant ${unitNumber}` });
+      await createTestTenant({ unit, property, company, name: `Tenant ${unitNumber}`, tenantCode: `TT-${unitNumber}` });
     }
 
     const expectedOrder = ["101", "102", "103", "204", "305", "306"];

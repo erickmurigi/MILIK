@@ -183,7 +183,9 @@ describe("payment voucher withholding tax and double clicks", () => {
     const { create, live } = await setup();
     const voucher = (await create({ status: "paid", paidDate: new Date(), whtAmount: 100 })).payload;
     const rows = await live(voucher._id);
-    expect(rows.length).toBe(5); // expense + payable, then payable settled, cash net, tax
+    // Direct payment (created straight to "paid"): no liability leg at all — just
+    // expense debit, cash-net credit, and the WHT credit. 3 legs, not 5.
+    expect(rows.length).toBe(3);
     const debit = rows.reduce((s, e) => s + Number(e.debit || 0), 0);
     const credit = rows.reduce((s, e) => s + Number(e.credit || 0), 0);
     expect(debit).toBe(credit);
@@ -224,7 +226,8 @@ describe("payment voucher withholding tax and double clicks", () => {
     ]);
     expect((await live(voucher._id)).length).toBe(0);
     const all = await FinancialLedgerEntry.find({ sourceTransactionId: String(voucher._id) }).lean();
-    expect(all.filter((e) => e.category === "REVERSAL").length).toBe(4);
+    // Direct payment (created straight to "paid", no WHT): 2 original legs, so 2 reversal legs.
+    expect(all.filter((e) => e.category === "REVERSAL").length).toBe(2);
   });
 });
 

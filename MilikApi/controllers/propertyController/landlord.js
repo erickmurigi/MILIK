@@ -62,11 +62,13 @@ const toKenyanMobile = (value) => {
 
 const PHONE_ERROR = "Enter one valid mobile number, e.g. 0712 345 678, or - for none";
 
-// "-" means the landlord has no phone on record, the same as email. It is stored as an empty phone.
+// A placeholder ("-", blank, omitted, etc. — see isPlaceholder) means the landlord has no
+// phone on record, the same as every other optional identifier field in this file. It is
+// stored as an empty phone. Only a non-placeholder value that still fails to parse as a
+// real Kenyan mobile number is rejected.
 const resolveLandlordPhone = (raw) => {
-  const trimmed = String(raw ?? "").trim();
-  if (trimmed === "-") return { value: "" };
-  const mobile = toKenyanMobile(trimmed);
+  if (isPlaceholder(raw)) return { value: "" };
+  const mobile = toKenyanMobile(String(raw).trim());
   return mobile ? { value: mobile } : { error: PHONE_ERROR };
 };
 const EMAIL_REQUIRED_ERROR = "Email is required. Enter - if the landlord has no email.";
@@ -145,13 +147,20 @@ export const createLandlord = async (req, res, next) => {
       return next(createError(400, "Company context is required. Please ensure you are logged in with a company account."));
     }
 
+    // Name is checked before any other field validation so the most fundamental
+    // missing field is always what the caller sees first (e.g. submitting a
+    // completely empty form reports a missing name, not a missing email).
+    const landlordNameValue = normalizeString(req.body.landlordName);
+    if (!landlordNameValue) {
+      return next(createError(400, "Landlord name is required"));
+    }
+
     const regIdValue = isPlaceholder(req.body.regId) ? null : normalizeString(req.body.regId);
     const idNumberValue = isPlaceholder(req.body.idNumber) ? null : (normalizeString(req.body.idNumber) || regIdValue);
     const emailResult = resolveLandlordEmail(req.body.email);
     if (emailResult.error) return next(createError(400, emailResult.error));
     const emailValue = emailResult.value;
     const taxPinValue = isPlaceholder(req.body.taxPin) ? null : normalizeString(req.body.taxPin);
-    const landlordNameValue = normalizeString(req.body.landlordName);
     const landlordTypeValue = normalizeString(req.body.landlordType) || "Individual";
     const phoneResult = resolveLandlordPhone(req.body.phoneNumber);
     if (phoneResult.error) return next(createError(400, phoneResult.error));
@@ -165,10 +174,6 @@ export const createLandlord = async (req, res, next) => {
     const locationValue = normalizeString(req.body.location) || "";
     const statusValue = normalizeString(req.body.status) || "Active";
     const portalAccessValue = normalizeString(req.body.portalAccess) || "Disabled";
-
-    if (!landlordNameValue) {
-      return next(createError(400, "Landlord name is required"));
-    }
 
     let landlordCode = normalizeString(req.body.landlordCode);
     if (!landlordCode) {

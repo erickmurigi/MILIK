@@ -1,6 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import BankDetailsFields from "../../components/common/BankDetailsFields";
-import { printDocument } from "../../utils/printKit";
+import { printDocument, printTabularList } from "../../utils/printKit";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
 import { adminRequests } from "../../utils/requestMethods";
@@ -8,6 +8,7 @@ import useDebounce from "../../hooks/useDebounce";
 import {
   FaBook,
   FaCheck,
+  FaDownload,
   FaEdit,
   FaFileInvoiceDollar,
   FaFilePdf,
@@ -176,9 +177,9 @@ const PaymentVouchers = () => {
     userId: currentUser?._id || currentUser?.id || currentUser?.email,
   });
   const [voucherDraft, setVoucherDraft] = useScopedSessionDraft(voucherDraftKey, {
-    filters: { search: "", category: "all", status: "all", propertyId: "all" },
+    filters: { search: "", category: "all", status: "all", propertyId: "all", startDate: "", endDate: "" },
   });
-  const filters = voucherDraft.filters || { search: "", category: "all", status: "all", propertyId: "all" };
+  const filters = voucherDraft.filters || { search: "", category: "all", status: "all", propertyId: "all", startDate: "", endDate: "" };
   const debouncedSearch = useDebounce(filters.search, 400);
   const setFilters = useCallback((value) => setVoucherDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value })), []);
   const setFilter = useCallback((key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value })), [setFilters]);
@@ -469,7 +470,7 @@ const PaymentVouchers = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId, currentPage, pageSize]);
+  }, [currentCompany?._id, debouncedSearch, filters.category, filters.status, filters.propertyId, filters.startDate, filters.endDate, currentPage, pageSize]);
 
   useEffect(() => {
     loadVouchers();
@@ -486,11 +487,103 @@ const PaymentVouchers = () => {
 
   const selectedRows = useMemo(() => filtered.filter((voucher) => selectedIds.includes(voucher._id)), [filtered, selectedIds]);
 
+  // The on-screen table is server-paginated (one page at a time) — printing or
+  // exporting the whole filtered register needs its own fetch with every matching
+  // row, not just whatever page happens to be visible.
+  const fetchAllFilteredVouchers = async () => {
+    const showEverything = filters.status === "everything";
+    const { data: rows } = await getPaymentVouchers({
+      ...filters,
+      status: showEverything ? "all" : filters.status,
+      includeReversed: showEverything,
+      search: debouncedSearch,
+      business: currentCompany._id,
+      company: currentCompany._id,
+      page: 1,
+      limit: 2000,
+    });
+    return (Array.isArray(rows) ? rows : []).map(normalizeVoucher);
+  };
+
+  const categoryLabel = (voucher) => categories.find((c) => c.value === voucher.category)?.label || voucher.category || "-";
+
+  const handlePrintList = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const printRows = await fetchAllFilteredVouchers();
+      if (printRows.length === 0) {
+        toast.info("There are no vouchers to print.");
+        return;
+      }
+      const totalAmount = printRows.reduce((sum, v) => sum + Number(v.amount || 0), 0);
+      const paidAmount = printRows.filter((v) => v.status === "paid").reduce((sum, v) => sum + Number(v.amount || 0), 0);
+      const printed = printTabularList({
+        title: "Payment Vouchers Register",
+        subtitle: `${printRows.length.toLocaleString()} voucher${printRows.length !== 1 ? "s" : ""}`,
+        company: currentCompany,
+        summaryItems: [
+          ["Total Records", printRows.length.toLocaleString()],
+          ["Total Amount", `KES ${totalAmount.toLocaleString()}`],
+          ["Paid", `KES ${paidAmount.toLocaleString()}`],
+        ],
+        columns: [
+          { label: "Voucher #", value: (v) => v.voucherNo || "-" },
+          { label: "Ref #", value: (v) => (isRawObjectId(v.reference) ? "-" : v.reference || "-") },
+          { label: "Category", value: categoryLabel },
+          { label: "Payee", value: (v) => v.payeeDisplay || v.payeeName || "-" },
+          { label: "Property", value: (v) => v.propertyName || "-" },
+          { label: "Amount", align: "right", bold: true, value: (v) => `KES ${Number(v.amount || 0).toLocaleString()}` },
+          { label: "Due Date", value: (v) => fmtDate(v.dueDate) },
+          { label: "Paid Date", value: (v) => (v.paidDate ? fmtDate(v.paidDate) : "-") },
+          { label: "Status", value: (v) => String(v.status || "").toUpperCase() },
+        ],
+        rows: printRows,
+        totalsRow: [`Total (${printRows.length.toLocaleString()} records)`, "", "", "", "", `KES ${totalAmount.toLocaleString()}`, "", "", ""],
+      });
+      if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load vouchers for printing");
+    }
+  };
+
+  const handleExportCsv = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const exportRows = await fetchAllFilteredVouchers();
+      if (exportRows.length === 0) {
+        toast.info("There are no vouchers to export.");
+        return;
+      }
+      const header = ["Voucher #", "Ref #", "Category", "Payee", "Property", "Amount", "Due Date", "Paid Date", "Status"];
+      const rows = exportRows.map((v) => [
+        v.voucherNo || "",
+        isRawObjectId(v.reference) ? "" : v.reference || "",
+        categoryLabel(v),
+        v.payeeDisplay || v.payeeName || "",
+        v.propertyName || "",
+        Number(v.amount || 0).toFixed(2),
+        v.dueDate ? fmtDate(v.dueDate) : "",
+        v.paidDate ? fmtDate(v.paidDate) : "",
+        (v.status || "").toUpperCase(),
+      ]);
+      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `payment-vouchers-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load vouchers for export");
+    }
+  };
+
   const totalPages = Math.max(1, serverPages);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, pageSize]);
+  }, [debouncedSearch, filters.category, filters.status, filters.propertyId, filters.startDate, filters.endDate, pageSize]);
 
 
   const closeForm = () => {
@@ -1211,12 +1304,17 @@ const PaymentVouchers = () => {
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
             <ListToolbar>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Vouchers: {serverTotal}</span>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {stats.total.toLocaleString()}</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Paid: KES {stats.paid.toLocaleString()}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {stats.draft}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Vouchers: {serverTotal}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Total: KES {stats.total.toLocaleString()}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Paid: KES {stats.paid.toLocaleString()}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Draft: {stats.draft}</span>
+              <ListToolbar.Divider />
+              <span className="shrink-0 text-[9px] text-slate-400">Due</span>
+              <ListToolbar.Input type="date" value={filters.startDate} onChange={setFilter("startDate")} />
+              <span className="shrink-0 text-[9px] text-slate-400">—</span>
+              <ListToolbar.Input type="date" value={filters.endDate} onChange={setFilter("endDate")} />
               <ListToolbar.Divider />
               <div className="relative shrink-0">
                 <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
@@ -1261,9 +1359,12 @@ const PaymentVouchers = () => {
                   searchable
                 />
               )}
-              <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all" })}>
+              <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all", startDate: "", endDate: "" })}>
                 Reset
               </ListToolbar.Button>
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList}>Print</ListToolbar.Button>
+              <ListToolbar.Button icon={FaDownload} variant="outline" onClick={handleExportCsv}>Export</ListToolbar.Button>
               <ListToolbar.Divider />
               <ListToolbar.Button variant="danger" onClick={bulkDeleteSelected}>Delete Selected</ListToolbar.Button>
               <ListToolbar.Button icon={FaPlus} disabled={!canCreateVoucher} onClick={openCreate}>New Voucher</ListToolbar.Button>
@@ -1305,7 +1406,7 @@ const PaymentVouchers = () => {
                     <td className={`px-3 py-1 border-r border-gray-100 whitespace-nowrap ${isOverdue ? "text-red-600 font-semibold" : "text-slate-700"}`}>{voucher.dueDate ? new Date(voucher.dueDate).toLocaleDateString("en-GB") : "—"}{isOverdue && <span className="ml-1 text-[9px] font-bold">OVERDUE</span>}</td>
                     <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{voucher.paidDate ? new Date(voucher.paidDate).toLocaleDateString("en-GB") : "—"}</td>
                     <td className="px-3 py-1 border-r border-gray-100 text-center">
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span>
+                      <span className={`inline-flex border px-2 py-0.5 text-[10px] font-bold ${statusColors[voucher.status] || statusColors.draft}`}>{voucher.status}</span>
                     </td>
                   </>
                 );

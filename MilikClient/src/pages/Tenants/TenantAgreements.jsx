@@ -319,15 +319,31 @@ const TenantAgreements = () => {
     );
   }, [agreementRows]);
 
+  // Counts missing (tenant, unit) pairs, not just tenants with zero leases — a
+  // multi-unit tenant can already have a lease for their primary unit while their
+  // additional units have none, which a tenant-only check would never surface.
+  // Matches what the backend backfill endpoint actually repairs.
   const missingCount = useMemo(() => {
-    const tenantIdsWithLease = new Set(
+    const leasedPairs = new Set(
       agreementRows
         .filter((r) => ["draft", "pending_signature", "active"].includes(r.status))
-        .map((r) => r.tenantId)
+        .map((r) => `${r.tenantId}|${r.unitId}`)
     );
-    return (Array.isArray(tenants) ? tenants : [])
-      .filter((t) => isActiveTenant(t) && !tenantIdsWithLease.has(normalizeId(t._id)))
-      .length;
+
+    let count = 0;
+    for (const tenant of Array.isArray(tenants) ? tenants : []) {
+      if (!isActiveTenant(tenant)) continue;
+      const tenantId = normalizeId(tenant._id);
+      const assignedUnitIds = [
+        normalizeId(tenant?.unit?._id || tenant?.unit),
+        ...(Array.isArray(tenant?.additionalUnits) ? tenant.additionalUnits.map((u) => normalizeId(u?._id || u)) : []),
+      ].filter(Boolean);
+
+      for (const unitId of assignedUnitIds) {
+        if (!leasedPairs.has(`${tenantId}|${unitId}`)) count += 1;
+      }
+    }
+    return count;
   }, [agreementRows, tenants]);
 
   const handleBackfillLeases = async () => {
@@ -340,7 +356,7 @@ const TenantAgreements = () => {
         toast.success(`Created ${created} missing agreement${created !== 1 ? "s" : ""}${failed > 0 ? ` (${failed} failed — check unit assignments)` : ""}.`);
         await loadData();
       } else if (failed > 0) {
-        toast.warning(`${failed} ${termTenant.toLowerCase()}${failed !== 1 ? "s" : ""} still have no agreement — they may not have a ${termUnit.toLowerCase()} assigned.`);
+        toast.warning(`${failed} unit${failed !== 1 ? "s" : ""} still have no agreement — check the ${termUnit.toLowerCase()} assignment.`);
       } else {
         toast.info(`No missing agreements found — all active ${termTenants.toLowerCase()} already have one.`);
       }
@@ -674,7 +690,7 @@ const TenantAgreements = () => {
           <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pending: {summary.pending}</span>
           {missingCount > 0 && (
             <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-red-700">
-              {missingCount} {termTenant.toLowerCase()}{missingCount !== 1 ? "s" : ""} missing agreement
+              {missingCount} missing agreement{missingCount !== 1 ? "s" : ""}
             </span>
           )}
           {selectedAgreements.length > 0 && (
@@ -718,7 +734,7 @@ const TenantAgreements = () => {
               variant="danger"
               onClick={handleBackfillLeases}
               disabled={backfilling}
-              title={`Create agreements for ${missingCount} ${termTenant.toLowerCase()}${missingCount !== 1 ? "s" : ""} that don't have one`}
+              title={`Create ${missingCount} missing agreement${missingCount !== 1 ? "s" : ""} — covers every unit a ${termTenant.toLowerCase()} occupies that doesn't have one yet`}
             >
               {backfilling ? <FaSyncAlt size={7} className="animate-spin" /> : <FaWrench size={7} />}
               Fix {missingCount} missing

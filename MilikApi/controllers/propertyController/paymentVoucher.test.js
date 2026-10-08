@@ -47,23 +47,22 @@ describe("paymentVoucher controller", () => {
       sourceTransactionId: String(voucherId),
     }).lean();
 
-    // Accrual (Dr Expense / Cr Liability) + Settlement (Dr Liability / Cr Cashbook) = 4 legs.
-    expect(entries).toHaveLength(4);
+    // A voucher created directly as "paid" (not via a separate approve-then-pay
+    // transition) is a same-step "direct payment" — it never touches the liability/
+    // payable account at all (see paymentVoucher.js's `direct` posting path, "a
+    // voucher paid on the spot goes straight from the expense to cash"), so it posts
+    // just Dr Expense / Cr Cashbook = 2 legs, not a separate accrual + settlement pair.
+    expect(entries).toHaveLength(2);
 
     const totalDebit = entries.reduce((sum, e) => sum + Number(e.debit || 0), 0);
     const totalCredit = entries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
-    expect(totalDebit).toBe(12000); // 6000 accrual debit + 6000 settlement debit
-    expect(totalCredit).toBe(12000); // 6000 accrual credit + 6000 settlement credit
+    expect(totalDebit).toBe(6000);
+    expect(totalCredit).toBe(6000);
     expect(totalDebit - totalCredit).toBe(0);
 
-    // The liability account is debited on settlement exactly what it was credited on
-    // accrual — its net movement across this voucher's lifecycle must be zero
-    // (the accrued liability is fully cleared once paid).
+    // Direct payments never post to the liability account at all.
     const liabilityEntries = entries.filter((e) => String(e.accountId) === String(liabilityAccount._id));
-    const liabilityNet =
-      liabilityEntries.reduce((sum, e) => sum + Number(e.debit || 0), 0) -
-      liabilityEntries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
-    expect(liabilityNet).toBe(0);
+    expect(liabilityEntries).toHaveLength(0);
 
     // Every leg is approved and carries a journalGroupId.
     entries.forEach((e) => {
