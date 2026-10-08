@@ -49,6 +49,9 @@ import { safeId } from "../../utils/idUtils";
 import MilikTable from "../../components/common/MilikTable";
 import { useTerms } from "../../hooks/useTerm";
 
+const STALE_MS = 30_000;
+const depositInvoicesCache = new Map();
+
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 const DEPOSIT_STATUS_FILTERS = [
@@ -519,7 +522,7 @@ const TenantDeposits = () => {
       const failedCount = response?.summary?.failed ?? 0;
       const failedList = (response?.results || []).filter((r) => !r.success);
 
-      await loadDepositInvoices();
+      await loadDepositInvoices({ force: true });
 
       if (createdCount > 0 && failedCount === 0) {
         toast.success(`${createdCount} deposit invoice${createdCount > 1 ? "s" : ""} created successfully.`);
@@ -540,20 +543,35 @@ const TenantDeposits = () => {
     }
   };
 
-  const loadDepositInvoices = useCallback(async () => {
+  // This is a full, unpaginated fetch into local state (client-paginated below via
+  // currentPageRows), not Redux — so it would normally be refetched from scratch every
+  // time this tab remounts. A tiny module-level cache (outside React, so it survives
+  // unmount) keyed by business gives the same "instant on revisit" behavior as
+  // useEntityCache. `force: true` (after any mutation, or the invoicesUpdated event
+  // another page fires) always hits the server; a plain call (mount effect) reuses the
+  // cache when it's still fresh.
+  const loadDepositInvoices = useCallback(async ({ force = false } = {}) => {
     if (!currentCompany?._id) {
       setDepositInvoices([]);
+      return;
+    }
+    const businessId = currentCompany._id;
+    const cached = depositInvoicesCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setDepositInvoices(cached.depositInvoices);
       return;
     }
 
     setLoading(true);
     try {
       const rows = await getTenantInvoices({
-        business: currentCompany._id,
+        business: businessId,
         category: "DEPOSIT_CHARGE",
         includeSnapshots: true,
       });
-      setDepositInvoices(Array.isArray(rows) ? rows : []);
+      const nextRows = Array.isArray(rows) ? rows : [];
+      setDepositInvoices(nextRows);
+      depositInvoicesCache.set(businessId, { depositInvoices: nextRows, loadedAt: Date.now() });
     } catch (error) {
       console.error("Failed to load deposit invoices:", error);
       setDepositInvoices([]);
@@ -573,7 +591,7 @@ const TenantDeposits = () => {
   }, [currentCompany?._id, loadDepositInvoices, dispatch]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    const handleRefresh = () => loadDepositInvoices();
+    const handleRefresh = () => loadDepositInvoices({ force: true });
     window.addEventListener("invoicesUpdated", handleRefresh);
     return () => window.removeEventListener("invoicesUpdated", handleRefresh);
   }, [loadDepositInvoices]);
@@ -840,7 +858,7 @@ const TenantDeposits = () => {
 
       toast.success("Deposit invoice created successfully.");
       setShowDepositModal(false);
-      await loadDepositInvoices();
+      await loadDepositInvoices({ force: true });
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(
@@ -880,7 +898,7 @@ const TenantDeposits = () => {
       await Promise.all(selectedRows.filter((row) => row.invoiceId).map((row) => deleteTenantInvoice(row.invoiceId)));
       toast.success("Selected deposit invoice(s) deleted successfully.");
       setSelectedInvoices([]);
-      await loadDepositInvoices();
+      await loadDepositInvoices({ force: true });
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(error?.message || "Failed to delete selected deposit invoices.");
@@ -908,7 +926,7 @@ const TenantDeposits = () => {
       await deleteTenantInvoice(row.invoiceId);
       toast.success(isOnLedger ? "Deposit invoice reversed." : "Deposit invoice deleted.");
       setSelectedInvoices((prev) => prev.filter((key) => key !== row.key));
-      await loadDepositInvoices();
+      await loadDepositInvoices({ force: true });
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(error?.message || `Failed to ${action.toLowerCase()} deposit invoice.`);
@@ -1009,7 +1027,7 @@ const TenantDeposits = () => {
               <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.toDate} onChange={setFilter("toDate")} />
               <ListToolbar.Button icon={FaSearch} onClick={applySearch}>Search</ListToolbar.Button>
               <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
-              <ListToolbar.Button variant="outline" onClick={loadDepositInvoices} disabled={loading}>{loading ? <Spinner size="sm" /> : <FaRedoAlt size={7} />} Refresh</ListToolbar.Button>
+              <ListToolbar.Button variant="outline" onClick={() => loadDepositInvoices({ force: true })} disabled={loading}>{loading ? <Spinner size="sm" /> : <FaRedoAlt size={7} />} Refresh</ListToolbar.Button>
               <ListToolbar.Button variant="danger" onClick={handleDeleteSelected} disabled={!canDeleteInvoice || selectedCount === 0 || deleting}>
                 <FaTrash size={7} /> Delete
               </ListToolbar.Button>

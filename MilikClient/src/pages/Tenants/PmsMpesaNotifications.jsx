@@ -38,30 +38,42 @@ const getUnitLabel   = (t) => [t?.unit?.unitNumber, t?.unit?.property?.propertyN
 const STATUS_MAP = {
   unmatched:      "border-amber-300 bg-amber-50 text-amber-700",
   captured:       "border-emerald-300 bg-emerald-50 text-emerald-700",
+  recorded:       "border-emerald-300 bg-emerald-50 text-emerald-700",
   duplicate:      "border-slate-300 bg-slate-100 text-slate-600",
   ignored:        "border-red-300 bg-red-50 text-red-700",
   matched_tenant: "border-amber-300 bg-amber-50 text-amber-700",
 };
 
 const STATUS_META = {
-  captured:  { label: "Captured",  chip: { accent: "border-l-emerald-400", border: "border-emerald-200", bg: "bg-emerald-50",  text: "text-emerald-700" } },
+  captured:  { label: "Recorded",  chip: { accent: "border-l-emerald-400", border: "border-emerald-200", bg: "bg-emerald-50",  text: "text-emerald-700" } },
   unmatched: { label: "Unmatched", chip: { accent: "border-l-amber-400",   border: "border-amber-200",   bg: "bg-amber-50",    text: "text-amber-700"   } },
   duplicate: { label: "Duplicate", chip: { accent: "border-l-slate-400",   border: "border-slate-200",   bg: "bg-slate-100",   text: "text-slate-600"   } },
   ignored:   { label: "Ignored",   chip: { accent: "border-l-red-400",     border: "border-red-200",     bg: "bg-red-50",      text: "text-red-600"     } },
 };
 
 // ─── Countdown refresh button — isolated so per-second ticks don't re-render the page ──
+// Polling pauses while the browser tab is hidden (switched away/minimized) — no point
+// hitting the server every 30s for a page nobody's looking at — and catches up with one
+// immediate refresh the moment the tab becomes visible again.
 const CountdownButton = React.memo(function CountdownButton({ onRefresh, loading }) {
   const [countdown, setCountdown] = useState(AUTO_RELOAD);
   useEffect(() => {
     setCountdown(AUTO_RELOAD);
     const tick = setInterval(() => {
       setCountdown(c => {
-        if (c <= 1) { onRefresh(true); return AUTO_RELOAD; }
+        if (c <= 1) {
+          if (document.visibilityState === "visible") onRefresh(true);
+          return AUTO_RELOAD;
+        }
         return c - 1;
       });
     }, 1000);
-    return () => clearInterval(tick);
+    const onVisible = () => { if (document.visibilityState === "visible") onRefresh(true); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [onRefresh]);
   return (
     <button type="button" onClick={() => onRefresh()}
@@ -185,7 +197,7 @@ function AssignTenantModal({ notif, businessId, onClose, onAssigned }) {
                     <span className={`text-xs font-extrabold ${isAssigning ? "text-emerald-700" : "text-slate-900"}`}>{t.name}</span>
                     <span className="font-mono text-[10px] text-slate-500">{t.tenantCode}</span>
                     {inactive && (
-                      <span className="rounded-full bg-red-100 px-1.5 py-px text-[9px] font-black uppercase text-red-600">{t.status}</span>
+                      <span className="bg-red-100 px-1.5 py-px text-[9px] font-black uppercase text-red-600">{t.status}</span>
                     )}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
@@ -310,13 +322,13 @@ const ImportResultsSummary = ({ results, onClose }) => (
         { label: "Unmatched", value: results.summary.unmatched, cls: "bg-amber-50 border-amber-200 text-amber-700"       },
         { label: "Total",     value: results.summary.total,     cls: "bg-white border-slate-200 text-slate-700"          },
       ].map(({ label, value, cls }) => (
-        <div key={label} className={`rounded border px-3 py-2 text-center ${cls}`}>
+        <div key={label} className={`border px-3 py-2 text-center ${cls}`}>
           <p className="text-xl font-black leading-none">{value}</p>
           <p className="mt-0.5 text-[9px] font-black uppercase tracking-wide opacity-70">{label}</p>
         </div>
       ))}
     </div>
-    <div className="overflow-x-auto rounded border border-slate-200">
+    <div className="overflow-x-auto border border-slate-200">
       <table className="w-full text-[11px] border-collapse">
         <thead className="bg-[#0B3B2E] text-white">
           <tr>
@@ -333,7 +345,7 @@ const ImportResultsSummary = ({ results, onClose }) => (
             const meta = RESULT_META[s === "captured" ? "matched" : s === "ignored" ? "skipped" : "unmatched"] || RESULT_META.unmatched;
             return (
               <tr key={i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black ${meta.cls}`}>{item.wasDuplicate ? "Duplicate" : meta.label}</span></td>
+                <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex items-center border px-2 py-0.5 text-[10px] font-black ${meta.cls}`}>{item.wasDuplicate ? "Duplicate" : meta.label}</span></td>
                 <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{item.transactionCode || "—"}</td>
                 <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{item.accountReference || item.billRefNumber || "—"}</td>
                 <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-700">{item.amount > 0 ? formatMoney(item.amount) : "—"}</td>
@@ -478,7 +490,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
                     onDragOver={e => { e.preventDefault(); setDragOver(true); }}
                     onDragLeave={() => setDragOver(false)} onDrop={handleDrop}
                     onClick={() => fileInputRef.current?.click()}
-                    className={`flex cursor-pointer flex-col items-center justify-center gap-3 rounded border-2 border-dashed py-12 transition-colors ${dragOver ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-300 hover:border-slate-400"}`}>
+                    className={`flex cursor-pointer flex-col items-center justify-center gap-3 border-2 border-dashed py-12 transition-colors ${dragOver ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-300 hover:border-slate-400"}`}>
                     <FaFileAlt size={32} className="text-slate-300" />
                     <div className="text-center">
                       <p className="text-sm font-bold text-slate-600">Drop CSV here, or click to browse</p>
@@ -486,7 +498,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
                     </div>
                     <input ref={fileInputRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => loadFile(e.target.files?.[0])} />
                   </div>
-                  <div className="rounded border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
+                  <div className="border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600">
                     <p className="mb-1.5 font-black uppercase tracking-wide text-slate-500">Supported Formats</p>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <div><p className="font-bold text-slate-700">M-Pesa Business Portal</p><p className="text-slate-500">Headers: Receipt No., Completion Time, Details, Transaction Status, Paid In</p></div>
@@ -504,7 +516,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
                     </div>
                     <button onClick={() => { setFile(null); setPreview(null); }} className="text-[11px] font-bold text-slate-400 hover:text-red-500">Change file</button>
                   </div>
-                  <div className="overflow-x-auto rounded border border-slate-200">
+                  <div className="overflow-x-auto border border-slate-200">
                     <table className="w-full min-w-[500px] text-[11px] border-collapse">
                       <thead className="bg-[#0B3B2E] text-white">
                         <tr>
@@ -531,13 +543,13 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
           {/* ── Paste tab ── */}
           {tab === "paste" && !results && (
             <>
-              <div className="rounded border border-slate-200 bg-amber-50 p-3 text-[11px] text-amber-800">
+              <div className="border border-slate-200 bg-amber-50 p-3 text-[11px] text-amber-800">
                 <p className="mb-1 font-black uppercase tracking-wide text-amber-700">Format — one transaction per line:</p>
                 <p className="font-mono text-[10px]">DD/MM/YYYY TXN_CODE Payer Name MSISDN TenantCode KES Amount</p>
                 <p className="mt-1 text-slate-500">Example: <span className="font-mono">04/06/2026 RGF12K9P1D John Doe 254712345678 TT0004 KES 12,000</span></p>
               </div>
               <textarea
-                className="w-full rounded border border-slate-300 p-3 font-mono text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+                className="w-full border border-slate-300 p-3 font-mono text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
                 rows={10}
                 placeholder={"04/06/2026 RGF12K9P1D John Doe 254712345678 TT0004 KES 12,000\n05/06/2026 SDF89X3Q2A Jane Smith 254700111222 TT0007 KES 18,500"}
                 value={pasteText}
@@ -610,8 +622,8 @@ export default function PmsMpesaNotifications() {
   const [deletingId,    setDeletingId]    = useState(null);
   const [unignoringId,  setUnignoringId]  = useState(null);
 
-  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() }));
-  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", shortCode: "", ref: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() }));
+  const [filters, setFilters] = useTabState("/receipts/mpesa-collections:filters", () => ({ status: "", shortCode: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() }));
+  const [applied, setApplied] = useTabState("/receipts/mpesa-collections:applied", () => ({ status: "", shortCode: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() }));
   const [page,    setPage]    = useTabState("/receipts/mpesa-collections:page", 1);
 
   const load = useCallback(async (silent = false) => {
@@ -623,7 +635,7 @@ export default function PmsMpesaNotifications() {
           business:  businessId,
           status:    applied.status    || undefined,
           shortCode: applied.shortCode || undefined,
-          search:    applied.search    || applied.ref || undefined,
+          search:    applied.search    || undefined,
           dateFrom:  applied.dateFrom  || undefined,
           dateTo:    applied.dateTo    || undefined,
           page, limit: pageSize,
@@ -642,7 +654,7 @@ export default function PmsMpesaNotifications() {
 
   const apply = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const reset = () => {
-    const d = { status: "", shortCode: "", ref: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() };
+    const d = { status: "", shortCode: "", search: "", dateFrom: threeMonthsAgoISO(), dateTo: todayISO() };
     setFilters(d); setApplied(d); setPage(1);
   };
 
@@ -720,7 +732,7 @@ export default function PmsMpesaNotifications() {
         { label: "Account Ref",value: (n) => n.accountReference || "—" },
         { label: "Amount",     value: (n) => n.amount > 0 ? formatMoney(n.amount) : "—", align: "right" },
         { label: "Payer",      value: (n) => n.payerName || "—" },
-        { label: "Txn Code",   value: (n) => n.transactionCode || "—" },
+        { label: "Transaction Code", value: (n) => n.transactionCode || "—" },
         { label: "Paybill",    value: (n) => n.configName || "—" },
         { label: termTenant,   value: (n) => getTenantLabel(n.tenant) !== "—" ? getTenantLabel(n.tenant) : "Unmatched" },
         { label: termProperty, value: (n) => n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—" },
@@ -728,6 +740,11 @@ export default function PmsMpesaNotifications() {
         { label: "Receipt",    value: (n) => n.matchedReceipt ? (n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked") : "—" },
       ],
       rows: notifications,
+      totalsRow: [
+        `Total (${notifications.length.toLocaleString()} records)`, "", "",
+        formatMoney(notifications.reduce((s, n) => s + Number(n.amount || 0), 0)),
+        "", "", "", "", "", "", "",
+      ],
     });
   }, [notifications, applied, summaryMap, currentCompany]);
 
@@ -738,17 +755,15 @@ export default function PmsMpesaNotifications() {
   // file also polls every AUTO_RELOAD seconds (see CountdownButton), so an unstable table is a
   // real, not theoretical, hot path.
   const tableColumns = useMemo(() => [
-    { label: "Time" },
-    { label: "Status" },
-    { label: "Account Ref" },
-    { label: "Amount", align: "right" },
-    { label: "Payer" },
-    { label: "Txn Code" },
-    { label: "Paybill Config" },
-    { label: termTenant },
-    { label: termProperty },
-    { label: termUnit },
-    { label: "Receipt" },
+    { label: "Time", width: "7%" },
+    { label: "Status", width: "9%" },
+    { label: "Account Ref", width: "13%" },
+    { label: "Amount", align: "right", width: "10%" },
+    { label: "Payer", width: "12%" },
+    { label: "Transaction Code", width: "11%" },
+    { label: termTenant, width: "13%" },
+    { label: `${termProperty} / ${termUnit}`, width: "13%" },
+    { label: "Receipt", width: "12%" },
   ], [termTenant, termProperty, termUnit]);
 
   // Pure function of its row argument — no external state captured, so an empty dependency
@@ -758,42 +773,41 @@ export default function PmsMpesaNotifications() {
     const isIgnored = n.matchingStatus === "ignored";
     return (
       <>
-        <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] text-slate-400 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>
-        <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={n.matchingStatus} map={STATUS_MAP} /></td>
+        <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] text-slate-500 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={STATUS_META[n.matchingStatus]?.label || n.matchingStatus} map={STATUS_MAP} /></td>
         <td className="px-3 py-1.5 border-r border-gray-100">
-          <div className="font-extrabold tracking-wider text-slate-900 leading-tight">{n.accountReference || "—"}</div>
-          {n.billRefNumber && n.billRefNumber !== n.accountReference && <div className="text-[9px] text-slate-400 font-mono leading-tight">↳ {n.billRefNumber}</div>}
+          <span className="font-bold text-slate-900">{n.accountReference || "—"}</span>
+          {n.billRefNumber && n.billRefNumber !== n.accountReference && <span className="ml-1.5 font-mono text-[10px] text-slate-400">↳ {n.billRefNumber}</span>}
         </td>
-        <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-extrabold tabular-nums ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-700"}`}>
+        <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums ${n.matchingStatus === "captured" ? "text-emerald-700" : "text-slate-900"}`}>
           {n.amount > 0 ? formatMoney(n.amount) : "—"}
         </td>
-        <td className="px-3 py-1.5 border-r border-gray-100">
-          <div className="font-semibold text-slate-700 leading-tight">{n.payerName || <span className="font-normal italic text-slate-400">—</span>}</div>
+        <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">
+          {n.payerName || <span className="font-normal italic text-slate-400">—</span>}
         </td>
-        <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-700 whitespace-nowrap">{n.transactionCode || "—"}</td>
-        <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] font-semibold text-slate-800 leading-tight">{n.configName || "—"}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[11px] text-slate-700 whitespace-nowrap">{n.transactionCode || "—"}</td>
         <td className="px-3 py-1.5 border-r border-gray-100">
           {n.tenant ? (
-            <div className="leading-tight">
+            <>
               <span className="font-bold text-[#0B3B2E]">{getTenantLabel(n.tenant)}</span>
               {n.metadata?.manualAssignment?.assignedByName && (
-                <div className="mt-0.5 inline-flex items-center gap-1">
-                  <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-300 whitespace-nowrap">✎ {n.metadata.manualAssignment.assignedByName}</span>
-                </div>
+                <span className="ml-1.5 border border-orange-300 bg-orange-50 px-1 py-px text-[9px] font-bold uppercase text-orange-700 whitespace-nowrap">✎ {n.metadata.manualAssignment.assignedByName}</span>
               )}
-            </div>
-          ) : <span className="italic text-[9px] text-slate-400">{n.notes || "—"}</span>}
+            </>
+          ) : <span className="italic text-[10px] text-slate-400">{n.notes || "—"}</span>}
         </td>
-        <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] text-slate-600 leading-tight">{n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—"}</td>
-        <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] font-semibold text-slate-700 leading-tight whitespace-nowrap">{n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—"}</td>
-        <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] font-mono leading-tight">
+        <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+          {n.tenant?.unit?.property?.propertyName || n.tenant?.property?.propertyName || "—"}
+          <span className="ml-1 font-normal text-slate-500">· {n.tenant?.unit?.unitName || n.tenant?.unit?.unitNumber || n.tenant?.unit?.name || "—"}</span>
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[11px]">
           {n.matchedReceipt ? (
             <span className="font-bold text-emerald-700">{n.matchedReceipt.receiptNumber || n.matchedReceipt.referenceNumber || "linked"}</span>
           ) : canRecord ? (
-            <div className="flex flex-col gap-px">
-              <span className="inline-flex items-center rounded px-1 py-px text-[8px] font-black uppercase tracking-wide bg-blue-50 text-blue-600 ring-1 ring-inset ring-blue-200 whitespace-nowrap">Awaiting Record</span>
-              {n.metadata?.autoReceiptSkipReason && <span className="text-[8px] text-amber-600 leading-tight" title={n.metadata.autoReceiptSkipReason}>⚠ {n.metadata.autoReceiptSkipReason}</span>}
-            </div>
+            <>
+              <span className="border border-blue-200 bg-blue-50 px-1 py-px text-[9px] font-bold uppercase text-blue-600 whitespace-nowrap">Awaiting Record</span>
+              {n.metadata?.autoReceiptSkipReason && <span className="ml-1 text-[9px] text-amber-600" title={n.metadata.autoReceiptSkipReason}>⚠</span>}
+            </>
           ) : <span className="text-slate-300">—</span>}
         </td>
       </>
@@ -814,7 +828,7 @@ export default function PmsMpesaNotifications() {
           { label: "Source",      value: n.source || "—" },
           { label: "Short Code",  value: n.shortCode || "—" },
           { label: "Txn Date",    value: n.transactionDate ? new Date(n.transactionDate).toLocaleString("en-KE") : "—" },
-          { label: "Config",      value: n.configName || "—" },
+          { label: "Paybill",     value: n.configName || "—" },
           { label: "Org Balance", value: n.orgAccountBalance || "—" },
           { label: "Status",      value: n.matchingStatus || "—" },
           ...(n.metadata?.manualAssignment ? [
@@ -823,8 +837,8 @@ export default function PmsMpesaNotifications() {
           ] : []),
         ].map(({ label, value }) => (
           <div key={label}>
-            <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-            <p className="mt-px break-all text-[10px] font-semibold text-slate-800">{value}</p>
+            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+            <p className="mt-px break-all text-[11px] font-semibold text-slate-800">{value}</p>
           </div>
         ))}
       </div>
@@ -837,7 +851,7 @@ export default function PmsMpesaNotifications() {
       {n.rawPayload && (
         <>
           <p className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Raw Safaricom Payload</p>
-          <pre className="max-h-40 overflow-auto rounded border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">{JSON.stringify(n.rawPayload, null, 2)}</pre>
+          <pre className="max-h-40 overflow-auto border border-slate-200 bg-white p-3 text-[10px] font-mono text-slate-700">{JSON.stringify(n.rawPayload, null, 2)}</pre>
         </>
       )}
       {!n.matchedReceipt && (
@@ -860,17 +874,17 @@ export default function PmsMpesaNotifications() {
     const canIgnore = isUnmatched && !n.matchedReceipt;
     const isIgnored = n.matchingStatus === "ignored";
     return (
-      <div className="flex flex-wrap items-center justify-end gap-1">
-        {canAssign && <button type="button" onClick={() => setAssignTarget(n)} className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-px text-[10px] font-bold text-amber-700 hover:bg-amber-100"><FaLink size={8} /> Assign</button>}
+      <div className="flex flex-nowrap items-center justify-end gap-1">
+        {canAssign && <button type="button" onClick={() => setAssignTarget(n)} className="inline-flex items-center gap-1 h-6 border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50"><FaLink size={9} /> Assign</button>}
         {canRecord && (
           <button type="button" onClick={() => {
             const pb = paybills.find(p => String(p.shortCode || "") === String(n.shortCode || "")) || paybills[0];
             const cbParam = pb?.defaultCashbookAccountId ? `&cashbookAccountId=${pb.defaultCashbookAccountId}` : "";
             navigate(`/receipts/new?tenant=${n.tenant?._id}&amount=${n.amount}&reference=${n.transactionCode}&collectionId=${n._id}&paymentMethod=mpesa&payerName=${encodeURIComponent(n.payerName || "")}&msisdn=${encodeURIComponent(n.msisdn || "")}${cbParam}`);
-          }} className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-px text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"><FaReceipt size={8} /> Record</button>
+          }} className="inline-flex items-center gap-1 h-6 border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50"><FaReceipt size={9} /> Record</button>
         )}
-        {canIgnore && <button type="button" onClick={() => setIgnoreTarget(n)} className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-px text-[10px] font-bold text-red-600 hover:bg-red-100"><FaBan size={8} /> Ignore</button>}
-        {isIgnored && <button type="button" onClick={() => handleUnignore(n._id)} disabled={unignoringId === n._id} className="inline-flex items-center gap-1 border border-slate-300 bg-white px-2 py-px text-[10px] font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50"><FaUndo size={8} /> {unignoringId === n._id ? "…" : "Restore"}</button>}
+        {canIgnore && <button type="button" onClick={() => setIgnoreTarget(n)} className="inline-flex items-center gap-1 h-6 border border-red-300 bg-white px-2 text-[10px] font-bold text-red-600 hover:bg-red-50"><FaBan size={9} /> Ignore</button>}
+        {isIgnored && <button type="button" onClick={() => handleUnignore(n._id)} disabled={unignoringId === n._id} className="inline-flex items-center gap-1 h-6 border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FaUndo size={9} /> {unignoringId === n._id ? "…" : "Restore"}</button>}
       </div>
     );
   }, [paybills, navigate, handleUnignore, unignoringId]);
@@ -896,34 +910,29 @@ export default function PmsMpesaNotifications() {
             onIgnored={(u) => { handleUpdate(u); setIgnoreTarget(null); }} />
         )}
 
-        {/* Summary chips — clickable quick-filters */}
-        <div className="shrink-0 flex items-center gap-1.5 border-b border-slate-200 bg-white px-3 py-1.5 overflow-x-auto">
-          {SUMMARY_CHIPS.map(({ key, value, sub }) => {
-            const meta   = STATUS_META[key];
-            const active = applied.status === key;
-            return (
-              <button key={key} type="button" onClick={() => quickFilter(active ? "" : key)}
-                title={`Filter by ${meta.label}`}
-                className={`inline-flex items-center gap-1.5 border-l-[3px] border border-r px-2 py-1 text-left transition-all whitespace-nowrap
-                  ${meta.chip.accent} ${meta.chip.border}
-                  ${active ? `${meta.chip.bg} ring-1 ring-inset ring-[#0B3B2E]/25` : `bg-white hover:${meta.chip.bg}`}`}>
-                <span className={`text-sm font-black tabular-nums ${meta.chip.text}`}>{value}</span>
-                <span className="text-[9px] font-black uppercase tracking-wide text-slate-500">{meta.label}</span>
-                {sub && <span className="text-[9px] text-slate-400">· {sub}</span>}
-                {active && <FaTimes size={7} className="shrink-0 text-slate-400" />}
-              </button>
-            );
-          })}
-          <div className="inline-flex items-center gap-1.5 border border-slate-200 bg-slate-50 px-2 py-1 whitespace-nowrap">
-            <span className="text-sm font-black tabular-nums text-slate-700">{pagination.total}</span>
-            <span className="text-[9px] font-black uppercase tracking-wide text-slate-500">Total</span>
-            <span className="text-[9px] text-slate-400">· in filter</span>
-          </div>
-        </div>
-
-        {/* Filter bar */}
+        {/* Filter bar — status chips (clickable quick-filters) and filters share one line */}
         <form onSubmit={apply}>
           <ListToolbar>
+            {SUMMARY_CHIPS.map(({ key, value, sub }) => {
+              const meta   = STATUS_META[key];
+              const active = applied.status === key;
+              return (
+                <button key={key} type="button" onClick={() => quickFilter(active ? "" : key)}
+                  title={`Filter by ${meta.label}${sub ? ` (${sub})` : ""}`}
+                  className={`inline-flex h-[22px] shrink-0 items-center gap-1 border-l-2 border border-r px-1 text-left transition-all whitespace-nowrap
+                    ${meta.chip.accent} ${meta.chip.border}
+                    ${active ? `${meta.chip.bg} ring-1 ring-inset ring-[#0B3B2E]/25` : `bg-white hover:${meta.chip.bg}`}`}>
+                  <span className={`text-[10px] font-black tabular-nums ${meta.chip.text}`}>{value}</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{meta.label}</span>
+                  {active && <FaTimes size={7} className="shrink-0 text-slate-400" />}
+                </button>
+              );
+            })}
+            <span className="inline-flex h-[22px] shrink-0 items-center gap-1 border border-slate-200 bg-slate-50 px-1 whitespace-nowrap">
+              <span className="text-[10px] font-black tabular-nums text-slate-700">{pagination.total}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total</span>
+            </span>
+            <ListToolbar.Divider />
             <AppSelect
               value={filters.status}
               onChange={(v) => setFilters(p => ({ ...p, status: v ?? "" }))}
@@ -944,26 +953,19 @@ export default function PmsMpesaNotifications() {
               />
             )}
             <ListToolbar.Input
-              placeholder="Account ref / tenant code"
-              value={filters.ref} onChange={e => setFilters(p => ({ ...p, ref: e.target.value }))} />
-            <div className="relative flex items-center">
-              <FaSearch size={8} className="pointer-events-none absolute left-1.5 text-slate-400" />
-              <ListToolbar.Input
-                width="w-40"
-                className="pl-5"
-                placeholder="Txn ID or payer name"
-                value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
-            </div>
+              width="w-44"
+              placeholder="Account ref, tenant, txn ID, or payer"
+              value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
+            <span className="shrink-0 text-[10px] font-semibold text-slate-500">From</span>
             <ListToolbar.Input type="date" value={filters.dateFrom} onChange={e => setFilters(p => ({ ...p, dateFrom: e.target.value }))} />
-            <span className="text-[9px] font-bold text-slate-400">→</span>
+            <span className="shrink-0 text-[10px] font-semibold text-slate-500">To</span>
             <ListToolbar.Input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))} />
             <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
             <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={reset}>Reset</ListToolbar.Button>
-            <div className="ml-auto flex items-center gap-2">
-              <ListToolbar.Button icon={FaUpload} variant="outline" type="button" onClick={() => setShowUpload(true)}>Import</ListToolbar.Button>
-              <ListToolbar.Button icon={FaPrint} variant="outline" type="button" onClick={handlePrint} disabled={notifications.length === 0}>Print</ListToolbar.Button>
-              <CountdownButton onRefresh={load} loading={loading} />
-            </div>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaUpload} variant="outline" type="button" onClick={() => setShowUpload(true)}>Import</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPrint} variant="outline" type="button" onClick={handlePrint} disabled={notifications.length === 0}>Print</ListToolbar.Button>
+            <CountdownButton onRefresh={load} loading={loading} />
           </ListToolbar>
         </form>
 
@@ -973,8 +975,9 @@ export default function PmsMpesaNotifications() {
           rows={notifications}
           rowKey="_id"
           loading={loading && notifications.length === 0}
-          empty={applied.status || applied.ref || applied.search ? "No collections match your filters." : "No M-Pesa transactions for today. Upload a CSV or wait for callbacks."}
+          empty={applied.status || applied.search ? "No collections match your filters." : "No M-Pesa transactions for today. Upload a CSV or wait for callbacks."}
           minWidth={1200}
+          actionsWidth="150px"
           renderRow={renderMpesaRow}
           renderExpanded={renderMpesaExpanded}
           renderActions={renderMpesaActions}

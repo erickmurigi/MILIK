@@ -2494,6 +2494,11 @@ const Statements = () => {
                       {hasInvoiceVatColumn && Number(totalInvoiceVatReceived || 0) > 0 && (
                         <p className="mt-0.5 text-[10px] text-slate-400">VAT: {currency(totalInvoiceVatReceived)}</p>
                       )}
+                      {Number(summary?.directRentCollections || 0) > 0 && (
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          of which {currency(summary.directRentCollections)} direct to landlord
+                        </p>
+                      )}
                     </div>
                     {/* Utilities Paid */}
                     <div className="px-3 py-1.5">
@@ -2501,6 +2506,11 @@ const Statements = () => {
                       <p className={`mt-0.5 text-sm font-bold ${Number(totals.utilityPaid || 0) > 0 ? "text-emerald-700" : "text-slate-400"}`}>
                         {Number(totals.utilityPaid || 0) > 0 ? currency(totals.utilityPaid) : "—"}
                       </p>
+                      {Number(summary?.directUtilityCollections || 0) > 0 && (
+                        <p className="mt-0.5 text-[10px] text-slate-400">
+                          of which {currency(summary.directUtilityCollections)} direct to landlord
+                        </p>
+                      )}
                     </div>
                     {/* Expenses */}
                     <div className="px-3 py-1.5">

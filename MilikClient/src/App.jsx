@@ -285,7 +285,6 @@ const ClientsList       = lazy(() => import("./pages/Clients/ClientsList"));
 const ClientDetail      = lazy(() => import("./pages/Clients/ClientDetail"));
 const ClientsContracts  = lazy(() => import("./pages/Clients/ClientsContracts"));
 const ClientsInvoices   = lazy(() => import("./pages/Clients/ClientsInvoices"));
-const InvoicePrintView  = lazy(() => import("./pages/Clients/InvoicePrintView"));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const EXTRA_SESSION_KEYS = ["milik_active_company_id"];
@@ -853,7 +852,6 @@ function App() {
             <Route path="/clients/dashboard"          element={<Guard resource="clients"><ClientsDashboard /></Guard>} />
             <Route path="/clients/contracts"         element={<Guard resource="clients"><ClientsContracts /></Guard>} />
             <Route path="/clients/invoices"          element={<Guard resource="clients"><ClientsInvoices /></Guard>} />
-            <Route path="/clients/invoices/:id/print" element={<Guard resource="clients"><InvoicePrintView /></Guard>} />
             <Route path="/clients"                   element={<Guard resource="clients"><ClientsList /></Guard>} />
             <Route path="/clients/:id"               element={<Guard resource="clients"><ClientDetail /></Guard>} />
 

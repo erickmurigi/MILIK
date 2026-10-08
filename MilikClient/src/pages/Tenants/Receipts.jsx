@@ -1,5 +1,4 @@
-﻿import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
-import PaginationBar from '../../components/PaginationBar';
+﻿import PaginationBar from '../../components/PaginationBar';
 import { useConfirm } from "../../context/ConfirmContext";
 import { formatMoney } from "../../utils/money";
 import { fmtDate } from "../../utils/dates";
@@ -357,9 +356,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const fromLedger = location.state?.fromPropertyLedger;
   const initialFilters = {
     search: "",
-    tenantSearch: "",
     status: "active",
-    paymentType: "all",
     tenant: tenantId || "all",
     property: fromLedger ? (location.state?.propertyName || "all") : "all",
     unit: "",
@@ -451,12 +448,10 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (!currentCompany?._id) return;
     const params = { business: currentCompany._id, page, limit: pageSize };
     if (filters.status && filters.status !== "all") params.status = filters.status;
-    if (filters.paymentType && filters.paymentType !== "all") params.paymentType = filters.paymentType;
     if (filters.tenant && filters.tenant !== "all") params.tenant = filters.tenant;
     if (filters.property && filters.property !== "all") params.property = filters.property;
     if (filters.unit) params.unit = filters.unit;
     if (filters.search) params.search = filters.search;
-    if (filters.tenantSearch) params.tenantSearch = filters.tenantSearch;
     if (filters.from) params.from = filters.from;
     if (filters.to) params.to = filters.to;
     if (!isCompanyLandlordMode && isLandlordReceiptView) {
@@ -1621,6 +1616,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
         { label: "Status", key: "_status", value: (r) => (r.isConfirmed ? "Confirmed" : "Pending") },
       ],
       rows: receipts,
+      totalsRow: [`Total (${receipts.length.toLocaleString()} records)`, "", "", "", "", "", "", "", `KES ${totalAmt.toLocaleString()}`, ""],
     });
   };
 
@@ -1660,19 +1656,14 @@ const Receipts = ({ viewMode = "tenant" }) => {
                   {location.state.propertyName} Ledger
                 </ListToolbar.Button>
               )}
-              <span className="shrink-0 border border-slate-300 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-700">{stats.count} {termReceipts}</span>
-              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Total: Ksh {stats.total.toLocaleString()}</span>
-              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Confirmed: {stats.confirmedCount}</span>
-              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pending: {stats.pendingCount}</span>
               <ListToolbar.Divider />
               <ListToolbar.Input
-                width="w-[4.5rem]"
+                width="w-28"
                 value={draftFilters.search}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && applySearchFilters()}
-                placeholder="Receipt #"
+                placeholder={`${termTenant} or Receipt #`}
               />
-              <ListToolbar.Input width="w-[4.5rem]" value={draftFilters.tenantSearch} onChange={(e) => setDraftFilters((prev) => ({ ...prev, tenantSearch: normalizeUppercaseInput(e.target.value) }))} placeholder={termTenant} />
               <AppSelect
                 value={draftFilters.property}
                 onChange={(v) => setDraftFilters((prev) => ({ ...prev, property: v ?? "all", unit: "" }))}
@@ -1708,21 +1699,9 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 ]}
                 compact
               />
-              <AppSelect
-                value={draftFilters.paymentType}
-                onChange={(v) => setDraftFilters((prev) => ({ ...prev, paymentType: v ?? "all" }))}
-                options={[
-                  { value: "rent", label: "Rent" },
-                  { value: "deposit", label: "Deposit" },
-                  { value: "utility", label: "Utility" },
-                  { value: "late_fee", label: "Late Fee" },
-                  { value: "other", label: "Other" },
-                ]}
-                placeholder="Type"
-                clearable
-                compact
-              />
+              <span className="shrink-0 text-[10px] font-semibold text-slate-500">From</span>
               <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.from} onChange={setFilter("from")} />
+              <span className="shrink-0 text-[10px] font-semibold text-slate-500">To</span>
               <ListToolbar.Input width="w-[5.5rem]" type="date" value={draftFilters.to} onChange={setFilter("to")} />
               <ListToolbar.Divider />
               <AppSelect

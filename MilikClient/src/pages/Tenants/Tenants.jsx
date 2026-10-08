@@ -2294,7 +2294,7 @@ const confirmTransferUnit = useCallback(async () => {
           ]}
           rows={currentTenants}
           rowKey="id"
-          loading={tableLoading}
+          loading={tableLoading && currentTenants.length === 0}
           empty={isTerminatedView ? `No terminated ${termTenants.toLowerCase()} found. Try adjusting filters.` : `No ${termTenants.toLowerCase()} found. Try adjusting filters or create a new ${termTenant.toLowerCase()}.`}
           groupBy={(tenant) => toListingCaps(tenant.propertyName)}
           checkboxes

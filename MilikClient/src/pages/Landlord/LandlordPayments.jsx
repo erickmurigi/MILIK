@@ -21,7 +21,16 @@ import { printDocument, formatMoney, formatDate as formatPrintDate } from "../..
 import AppSelect from "../../components/common/AppSelect";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
 import { getProperties } from "../../redux/propertyRedux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 // NOTE: getLandlords is a thunk creator — must be called via dispatch(getLandlords({...}))
+
+// getLandlordPayments pages through the WHOLE company payment-voucher history (see its
+// own comment) into local state — not Redux — so it would normally be refetched from
+// scratch every time this tab remounts. A tiny module-level cache (outside React, so it
+// survives unmount) keyed by company gives the same "instant on revisit" behavior as
+// useEntityCache.
+const STALE_MS = 30_000;
+const landlordPaymentsCache = new Map();
 
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
@@ -41,6 +50,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
   const isFetching = useSelector(selectLandlordIsFetching);
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
   const canExportPayment = useMemo(
     () => hasCompanyPermission(currentUser || {}, currentCompany, "landlordPayments", "export", "accounts"),
@@ -58,18 +68,26 @@ const LandlordPayments = ({ mode = "payments" }) => {
   // Landlord payment vouchers from backend
   const [landlordPayments, setLandlordPayments] = useState([]);
 
+  // `force: true` (Refresh button) always hits the server; a plain call (mount effect)
+  // reuses the cache when it's still fresh.
+  const loadLandlordPayments = async (companyId, { force = false } = {}) => {
+    const cached = landlordPaymentsCache.get(companyId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setLandlordPayments(cached.payments);
+      return;
+    }
+    const payments = await getLandlordPayments(companyId);
+    setLandlordPayments(payments);
+    landlordPaymentsCache.set(companyId, { payments, loadedAt: Date.now() });
+  };
+
   // Load data
   useEffect(() => {
-    const fetchData = async () => {
-      if (currentCompany?._id) {
-        dispatch(getLandlords({ business: currentCompany._id }));
-        dispatch(getProperties({ business: currentCompany._id }));
-        const payments = await getLandlordPayments(currentCompany._id);
-        setLandlordPayments(payments);
-      }
-    };
-    fetchData();
-  }, [dispatch, currentCompany?._id]);
+    if (!currentCompany?._id) return;
+    if (!landlords?.length) dispatch(getLandlords({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    loadLandlordPayments(currentCompany._id);
+  }, [dispatch, currentCompany?._id, propertiesLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate landlord financial data
   const tenantsByPropertyId = useMemo(() => {
@@ -296,7 +314,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
             >
               SMS{selectedLandlords.length > 0 && <span> ({selectedLandlords.length})</span>}
             </ListToolbar.Button>
-            <ListToolbar.Button icon={FaRedoAlt} onClick={() => dispatch(getLandlords({ business: currentCompany._id }))}>Refresh</ListToolbar.Button>
+            <ListToolbar.Button icon={FaRedoAlt} onClick={() => { dispatch(getLandlords({ business: currentCompany._id })); loadLandlordPayments(currentCompany._id, { force: true }); }}>Refresh</ListToolbar.Button>
           </ListToolbar>
 
           {/* Table */}
@@ -313,7 +331,7 @@ const LandlordPayments = ({ mode = "payments" }) => {
               ]}
               rows={currentPageData}
               rowKey="_id"
-              loading={isFetching}
+              loading={isFetching && currentPageData.length === 0}
               empty="No landlords found"
               minWidth="1400px"
               checkboxes

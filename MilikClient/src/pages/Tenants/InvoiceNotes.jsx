@@ -9,6 +9,7 @@ import {
 } from "../../redux/selectors";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { buildTenantOption } from "../../utils/tenantUtils";
 import {
   FaFileInvoice,
@@ -50,6 +51,16 @@ const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 
 const todayInput = () => new Date().toISOString().split("T")[0];
+
+// Properties (local state, not Redux here) and the five-request workspace bundle
+// (open invoices, anchor invoices, notes, charge types, posting accounts) were both
+// being refetched from scratch on every visit to this tab. These two module-level
+// caches (outside React, so they survive the tab remount) give the same "instant on
+// revisit" behavior the other list pages get from Redux, keyed by business.
+const STALE_MS = 30_000;
+const propertiesCache = new Map();
+const notesCache = new Map();
+const formDataCache = new Map();
 
 
 const normalizeList = (payload) => {
@@ -271,6 +282,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
   const tenants = useSelector(selectAllTenants);
+  const { tenantsLoaded } = useEntityCache(currentCompany?._id);
   const { tenant: termTenant, tenants: termTenants, property: termProperty, unit: termUnit, invoice: termInvoice } = useTerms("tenant", "tenants", "property", "unit", "invoice");
 
   const navigate = useNavigate();
@@ -364,47 +376,103 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
     [properties]
   );
 
-  const loadProperties = useCallback(async () => {
+  const loadProperties = useCallback(async ({ force = false } = {}) => {
     if (!currentCompany?._id) return;
+    const businessId = currentCompany._id;
+    const cached = propertiesCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setProperties(cached.properties);
+      return;
+    }
     try {
-      const propertiesRes = await adminRequests.get(`/properties?business=${currentCompany._id}&limit=1000`);
-      setProperties(normalizeList(propertiesRes.data));
+      const propertiesRes = await adminRequests.get(`/properties?business=${businessId}&limit=1000`);
+      const list = normalizeList(propertiesRes.data);
+      setProperties(list);
+      propertiesCache.set(businessId, { properties: list, loadedAt: Date.now() });
     } catch (error) {
       console.error("Failed to load properties:", error);
     }
   }, [currentCompany?._id]);
 
-  const loadData = useCallback(async () => {
+  // Split from the form-reference fetch below so the notes table can paint as soon as
+  // its own (cheap) request resolves, instead of waiting on the two full-business
+  // invoice pulls that only the add/edit note form actually needs. `force: true`
+  // (Refresh button, or after a create/reverse/import) always hits the server; a plain
+  // call reuses the cache when fresh.
+  const loadNotes = useCallback(async ({ force = false } = {}) => {
     if (!currentCompany?._id) return;
+    const businessId = currentCompany._id;
+    const cached = notesCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setNotes(cached.notes);
+      return;
+    }
     setLoading(true);
     try {
-      const [
-        creditable,
-        invoices,
-        noteRows,
-        types,
-        accounts,
-      ] = await Promise.all([
-        getCreditableTenantInvoices({ business: currentCompany._id }),
-        getTenantInvoices({ business: currentCompany._id }),
-        getTenantInvoiceNotes({ business: currentCompany._id }),
-        getTenantInvoiceNoteChargeTypes(),
-        getChartOfAccounts({ business: currentCompany._id }),
-        dispatch(getTenants({ business: currentCompany._id })),
-      ]);
-
-      setOpenInvoices((Array.isArray(creditable) ? creditable : []).filter(isActiveInvoice));
-      setAnchorInvoices((Array.isArray(invoices) ? invoices : []).filter(isActiveInvoice));
-      setNotes(Array.isArray(noteRows) ? noteRows : []);
-      setChargeTypes(Array.isArray(types) ? types : []);
-      setPostingAccounts((Array.isArray(accounts) ? accounts : []).filter(isPostingAccount));
+      const noteRows = await getTenantInvoiceNotes({ business: businessId });
+      const nextNotes = Array.isArray(noteRows) ? noteRows : [];
+      setNotes(nextNotes);
+      notesCache.set(businessId, { notes: nextNotes, loadedAt: Date.now() });
     } catch (error) {
-      console.error("Failed to load invoice notes workspace:", error);
-      toast.error(error?.response?.data?.message || "Failed to load invoice notes workspace");
+      console.error("Failed to load invoice notes:", error);
+      toast.error(error?.response?.data?.message || "Failed to load invoice notes");
     } finally {
       setLoading(false);
     }
-  }, [currentCompany?._id, dispatch]);
+  }, [currentCompany?._id]);
+
+  // The add/edit note form's reference data (open invoices to apply credit against,
+  // the full invoice list, charge types, posting accounts). Runs independently of
+  // loadNotes — in the background on mount, so it never blocks the notes table's own
+  // display, and is only actually waited on once the form needs it.
+  const loadFormData = useCallback(async ({ force = false } = {}) => {
+    if (!currentCompany?._id) return;
+    const businessId = currentCompany._id;
+    const cached = formDataCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setOpenInvoices(cached.openInvoices);
+      setAnchorInvoices(cached.anchorInvoices);
+      setChargeTypes(cached.chargeTypes);
+      setPostingAccounts(cached.postingAccounts);
+      return;
+    }
+    try {
+      const [creditable, invoices, types, accounts] = await Promise.all([
+        getCreditableTenantInvoices({ business: businessId }),
+        getTenantInvoices({ business: businessId }),
+        getTenantInvoiceNoteChargeTypes(),
+        getChartOfAccounts({ business: businessId }),
+        tenantsLoaded ? null : dispatch(getTenants({ business: businessId })),
+      ]);
+
+      const nextOpenInvoices = (Array.isArray(creditable) ? creditable : []).filter(isActiveInvoice);
+      const nextAnchorInvoices = (Array.isArray(invoices) ? invoices : []).filter(isActiveInvoice);
+      const nextChargeTypes = Array.isArray(types) ? types : [];
+      const nextPostingAccounts = (Array.isArray(accounts) ? accounts : []).filter(isPostingAccount);
+
+      setOpenInvoices(nextOpenInvoices);
+      setAnchorInvoices(nextAnchorInvoices);
+      setChargeTypes(nextChargeTypes);
+      setPostingAccounts(nextPostingAccounts);
+      formDataCache.set(businessId, {
+        openInvoices: nextOpenInvoices,
+        anchorInvoices: nextAnchorInvoices,
+        chargeTypes: nextChargeTypes,
+        postingAccounts: nextPostingAccounts,
+        loadedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Failed to load invoice notes form data:", error);
+      toast.error(error?.response?.data?.message || "Failed to load invoice notes workspace");
+    }
+  }, [currentCompany?._id, dispatch, tenantsLoaded]);
+
+  // Kept for the call sites below (after a save/reverse/import, or the Refresh button)
+  // that need everything current at once — both run in parallel, neither blocks the
+  // other's render.
+  const loadData = useCallback(async ({ force = false } = {}) => {
+    await Promise.all([loadNotes({ force }), loadFormData({ force })]);
+  }, [loadNotes, loadFormData]);
 
   useEffect(() => { loadProperties(); }, [loadProperties]);
   useEffect(() => { loadData(); }, [loadData]);
@@ -790,6 +858,12 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
         { label: "Status", value: (n) => getNotePaymentLabel(n) },
       ],
       rows: filteredNotes,
+      totalsRow: [
+        `Total (${filteredNotes.length.toLocaleString()} records)`, "", "", "", "", "",
+        fmtAmountKE(filteredNotes.reduce((s, n) => s + Number(n.amount || 0), 0)),
+        fmtAmountKE(filteredNotes.reduce((s, n) => s + Number(n?.balance ?? n?.outstanding ?? 0), 0)),
+        "",
+      ],
     });
   };
 
@@ -858,7 +932,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
         closeAddForm();
         resetModalForm();
         clearInvoiceNotesDraft();
-        await loadData();
+        await loadData({ force: true });
         window.dispatchEvent(new Event("invoicesUpdated"));
       } catch (error) {
         toast.error(error?.response?.data?.error || error?.response?.data?.message || error.message || "Failed to create note");
@@ -907,7 +981,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
       closeAddForm();
       resetModalForm();
       clearInvoiceNotesDraft();
-      await loadData();
+      await loadData({ force: true });
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || error.message || "Failed to create note");
@@ -932,7 +1006,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
       await deleteTenantInvoiceNote(noteId, { business: currentCompany?._id, reason });
       toast.success(`${String(note?.noteType || "").toUpperCase() === "CREDIT_NOTE" ? "Credit" : "Debit"} note reversed successfully.`);
       setReverseNoteModal({ open: false, note: null, reason: "", loading: false });
-      await loadData();
+      await loadData({ force: true });
       window.dispatchEvent(new Event("invoicesUpdated"));
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reverse invoice note");
@@ -1028,7 +1102,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
               />
               <ListToolbar.Button icon={FaSearch} onClick={handleSearchFilters}>Search</ListToolbar.Button>
               <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetWorkspaceFilters}>Reset</ListToolbar.Button>
-              <ListToolbar.Button variant="outline" onClick={loadData}>Refresh</ListToolbar.Button>
+              <ListToolbar.Button variant="outline" onClick={() => loadData({ force: true })}>Refresh</ListToolbar.Button>
               <ListToolbar.Button icon={FaPlus} onClick={openAddModal}>{lockedBillItemKey === "lease_fee" ? "Add Lease Fee" : "Add Note"}</ListToolbar.Button>
               <ListToolbar.Button icon={FaUpload} onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
               <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintNotes} disabled={filteredNotes.length === 0}>Print</ListToolbar.Button>
@@ -1455,7 +1529,7 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
           const successful = Array.isArray(res?.data?.successful) ? res.data.successful : [];
           const failed = Array.isArray(res?.data?.failed) ? res.data.failed : [];
           if (successful.length > 0) {
-            await loadData();
+            await loadData({ force: true });
           }
           return { successful, failed };
         }}

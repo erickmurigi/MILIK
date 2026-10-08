@@ -1,6 +1,7 @@
 import LandlordStatement from "../../models/LandlordStatement.js";
 import LandlordStatementLine from "../../models/LandlordStatementLine.js";
 import Property from "../../models/Property.js";
+import Company from "../../models/Company.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import mongoose from "mongoose";
 import {
@@ -777,16 +778,19 @@ export const generatePdf = async (req, res, next) => {
     // Cheap existence + cache-key check first (a repeated print/preview/download of an
     // already-rendered statement is the common case) — only pay for the property/landlord/
     // business populate joins below when the PDF isn't already cached.
-    const leanStatement = await LandlordStatement.findOne(
-      { _id: statementId, business: businessId },
-      "_id status updatedAt generatedAt statementNumber"
-    ).lean();
+    const [leanStatement, companyStub] = await Promise.all([
+      LandlordStatement.findOne(
+        { _id: statementId, business: businessId },
+        "_id status updatedAt generatedAt statementNumber"
+      ).lean(),
+      Company.findById(businessId).select("updatedAt").lean(),
+    ]);
 
     if (!leanStatement) {
       return next(createError(404, "Statement not found or access denied"));
     }
 
-    const statement = isPdfCached(leanStatement)
+    const statement = isPdfCached(leanStatement, companyStub?.updatedAt)
       ? leanStatement
       : await LandlordStatement.findOne({ _id: statementId, business: businessId })
           .populate("property", "propertyCode propertyName name address city commissionPercentage commissionRecognitionBasis commissionPaymentMode commissionFixedAmount totalUnits")

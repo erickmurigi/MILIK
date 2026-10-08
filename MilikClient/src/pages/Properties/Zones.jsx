@@ -38,6 +38,13 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
 ];
 
+// The officers dropdown (zone supervisors) is reference data unrelated to the zones
+// grid's own filters/pagination — it was being refetched from scratch on every visit
+// to this tab. A small module-level cache (survives the tab remount) keeps a revisit
+// within the window instant instead of waiting on another round trip.
+const OFFICERS_STALE_MS = 30_000;
+let officersCache = { officers: [], loadedAt: 0 };
+
 const EMPTY_FORM = {
   name: '', code: '', description: '', type: 'geographic',
   color: '#0B3B2E', fieldOfficers: [], supervisors: [],
@@ -301,9 +308,15 @@ export default function Zones() {
   }, [page, pageSize, search, typeFilter, statusFilter]);
 
   const loadOfficers = useCallback(async () => {
+    if (Date.now() - officersCache.loadedAt < OFFICERS_STALE_MS) {
+      setOfficers(officersCache.officers);
+      return;
+    }
     try {
       const res = await adminRequests.get('/zones/officers', { params: { limit: 500 } });
-      setOfficers(res.data?.users || []);
+      const users = res.data?.users || [];
+      setOfficers(users);
+      officersCache = { officers: users, loadedAt: Date.now() };
     } catch { /* non-fatal */ }
   }, []);
 

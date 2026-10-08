@@ -1,5 +1,6 @@
 ﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
@@ -12,7 +13,8 @@ import {
   selectAllTenants,
 } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
-import { getUnits, getTenants } from "../../redux/apiCalls";
+import { getUnits } from "../../redux/unitRedux";
+import { getTenants } from "../../redux/tenantsRedux";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { toast } from "react-toastify";
 import {
@@ -57,6 +59,23 @@ import {
 import { useTerms } from "../../hooks/useTerm";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
+
+// Full-page add/edit form conventions — matches AddLandlord.jsx (Section header bars,
+// h-7 compact inputs, bold labels, plain Cancel/Save footer, no modal/colored banner).
+const formInputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const formLabelClass = "mb-1 block text-xs font-bold text-slate-900";
+const FormRequired = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+const FormSection = ({ title, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white ${className}`}>
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
+
+const STALE_MS = 30_000;
+const pageDataCache = new Map();
 
 const normalizeList = (payload) => {
   if (Array.isArray(payload)) return payload;
@@ -185,6 +204,7 @@ const MeterReadings = () => {
   const reduxProperties = useSelector(selectAllProperties);
   const reduxUnits      = useSelector(selectAllUnits);
   const reduxTenants    = useSelector(selectAllTenants);
+  const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(businessId);
 
   const canCreateReading = hasCompanyPermission(
     currentUser || {},
@@ -273,8 +293,22 @@ const MeterReadings = () => {
     return Array.from(names).sort((a, b) => a.localeCompare(b));
   }, [utilityList, companySettings, units]);
 
-  const loadPageData = useCallback(async () => {
+  // Readings + the utility list (also used by this page's own filter bar) are local
+  // state, not Redux — so unlike properties/units/tenants above, they'd normally be
+  // refetched from scratch every time this tab remounts. A tiny module-level cache
+  // (outside React, so it survives unmount) keyed by business gives the same "instant
+  // on revisit" behavior as useEntityCache. `force: true` always hits the server;
+  // refreshReadings() (used after every create/edit/bill/delete/void) invalidates the
+  // cache so a later revisit doesn't serve pre-mutation data.
+  const loadPageData = useCallback(async ({ force = false } = {}) => {
     if (!businessId) return;
+
+    const cached = pageDataCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setUtilityList(cached.utilityList);
+      setReadings(cached.readings);
+      return;
+    }
 
     setLoading(true);
     try {
@@ -283,11 +317,12 @@ const MeterReadings = () => {
         getMeterReadings({ business: businessId }),
       ]);
 
-      setUtilityList(normalizeList(utilitiesRes.data));
-      setReadings(Array.isArray(readingsRes) ? readingsRes : []);
-      setSelectedReadingIds((prev) =>
-        prev.filter((id) => (Array.isArray(readingsRes) ? readingsRes : []).some((row) => row._id === id))
-      );
+      const nextUtilityList = normalizeList(utilitiesRes.data);
+      const nextReadings = Array.isArray(readingsRes) ? readingsRes : [];
+      setUtilityList(nextUtilityList);
+      setReadings(nextReadings);
+      setSelectedReadingIds((prev) => prev.filter((id) => nextReadings.some((row) => row._id === id)));
+      pageDataCache.set(businessId, { utilityList: nextUtilityList, readings: nextReadings, loadedAt: Date.now() });
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -299,14 +334,17 @@ const MeterReadings = () => {
     }
   }, [businessId]);
 
-  // Trigger Redux loads for shared data (no-op if already in store)
+  // Trigger Redux loads for shared data — these used to be unconditional (including two
+  // raw, uncached apiCalls fetches that always hit the network), so every visit to this
+  // tab re-pulled the full properties/units/tenants collections even when another page
+  // had loaded them seconds earlier. Gated the same way as the rest of the app now.
   useEffect(() => {
     if (!businessId) return;
-    dispatch(getProperties({ business: businessId }));
-    getUnits(dispatch, businessId);
-    getTenants(dispatch, businessId);
+    if (!propertiesLoaded) dispatch(getProperties({ business: businessId }));
+    if (!unitsLoaded) dispatch(getUnits({ business: businessId }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: businessId }));
     dispatch(fetchCompanySettings(businessId));
-  }, [businessId, dispatch]);
+  }, [businessId, dispatch, propertiesLoaded, unitsLoaded, tenantsLoaded]);
 
   useEffect(() => {
     loadPageData();
@@ -862,6 +900,10 @@ const MeterReadings = () => {
       const normalized = Array.isArray(list) ? list : [];
       setReadings(normalized);
       setSelectedReadingIds((prev) => prev.filter((id) => normalized.some((row) => row._id === id)));
+      // Keep the page-data cache in step with this mutation (rather than just deleting
+      // it) so a tab revisit within the staleness window still renders instantly.
+      const cached = pageDataCache.get(businessId);
+      pageDataCache.set(businessId, { utilityList: cached?.utilityList || [], readings: normalized, loadedAt: Date.now() });
     } catch (error) {
       toast.error(
         error.response?.data?.message ||
@@ -1213,7 +1255,7 @@ const MeterReadings = () => {
 
           {showAddModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4">
-              <div className="flex flex-col max-h-[92vh] w-full max-w-5xl overflow-hidden border border-slate-200 bg-white shadow-2xl">
+              <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
                 <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
                   <h2 className="text-sm font-black uppercase tracking-wide">
                     {editingId ? "Edit meter reading" : "Add meter reading"}
@@ -1231,10 +1273,10 @@ const MeterReadings = () => {
                   </button>
                 </div>
 
-                <form className="flex flex-col flex-1 overflow-hidden" onSubmit={handleSubmit}>
-                  <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-4">
-                    {/* ── Property + Unit ── */}
-                    <div className="grid gap-4 md:grid-cols-2">
+                <form onSubmit={handleSubmit} noValidate className="flex flex-1 flex-col overflow-hidden">
+                  <div className="flex-1 overflow-y-auto bg-white px-5 py-4 space-y-3">
+                  <FormSection title="Reading Details">
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-4">
                       <AppSelect
                         label="Property"
                         required
@@ -1255,47 +1297,7 @@ const MeterReadings = () => {
                         placeholder="Select unit"
                         size="md"
                       />
-                    </div>
 
-                    {/* ── Tenant (read-only, auto-detected from unit) ── */}
-                    {form.unit && (
-                      <div className={`flex items-center gap-3 rounded-md border px-4 py-2.5 ${
-                        selectedAutoTenant
-                          ? "border-emerald-200 bg-emerald-50"
-                          : "border-amber-200 bg-amber-50"
-                      }`}>
-                        <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-black ${
-                          selectedAutoTenant ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
-                        }`}>
-                          {selectedAutoTenant ? selectedAutoTenant.name?.charAt(0)?.toUpperCase() || "T" : "!"}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant / Occupant</p>
-                          {selectedAutoTenant ? (
-                            <p className="truncate text-xs font-semibold text-emerald-800">
-                              {selectedAutoTenant.name}
-                              <span className="ml-2 font-normal text-emerald-600">· auto-detected</span>
-                            </p>
-                          ) : (
-                            <>
-                              <p className="text-xs font-semibold text-amber-800">No active tenant found for this unit (vacant)</p>
-                              <label className="mt-1.5 flex items-center gap-2 text-[11px] font-medium text-amber-800">
-                                <input
-                                  type="checkbox"
-                                  checked={Boolean(form.allowVacant)}
-                                  onChange={(e) => handleFormChange("allowVacant", e.target.checked)}
-                                  className="h-3.5 w-3.5 rounded border-amber-300"
-                                />
-                                Record this reading anyway for the vacant unit
-                              </label>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── Utility + Billing Period ── */}
-                    <div className="grid gap-4 md:grid-cols-2">
                       <AppSelect
                         label="Utility type"
                         required
@@ -1306,120 +1308,165 @@ const MeterReadings = () => {
                         size="md"
                       />
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                          Billing period <span className="text-red-500">*</span>
-                        </span>
+                      <div>
+                        <label className={formLabelClass} htmlFor="mr-billingPeriod">Billing period<FormRequired /></label>
                         <input
+                          id="mr-billingPeriod"
                           type="month"
                           value={form.billingPeriod}
                           onChange={(e) => handleFormChange("billingPeriod", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className={formInputClass}
                         />
-                      </label>
+                      </div>
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reading date</span>
+                      {/* ── Tenant (read-only, auto-detected from unit) ── */}
+                      {form.unit && (
+                        <div className={`col-span-2 flex items-center gap-3 border px-4 py-2.5 md:col-span-4 ${
+                          selectedAutoTenant
+                            ? "border-emerald-200 bg-emerald-50"
+                            : "border-amber-200 bg-amber-50"
+                        }`}>
+                          <div className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full text-[11px] font-black ${
+                            selectedAutoTenant ? "bg-emerald-600 text-white" : "bg-amber-500 text-white"
+                          }`}>
+                            {selectedAutoTenant ? selectedAutoTenant.name?.charAt(0)?.toUpperCase() || "T" : "!"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black uppercase tracking-wide text-slate-500">Tenant / Occupant</p>
+                            {selectedAutoTenant ? (
+                              <p className="truncate text-xs font-semibold text-emerald-800">
+                                {selectedAutoTenant.name}
+                                <span className="ml-2 font-normal text-emerald-600">· auto-detected</span>
+                              </p>
+                            ) : (
+                              <>
+                                <p className="text-xs font-semibold text-amber-800">No active tenant found for this unit (vacant)</p>
+                                <label className="mt-1.5 flex items-center gap-2 text-[11px] font-medium text-amber-800">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(form.allowVacant)}
+                                    onChange={(e) => handleFormChange("allowVacant", e.target.checked)}
+                                    className="h-3.5 w-3.5 border-amber-300"
+                                  />
+                                  Record this reading anyway for the vacant unit
+                                </label>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label className={formLabelClass} htmlFor="mr-readingDate">Reading date</label>
                         <input
+                          id="mr-readingDate"
                           type="date"
                           value={form.readingDate}
                           onChange={(e) => handleFormChange("readingDate", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className={formInputClass}
                         />
-                      </label>
+                      </div>
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Rate per unit</span>
+                      <div>
+                        <label className={formLabelClass} htmlFor="mr-rate">Rate per unit</label>
                         <input
+                          id="mr-rate"
                           type="text"
                           inputMode="decimal"
                           value={form.rate}
                           onChange={(e) => handleFormChange("rate", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className={formInputClass}
                         />
-                      </label>
+                      </div>
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Previous reading</span>
+                      <div>
+                        <label className={formLabelClass} htmlFor="mr-previousReading">Previous reading</label>
                         <input
+                          id="mr-previousReading"
                           type="text"
                           inputMode="decimal"
                           value={form.previousReading === "" ? (inferredPreviousReading > 0 ? String(inferredPreviousReading) : "") : form.previousReading}
                           onChange={(e) => handleFormChange("previousReading", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className={formInputClass}
                           placeholder="0"
                         />
-                      </label>
+                      </div>
 
-                      <label className="block">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">
-                          Current reading <span className="text-red-500">*</span>
-                        </span>
+                      <div>
+                        <label className={formLabelClass} htmlFor="mr-currentReading">Current reading<FormRequired /></label>
                         <input
+                          id="mr-currentReading"
                           type="text"
                           inputMode="decimal"
                           value={form.currentReading}
                           onChange={(e) => handleFormChange("currentReading", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className={formInputClass}
                         />
-                      </label>
+                      </div>
 
-                      <label className="block md:col-span-2">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Meter number</span>
+                      <div className="col-span-2">
+                        <label className={formLabelClass} htmlFor="mr-meterNumber">Meter number</label>
                         <input
+                          id="mr-meterNumber"
                           type="text"
                           value={form.meterNumber}
                           onChange={(e) => handleFormChange("meterNumber", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className={formInputClass}
                         />
-                      </label>
+                      </div>
 
-                      <label className="block md:col-span-2">
-                        <span className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Notes</span>
+                      <div className="col-span-2 md:col-span-4">
+                        <label className={formLabelClass} htmlFor="mr-notes">Notes</label>
                         <textarea
+                          id="mr-notes"
                           rows={3}
                           value={form.notes}
                           onChange={(e) => handleFormChange("notes", e.target.value)}
-                          className="w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="w-full border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
-                      </label>
-                    </div>
-
-                    <div className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm text-purple-900">
-                      <input
-                        id="meter-reset"
-                        type="checkbox"
-                        checked={Boolean(form.isMeterReset)}
-                        onChange={(e) => handleFormChange("isMeterReset", e.target.checked)}
-                        className="h-4 w-4 rounded border-purple-300"
-                      />
-                      <label htmlFor="meter-reset" className="cursor-pointer font-medium">
-                        Meter reset / rollover during this capture
-                      </label>
-                    </div>
-
-                    <div className="grid gap-3 md:grid-cols-3">
-                      <div className="rounded border border-blue-200 bg-blue-50 p-3">
-                        <p className="text-[11px] font-semibold text-blue-600">Units Consumed</p>
-                        <p className="text-lg font-bold text-blue-900">
-                          {formatNumber(formDerived.unitsConsumed)} units
-                        </p>
-                      </div>
-                      <div className="rounded border border-orange-200 bg-orange-50 p-3">
-                        <p className="text-[11px] font-semibold text-orange-600">Rate</p>
-                        <p className="text-lg font-bold text-orange-900">
-                          {formatMoney(form.rate || 0)}
-                        </p>
-                      </div>
-                      <div className="rounded border border-green-200 bg-green-50 p-3">
-                        <p className="text-[11px] font-semibold text-green-600">Charge Preview</p>
-                        <p className="text-lg font-bold text-green-900">
-                          {formatMoney(formDerived.amount)}
-                        </p>
                       </div>
                     </div>
+                  </FormSection>
 
+                  <FormSection title="Flags & Preview">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center gap-2 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <input
+                          id="meter-reset"
+                          type="checkbox"
+                          checked={Boolean(form.isMeterReset)}
+                          onChange={(e) => handleFormChange("isMeterReset", e.target.checked)}
+                          className="h-4 w-4 border-amber-300"
+                        />
+                        <label htmlFor="meter-reset" className="cursor-pointer font-medium">
+                          Meter reset / rollover during this capture
+                        </label>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[11px] font-semibold text-slate-500">Units Consumed</p>
+                          <p className="text-lg font-bold text-slate-900">
+                            {formatNumber(formDerived.unitsConsumed)} units
+                          </p>
+                        </div>
+                        <div className="border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[11px] font-semibold text-slate-500">Rate</p>
+                          <p className="text-lg font-bold text-slate-900">
+                            {formatMoney(form.rate || 0)}
+                          </p>
+                        </div>
+                        <div className="border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 p-3">
+                          <p className="text-[11px] font-semibold text-[#0B3B2E]">Charge Preview</p>
+                          <p className="text-lg font-bold text-[#0B3B2E]">
+                            {formatMoney(formDerived.amount)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </FormSection>
                   </div>
+
                   <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
                     <button
                       type="button"
@@ -1427,20 +1474,20 @@ const MeterReadings = () => {
                         resetForm();
                         setShowAddModal(false);
                       }}
-                      className="border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)}
-                      className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-black text-white ${
+                      className={`inline-flex h-8 items-center gap-1.5 px-4 text-xs font-black text-white transition ${
                         saving || (!editingId && !canCreateReading) || (editingId && !canUpdateReading)
                           ? "cursor-not-allowed bg-gray-400"
                           : `${MILIK_GREEN} hover:bg-[#0A3127]`
                       }`}
                     >
-                      <FaSave /> {saving ? "Saving..." : editingId ? "Update Reading" : "Save Reading"}
+                      <FaSave size={11} /> {saving ? "Saving..." : editingId ? "Update Reading" : "Save Reading"}
                     </button>
                   </div>
                 </form>

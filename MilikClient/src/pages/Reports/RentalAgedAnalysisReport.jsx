@@ -20,6 +20,16 @@ import printTabularList from "../../utils/printList";
 
 const normalizeArray = (value) => (Array.isArray(value) ? value : Array.isArray(value?.data) ? value.data : []);
 
+// Properties/zones (filter dropdowns) and the report rows themselves are local state,
+// not Redux — so they'd normally be refetched from scratch every time this tab
+// remounts. Module-level caches (outside React, so they survive unmount) give the same
+// "instant on revisit" behavior as useEntityCache. The report cache is keyed by the
+// filter combination too, since different filters genuinely need different data.
+const STALE_MS = 30_000;
+const propertiesCache = new Map();
+const zoneOptionsCache = new Map();
+const reportCache = new Map();
+
 const RentalAgedAnalysisReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -37,27 +47,55 @@ const RentalAgedAnalysisReport = () => {
   const [currentPage, setCurrentPage] = useTabState("/reports/rental-aged-analysis:currentPage", 1);
   const [pageSize, setPageSize] = useState(50);
 
-  // Fetch properties once for the filter dropdown
+  // Fetch properties once for the filter dropdown — cached per business
   useEffect(() => {
     if (!businessId) return;
+    const cached = propertiesCache.get(businessId);
+    if (cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setProperties(cached.properties);
+      return;
+    }
     adminRequests.get(`/properties?business=${businessId}&limit=1000`)
-      .then((res) => setProperties(normalizeArray(res?.data || res)))
+      .then((res) => {
+        const list = normalizeArray(res?.data || res);
+        setProperties(list);
+        propertiesCache.set(businessId, { properties: list, loadedAt: Date.now() });
+      })
       .catch(() => {});
   }, [businessId]);
 
   // Stable option array — avoids busting AppSelect's internal useMemo on every render
   const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
 
-  // Fetch zone options once on mount
+  // Fetch zone options once on mount — cached per business
   useEffect(() => {
-    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
-      .then((res) => setZoneOptions((res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }))))
-      .catch(() => {});
-  }, []);
-
-  // Main report data — refetched whenever backend-side filters change
-  const loadData = useCallback(async (signal) => {
     if (!businessId) return;
+    const cached = zoneOptionsCache.get(businessId);
+    if (cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setZoneOptions(cached.zoneOptions);
+      return;
+    }
+    adminRequests.get('/zones', { params: { limit: 500, isActive: 'true' } })
+      .then((res) => {
+        const options = (res.data?.zones || []).map((z) => ({ value: z.name, label: z.name }));
+        setZoneOptions(options);
+        zoneOptionsCache.set(businessId, { zoneOptions: options, loadedAt: Date.now() });
+      })
+      .catch(() => {});
+  }, [businessId]);
+
+  // Main report data — refetched whenever backend-side filters change. Cached per
+  // business+filter combination so switching back to a filter combo already seen in
+  // the last 30s renders instantly instead of re-running the report. `force: true`
+  // (Refresh button) always hits the server.
+  const loadData = useCallback(async (signal, { force = false } = {}) => {
+    if (!businessId) return;
+    const cacheKey = [businessId, filters.propertyId, filters.category, filters.zone].join("|");
+    const cached = reportCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setRows(cached.rows);
+      return;
+    }
     setLoading(true);
     try {
       const data = await getRentalAgedAnalysisReport(
@@ -69,7 +107,9 @@ const RentalAgedAnalysisReport = () => {
         },
         signal
       );
-      setRows(data.rows || []);
+      const nextRows = data.rows || [];
+      setRows(nextRows);
+      reportCache.set(cacheKey, { rows: nextRows, loadedAt: Date.now() });
     } catch (error) {
       if (error?.name === "CanceledError" || error?.name === "AbortError" || error?.code === "ERR_CANCELED") return;
       toast.error(error?.response?.data?.message || "Failed to load rental aged analysis.");
@@ -320,7 +360,7 @@ const RentalAgedAnalysisReport = () => {
               <ListToolbar.Divider />
               <ListToolbar.Button icon={FaFileDownload} variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={exportCsv} disabled={!canExportReports}>CSV</ListToolbar.Button>
               <ListToolbar.Button icon={FaPrint} variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
-              <ListToolbar.Button variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={() => loadData()}>
+              <ListToolbar.Button variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={() => loadData(undefined, { force: true })}>
                 <FaSyncAlt size={7} className={loading ? 'animate-spin' : ''} /> Refresh
               </ListToolbar.Button>
             </ListToolbar>

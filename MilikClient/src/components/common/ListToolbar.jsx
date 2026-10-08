@@ -88,7 +88,7 @@ ListToolbar.Menu = function ToolbarMenu({ open, onClose, anchorRef, children, wi
     <div
       ref={menuRef}
       style={{ position: "fixed", top: pos.top, right: pos.right, zIndex: 9999 }}
-      className={`${width} bg-white border border-gray-200 rounded-lg shadow-xl overflow-hidden`}
+      className={`${width} bg-white border border-gray-200 shadow-xl overflow-hidden`}
     >
       {children}
     </div>

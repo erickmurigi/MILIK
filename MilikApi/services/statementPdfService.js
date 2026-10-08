@@ -5,6 +5,7 @@ import { COMPANY_PRINT_FIELDS } from "../utils/printCompanyFields.js";
 import { BASE_CSS, footerHtml, letterheadHtml } from "../utils/printKitCore.js";
 import LandlordStatement from "../models/LandlordStatement.js";
 import LandlordStatementLine from "../models/LandlordStatementLine.js";
+import Company from "../models/Company.js";
 
 // Module-level logo cache: URL → Base64 data URI.
 // Pre-fetching eliminates the outbound HTTP call Puppeteer would otherwise make per render.
@@ -332,13 +333,19 @@ const buildBusinessLocation = (business = {}) =>
 const buildBusinessPostalAddress = (business = {}) =>
   business?.postalAddress || business?.POBOX || business?.address || "";
 
-const buildStatementPdfCacheKey = (statement = {}) => {
+// The letterhead prints the company's own name/logo/address/PIN, so its update time is
+// part of the key too — editing company settings must not leave a cached statement PDF
+// with the old name. `companyUpdatedAt` is passed in explicitly (rather than read off
+// statement.business) so the cheap isPdfCached() pre-check below, which never populates
+// business, can still compute the same key a full, populated render would.
+const buildStatementPdfCacheKey = (statement = {}, companyUpdatedAt = null) => {
   const updatedAt = statement?.updatedAt
     ? new Date(statement.updatedAt).getTime()
     : statement?.generatedAt
     ? new Date(statement.generatedAt).getTime()
     : 0;
-  return `${String(statement?._id || "")}::${String(statement?.status || "")}::${updatedAt}`;
+  const companyStamp = companyUpdatedAt ? new Date(companyUpdatedAt).getTime() : 0;
+  return `${String(statement?._id || "")}::${String(statement?.status || "")}::${updatedAt}::${companyStamp}`;
 };
 
 const rememberPdfBuffer = (cacheKey, buffer) => {
@@ -360,14 +367,15 @@ const getCachedPdfBuffer = (cacheKey) => {
 };
 
 // Lets a caller check for a cached PDF using only cheap, unpopulated fields (_id/status/
-// updatedAt/generatedAt — the same fields buildStatementPdfCacheKey reads) so it can skip
-// the property/landlord/business populate joins entirely on the common "already rendered,
-// print/preview/download it again" path. Safe by construction: the cache key depends only
-// on these fields, so a lean document produces the exact same key a fully populated one
-// would, and generateStatementPdf() re-checks the cache itself regardless — this is purely
-// an opportunity for the caller to avoid an unnecessary fetch, never a correctness risk.
-export const isPdfCached = (leanStatement = {}) =>
-  pdfBufferCache.has(buildStatementPdfCacheKey(leanStatement));
+// updatedAt/generatedAt plus the company's own updatedAt — the same fields
+// buildStatementPdfCacheKey reads) so it can skip the property/landlord/business populate
+// joins entirely on the common "already rendered, print/preview/download it again" path.
+// Safe by construction: the cache key depends only on these fields, so a lean document
+// produces the exact same key a fully populated one would, and generateStatementPdf()
+// re-checks the cache itself regardless — this is purely an opportunity for the caller to
+// avoid an unnecessary fetch, never a correctness risk.
+export const isPdfCached = (leanStatement = {}, companyUpdatedAt = null) =>
+  pdfBufferCache.has(buildStatementPdfCacheKey(leanStatement, companyUpdatedAt));
 
 const withTimeout = (promise, ms, message) =>
   Promise.race([
@@ -607,12 +615,14 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       "landlord",
       "firstName lastName landlordName email phone phoneNumber taxPin"
     )
-    .populate("business", `${COMPANY_PRINT_FIELDS} slogan POBOX Street City`)
+    .populate("business", `${COMPANY_PRINT_FIELDS} slogan POBOX Street City updatedAt`)
     .lean();
 
   if (!statement) { const e = new Error("Statement not found or access denied"); e.status = 404; throw e; }
 
-  const cacheKey = buildStatementPdfCacheKey(statement);
+  const companyUpdatedAt = statement.business?.updatedAt
+    ?? (await Company.findById(businessId).select("updatedAt").lean())?.updatedAt;
+  const cacheKey = buildStatementPdfCacheKey(statement, companyUpdatedAt);
   const cachedPdfBuffer = getCachedPdfBuffer(cacheKey);
   if (cachedPdfBuffer) return cachedPdfBuffer;
 

@@ -1,4 +1,5 @@
 import { adminRequests } from '../utils/requestMethods';
+import { printPdfBlob } from '../utils/printKit';
 
 export const clientsApi = {
   // ─── Clients CRUD ────────────────────────────────────────────────────────────
@@ -32,6 +33,28 @@ export const clientsApi = {
     adminRequests.post(`/clients/invoices/${invoiceId}/payments/${paymentId}/reverse`, data),
   sendInvoice: (id) => adminRequests.post(`/clients/invoices/${id}/send`),
   cancelInvoice: (id, data = {}) => adminRequests.delete(`/clients/invoices/${id}`, { data }),
+  // Same shared print kit every other printed document (receipts, tenant invoices,
+  // statements) uses on the backend. `preview: true` opens the system print dialog on
+  // the generated PDF instead of downloading it.
+  downloadInvoicePdf: async (id, { preview = false, filename } = {}) => {
+    const res = await adminRequests.get(`/clients/invoices/${id}/pdf${preview ? '?preview=true' : ''}`, {
+      responseType: 'blob',
+    });
+    const blob = new Blob([res.data], { type: 'application/pdf' });
+    if (preview) {
+      await printPdfBlob(blob);
+      return true;
+    }
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename || `Invoice-${id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    return true;
+  },
 
   // ─── Interactions ────────────────────────────────────────────────────────────
   listInteractions: (params = {}) => adminRequests.get('/clients/interactions', { params }),

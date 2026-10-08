@@ -2245,9 +2245,6 @@ const createInvoiceForTenant = async (
                   Back
                 </ListToolbar.Button>
               )}
-              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Invoices: {invoiceListPagination.totalItems || 0}</span>
-              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Total: {formatCurrency(invoicePageSummary.pageTotalAmount || 0)}</span>
-              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pend: {formatCurrency(invoicePageSummary.pagePendingAmount || 0)}</span>
               <ListToolbar.Divider />
               <AppSelect
                 value={draftFilters.status}

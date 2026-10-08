@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
 import { useTabState } from '../../hooks/useTabState';
+import { useEntityCache } from '../../hooks/useEntityCache';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { getProperties, updateProperty } from '../../redux/propertyRedux';
@@ -28,6 +29,7 @@ const CommissionsList = () => {
   const properties = useSelector(selectAllProperties);
 
   const canWrite = hasCompanyPermission(currentUser || {}, currentCompany, "commissions", "create", "propertyManagement");
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id || currentUser?.company?._id || currentUser?.company);
 
   const [searchTerm, setSearchTerm] = useTabState('/properties/commissions-list:searchTerm', '');
   const [filterMode, setFilterMode] = useTabState('/properties/commissions-list:filterMode', 'all');
@@ -38,15 +40,16 @@ const CommissionsList = () => {
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
 
-  // Fetch properties on mount
+  // Fetch properties on mount — skipped when another page already loaded the full,
+  // unfiltered property list within the staleness window (that fetch returns up to
+  // 1000 records, more than this page's own 500 cap, so reusing it is strictly better).
   useEffect(() => {
     const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company;
-    if (businessId) {
-      setLoading(true);
-      dispatch(getProperties({ business: businessId, limit: 500 }))
-        .finally(() => setLoading(false));
-    }
-  }, [currentCompany?._id, currentUser?.company, dispatch]);
+    if (!businessId || propertiesLoaded) return;
+    setLoading(true);
+    dispatch(getProperties({ business: businessId }))
+      .finally(() => setLoading(false));
+  }, [currentCompany?._id, currentUser?.company, dispatch, propertiesLoaded]);
 
   const filteredProperties = useMemo(() => {
     const q = searchTerm.toLowerCase();

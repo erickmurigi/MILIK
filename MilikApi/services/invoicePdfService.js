@@ -1,5 +1,6 @@
 import TenantInvoice from '../models/TenantInvoice.js';
 import Landlord from '../models/Landlord.js';
+import Company from '../models/Company.js';
 import { documentPageHtml, formatMoney } from '../utils/printKitCore.js';
 import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
 import { renderHtmlToPdf } from '../utils/pdfRender.js';
@@ -47,12 +48,15 @@ const getCachedPdfBuffer = (cacheKey) => {
 };
 
 
-// The supplier block prints the landlord's name and PIN, so the landlord's own update time is part
-// of the key: editing the landlord must not leave a cached PDF with the old PIN.
-const buildInvoicePdfCacheKey = (invoice, landlordUpdatedAt = null) => {
+// The letterhead prints the company's own name/logo/address/PIN (supplier = company —
+// see below) and the "Landlord: X" line reads from the landlord, so both of their
+// update times are part of the key: editing either must not leave a cached PDF with
+// stale details.
+const buildInvoicePdfCacheKey = (invoice, landlordUpdatedAt = null, companyUpdatedAt = null) => {
   const updatedAt = invoice?.updatedAt ? new Date(invoice.updatedAt).toISOString() : '';
   const landlordStamp = landlordUpdatedAt ? new Date(landlordUpdatedAt).toISOString() : '';
-  return `invoice::${String(invoice?._id || '')}::${updatedAt}::${landlordStamp}`;
+  const companyStamp = companyUpdatedAt ? new Date(companyUpdatedAt).toISOString() : '';
+  return `invoice::${String(invoice?._id || '')}::${updatedAt}::${landlordStamp}::${companyStamp}`;
 };
 
 export const generateInvoicePdf = async (invoiceId, businessId) => {
@@ -64,10 +68,11 @@ export const generateInvoicePdf = async (invoiceId, businessId) => {
 
   if (!invoiceStub) { const e = new Error('Invoice not found or access denied'); e.status = 404; throw e; }
 
-  const landlordStub = invoiceStub.landlord
-    ? await Landlord.findById(invoiceStub.landlord).select('updatedAt').lean()
-    : null;
-  const cacheKey = buildInvoicePdfCacheKey(invoiceStub, landlordStub?.updatedAt);
+  const [landlordStub, companyStub] = await Promise.all([
+    invoiceStub.landlord ? Landlord.findById(invoiceStub.landlord).select('updatedAt').lean() : null,
+    Company.findById(businessId).select('updatedAt').lean(),
+  ]);
+  const cacheKey = buildInvoicePdfCacheKey(invoiceStub, landlordStub?.updatedAt, companyStub?.updatedAt);
   const cachedPdfBuffer = getCachedPdfBuffer(cacheKey);
   if (cachedPdfBuffer) return cachedPdfBuffer;
 

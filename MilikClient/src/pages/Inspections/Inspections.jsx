@@ -10,7 +10,9 @@ import {
   selectAllTenants,
 } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
-import { getUnits, getTenants } from "../../redux/apiCalls";
+import { getUnits } from "../../redux/unitRedux";
+import { getTenants } from "../../redux/tenantsRedux";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   FaCalendarAlt,
   FaCheckCircle,
@@ -134,6 +136,7 @@ const Inspections = () => {
   const reduxProperties = useSelector(selectAllProperties);
   const reduxUnits      = useSelector(selectAllUnits);
   const reduxTenants    = useSelector(selectAllTenants);
+  const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
   const canCreate = hasCompanyPermission(currentUser, currentCompany, "inspections", "create", "propertyManagement");
   const canUpdate = hasCompanyPermission(currentUser, currentCompany, "inspections", "update", "propertyManagement");
   const canDelete = hasCompanyPermission(currentUser, currentCompany, "inspections", "delete", "propertyManagement");
@@ -209,12 +212,15 @@ const Inspections = () => {
   useEffect(() => { if (reduxUnits.length) setUnits(reduxUnits); }, [reduxUnits]);
   useEffect(() => { if (reduxTenants.length) setTenants(reduxTenants); }, [reduxTenants]);
 
-  // Trigger Redux loads for shared form-dropdown data
+  // Trigger Redux loads for shared form-dropdown data — these used to be unconditional
+  // (including two raw, uncached apiCalls fetches that always hit the network), so every
+  // visit to this tab re-pulled the full properties/units/tenants collections even when
+  // another page had loaded them seconds earlier.
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getProperties({ business: currentCompany._id }));
-    getUnits(dispatch, currentCompany._id);
-    getTenants(dispatch, currentCompany._id);
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
   }, [currentCompany?._id, dispatch]);
 
   useEffect(() => { loadInspections(); }, [loadInspections]);

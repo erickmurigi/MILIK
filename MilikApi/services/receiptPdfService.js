@@ -2,6 +2,7 @@ import RentPayment from '../models/RentPayment.js';
 import Unit from '../models/Unit.js';
 import Property from '../models/Property.js';
 import Landlord from '../models/Landlord.js';
+import Company from '../models/Company.js';
 import { documentPageHtml, formatMoney } from '../utils/printKitCore.js';
 import { COMPANY_PRINT_FIELDS } from '../utils/printCompanyFields.js';
 import { renderHtmlToPdf } from '../utils/pdfRender.js';
@@ -58,11 +59,15 @@ export const generateReceiptPdf = async (receiptId, businessId) => {
 
   if (!receiptStub) { const e = new Error('Receipt not found or access denied'); e.status = 404; throw e; }
 
-  // The supplier block prints the landlord's name and KRA PIN, so the landlord's update time is
-  // part of the key: editing the landlord must not leave a cached receipt with the old PIN.
+  // The letterhead prints the company's own name/logo/address/PIN (supplier = company)
+  // and the landlord's name appears in a sub-line, so both of their update times are
+  // part of the key: editing either must not leave a cached receipt with stale details.
   const stubLandlordId = await resolvePrimaryLandlordId(receiptStub.unit);
-  const stubLandlord = stubLandlordId ? await Landlord.findById(stubLandlordId).select('updatedAt').lean() : null;
-  const cacheKey = `receipt::${String(receiptStub._id)}::${receiptStub.updatedAt ? new Date(receiptStub.updatedAt).toISOString() : ''}::${stubLandlord?.updatedAt ? new Date(stubLandlord.updatedAt).toISOString() : ''}`;
+  const [stubLandlord, companyStub] = await Promise.all([
+    stubLandlordId ? Landlord.findById(stubLandlordId).select('updatedAt').lean() : null,
+    Company.findById(businessId).select('updatedAt').lean(),
+  ]);
+  const cacheKey = `receipt::${String(receiptStub._id)}::${receiptStub.updatedAt ? new Date(receiptStub.updatedAt).toISOString() : ''}::${stubLandlord?.updatedAt ? new Date(stubLandlord.updatedAt).toISOString() : ''}::${companyStub?.updatedAt ? new Date(companyStub.updatedAt).toISOString() : ''}`;
   const cached = getCachedPdfBuffer(cacheKey);
   if (cached) return cached;
 

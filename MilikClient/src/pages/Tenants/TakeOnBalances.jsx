@@ -19,7 +19,7 @@ import {
   FaTrash,
   FaFilter,
   FaTimes,
-  FaSave,
+  FaSave,
   FaUpload,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -38,9 +38,21 @@ import { parseTakeOnBalancesExcel, downloadTakeOnBalancesTemplate } from "../../
 import { createRentPayment, reverseRentPayment, getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { useTabState } from "../../hooks/useTabState";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import PaginationBar from "../../components/PaginationBar";
+
+// This page's own list (take-on balances) and its modal-only lookups (chart of
+// accounts, utility types) are local component state, not Redux — so unlike
+// properties/tenants (which survive a tab switch in the store), they'd normally be
+// refetched from scratch every time the tab remounts. Two tiny module-level caches
+// (outside React, so they survive unmount), kept separate so the table's own cache hit
+// doesn't wait on the modal lookups or vice versa, give the same "instant on revisit"
+// behavior as useEntityCache, within the same staleness window.
+const STALE_MS = 30_000;
+const pageDataCache = new Map();
+const modalLookupsCache = new Map();
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
@@ -497,6 +509,7 @@ function TakeOnViewModal({ open, row, onClose }) {
 const TakeOnBalances = () => {
   const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
+  const { propertiesLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
   const tenantState = useSelector(selectAllTenants);
   const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
   const propertyState = useSelector(selectAllProperties);
@@ -594,12 +607,25 @@ const TakeOnBalances = () => {
     };
   }, [showModal, currentCompany?._id, form.propertyId]);
 
-  const loadRows = useCallback(async () => {
+  // The page's own table data. Split from the modal-only lookups below so the table
+  // can paint as soon as this (cheap) request resolves instead of waiting on the chart
+  // of accounts and company-settings calls, which only the add/edit modal needs.
+  // `force: true` (Refresh button, or after a save/delete/import) always hits the
+  // server; a plain call (mount effect) reuses the cache when it's still fresh.
+  const loadRows = useCallback(async ({ force = false } = {}) => {
     if (!currentCompany?._id) return;
+    const businessId = currentCompany._id;
+    const cached = pageDataCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setRows(cached.rows);
+      return;
+    }
     try {
       setLoading(true);
-      const data = await getTakeOnBalances({ business: currentCompany._id });
-      setRows(Array.isArray(data) ? data : []);
+      const data = await getTakeOnBalances({ business: businessId });
+      const nextRows = Array.isArray(data) ? data : [];
+      setRows(nextRows);
+      pageDataCache.set(businessId, { rows: nextRows, loadedAt: Date.now() });
     } catch (error) {
       toast.error(
         error?.response?.data?.message || error?.message || "Failed to load take-on balances."
@@ -609,29 +635,47 @@ const TakeOnBalances = () => {
     }
   }, [currentCompany?._id]);
 
+  // Chart of accounts + utility types — only consumed by the add/edit modal, so these
+  // run in the background on mount and never hold up the table above.
+  const loadModalLookups = useCallback(async ({ force = false } = {}) => {
+    if (!currentCompany?._id) return;
+    const businessId = currentCompany._id;
+    const cached = modalLookupsCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setChartAccounts(cached.chartAccounts);
+      setUtilityTypeOptions(cached.utilityTypeOptions);
+      return;
+    }
+    try {
+      const [accounts, settingsRes] = await Promise.all([
+        getChartOfAccounts({ business: businessId }).catch(() => []),
+        adminRequests.get(`/company-settings/${businessId}`).catch(() => null),
+      ]);
+      const nextAccounts = Array.isArray(accounts) ? accounts : [];
+      const nextUtilityTypes = Array.from(new Set(
+        (settingsRes?.data?.utilityTypes || [])
+          .filter((item) => item?.isActive !== false && item?.name)
+          .map((item) => String(item.name))
+      ));
+      setChartAccounts(nextAccounts);
+      setUtilityTypeOptions(nextUtilityTypes);
+      modalLookupsCache.set(businessId, {
+        chartAccounts: nextAccounts,
+        utilityTypeOptions: nextUtilityTypes,
+        loadedAt: Date.now(),
+      });
+    } catch {
+      // non-fatal — the modal falls back to empty/default option lists
+    }
+  }, [currentCompany?._id]);
+
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getTenants({ business: currentCompany._id }));
-    dispatch(getProperties({ business: currentCompany._id }));
+    if (!tenantsLoaded) dispatch(getTenants({ business: currentCompany._id }));
+    if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
     loadRows();
-    (async () => {
-      try {
-        const accounts = await getChartOfAccounts({ business: currentCompany._id });
-        setChartAccounts(Array.isArray(accounts) ? accounts : []);
-      } catch {
-        setChartAccounts([]);
-      }
-    })();
-    adminRequests
-      .get(`/company-settings/${currentCompany._id}`)
-      .then((res) => {
-        const names = Array.from(new Set(
-          (res?.data?.utilityTypes || []).filter((item) => item?.isActive !== false && item?.name).map((item) => String(item.name))
-        ));
-        setUtilityTypeOptions(names);
-      })
-      .catch(() => setUtilityTypeOptions([]));
-  }, [dispatch, currentCompany?._id, loadRows]);
+    loadModalLookups();
+  }, [dispatch, currentCompany?._id, tenantsLoaded, propertiesLoaded, loadRows, loadModalLookups]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -898,7 +942,7 @@ const TakeOnBalances = () => {
       setShowModal(false);
       setSelectedRow(null);
       setForm({ ...emptyForm });
-      await loadRows();
+      await loadRows({ force: true });
     } catch (error) {
       toast.error(
         error?.response?.data?.message || error?.message || "Failed to save take-on balance."
@@ -933,7 +977,7 @@ const TakeOnBalances = () => {
       }
       toast.success("Take-on balance deleted successfully.");
       setRowToDelete(null);
-      await loadRows();
+      await loadRows({ force: true });
     } catch (error) {
       toast.error(
         error?.response?.data?.error ||
@@ -1009,7 +1053,7 @@ const TakeOnBalances = () => {
               />
               <ListToolbar.Button variant="accent" onClick={() => setAppliedFilters(draftFilters)}>Apply</ListToolbar.Button>
               <ListToolbar.Button variant="outline" onClick={() => { setDraftFilters(emptyFilters); setAppliedFilters(emptyFilters); }}>Reset</ListToolbar.Button>
-              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows}>Refresh</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={() => { loadRows({ force: true }); loadModalLookups({ force: true }); }}>Refresh</ListToolbar.Button>
               <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>Add Take-On</ListToolbar.Button>
               <ListToolbar.Button icon={FaUpload} onClick={() => setShowImportModal(true)}>Import</ListToolbar.Button>
             </ListToolbar>
@@ -1133,7 +1177,7 @@ const TakeOnBalances = () => {
           const res = await bulkImportTakeOnBalances({ rows, business: currentCompany?._id });
           const successful = Array.isArray(res?.data?.successful) ? res.data.successful : [];
           const failed = Array.isArray(res?.data?.failed) ? res.data.failed : [];
-          if (successful.length > 0) await loadRows();
+          if (successful.length > 0) await loadRows({ force: true });
           return { successful, failed };
         }}
       />

@@ -617,10 +617,14 @@ const TopToolbar = ({
 
   const closeHoveredFinancialItem = useCallback(() => {
     clearHoverCloseTimer();
+    // Long enough that moving the cursor diagonally from the trigger toward an item
+    // lower in a tall flyout doesn't get caught by this and close the menu before the
+    // cursor lands on it (the classic "safe triangle" hover problem) — any re-entry
+    // (trigger, bridge, or the flyout itself) cancels this via openHoveredFinancialItem.
     hoverCloseTimerRef.current = window.setTimeout(() => {
       setHoveredFinancialItem(null);
       hoverCloseTimerRef.current = null;
-    }, 120);
+    }, 350);
   }, [clearHoverCloseTimer]);
 
   const isSystemAdminWorkspace    = currentWorkspace === WORKSPACE_IDS.SYSTEM_ADMIN;
@@ -1511,7 +1515,7 @@ const TopToolbar = ({
           { id: "zones", label: "Zones", icon: FaLayerGroup },
           { type: "separator" },
           { id: "property-commission-settings", label: "Commission Settings", icon: FaCog },
-          { id: "commissions-list", label: "Commission List", icon: FaList },
+          { id: "commissions-list", label: "Commission Rates", icon: FaList },
         ],
       },
       {
@@ -1574,7 +1578,7 @@ const TopToolbar = ({
           { id: "settings", label: "Settings", icon: FaCog },
           { id: "users", label: "Users", icon: FaUsers },
           { type: "separator" },
-          { id: "maintenance", label: "Maintenance Management", icon: FaWrench },
+          { id: "maintenance", label: "Maintenance", icon: FaWrench },
           { id: "inspections", label: "Inspections", icon: FaClipboard },
         ],
       },
@@ -1676,11 +1680,11 @@ const TopToolbar = ({
         { id: "credit-debit-notes", label: "Credit & Debit Notes", icon: FaFileInvoice },
         { id: "lease-fees", label: `${termLease} Fees`, icon: FaFileInvoice },
         { id: "utility-bills", label: "Utility Bills", icon: FaFileInvoice },
-        { id: "late-penalties", label: "Late Penalties - Invoices", icon: FaExclamationTriangle },
+        { id: "late-penalties", label: "Late Penalties", icon: FaExclamationTriangle },
         { id: "meter-readings", label: "Meter Readings", icon: FaDatabase },
         { type: "separator" },
-        { id: "rental-invoices-vat", label: "Rental Invoices V.A.T", icon: FaFileInvoice },
-        { id: "rental-aged-analysis", label: "Rental Aged Analysis", icon: FaChartBar },
+        { id: "rental-invoices-vat", label: "Rental Invoices VAT", icon: FaFileInvoice },
+        { id: "rental-aged-analysis", label: `${termTenant} Arrears Analysis`, icon: FaChartBar },
       ],
       "rental-receipting": [
         { id: "rental-receipts", label: `${termRent} Receipts`, icon: FaReceipt },
@@ -1690,11 +1694,11 @@ const TopToolbar = ({
         { id: "landlord-receipt", label: `${termLandlord} Receipts`, icon: FaReceipt },
       ],
       "landlord-payments": [
-        { id: "commission-landlord-statement", label: "Commissions & LL Statement", icon: FaFileAlt },
+        { id: "commission-landlord-statement", label: `${termLandlord} Statement`, icon: FaFileAlt },
         { id: "landlord-standing-orders", label: `${termLandlord} Standing Orders`, icon: FaCalendarAlt },
-        { id: "landlord-advancement", label: `${termLandlord} Advancement`, icon: FaMoneyBillWave },
+        { id: "landlord-advancement", label: `${termLandlord} Advances`, icon: FaMoneyBillWave },
         { id: "management-fee-invoices", label: "Management Fee Invoices", icon: FaFileInvoice },
-        { id: "processed-statements", label: "Processed Statements (Legacy)", icon: FaCheckCircle },
+        { id: "processed-statements", label: "Statement History", icon: FaCheckCircle },
         ...(currentUser?.isSystemAdmin || currentUser?.superAdminAccess
           ? [{ id: "statement-allocations", label: "Statement Allocations", icon: FaExchangeAlt }]
           : []),
@@ -1796,7 +1800,7 @@ const TopToolbar = ({
 
           {hoveredFinancialItem === item.id && nestedSubmenus[item.id] && (
             <div
-              className="absolute left-full top-0 w-2 h-full pointer-events-auto"
+              className="absolute left-full top-0 w-4 h-full pointer-events-auto"
               onMouseEnter={() => openHoveredFinancialItem(item.id)}
               onMouseLeave={closeHoveredFinancialItem}
             />

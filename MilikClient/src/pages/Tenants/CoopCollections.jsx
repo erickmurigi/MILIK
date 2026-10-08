@@ -30,7 +30,19 @@ const STATUS_MAP = {
   unmatched:      "border-amber-200 bg-amber-50 text-amber-700",
   matched_tenant: "border-blue-200 bg-blue-50 text-blue-700",
   captured:       "border-emerald-200 bg-emerald-50 text-emerald-700",
+  recorded:       "border-emerald-200 bg-emerald-50 text-emerald-700",
   ignored:        "border-red-200 bg-red-50 text-red-700",
+};
+
+// "Recorded" matches the verb on the Record button elsewhere — the raw backend value stays
+// "captured"; only the label shown to the user changes.
+const STATUS_LABEL = { captured: "Recorded", matched_tenant: "Matched", unmatched: "Unmatched", ignored: "Ignored" };
+
+const STATUS_CHIP_META = {
+  captured:       { accent: "border-l-emerald-400", border: "border-emerald-200", bg: "bg-emerald-50", text: "text-emerald-700" },
+  unmatched:      { accent: "border-l-amber-400",   border: "border-amber-200",   bg: "bg-amber-50",   text: "text-amber-700"   },
+  matched_tenant: { accent: "border-l-blue-400",    border: "border-blue-200",    bg: "bg-blue-50",    text: "text-blue-700"    },
+  ignored:        { accent: "border-l-red-400",     border: "border-red-200",     bg: "bg-red-50",     text: "text-red-600"     },
 };
 
 // ─── Assign Tenant Modal ──────────────────────────────────────────────────────
@@ -195,16 +207,26 @@ export default function CoopCollections() {
 
   useEffect(() => { fetchData(1); }, [fetchData]);
 
-  // Countdown timer
+  // Countdown timer — pauses while the browser tab is hidden (no point polling every 30s
+  // for a page nobody's looking at) and catches up with one refresh when it becomes
+  // visible again, same as the M-Pesa Collections page.
   useEffect(() => {
     setCountdown(AUTO_RELOAD);
     countdownRef.current = setInterval(() => {
       setCountdown(prev => {
-        if (prev <= 1) { fetchData(page); return AUTO_RELOAD; }
+        if (prev <= 1) {
+          if (document.visibilityState === "visible") fetchData(page);
+          return AUTO_RELOAD;
+        }
         return prev - 1;
       });
     }, 1000);
-    return () => clearInterval(countdownRef.current);
+    const onVisible = () => { if (document.visibilityState === "visible") fetchData(page); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(countdownRef.current);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [fetchData, page]);
 
   // useCallback — renderActions (passed to MilikTable) closes over these; leaving them as
@@ -243,12 +265,19 @@ export default function CoopCollections() {
     setItems(prev => prev.map(c => c._id === updated._id ? updated : c));
   };
 
-  const SummaryCard = ({ label, value, highlight }) => (
-    <div className={`border px-3 py-3 ${highlight ? "border-[#0B3B2E] bg-[#EDF5F1]" : "border-slate-200 bg-white"}`}>
-      <div className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="mt-0.5 text-lg font-extrabold text-slate-900">{value}</div>
-    </div>
-  );
+  // Clicking a summary chip quick-filters by that status
+  const quickFilter = (status) => {
+    const next = statusFilter === status ? "" : status;
+    setStatusFilter(next);
+    fetchData(1);
+  };
+
+  const SUMMARY_CHIPS = useMemo(() => [
+    { key: "captured",       value: summary.captured,       sub: formatMoney(summary.totalAmount) },
+    { key: "unmatched",      value: summary.unmatched,      sub: "pending action" },
+    { key: "matched_tenant", value: summary.matched_tenant, sub: "awaiting record" },
+    { key: "ignored",        value: summary.ignored,        sub: "excluded" },
+  ], [summary]);
 
   // ─── MilikTable props, stabilized ──────────────────────────────────────────
   // Same reasoning as PmsMpesaNotifications.jsx: MilikTable is React.memo'd, this page also
@@ -256,136 +285,127 @@ export default function CoopCollections() {
   // re-renders the whole component — none of that should re-render the table itself unless
   // its actual data changed.
   const tableColumns = useMemo(() => [
-    { label: "Date" },
-    { label: "Transaction Ref" },
-    { label: "Account Ref" },
-    { label: "Tenant Code" },
-    { label: "Amount" },
-    { label: "Payer" },
-    { label: termTenant },
-    { label: "Status" },
+    { label: "Date", width: "9%" },
+    { label: "Transaction Ref", width: "14%" },
+    { label: "Account Ref", width: "14%" },
+    { label: "Amount", align: "right", width: "11%" },
+    { label: "Payer", width: "14%" },
+    { label: termTenant, width: "16%" },
+    { label: "Status", width: "11%" },
   ], [termTenant]);
 
   // Pure function of its row argument — no external state captured.
   const renderCoopRow = useCallback((item) => (
     <>
-      <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-500">{fmtDate(item.paymentDate || item.transactionDate)}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-700">{item.transactionReferenceCode || "—"}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[10px] text-slate-600">{item.documentReferenceNumber || "—"}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-slate-700">{item.tenantCode || "—"}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-bold text-slate-900">{formatMoney(item.amount)}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 max-w-[120px] truncate text-slate-600">{item.payerName || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-[10px] text-slate-500">{fmtDate(item.paymentDate || item.transactionDate)}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[11px] text-slate-700">{item.transactionReferenceCode || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100">
+        <span className="font-bold text-slate-900">{item.documentReferenceNumber || "—"}</span>
+        {item.tenantCode && <span className="ml-1.5 font-mono text-[10px] text-slate-400">↳ {item.tenantCode}</span>}
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900 tabular-nums">{formatMoney(item.amount)}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">{item.payerName || <span className="font-normal italic text-slate-400">—</span>}</td>
       <td className="px-3 py-1.5 border-r border-gray-100">
         {item.tenant ? (
-          <div>
-            <div className="font-bold text-slate-900">{item.tenant.name}</div>
-            <div className="text-[10px] text-slate-500 font-mono">{item.tenant.tenantCode}</div>
-          </div>
-        ) : <span className="text-slate-400">—</span>}
+          <>
+            <span className="font-bold text-[#0B3B2E]">{item.tenant.name}</span>
+            <span className="ml-1.5 font-mono text-[10px] text-slate-500">{item.tenant.tenantCode}</span>
+          </>
+        ) : <span className="italic text-[10px] text-slate-400">—</span>}
       </td>
-      <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={item.matchingStatus} map={STATUS_MAP} /></td>
+      <td className="px-3 py-1.5 border-r border-gray-100"><StatusBadge status={STATUS_LABEL[item.matchingStatus] || item.matchingStatus} map={STATUS_MAP} /></td>
     </>
   ), []);
 
   // Closes over handleUnignore/handleDelete (both stable via their own useCallback above)
   // and unignoringId/deletingId.
   const renderCoopActions = useCallback((item) => (
-    <div className="flex items-center gap-1">
+    <div className="flex flex-nowrap items-center gap-1">
       {item.matchingStatus === "ignored" ? (
-        <button onClick={() => handleUnignore(item)} disabled={unignoringId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50" title="Unignore">
-          {unignoringId === item._id ? <Spinner size="sm" /> : <FaUndo size={8} />}
-        </button>
+        <button onClick={() => handleUnignore(item)} disabled={unignoringId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"><FaUndo size={9} /> {unignoringId === item._id ? "…" : "Restore"}</button>
       ) : item.matchingStatus !== "captured" ? (
         <>
-          <button onClick={() => setAssignTarget(item)} className="inline-flex h-6 items-center gap-1 border border-blue-200 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100" title="Assign tenant"><FaLink size={8} /></button>
-          <button onClick={() => setIgnoreTarget(item)} className="inline-flex h-6 items-center gap-1 border border-red-200 bg-red-50 px-2 text-[10px] font-bold text-red-600 hover:bg-red-100" title="Ignore"><FaBan size={8} /></button>
+          <button onClick={() => setAssignTarget(item)} className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[10px] font-bold text-slate-700 hover:bg-slate-50"><FaLink size={9} /> Assign</button>
+          <button onClick={() => setIgnoreTarget(item)} className="inline-flex h-6 items-center gap-1 border border-red-300 bg-white px-2 text-[10px] font-bold text-red-600 hover:bg-red-50"><FaBan size={9} /> Ignore</button>
         </>
       ) : null}
       {item.matchingStatus !== "captured" && (
-        <button onClick={() => handleDelete(item)} disabled={deletingId === item._id} className="inline-flex h-6 items-center gap-1 border border-slate-200 bg-white px-2 text-[10px] font-bold text-slate-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" title="Delete">
-          {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={8} />}
+        <button onClick={() => handleDelete(item)} disabled={deletingId === item._id} className="inline-flex h-6 items-center gap-1 border border-red-300 bg-white px-2 text-[10px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+          {deletingId === item._id ? <Spinner size="sm" /> : <FaTrash size={9} />}
         </button>
       )}
     </div>
   ), [handleUnignore, unignoringId, handleDelete, deletingId]);
 
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-slate-50 px-3 py-4 sm:px-6">
-        {/* Header */}
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-sm font-black uppercase tracking-wide text-slate-900">Co-op Bank B2B Collections</h1>
-            <p className="text-[11px] text-slate-500 mt-0.5">Payments received via Co-operative Bank B2B integration</p>
-          </div>
-          <button
-            onClick={() => fetchData(page)}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 border border-slate-300 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            <FaRedoAlt className={loading ? "animate-spin" : ""} size={10} />
-            Refresh {!loading && <span className="text-slate-400">({countdown}s)</span>}
-          </button>
-        </div>
+    <DashboardLayout lockContentScroll>
+      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
 
-        {/* Summary cards */}
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          <SummaryCard label="Total" value={total} />
-          <SummaryCard label="Unmatched" value={summary.unmatched} />
-          <SummaryCard label="Matched" value={summary.matched_tenant} />
-          <SummaryCard label="Captured" value={summary.captured} highlight />
-          <SummaryCard label="Total Amount" value={formatMoney(summary.totalAmount)} />
-        </div>
-
-        {/* Filters */}
-        <div className="mb-3">
-          <ListToolbar>
-            <div className="relative shrink-0">
-              <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
-              <ListToolbar.Input
-                width="w-44"
-                className="pl-5"
-                value={search}
-                onChange={e => { setSearch(e.target.value); if (!e.target.value) fetchData(1); }}
-                onKeyDown={e => e.key === "Enter" && fetchData(1)}
-                placeholder="Ref, tenant code, payer…"
-              />
-            </div>
-
-            <AppSelect
-              value={statusFilter}
-              onChange={(v) => { setStatusFilter(v ?? ""); fetchData(1); }}
-              options={[
-                { value: "unmatched", label: "Unmatched" },
-                { value: "matched_tenant", label: "Matched" },
-                { value: "captured", label: "Captured" },
-                { value: "ignored", label: "Ignored" },
-              ]}
-              placeholder="All statuses"
-              clearable
-              compact
-            />
-
-            <ListToolbar.Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
-            <span className="shrink-0 text-[9px] text-slate-400">to</span>
-            <ListToolbar.Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
-
-            <ListToolbar.Button icon={FaSearch} onClick={() => fetchData(1)}>Filter</ListToolbar.Button>
-          </ListToolbar>
-        </div>
+        {/* Filter bar — status chips (clickable quick-filters) and filters share one line */}
+        <ListToolbar>
+          {SUMMARY_CHIPS.map(({ key, value, sub }) => {
+            const meta   = STATUS_CHIP_META[key];
+            const active = statusFilter === key;
+            return (
+              <button key={key} type="button" onClick={() => quickFilter(key)}
+                title={`Filter by ${STATUS_LABEL[key]}${sub ? ` (${sub})` : ""}`}
+                className={`inline-flex h-[22px] shrink-0 items-center gap-1 border-l-2 border border-r px-1 text-left transition-all whitespace-nowrap
+                  ${meta.accent} ${meta.border}
+                  ${active ? `${meta.bg} ring-1 ring-inset ring-[#0B3B2E]/25` : `bg-white hover:${meta.bg}`}`}>
+                <span className={`text-[10px] font-black tabular-nums ${meta.text}`}>{value}</span>
+                <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{STATUS_LABEL[key]}</span>
+                {active && <FaTimes size={7} className="shrink-0 text-slate-400" />}
+              </button>
+            );
+          })}
+          <span className="inline-flex h-[22px] shrink-0 items-center gap-1 border border-slate-200 bg-slate-50 px-1 whitespace-nowrap">
+            <span className="text-[10px] font-black tabular-nums text-slate-700">{total}</span>
+            <span className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Total</span>
+          </span>
+          <ListToolbar.Divider />
+          <AppSelect
+            value={statusFilter}
+            onChange={(v) => { setStatusFilter(v ?? ""); fetchData(1); }}
+            options={[
+              { value: "unmatched", label: "Unmatched" },
+              { value: "matched_tenant", label: "Matched" },
+              { value: "captured", label: "Recorded" },
+              { value: "ignored", label: "Ignored" },
+            ]}
+            placeholder="All statuses"
+            clearable
+            compact
+          />
+          <ListToolbar.Input
+            width="w-44"
+            value={search}
+            onChange={e => { setSearch(e.target.value); if (!e.target.value) fetchData(1); }}
+            onKeyDown={e => e.key === "Enter" && fetchData(1)}
+            placeholder="Ref, tenant code, or payer"
+          />
+          <span className="shrink-0 text-[10px] font-semibold text-slate-500">From</span>
+          <ListToolbar.Input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          <span className="shrink-0 text-[10px] font-semibold text-slate-500">To</span>
+          <ListToolbar.Input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          <ListToolbar.Button icon={FaSearch} variant="accent" onClick={() => fetchData(1)}>Search</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={() => fetchData(page)} disabled={loading}>
+            {loading ? "…" : `${countdown}s`}
+          </ListToolbar.Button>
+        </ListToolbar>
 
         {/* Table */}
-        <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <MilikTable
-            columns={tableColumns}
-            rows={items}
-            rowKey="_id"
-            loading={loading && items.length === 0}
-            empty="No Co-op Bank B2B collections yet. Payments will appear here automatically."
-            renderRow={renderCoopRow}
-            renderActions={renderCoopActions}
-          />
-        </div>
+        <MilikTable
+          columns={tableColumns}
+          rows={items}
+          rowKey="_id"
+          loading={loading && items.length === 0}
+          empty="No Co-op Bank B2B collections yet. Payments will appear here automatically."
+          minWidth={1100}
+          actionsWidth="210px"
+          renderRow={renderCoopRow}
+          renderActions={renderCoopActions}
+        />
 
         {/* Pagination */}
         <PaginationBar

@@ -95,10 +95,20 @@ const AppSelect = ({
     const spaceAbove = rect.top;
     const dropUp = spaceBelow < 260 && spaceAbove > spaceBelow;
 
+    // The trigger itself can be very narrow (compact toolbar filters have no fixed
+    // width, so it shrinks to fit a short placeholder/selection). The options list
+    // shouldn't inherit that narrowness — it should stay comfortably readable
+    // regardless of how narrow the closed control happens to be, the same width it'd
+    // naturally have once something long is selected. Widen from the trigger's left
+    // edge, nudged left if that would run off the right edge of the viewport.
+    const minPanelWidth = compact ? 200 : 240;
+    const panelWidth = Math.max(rect.width, minPanelWidth);
+    const left = Math.min(rect.left, window.innerWidth - panelWidth - 8);
+
     setDropdownStyle({
       position: "fixed",
-      left: rect.left,
-      width: rect.width,
+      left: Math.max(8, left),
+      width: panelWidth,
       ...(dropUp
         ? { bottom: vp - rect.top + 4 }
         : { top: rect.bottom + 4 }),
@@ -190,7 +200,7 @@ const AppSelect = ({
     }
   };
 
-  const heightCls = compact ? "h-[22px] text-[10px]" : size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
+  const heightCls = compact ? "h-[22px] text-[11px]" : size === "sm" ? "h-7 text-xs" : "h-9 text-sm";
   // Square corners everywhere, to match the rest of the Milik fields
   const roundedCls = "rounded-none";
   const paddingCls = compact ? "px-1.5" : "px-3";
@@ -293,7 +303,7 @@ const AppSelect = ({
                   }}
                   onKeyDown={handleListKeyDown}
                   placeholder="Search..."
-                  className={`flex-1 bg-transparent text-slate-800 placeholder:text-slate-400 focus:outline-none ${compact ? "text-[11px]" : "text-xs"}`}
+                  className="flex-1 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none"
                 />
                 {search && (
                   <button
@@ -316,7 +326,7 @@ const AppSelect = ({
               className={`overflow-auto py-0.5 ${compact ? "max-h-52" : "max-h-60"}`}
             >
               {filtered.length === 0 ? (
-                <li className={`text-center text-slate-400 ${compact ? "px-2 py-3 text-[9px]" : "px-4 py-6 text-xs"}`}>
+                <li className={`text-center text-slate-400 ${compact ? "px-2 py-3 text-[10px]" : "px-4 py-6 text-xs"}`}>
                   {emptyMessage}
                 </li>
               ) : (
@@ -333,7 +343,7 @@ const AppSelect = ({
                       onMouseEnter={() => !opt.disabled && setHighlightedIndex(idx)}
                       onClick={() => selectOption(opt)}
                       className={[
-                        `flex flex-col transition-colors ${compact ? "px-1.5 py-0.5 text-[9px]" : "px-3 py-2 text-xs"}`,
+                        `flex flex-col transition-colors ${compact ? "px-1.5 py-1 text-[10px]" : "px-3 py-2 text-xs"}`,
                         opt.disabled
                           ? "cursor-not-allowed opacity-40"
                           : "cursor-pointer",
@@ -354,7 +364,7 @@ const AppSelect = ({
                         {opt.label}
                       </span>
                       {opt.description && (
-                        <span className={`leading-snug text-slate-500 ${compact ? "mt-0 text-[8px]" : "mt-0.5 text-[11px]"}`}>
+                        <span className={`leading-snug text-slate-500 ${compact ? "mt-0 text-[9px]" : "mt-0.5 text-[11px]"}`}>
                           {opt.description}
                         </span>
                       )}

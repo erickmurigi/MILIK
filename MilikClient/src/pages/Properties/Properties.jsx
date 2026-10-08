@@ -144,13 +144,15 @@ const Properties = () => {
     onConfirm: null,
   });
 
-  // Close dropdown on outside click
-  // Load landlords and zones on mount
+  // Load landlords on mount — only the filter dropdown needs this, so skip the
+  // dispatch when a previous page already populated it (the `limit: 500` this used to
+  // pass also disqualified it from the store's own built-in cache; dropping it both
+  // fixes that and matches every other page's unfiltered getLandlords call).
   useEffect(() => {
-    if (currentCompany?._id) {
-      dispatch(getLandlords({ company: currentCompany._id, limit: 500 }));
+    if (currentCompany?._id && !landlords?.length) {
+      dispatch(getLandlords({ company: currentCompany._id }));
     }
-  }, [dispatch, currentCompany?._id]);
+  }, [dispatch, currentCompany?._id, landlords?.length]);
 
   // Keep selectAll off when page changes
   useEffect(() => {

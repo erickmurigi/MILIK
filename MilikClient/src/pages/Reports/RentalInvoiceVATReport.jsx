@@ -18,6 +18,15 @@ import PaginationBar from "../../components/PaginationBar";
 import printTabularList from "../../utils/printList";
 
 
+// This page's data (every taxable rent/utility/late-penalty invoice ever created, plus
+// properties for the filter dropdown) is local state, not Redux — so it would normally
+// be refetched from scratch, in full, every time this tab remounts. A module-level
+// cache (outside React, so it survives unmount) keyed by business gives the same
+// "instant on revisit" behavior as useEntityCache. `force: true` (Refresh button)
+// always hits the server.
+const STALE_MS = 30_000;
+const vatReportCache = new Map();
+
 const RentalInvoiceVATReport = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -36,8 +45,14 @@ const RentalInvoiceVATReport = () => {
   // Stable option array — avoids busting AppSelect's internal useMemo on every render
   const propertyOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async ({ force = false } = {}) => {
     if (!businessId) return;
+    const cached = vatReportCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setProperties(cached.properties);
+      setRows(cached.rows);
+      return;
+    }
     setLoading(true);
     try {
       const [invoiceRows, propertyRes] = await Promise.all([
@@ -59,6 +74,7 @@ const RentalInvoiceVATReport = () => {
       });
       setProperties(normalizedProps);
       setRows(taxable);
+      vatReportCache.set(businessId, { properties: normalizedProps, rows: taxable, loadedAt: Date.now() });
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to load rental invoice VAT report.");
     } finally {
@@ -304,7 +320,7 @@ const RentalInvoiceVATReport = () => {
               <ListToolbar.Divider />
               <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={exportCsv} disabled={!canExportReports}>CSV</ListToolbar.Button>
               <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
-              <ListToolbar.Button onClick={loadData}>
+              <ListToolbar.Button onClick={() => loadData({ force: true })}>
                 <FaSyncAlt size={7} className={loading ? "animate-spin" : ""} /> Refresh
               </ListToolbar.Button>
             </ListToolbar>

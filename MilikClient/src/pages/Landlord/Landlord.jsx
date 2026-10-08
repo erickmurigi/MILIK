@@ -578,7 +578,7 @@ const Landlords = () => {
               ]}
               rows={currentLandlords}
               rowKey="_id"
-              loading={isFetching}
+              loading={isFetching && currentLandlords.length === 0}
               empty={
                 <div className="flex flex-col items-center justify-center gap-2">
                   <div className="text-sm font-bold text-gray-500">No {termLandlords.toLowerCase()} found</div>

@@ -1,6 +1,7 @@
 ﻿// pages/Units.js
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -126,6 +127,7 @@ const Units = () => {
   const isFetching     = useSelector(selectUnitIsFetching);
   const unitPagination = useSelector(selectUnitPagination);
   const properties = useSelector(selectAllProperties);
+  const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
   const { canCreateUnit, canUpdateUnit, canDeleteUnit } = useMemo(() => ({
     canCreateUnit: hasCompanyPermission(currentUser || {}, currentCompany, "units", "create", "propertyManagement"),
@@ -271,7 +273,7 @@ const Units = () => {
   useEffect(() => {
     if (currentCompany?._id) {
       dispatch(getUnits({ business: currentCompany._id, page: 1, limit: pageSize }));
-      dispatch(getProperties({ business: currentCompany._id }));
+      if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
       getCompanyUnitTypes(currentCompany._id)
         .then((res) => setConfiguredUnitTypes(Array.isArray(res?.unitTypes) ? res.unitTypes.filter((t) => t.isActive !== false) : []))
         .catch(() => {});
@@ -345,6 +347,7 @@ const Units = () => {
         rentUnit: formatRentAmount(unit.rent),
         marketRent: formatRentAmount(unit.rent),
         currentRent: formatRentAmount(unit.rent),
+        rentAmount: Number(unit.rent) || 0,
         unitType: unit.unitType || "N/A",
         status: normalizedStatus,
         vacantFrom: unit.vacantSince ? fmtDate(unit.vacantSince) : "-",
@@ -657,6 +660,11 @@ const Units = () => {
         { label: "Vacant Since", value: (u) => u.status === "vacant" ? u.vacantFrom : "-" },
       ],
       rows: currentUnits,
+      totalsRow: [
+        `Total (${currentUnits.length.toLocaleString()} records)`, "", "", "",
+        formatRentAmount(currentUnits.reduce((s, u) => s + Number(u.rentAmount || 0), 0)),
+        "", "", "",
+      ],
     });
   };
 
@@ -927,7 +935,7 @@ const Units = () => {
               ]}
               rows={currentUnits}
               rowKey="id"
-              loading={isFetching}
+              loading={isFetching && currentUnits.length === 0}
               empty={appliedFilters.property !== 'any' || appliedFilters.status !== 'any' ? `No ${termUnits.toLowerCase()} match the current filters.` : `No ${termUnits.toLowerCase()} found. Create a ${termUnit.toLowerCase()} or import existing ${termUnits.toLowerCase()}.`}
               groupBy={(u) => u.propertyName}
               checkboxes

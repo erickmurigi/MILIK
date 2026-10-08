@@ -905,7 +905,7 @@ const Vacants = () => {
               ]}
               rows={currentRows}
               rowKey="id"
-              loading={unitsLoading}
+              loading={unitsLoading && currentRows.length === 0}
               empty={unitsLoading ? "Loading availability status..." : `No availability records found. Try adjusting the filters or add ${termUnits.toLowerCase()} to start tracking availability.`}
               minWidth="980px"
               groupBy={(row) => row.propertyName}

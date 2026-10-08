@@ -238,7 +238,7 @@ const ClientsInvoices = () => {
               )}
               <button
                 type="button"
-                onClick={() => navigate(`/clients/invoices/${inv._id}/print`)}
+                onClick={() => clientsApi.downloadInvoicePdf(inv._id, { preview: true }).catch(() => toast.error('Failed to open invoice PDF'))}
                 className="border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 px-2 py-0.5 rounded text-[10px] font-semibold"
               >
                 Print
