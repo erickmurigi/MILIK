@@ -4,6 +4,7 @@ import {
   cancelLandlordAdvancementRecovery,
   createLandlordAdvancement,
   deleteLandlordAdvancement,
+  getLandlordAdvancement,
   getLandlordAdvancements,
   processLandlordAdvancementRecovery,
   updateLandlordAdvancement,
@@ -15,6 +16,7 @@ const router = express.Router();
 const can = (action) => requireCompanyPermission("landlordAdvancements", action, "accounts");
 
 router.get("/", verifyUser, can("view"), getLandlordAdvancements);
+router.get("/:id", verifyUser, can("view"), getLandlordAdvancement);
 router.post("/", verifyUser, can("create"), createLandlordAdvancement);
 router.put("/:id", verifyUser, can("update"), updateLandlordAdvancement);
 router.put("/:id/status", verifyUser, can("update"), updateLandlordAdvancementStatus);

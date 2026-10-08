@@ -38,7 +38,7 @@ const routeNames = {
   '/landlords/new': 'New Landlord',
   '/landlord-payments': 'Landlord Payments',
   '/landlord/statements': 'Landlord Statements',
-  '/landlord/processed-statements': 'Processed Statements',
+  '/landlord/processed-statements': 'Statement History',
   '/financial/landlord-statement': 'Landlord Statement',
   '/units': 'Units',
   '/units/new': 'New Unit',
@@ -49,6 +49,8 @@ const routeNames = {
   '/financial/service-providers': 'Service Providers',
   '/expenses/requisition': 'Expense Requisition',
   '/landlords/standing-orders': 'Landlord Standing Orders',
+  '/landlords/advancement': 'Landlord Advances',
+  '/landlords/advancement/new': 'New Landlord Advance',
   '/financial/journals': 'Journals',
   '/reports/paid-balance': 'Paid & Balance',
   '/reports/rental-collection': 'Rental Collection',
@@ -171,6 +173,7 @@ export const getPageTitle = (pathname) => {
     pathname === '/tenant/new' ||
     (pathname.startsWith('/tenant/') && pathname.endsWith('/edit'))
   ) return 'Tenant Details';
+  if (/^\/landlords\/advancement\/[^/]+\/edit$/.test(pathname)) return 'Edit Landlord Advance';
   if (
     pathname.startsWith('/units/') &&
     pathname !== '/units/new' &&

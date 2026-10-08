@@ -36,10 +36,6 @@ import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
 
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
-const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
 const money = (value) => Number(value || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const displayMoney = (value) => `KSh ${money(value)}`;
 const formatPaymentMethod = (method) => method ? method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '—';
@@ -417,8 +413,8 @@ const ProcessedStatements = () => {
   const getStatusBadge = (statement) => {
     if (statement?.status === "reversed") {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-3 py-1 text-sm font-semibold text-gray-700">
-          <FaUndo /> Reversed
+        <span className="inline-flex items-center gap-1 border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-700">
+          <FaUndo size={9} /> Reversed
         </span>
       );
     }
@@ -427,45 +423,45 @@ const ProcessedStatements = () => {
       const outstandingRecovery = getOutstandingRecoveryBalance(statement);
       if (outstandingRecovery <= 0 && Number(statement?.amountRecovered || 0) > 0) {
         return (
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-            <FaCheckCircle /> Recovered
+          <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+            <FaCheckCircle size={9} /> Recovered
           </span>
         );
       }
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-3 py-1 text-sm font-semibold text-red-700">
-          <FaHourglass /> Landlord Owes Manager
+        <span className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+          <FaHourglass size={9} /> Landlord Owes Manager
         </span>
       );
     }
 
     if (statement?.status === "paid") {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-700">
-          <FaCheckCircle /> Paid
+        <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
+          <FaCheckCircle size={9} /> Paid
         </span>
       );
     }
 
     if (statement?.status === "part_paid") {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-700">
-          <FaHourglass /> Part Paid
+        <span className="inline-flex items-center gap-1 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+          <FaHourglass size={9} /> Part Paid
         </span>
       );
     }
 
     if (statement?.status === "processed") {
       return (
-        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-700">
-          <FaHourglass /> Processed
+        <span className="inline-flex items-center gap-1 border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-slate-600">
+          <FaHourglass size={9} /> Processed
         </span>
       );
     }
 
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-yellow-100 px-3 py-1 text-sm font-semibold text-yellow-700">
-        <FaHourglass /> Unpaid
+      <span className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+        <FaHourglass size={9} /> Unpaid
       </span>
     );
   };
@@ -498,7 +494,7 @@ const ProcessedStatements = () => {
               >
                 Processed {activeTab === "processed" ? `(${pagination.total})` : ""}
               </ListToolbar.Button>
-              <ListToolbar.Button icon={FaDownload} variant={activeTab === "management_fees" ? "accent" : "outline"} onClick={() => handleTabChange("management_fees")}>
+              <ListToolbar.Button icon={FaDownload} variant={activeTab === "management_fees" ? "primary" : "outline"} onClick={() => handleTabChange("management_fees")}>
                 Mgmt Fees {activeTab === "management_fees" ? `(${pagination.total})` : ""}
               </ListToolbar.Button>
               <ListToolbar.Input type="text" placeholder="Search landlord, property…" value={searchText} onChange={(e) => handleSearchChange(e.target.value)} onBlur={applySearch} onKeyDown={(e) => e.key === "Enter" && applySearch()} width="w-36" />
@@ -512,17 +508,18 @@ const ProcessedStatements = () => {
                 compact
               />
               <ListToolbar.Divider />
-              <span className="shrink-0 border border-yellow-200 bg-yellow-50 px-1 py-0.5 text-[8px] font-bold text-yellow-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
-              <span className="shrink-0 border border-red-200 bg-red-50 px-1 py-0.5 text-[8px] font-bold text-red-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Outstanding: {activeTab === "outstanding" ? pagination.total : "—"} • {activeTab === "outstanding" ? money(stats.totalAmountUnpaid) : "—"}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Recoveries: {activeTab === "recoveries" ? pagination.total : "—"} • {activeTab === "recoveries" ? money(stats.totalRecoveryAmount) : "—"}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Paid: {activeTab === "paid" ? pagination.total : "—"} • {activeTab === "paid" ? money(stats.totalAmountPaid) : "—"}</span>
               <ListToolbar.Divider />
               <ListToolbar.Button icon={FaArrowLeft} variant="dark" onClick={() => navigate(-1)}>Back</ListToolbar.Button>
             </ListToolbar>
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden  border border-slate-200 bg-white shadow-sm">
               <MilikTable
                 columns={[
                   { label: "Stmt #" },
+                  { label: "Fee Inv #" },
                   { label: "Landlord" },
                   { label: "Property" },
                   { label: "Period" },
@@ -532,32 +529,32 @@ const ProcessedStatements = () => {
                 ]}
                 rows={paginatedStatements}
                 rowKey="_id"
-                loading={loading}
+                loading={loading && paginatedStatements.length === 0}
                 empty={`No ${activeTab} statements found`}
-                minWidth="1160px"
+                minWidth="1260px"
                 renderRow={(statement) => {
                   const isNegative = isNegativeProcessedStatement(statement);
                   return (
                     <>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <div className="font-mono text-slate-500">{statement.sourceStatementNumber || '—'}{statement.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(statement.lastSmsAt)}`}>SMS</span>}{statement.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(statement.lastEmailAt)}`}>EMAIL</span>}</div>
-                        {statement.managementFeeInvoiceNumber && (
-                          <div className="font-mono text-[10px] text-orange-600 font-semibold">{statement.managementFeeInvoiceNumber}</div>
-                        )}
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500 whitespace-nowrap">
+                        {statement.sourceStatementNumber || '—'}
+                        {statement.lastSmsAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`SMS sent ${fmtDate(statement.lastSmsAt)}`}>SMS</span>}
+                        {statement.lastEmailAt && <span className="ml-1.5 border border-slate-300 px-1 text-[9px] font-bold uppercase text-slate-500" title={`Emailed ${fmtDate(statement.lastEmailAt)}`}>EMAIL</span>}
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{statement.landlord?.landlordName || "N/A"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100">
-                        <div>
-                          <p className="font-semibold text-slate-900">{statement.property?.propertyCode}</p>
-                          <p className="text-[10px] text-gray-500">{statement.property?.propertyName || statement.property?.name}</p>
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-[11px] font-semibold text-orange-600 whitespace-nowrap">{statement.managementFeeInvoiceNumber || <span className="font-sans text-slate-300">—</span>}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{statement.landlord?.landlordName || "N/A"}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="shrink-0 font-semibold text-slate-900">{statement.property?.propertyCode}</span>
+                          <span className="min-w-0 truncate text-[10px] text-slate-500">{statement.property?.propertyName || statement.property?.name}</span>
                         </div>
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{formatPeriodRange(statement)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{displayMoney(getStatementDisplayAmount(statement))}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-700">
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 whitespace-nowrap">{formatPeriodRange(statement)}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900 whitespace-nowrap">{displayMoney(getStatementDisplayAmount(statement))}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-700 whitespace-nowrap">
                         {displayMoney(isNegative ? statement.amountRecovered || 0 : statement.amountPaid || 0)}
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-center">{getStatusBadge(statement)}</td>
+                      <td className="px-3 py-1.5 text-center">{getStatusBadge(statement)}</td>
                     </>
                   );
                 }}
@@ -565,75 +562,30 @@ const ProcessedStatements = () => {
                   const isNegative = isNegativeProcessedStatement(statement);
                   const outstandingRecovery = getOutstandingRecoveryBalance(statement);
                   return (
-                                  <div className="space-y-4">
-                                    <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-                                      <div>
-                                        <p className="text-sm text-gray-600">Occupied Units</p>
-                                        <p className="font-semibold">{statement.occupiedUnits}</p>
+                                  <div className="space-y-2">
+                                    <div className="border border-slate-200 bg-white">
+                                      <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                                        <p className="text-[11px] font-black uppercase tracking-wide text-slate-700">Statement Summary</p>
                                       </div>
-                                      <div>
-                                        <p className="text-sm text-gray-600">Vacant Units</p>
-                                        <p className="font-semibold">{statement.vacantUnits}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-sm text-gray-600">Processed Date</p>
-                                        <p className="font-semibold">{fmtDate(statement.closedAt)}</p>
-                                      </div>
-                                      <div>
-                                        <p className="text-sm text-gray-600">Statement Period</p>
-                                        <p className="font-semibold">{formatPeriodRange(statement)}</p>
-                                      </div>
-                                      {statement.managementFeeInvoiceNumber && (
-                                        <div>
-                                          <p className="text-sm text-gray-600">Fee Invoice #</p>
-                                          <p className="font-semibold font-mono text-[#FF8C00]">{statement.managementFeeInvoiceNumber}</p>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <div className="rounded border bg-white p-3">
-                                      <p className="mb-2 text-sm font-semibold">Financial Summary</p>
-                                      <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
-                                        <div>
-                                          <p className="text-gray-600">Rent Expected</p>
-                                          <p className="font-semibold">{money(statement.totalRentInvoiced)}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-gray-600">Rent Collected</p>
-                                          <p className="font-semibold">{money(statement.totalRentReceived)}</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-gray-600">Arrears</p>
-                                          <p className="font-semibold">
-                                            {money((statement.totalRentInvoiced || 0) - (statement.totalRentReceived || 0))}
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <p className="text-gray-600">Commission</p>
-                                          <p className="font-semibold">({money(statement.commissionAmount)})</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-gray-600">VAT on Commission</p>
-                                          <p className="font-semibold">({money(statement.commissionTaxAmount || 0)})</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-gray-600">Commission %</p>
-                                          <p className="font-semibold">{statement.commissionPercentage}%</p>
-                                        </div>
-                                        <div>
-                                          <p className="text-gray-600">Basis</p>
-                                          <p className="font-semibold">{getCommissionBasisLabel(statement.commissionBasis)}</p>
-                                        </div>
+                                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 p-2.5 text-[11px] md:grid-cols-4 lg:grid-cols-6">
+                                        <div><span className="font-bold text-slate-900">Occupied:</span> <span className="text-slate-600">{statement.occupiedUnits}</span></div>
+                                        <div><span className="font-bold text-slate-900">Vacant:</span> <span className="text-slate-600">{statement.vacantUnits}</span></div>
+                                        <div><span className="font-bold text-slate-900">Processed:</span> <span className="text-slate-600">{fmtDate(statement.closedAt)}</span></div>
+                                        <div><span className="font-bold text-slate-900">Period:</span> <span className="text-slate-600">{formatPeriodRange(statement)}</span></div>
+                                        {statement.managementFeeInvoiceNumber && (
+                                          <div><span className="font-bold text-slate-900">Fee Inv #:</span> <span className="font-mono text-orange-600">{statement.managementFeeInvoiceNumber}</span></div>
+                                        )}
+                                        <div><span className="font-bold text-slate-900">Rent Expected:</span> <span className="text-slate-600">{money(statement.totalRentInvoiced)}</span></div>
+                                        <div><span className="font-bold text-slate-900">Rent Collected:</span> <span className="text-slate-600">{money(statement.totalRentReceived)}</span></div>
+                                        <div><span className="font-bold text-slate-900">Arrears:</span> <span className="text-slate-600">{money((statement.totalRentInvoiced || 0) - (statement.totalRentReceived || 0))}</span></div>
+                                        <div><span className="font-bold text-slate-900">Commission:</span> <span className="text-slate-600">({money(statement.commissionAmount)})</span></div>
+                                        <div><span className="font-bold text-slate-900">VAT on Commission:</span> <span className="text-slate-600">({money(statement.commissionTaxAmount || 0)})</span></div>
+                                        <div><span className="font-bold text-slate-900">Commission %:</span> <span className="text-slate-600">{statement.commissionPercentage}%</span></div>
+                                        <div><span className="font-bold text-slate-900">Basis:</span> <span className="text-slate-600">{getCommissionBasisLabel(statement.commissionBasis)}</span></div>
                                         {isNegative && (
                                           <>
-                                            <div>
-                                              <p className="text-gray-600">Total Recovery</p>
-                                              <p className="font-semibold">{money(statement.amountPayableByLandlordToManager || 0)}</p>
-                                            </div>
-                                            <div>
-                                              <p className="text-gray-600">Recovered So Far</p>
-                                              <p className="font-semibold">{money(statement.amountRecovered || 0)}</p>
-                                            </div>
+                                            <div><span className="font-bold text-slate-900">Total Recovery:</span> <span className="text-slate-600">{money(statement.amountPayableByLandlordToManager || 0)}</span></div>
+                                            <div><span className="font-bold text-slate-900">Recovered So Far:</span> <span className="text-slate-600">{money(statement.amountRecovered || 0)}</span></div>
                                           </>
                                         )}
                                       </div>
@@ -642,25 +594,25 @@ const ProcessedStatements = () => {
                                     {Array.isArray(statement.paymentHistory) && statement.paymentHistory.length > 0 && (
                                       <div>
                                         <p className="mb-2 text-sm font-semibold text-slate-700">Payment History</p>
-                                        <div className="overflow-hidden rounded border border-slate-200">
+                                        <div className="overflow-hidden  border border-slate-200">
                                           <table className="w-full text-[11px] border-collapse">
                                             <thead className="bg-[#0B3B2E] text-white">
                                               <tr>
-                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
-                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                                                <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount</th>
-                                                <th className="px-3 py-1 text-left font-bold">Notes</th>
+                                                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Date</th>
+                                                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Method</th>
+                                                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Reference</th>
+                                                <th className="px-3 py-1.5 text-right font-bold border-r border-white/10">Amount</th>
+                                                <th className="px-3 py-1.5 text-left font-bold">Notes</th>
                                               </tr>
                                             </thead>
                                             <tbody>
                                               {statement.paymentHistory.map((ph, i) => (
                                                 <tr key={ph._id || ph.entryId || i} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white hover:bg-blue-50/40' : 'bg-slate-50/60 hover:bg-blue-50/40'}`}>
-                                                  <td className="px-3 py-1 border-r border-gray-100">{fmtDate(ph.paymentDate)}</td>
-                                                  <td className="px-3 py-1 border-r border-gray-100">{formatPaymentMethod(ph.paymentMethod)}</td>
-                                                  <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
-                                                  <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-emerald-700">{displayMoney(ph.amount)}</td>
-                                                  <td className="px-3 py-1 text-slate-500">{ph.notes || '—'}</td>
+                                                  <td className="px-3 py-1.5 border-r border-gray-100">{fmtDate(ph.paymentDate)}</td>
+                                                  <td className="px-3 py-1.5 border-r border-gray-100">{formatPaymentMethod(ph.paymentMethod)}</td>
+                                                  <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{ph.paymentReference || '—'}</td>
+                                                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-emerald-700">{displayMoney(ph.amount)}</td>
+                                                  <td className="px-3 py-1.5 text-slate-500">{ph.notes || '—'}</td>
                                                 </tr>
                                               ))}
                                             </tbody>
@@ -672,25 +624,25 @@ const ProcessedStatements = () => {
                                     {Array.isArray(statement.recoveryHistory) && statement.recoveryHistory.length > 0 && (
                                       <div>
                                         <p className="mb-2 text-sm font-semibold text-slate-700">Recovery History</p>
-                                        <div className="overflow-hidden rounded border border-red-200">
+                                        <div className="overflow-hidden  border border-red-200">
                                           <table className="w-full text-[11px] border-collapse">
                                             <thead className="bg-red-700 text-white">
                                               <tr>
-                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Date</th>
-                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Method</th>
-                                                <th className="px-3 py-1 text-left font-bold border-r border-white/10">Reference</th>
-                                                <th className="px-3 py-1 text-right font-bold border-r border-white/10">Amount Recovered</th>
-                                                <th className="px-3 py-1 text-left font-bold">Notes</th>
+                                                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Date</th>
+                                                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Method</th>
+                                                <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Reference</th>
+                                                <th className="px-3 py-1.5 text-right font-bold border-r border-white/10">Amount Recovered</th>
+                                                <th className="px-3 py-1.5 text-left font-bold">Notes</th>
                                               </tr>
                                             </thead>
                                             <tbody>
                                               {statement.recoveryHistory.map((rh, i) => (
                                                 <tr key={rh._id || rh.entryId || i} className={`border-b border-red-100 ${i % 2 === 0 ? 'bg-white' : 'bg-red-50/40'}`}>
-                                                  <td className="px-3 py-1 border-r border-red-100">{fmtDate(rh.paymentDate)}</td>
-                                                  <td className="px-3 py-1 border-r border-red-100">{formatPaymentMethod(rh.paymentMethod)}</td>
-                                                  <td className="px-3 py-1 border-r border-red-100 font-mono text-slate-500">{rh.paymentReference || '—'}</td>
-                                                  <td className="px-3 py-1 border-r border-red-100 text-right font-semibold text-red-700">{displayMoney(rh.amount)}</td>
-                                                  <td className="px-3 py-1 text-slate-500">{rh.notes || '—'}</td>
+                                                  <td className="px-3 py-1.5 border-r border-red-100">{fmtDate(rh.paymentDate)}</td>
+                                                  <td className="px-3 py-1.5 border-r border-red-100">{formatPaymentMethod(rh.paymentMethod)}</td>
+                                                  <td className="px-3 py-1.5 border-r border-red-100 font-mono text-slate-500">{rh.paymentReference || '—'}</td>
+                                                  <td className="px-3 py-1.5 border-r border-red-100 text-right font-semibold text-red-700">{displayMoney(rh.amount)}</td>
+                                                  <td className="px-3 py-1.5 text-slate-500">{rh.notes || '—'}</td>
                                                 </tr>
                                               ))}
                                             </tbody>
@@ -700,7 +652,7 @@ const ProcessedStatements = () => {
                                     )}
 
                                     {statement.status === "reversed" && (
-                                      <div className="rounded-lg border border-gray-300 bg-gray-100 p-3 text-sm text-gray-700">
+                                      <div className=" border border-gray-300 bg-gray-100 p-3 text-sm text-gray-700">
                                         <p className="font-semibold">Reversed Processed Statement</p>
                                         <p>Reversed on {fmtDate(statement.reversedAt)}.</p>
                                         {statement.reversalReason ? <p>Reason: {statement.reversalReason}</p> : null}
@@ -709,7 +661,7 @@ const ProcessedStatements = () => {
                                     )}
 
                                     {isNegative && statement.status !== "reversed" && (
-                                      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                      <div className=" border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                                         <p className="font-semibold">{getStatementAmountHeading(statement)}</p>
                                         <p>
                                           The landlord owes the manager {money(statement.amountPayableByLandlordToManager || 0)} for this processed statement.
@@ -718,22 +670,22 @@ const ProcessedStatements = () => {
                                       </div>
                                     )}
 
-                                    <div className="flex flex-wrap gap-2">
+                                    <div className="flex flex-wrap gap-1.5">
                                       <button
                                         onClick={() => setGlStatement(statement)}
-                                        className="flex items-center gap-2 rounded border border-teal-300 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-100"
+                                        className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                                         title="View GL Journal Entries"
                                       >
-                                        <FaBook /> GL Entries
+                                        <FaBook size={11} /> GL Entries
                                       </button>
 
                                       <button
                                         onClick={() => handlePrintStatement(statement)}
                                         disabled={!canExportProcessedStatement}
                                         title={canExportProcessedStatement ? "Print" : "You do not have permission to print processed statements"}
-                                        className="flex items-center gap-2 rounded bg-gray-700 px-3 py-2 text-sm text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                       >
-                                        <FaPrint /> Print
+                                        <FaPrint size={11} /> Print
                                       </button>
 
                                       {Number(statement.commissionAmount || 0) > 0 && (
@@ -741,9 +693,9 @@ const ProcessedStatements = () => {
                                           onClick={() => handlePrintFeeInvoice(statement)}
                                           disabled={!canExportProcessedStatement}
                                           title={statement.managementFeeInvoiceNumber ? `Print Fee Invoice ${statement.managementFeeInvoiceNumber}` : "Print Management Fee Invoice"}
-                                          className="flex items-center gap-2 rounded border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                          className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                         >
-                                          <FaDownload /> Fee Invoice
+                                          <FaDownload size={11} /> Fee Invoice
                                         </button>
                                       )}
 
@@ -751,62 +703,62 @@ const ProcessedStatements = () => {
                                         onClick={() => setCommModalStatement(statement)}
                                         disabled={!canSendCommunications}
                                         title={canSendCommunications ? "Email statement to landlord" : "You do not have permission to send communications"}
-                                        className="flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                        className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                                       >
-                                        <FaEnvelope /> Email Statement
+                                        <FaEnvelope size={11} /> Email Statement
                                       </button>
 
                                       {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => setShowPayModal(statement._id)}
-                                          className={`flex items-center gap-2 rounded px-3 py-2 text-sm text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                          className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                                         >
-                                          <FaCheckCircle /> Pay Landlord
+                                          <FaCheckCircle size={11} /> Pay Landlord
                                         </button>
                                       )}
 
                                       {isNegative && statement.status !== "reversed" && outstandingRecovery > 0 && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => setShowRecoveryModal(statement._id)}
-                                          className="flex items-center gap-2 rounded bg-red-600 px-3 py-2 text-sm text-white transition hover:bg-red-700"
+                                          className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                                         >
-                                          <FaMoneyBillWave /> Record Recovery
+                                          <FaMoneyBillWave size={11} /> Record Recovery
                                         </button>
                                       )}
 
                                       {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && statement.commissionAmount > 0 && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => setShowCommissionModal(statement._id)}
-                                          className={`flex items-center gap-2 rounded px-3 py-2 text-sm text-white transition ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}
+                                          className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                                         >
-                                          <FaDownload /> Post Commission
+                                          <FaDownload size={11} /> Post Commission
                                         </button>
                                       )}
 
                                       {!isNegative && statement.status !== "reversed" && ["unpaid", "part_paid"].includes(statement.status) && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => handleMarkAsPaid(statement._id)}
-                                          className={`flex items-center gap-2 rounded px-3 py-2 text-sm text-white transition ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                                          className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                                         >
-                                          <FaCheckCircle /> Mark as Paid
+                                          <FaCheckCircle size={11} /> Mark as Paid
                                         </button>
                                       )}
 
                                       {!isNegative && statement.status === "paid" && canProcessLandlordPayments && (
                                         <button
                                           onClick={() => handleMarkAsUnpaid(statement._id)}
-                                          className="flex items-center gap-2 rounded bg-yellow-500 px-3 py-2 text-sm text-white transition hover:bg-yellow-600"
+                                          className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
                                         >
-                                          <FaHourglass /> Mark as Unpaid
+                                          <FaHourglass size={11} /> Mark as Unpaid
                                         </button>
                                       )}
 
                                       {statement.status !== "reversed" && canReverseProcessedStatement && (
                                         <button
                                           onClick={() => handleReverseStatement(statement)}
-                                          className="ml-auto flex items-center gap-2 rounded bg-slate-700 px-3 py-2 text-sm text-white transition hover:bg-slate-800"
+                                          className="ml-auto inline-flex h-7 items-center gap-1.5 border border-red-300 bg-white px-2.5 text-xs font-bold text-red-600 hover:bg-red-50"
                                         >
-                                          <FaUndo /> Reverse
+                                          <FaUndo size={11} /> Reverse
                                         </button>
                                       )}
 
@@ -897,9 +849,9 @@ const ProcessedStatements = () => {
 
       {reversalModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white  shadow-2xl w-full max-w-md overflow-hidden">
             <div className="bg-[#0B3B2E] px-6 py-4 flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
+              <div className="flex h-9 w-9 items-center justify-center  bg-white/15">
                 <FaUndo className="text-white text-sm" />
               </div>
               <div>
@@ -908,7 +860,7 @@ const ProcessedStatements = () => {
               </div>
             </div>
             <div className="px-6 py-5 space-y-4">
-              <div className="flex items-start gap-3 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+              <div className="flex items-start gap-3  bg-amber-50 border border-amber-200 px-4 py-3">
                 <FaUndo className="text-amber-500 mt-0.5 shrink-0" />
                 <p className="text-sm text-amber-800">This will reverse the processed statement and reopen the draft workspace for the same period. This action cannot be undone.</p>
               </div>
@@ -917,7 +869,7 @@ const ProcessedStatements = () => {
                 <textarea
                   rows={3}
                   autoFocus
-                  className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
+                  className="w-full resize-none  border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
                   value={reversalModal.reason}
                   onChange={(e) => setReversalModal((prev) => ({ ...prev, reason: e.target.value }))}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleReversalConfirm(); } }}
@@ -926,8 +878,8 @@ const ProcessedStatements = () => {
               </div>
             </div>
             <div className="px-6 pb-5 flex justify-end gap-3">
-              <button onClick={() => setReversalModal({ open: false, statement: null, reason: "", loading: false })} disabled={reversalModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
-              <button onClick={handleReversalConfirm} disabled={reversalModal.loading} className="rounded-lg bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2">
+              <button onClick={() => setReversalModal({ open: false, statement: null, reason: "", loading: false })} disabled={reversalModal.loading} className=" border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
+              <button onClick={handleReversalConfirm} disabled={reversalModal.loading} className=" bg-red-600 hover:bg-red-700 px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2">
                 {reversalModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Reversing…</> : <><FaUndo className="text-xs" />Confirm Reversal</>}
               </button>
             </div>

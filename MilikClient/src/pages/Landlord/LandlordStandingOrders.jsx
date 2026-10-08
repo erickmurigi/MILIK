@@ -7,10 +7,12 @@ import {
   FaCalendarAlt,
   FaCheck,
   FaChevronDown,
+  FaDownload,
   FaEdit,
   FaPause,
   FaPlay,
   FaPlus,
+  FaPrint,
   FaSave,
   FaSearch,
   FaStop,
@@ -22,6 +24,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { fmtDate } from "../../utils/dates";
+import { printTabularList } from "../../utils/printKit";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
 import { useConfirm } from "../../context/ConfirmContext";
 import {
@@ -47,6 +50,17 @@ import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
 const todayIso = () => new Date().toISOString().split("T")[0];
+
+const formInputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const formLabelClass = "mb-1 block text-xs font-bold text-slate-900";
+const FormSection = ({ title, children }) => (
+  <div className="border border-slate-200 bg-white">
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 
 const blankForm = {
   landlord: "",
@@ -276,6 +290,77 @@ const LandlordStandingOrders = () => {
   useEffect(() => {
     loadRows();
   }, [loadRows]);
+
+  // The on-screen table is server-paginated (one page at a time) — printing or exporting
+  // the whole filtered register needs its own fetch with every matching row.
+  const fetchAllFilteredOrders = async () => {
+    const result = await getLandlordStandingOrders({
+      business: currentCompany._id,
+      company: currentCompany._id,
+      ...filters,
+      search: debouncedSearch,
+      page: 1,
+      limit: 2000,
+    });
+    return Array.isArray(result.data) ? result.data : [];
+  };
+
+  const PRINT_COLUMNS = [
+    { label: "Order #", value: (r) => r.standingOrderNo || r.referenceNo || "-" },
+    { label: "Title", value: (r) => r.title || "-" },
+    { label: "Landlord", value: (r) => getLandlordLabel(r.landlord) },
+    { label: "Property", value: (r) => r.property?.propertyName || r.property?.name || "-" },
+    { label: "Frequency", value: (r) => frequencyLabel(r.frequency) },
+    { label: "Amount", align: "right", bold: true, value: (r) => money(r.amount) },
+    { label: "Next Period", value: (r) => r.nextEligiblePeriod?.periodLabel || "-" },
+    { label: "Status", align: "center", value: (r) => frequencyLabel(r.status) },
+  ];
+
+  const handlePrintList = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const printRows = await fetchAllFilteredOrders();
+      if (printRows.length === 0) { toast.info("There are no standing orders to print."); return; }
+      const totalAmount = printRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+      const processedAmount = printRows.reduce((s, r) => s + Number(r.totalProcessedAmount || 0), 0);
+      const printed = printTabularList({
+        title: "Landlord Standing Orders",
+        subtitle: `${printRows.length.toLocaleString()} order${printRows.length !== 1 ? "s" : ""}`,
+        company: currentCompany,
+        summaryItems: [
+          ["Total Orders", printRows.length.toLocaleString()],
+          ["Total Amount", money(totalAmount)],
+          ["Total Processed", money(processedAmount)],
+        ],
+        columns: PRINT_COLUMNS,
+        rows: printRows,
+        totalsRow: ["", "", "", "", "Total", money(totalAmount), "", ""],
+      });
+      if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load standing orders for printing");
+    }
+  };
+
+  const handleExportCsv = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const exportRows = await fetchAllFilteredOrders();
+      if (exportRows.length === 0) { toast.info("There are no standing orders to export."); return; }
+      const header = PRINT_COLUMNS.map((c) => c.label);
+      const rows = exportRows.map((r) => PRINT_COLUMNS.map((c) => c.value(r)));
+      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `landlord-standing-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load standing orders for export");
+    }
+  };
 
   useEffect(() => {
     setSelectedIds((prev) =>
@@ -619,7 +704,7 @@ const LandlordStandingOrders = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex h-full w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden  border border-slate-200 bg-white shadow-sm">
             <ListToolbar>
               <div className="relative shrink-0">
                 <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
@@ -657,20 +742,23 @@ const LandlordStandingOrders = () => {
                 compact
               />
               <ListToolbar.Divider />
-              <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{stats.total} orders</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Active: {stats.active}</span>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1 py-0.5 text-[8px] font-bold text-blue-700">Processed: {money(stats.processed)}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Pending: {stats.pendingPeriods}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{stats.total} orders</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Active: {stats.active}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Processed: {money(stats.processed)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pending: {stats.pendingPeriods}</span>
               <ListToolbar.Divider />
               <ListToolbar.Button
                 icon={FaCheck}
-                variant="toggle"
-                className="!bg-green-600 hover:!bg-green-700"
+                variant="outlineOk"
                 disabled={bulkRunning || selectedIds.length === 0}
                 onClick={handleRunSelected}
               >
                 {bulkRunning ? "Running…" : `Run${selectedIds.length ? ` (${selectedIds.length})` : ""}`}
               </ListToolbar.Button>
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList}>Print</ListToolbar.Button>
+              <ListToolbar.Button icon={FaDownload} variant="outline" onClick={handleExportCsv}>Export</ListToolbar.Button>
+              <ListToolbar.Divider />
               <ListToolbar.Button icon={FaPlus} disabled={!canWrite} onClick={openCreate}>Add</ListToolbar.Button>
               <ListToolbar.Button
                 variant="dark"
@@ -691,7 +779,7 @@ const LandlordStandingOrders = () => {
               ]}
               rows={rows}
               rowKey="_id"
-              loading={loading}
+              loading={loading && rows.length === 0}
               empty="No standing orders found."
               minWidth="1340px"
               checkboxes
@@ -708,34 +796,36 @@ const LandlordStandingOrders = () => {
                 const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                 return (
                   <>
-                    <td className="px-3 py-1 align-top border-r border-gray-100">
-                      <div className="font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</div>
-                      <div className="text-[10px] text-slate-500">{row.title}</div>
-                    </td>
-                    <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
-                      <div className="font-semibold text-slate-900">{getLandlordLabel(row.landlord)}</div>
-                      <div className="text-[10px] text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</div>
-                    </td>
-                    <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
-                      <div className="font-semibold">{frequencyLabel(row.frequency)}</div>
-                      <div className="text-[10px] text-slate-500">
-                        Runs {canUseDayOfMonth(row.frequency) ? `on day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "every week"}
-                      </div>
-                      <div className="text-[10px] text-slate-500">Next: {row.nextEligiblePeriod?.periodLabel || "No open period"}</div>
-                      <div className="text-[10px] text-slate-500">
-                        Done {row.processedPeriodsCount || 0} • Pending {row.unprocessedPeriodsCount || 0}
+                    <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="shrink-0 font-black text-slate-900">{row.standingOrderNo || row.referenceNo}</span>
+                        <span className="min-w-0 truncate text-[10px] text-slate-500" title={row.title}>{row.title}</span>
                       </div>
                     </td>
-                    <td className="px-3 py-1 align-top border-r border-gray-100 text-slate-700">
-                      <div className="font-semibold">
-                        {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 overflow-hidden">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="shrink-0 font-semibold text-slate-900 truncate max-w-[60%]">{getLandlordLabel(row.landlord)}</span>
+                        <span className="min-w-0 truncate text-[10px] text-slate-500">{row.property?.propertyName || row.property?.name || "No property"}</span>
                       </div>
-                      <div className="text-[10px] text-slate-500">{getCashbookLabel(row.cashbook)}</div>
-                      <div className="text-[10px] text-slate-500">{getPaymentDestinationSummary(row)}</div>
                     </td>
-                    <td className="px-3 py-1 text-right align-top border-r border-gray-100 font-black text-slate-900">{money(row.amount)}</td>
-                    <td className="px-3 py-1 align-top border-r border-gray-100">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 overflow-hidden">
+                      <span className="truncate block">
+                        <span className="font-semibold">{frequencyLabel(row.frequency)}</span>
+                        {canUseDayOfMonth(row.frequency) && <span className="text-[10px] text-slate-500"> · Day {row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}</span>}
+                        <span className="text-[10px] text-slate-500"> · Next: {row.nextEligiblePeriod?.periodLabel || "No open period"}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 overflow-hidden">
+                      <span className="truncate block">
+                        <span className="font-semibold">
+                          {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}
+                        </span>
+                        <span className="text-[10px] text-slate-500"> · {getPaymentDestinationSummary(row)}</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-1.5 text-right border-r border-gray-100 font-black text-slate-900 whitespace-nowrap">{money(row.amount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">
+                      <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold border ${
                         row.status === "active" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                         : row.status === "paused" ? "bg-amber-50 text-amber-700 border-amber-200"
                         : row.status === "stopped" ? "bg-red-50 text-red-700 border-red-200"
@@ -748,179 +838,144 @@ const LandlordStandingOrders = () => {
                 );
               }}
               renderActions={(row) => {
-                const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                 return (
-                  <div className="inline-flex flex-wrap justify-end gap-2">
+                  <div className="inline-flex flex-wrap justify-end gap-1.5">
                     <button
                       onClick={() => openEdit(row)}
                       disabled={!canWrite}
-                      className="inline-flex h-7 items-center gap-1 rounded border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <FaEdit /> Edit
+                      <FaEdit size={10} /> Edit
                     </button>
                     {row.status !== "active" && (
                       <button
                         onClick={() => handleStatus(row, "active")}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700"
+                        className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                       >
-                        <FaPlay /> Activate
+                        <FaPlay size={10} /> Activate
                       </button>
                     )}
                     {row.status === "active" && (
                       <button
                         onClick={() => handleStatus(row, "paused")}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-amber-300 bg-amber-50 px-2.5 text-[11px] font-bold text-amber-700"
+                        className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                       >
-                        <FaPause /> Pause
+                        <FaPause size={10} /> Pause
                       </button>
                     )}
                     {row.status !== "stopped" && (
                       <button
                         onClick={() => handleStatus(row, "stopped")}
-                        className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 bg-slate-100 px-2.5 text-[11px] font-bold text-slate-700"
+                        className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                       >
-                        <FaStop /> Stop
+                        <FaStop size={10} /> Stop
                       </button>
                     )}
                     <button
                       onClick={() => openRunModal(row)}
-                      className={`inline-flex h-7 items-center gap-1 rounded border px-2.5 text-[11px] font-bold ${
-                        runnable
-                          ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                          : "border-slate-300 bg-slate-100 text-slate-400"
-                      }`}
+                      className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
                     >
-                      <FaCalendarAlt /> Run
+                      <FaCalendarAlt size={10} /> Run
+                    </button>
+                    <button
+                      onClick={() => setGlOrder(row)}
+                      className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                      title="View GL Entries"
+                    >
+                      <FaBook size={10} /> GL
                     </button>
                     <button
                       onClick={() => handleDelete(row)}
                       disabled={!canWrite}
-                      className="inline-flex h-7 items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2.5 text-[11px] font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="inline-flex h-6 items-center gap-1 border border-red-300 bg-white px-2 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <FaTrash /> Delete
-                    </button>
-                    <button
-                      onClick={() => setGlOrder(row)}
-                      className="inline-flex h-7 items-center gap-1 rounded border border-teal-300 bg-teal-50 px-2.5 text-[11px] font-bold text-teal-700"
-                      title="View GL Entries"
-                    >
-                      <FaBook /> GL
+                      <FaTrash size={10} /> Delete
                     </button>
                   </div>
                 );
               }}
-              renderExpanded={(row) => (
-                <>
-                  <div className="mb-4 grid gap-4 xl:grid-cols-3">
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Payment destination</p>
-                      <div className="mt-3 space-y-2 text-sm text-slate-700">
-                        <div><span className="font-bold text-slate-900">Method:</span> {paymentMethodOptions.find((item) => item.value === normalizePaymentMethod(row.paymentMethod))?.label || frequencyLabel(row.paymentMethod)}</div>
-                        <div><span className="font-bold text-slate-900">Cashbook:</span> {getCashbookLabel(row.cashbook)}</div>
-                        <div><span className="font-bold text-slate-900">Destination:</span> {getPaymentDestinationSummary(row)}</div>
-                        <div><span className="font-bold text-slate-900">Narration:</span> {row.narration || row.title || "-"}</div>
-                        <div><span className="font-bold text-slate-900">Internal notes:</span> {row.notes || "-"}</div>
-                      </div>
+              renderExpanded={(row) => {
+                const scheduleRows = row.fullSchedule || [];
+                return (
+                  <div className="border border-slate-200 bg-white">
+                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                      <p className="text-[11px] font-black uppercase tracking-wide text-slate-700">
+                        {frequencyLabel(row.frequency)} Schedule · {fmtDate(row.startDate)} – {row.endDate ? fmtDate(row.endDate) : "Ongoing"}
+                      </p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Current schedule</p>
-                      <div className="mt-3 space-y-2 text-sm text-slate-700">
-                        <div><span className="font-bold text-slate-900">Start:</span> {fmtDate(row.startDate)}</div>
-                        <div><span className="font-bold text-slate-900">End:</span> {fmtDate(row.endDate)}</div>
-                        <div><span className="font-bold text-slate-900">Frequency:</span> {frequencyLabel(row.frequency)}</div>
-                        <div><span className="font-bold text-slate-900">Run rule:</span> {canUseDayOfMonth(row.frequency) ? `Day ${row.dayOfMonth || new Date(row.startDate || Date.now()).getDate()}` : "Weekly cycle"}</div>
-                        <div><span className="font-bold text-slate-900">Last processed:</span> {fmtDate(row.lastRunDate || row.lastRunAt)}</div>
+                    {scheduleRows.length === 0 ? (
+                      <p className="px-3 py-2.5 text-xs text-slate-500">No scheduled periods.</p>
+                    ) : (
+                      <div className="max-h-80 overflow-y-auto">
+                        <table className="w-full text-[11px]">
+                          <thead className="sticky top-0">
+                            <tr className="border-b border-slate-200 bg-slate-50">
+                              <th className="px-3 py-1 text-left font-bold uppercase tracking-wide text-slate-500">Period</th>
+                              <th className="px-3 py-1 text-left font-bold uppercase tracking-wide text-slate-500">Due</th>
+                              <th className="px-3 py-1 text-right font-bold uppercase tracking-wide text-slate-500">Amount</th>
+                              <th className="px-3 py-1 text-center font-bold uppercase tracking-wide text-slate-500">Status</th>
+                              <th className="px-3 py-1 text-right font-bold uppercase tracking-wide text-slate-500">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {scheduleRows.map((item) => {
+                              const processed = item.processed;
+                              const isCancelled = Boolean(processed?.isCancelled);
+                              const statusLabel = processed ? (isCancelled ? "Reversed" : "Processed") : item.isEligible ? "Due" : "Upcoming";
+                              const statusCls = processed
+                                ? (isCancelled ? "border-slate-200 bg-slate-100 text-slate-600" : "border-emerald-200 bg-emerald-50 text-emerald-700")
+                                : item.isEligible
+                                ? "border-amber-200 bg-amber-50 text-amber-700"
+                                : "border-slate-200 bg-slate-50 text-slate-400";
+                              return (
+                                <tr key={item.periodKey} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                  <td className="px-3 py-1.5 font-semibold text-slate-900 border-r border-gray-100">{item.periodLabel}</td>
+                                  <td className="px-3 py-1.5 text-slate-600 border-r border-gray-100">{fmtDate(item.dueDate)}</td>
+                                  <td className={`px-3 py-1.5 text-right font-bold tabular-nums border-r border-gray-100 ${isCancelled ? "text-slate-400 line-through" : "text-slate-900"}`}>
+                                    {money(processed?.amount ?? row.amount)}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                                    <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${statusCls}`}>
+                                      {statusLabel}
+                                    </span>
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right">
+                                    {processed ? (
+                                      <button
+                                        onClick={() => !isCancelled && handleReverseRun(row, processed)}
+                                        disabled={isCancelled || reversingRunId === String(processed.id)}
+                                        title={isCancelled ? "Already reversed" : undefined}
+                                        className="inline-flex h-6 items-center gap-1 border border-red-300 bg-white px-2 text-[11px] font-bold text-red-600 hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                                      >
+                                        <FaUndo size={9} /> {reversingRunId === String(processed.id) ? "..." : "Reverse"}
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={() =>
+                                          item.isEligible &&
+                                          openRunModal({
+                                            ...row,
+                                            eligiblePeriods: [item, ...(row.eligiblePeriods || []).filter((entry) => entry.periodKey !== item.periodKey)],
+                                          })
+                                        }
+                                        disabled={!item.isEligible}
+                                        title={!item.isEligible ? "Not yet due" : undefined}
+                                        className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                                      >
+                                        <FaCalendarAlt size={9} /> Run
+                                      </button>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Controls</p>
-                      <div className="mt-3 space-y-3 text-sm text-slate-700">
-                        <div>Processed runs can be reversed only while the related landlord statement period is still open.</div>
-                        <div>Once runs exist, the property, landlord, schedule day, frequency, and start date are locked for audit safety.</div>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Eligible periods to run</p>
-                      <div className="mt-3 space-y-2">
-                        {(row.eligiblePeriods || []).length === 0 && (
-                          <p className="text-sm text-slate-500">
-                            No eligible periods. Already processed periods, future periods, and closed statement periods are blocked.
-                          </p>
-                        )}
-                        {(row.eligiblePeriods || []).map((item) => (
-                          <div key={item.periodKey} className="flex items-center justify-between rounded-xl border border-slate-200 px-3 py-2 text-sm">
-                            <div>
-                              <div className="font-bold text-slate-800">{item.periodLabel}</div>
-                              <div className="text-xs text-slate-500">Due {fmtDate(item.dueDate)}</div>
-                            </div>
-                            <button
-                              onClick={() =>
-                                openRunModal({
-                                  ...row,
-                                  eligiblePeriods: [item, ...(row.eligiblePeriods || []).filter((entry) => entry.periodKey !== item.periodKey)],
-                                })
-                              }
-                              className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700"
-                            >
-                              Run this period
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-white p-3">
-                      <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Processed periods</p>
-                      <div className="mt-3 max-h-80 space-y-2 overflow-y-auto">
-                        {(row.processedPeriods || []).length === 0 && (
-                          <p className="text-sm text-slate-500">No processed periods yet.</p>
-                        )}
-                        {(row.processedPeriods || []).map((item) => (
-                          <div
-                            key={item.referenceNo || item.periodKey}
-                            className={`rounded-xl border px-3 py-2 text-sm ${item.isCancelled ? "border-slate-200 bg-slate-100" : "border-emerald-200 bg-emerald-50"}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className={`font-bold ${item.isCancelled ? "text-slate-700" : "text-emerald-800"}`}>
-                                  {item.periodLabel || item.periodKey}
-                                </div>
-                                <div className={`mt-1 text-xs ${item.isCancelled ? "text-slate-500" : "text-emerald-700"}`}>
-                                  Processed {fmtDate(item.runDate)} • Ref {item.referenceNo || "-"}
-                                </div>
-                                {item.isCancelled && (
-                                  <div className="mt-1 text-xs text-rose-600">
-                                    Reversed {fmtDate(item.cancelledAt)} • {item.cancellationReason || "No reason recorded"}
-                                  </div>
-                                )}
-                              </div>
-                              <div className="flex flex-col items-end gap-2">
-                                <div className={`font-black ${item.isCancelled ? "text-slate-700" : "text-emerald-900"}`}>
-                                  {money(item.amount)}
-                                </div>
-                                {item.isCancelled ? (
-                                  <span className="rounded-full bg-slate-200 px-2.5 py-1 text-[11px] font-black text-slate-700">
-                                    Reversed
-                                  </span>
-                                ) : (
-                                  <button
-                                    onClick={() => handleReverseRun(row, item)}
-                                    disabled={reversingRunId === String(item.id)}
-                                    className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
-                                  >
-                                    <FaUndo /> {reversingRunId === String(item.id) ? "Reversing..." : "Reverse run"}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
+                );
+              }}
             />
           </div>
 
@@ -939,13 +994,13 @@ const LandlordStandingOrders = () => {
 
       {showModal && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
+          <div className="w-full max-w-6xl overflow-hidden  border border-slate-200 bg-white shadow-2xl">
             <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
               <div>
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Landlord Standing Order</p>
                 <h3 className="text-xl font-black">{editingId ? "Edit Standing Order" : "Add Standing Order"}</h3>
               </div>
-              <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10">
+              <button onClick={closeModal} className=" border border-white/30 p-2 hover:bg-white/10">
                 <FaTimes />
               </button>
             </div>
@@ -982,7 +1037,7 @@ const LandlordStandingOrders = () => {
                   type="number"
                   value={form.amount}
                   onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -1005,7 +1060,7 @@ const LandlordStandingOrders = () => {
                 <input
                   value={form.title}
                   onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -1025,7 +1080,7 @@ const LandlordStandingOrders = () => {
                   type="date"
                   value={form.startDate}
                   onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -1035,7 +1090,7 @@ const LandlordStandingOrders = () => {
                   type="date"
                   value={form.endDate}
                   onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -1048,7 +1103,7 @@ const LandlordStandingOrders = () => {
                     max="31"
                     value={form.dayOfMonth}
                     onChange={(e) => setForm((prev) => ({ ...prev, dayOfMonth: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                   />
                 </label>
               )}
@@ -1082,7 +1137,7 @@ const LandlordStandingOrders = () => {
                   rows={3}
                   value={form.narration}
                   onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
@@ -1092,11 +1147,11 @@ const LandlordStandingOrders = () => {
                   rows={3}
                   value={form.notes}
                   onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                  className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                 />
               </label>
 
-              <div className="xl:col-span-4 mt-2 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="xl:col-span-4 mt-2  border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Payout destination</p>
                 <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   {normalizePaymentMethod(form.paymentMethod) !== "mpesa" && (
@@ -1105,7 +1160,7 @@ const LandlordStandingOrders = () => {
                       <input
                         value={form.accountName}
                         onChange={(e) => setForm((prev) => ({ ...prev, accountName: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                   )}
@@ -1118,7 +1173,7 @@ const LandlordStandingOrders = () => {
                         <input
                           value={form.accountNumber}
                           onChange={(e) => setForm((prev) => ({ ...prev, accountNumber: e.target.value }))}
-                          className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                       <label className="block">
@@ -1126,7 +1181,7 @@ const LandlordStandingOrders = () => {
                         <input
                           value={form.bankName}
                           onChange={(e) => setForm((prev) => ({ ...prev, bankName: e.target.value }))}
-                          className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                       <label className="block">
@@ -1134,7 +1189,7 @@ const LandlordStandingOrders = () => {
                         <input
                           value={form.branchName}
                           onChange={(e) => setForm((prev) => ({ ...prev, branchName: e.target.value }))}
-                          className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                          className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                         />
                       </label>
                     </>
@@ -1146,7 +1201,7 @@ const LandlordStandingOrders = () => {
                       <input
                         value={form.mobileNumber}
                         onChange={(e) => setForm((prev) => ({ ...prev, mobileNumber: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                        className="mt-1 w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                       />
                     </label>
                   )}
@@ -1154,13 +1209,13 @@ const LandlordStandingOrders = () => {
               </div>
             </div>
             <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+              <button onClick={closeModal} className=" border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
+                className="inline-flex items-center gap-2  bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
               >
                 <FaSave /> {saving ? "Saving..." : editingId ? "Update Order" : "Save Order"}
               </button>
@@ -1170,70 +1225,69 @@ const LandlordStandingOrders = () => {
       )}
 
       {runModal.open && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/55 p-4">
-          <div className="w-full max-w-2xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-indigo-600 px-6 py-4 text-white">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-indigo-100">Standing Order Run</p>
-                <h3 className="text-xl font-black">Choose eligible period</h3>
-              </div>
-              <button onClick={() => setRunModal({ open: false, row: null, periodKey: "", amount: "", note: "" })} className="rounded-full border border-white/30 p-2 hover:bg-white/10">
-                <FaTimes />
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-900/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">Run Standing Order</h2>
+              <button onClick={() => setRunModal({ open: false, row: null, periodKey: "", amount: "", note: "" })} className="text-white/70 transition-colors hover:text-white">
+                <FaTimes size={14} />
               </button>
             </div>
-            <div className="space-y-4 p-6">
-              <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-900">
-                <div className="font-black">{runModal.row?.title}</div>
-                <div className="mt-1">
-                  Only current or skipped eligible periods can be processed. Future periods, duplicate runs, and closed statement periods are blocked by the backend.
-                </div>
-              </div>
-              <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Eligible period</span>
-                <AppSelect
-                  value={runModal.periodKey || null}
-                  onChange={(v) => setRunModal((prev) => ({ ...prev, periodKey: v ?? "" }))}
-                  options={(runModal.row?.eligiblePeriods || []).map((item) => ({
-                    value: item.periodKey,
-                    label: `${item.periodLabel} • Due ${fmtDate(item.dueDate)}`,
-                  }))}
-                  size="sm"
-                />
-              </label>
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount</span>
-                  <input
-                    type="number"
-                    value={runModal.amount}
-                    onChange={(e) => setRunModal((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </label>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                  <div className="font-black text-slate-900">Selected period</div>
-                  <div className="mt-2">{selectedRunPeriod?.periodLabel || "-"}</div>
-                  <div className="text-xs text-slate-500">
-                    Statement window: {fmtDate(selectedRunPeriod?.periodStart)} - {fmtDate(selectedRunPeriod?.periodEnd)}
+
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+              <FormSection title={runModal.row?.title || "Run Details"}>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Eligible period</label>
+                    <AppSelect
+                      value={runModal.periodKey || null}
+                      onChange={(v) => setRunModal((prev) => ({ ...prev, periodKey: v ?? "" }))}
+                      options={(runModal.row?.eligiblePeriods || []).map((item) => ({
+                        value: item.periodKey,
+                        label: `${item.periodLabel} · Due ${fmtDate(item.dueDate)}`,
+                      }))}
+                      size="md"
+                    />
+                    {selectedRunPeriod && (
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Statement window: {fmtDate(selectedRunPeriod.periodStart)} – {fmtDate(selectedRunPeriod.periodEnd)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className={formLabelClass}>Amount</label>
+                    <input
+                      type="number"
+                      value={runModal.amount}
+                      onChange={(e) => setRunModal((prev) => ({ ...prev, amount: e.target.value }))}
+                      className={formInputClass}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Narration <span className="font-normal text-slate-400">(optional)</span></label>
+                    <textarea
+                      rows={2}
+                      value={runModal.note}
+                      onChange={(e) => setRunModal((prev) => ({ ...prev, note: e.target.value }))}
+                      className="w-full resize-none border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    />
                   </div>
                 </div>
-              </div>
-              <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
-                <textarea
-                  rows={3}
-                  value={runModal.note}
-                  onChange={(e) => setRunModal((prev) => ({ ...prev, note: e.target.value }))}
-                  className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                />
-              </label>
+              </FormSection>
+
+              <p className="mt-2 text-[10px] text-slate-400">
+                Only current or skipped eligible periods can be processed — future periods, duplicate runs, and closed statement periods are blocked by the backend.
+              </p>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={() => setRunModal({ open: false, row: null, periodKey: "", amount: "", note: "" })} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
+
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button onClick={() => setRunModal({ open: false, row: null, periodKey: "", amount: "", note: "" })} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
               </button>
-              <button onClick={handleRun} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
-                <FaCheck /> Run selected period
+              <button onClick={handleRun} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                <FaCheck size={11} /> Run Selected Period
               </button>
             </div>
           </div>

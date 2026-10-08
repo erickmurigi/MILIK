@@ -16,6 +16,11 @@ export const getLandlordAdvancements = async (filters = {}) => {
   return { data: extractList(res.data), total: res.data?.total ?? 0, page: res.data?.page ?? 1, pages: res.data?.pages ?? 1 };
 };
 
+export const getLandlordAdvancement = async (id) => {
+  const res = await adminRequests.get(`/landlord-advancements/${id}`);
+  return res?.data?.data || res?.data;
+};
+
 export const createLandlordAdvancement = async (payload) => {
   const res = await adminRequests.post("/landlord-advancements", payload);
   return res.data;

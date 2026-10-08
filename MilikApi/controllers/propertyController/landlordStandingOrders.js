@@ -232,6 +232,33 @@ const serializeStandingOrder = (row) => {
   const processedPeriodsCount = processedPeriods.filter((item) => !item.isCancelled).length;
   const cancelledPeriodsCount = processedPeriods.filter((item) => item.isCancelled).length;
 
+  // One row per scheduled period, start to end, for the single tabular schedule view —
+  // replaces showing eligible/processed as two separate lists. Open-ended orders (no
+  // endDate) are capped 2 years out so the table stays a manageable length rather than
+  // running to the recurringSchedule guard's 1000-period ceiling.
+  const displayHorizon = plain.endDate
+    ? null
+    : (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 2); return d; })();
+  const fullRunSchedule = buildRunSchedule({
+    startDate: plain.startDate,
+    endDate: plain.endDate,
+    frequency: plain.frequency,
+    dayOfMonth: plain.dayOfMonth,
+    capAt: displayHorizon,
+  });
+  const processedByKey = new Map(processedPeriods.map((item) => [item.periodKey, item]));
+  const eligibleKeys = new Set(eligiblePeriods.map((item) => item.periodKey));
+  const fullSchedule = fullRunSchedule.map((item) => {
+    const processed = processedByKey.get(item.periodKey) || null;
+    return {
+      periodKey: item.periodKey,
+      periodLabel: item.periodLabel,
+      dueDate: item.dueDate,
+      processed,
+      isEligible: !processed && eligibleKeys.has(item.periodKey),
+    };
+  });
+
   return {
     ...plain,
     eligiblePeriods: eligiblePeriods.map((item) => ({
@@ -242,6 +269,7 @@ const serializeStandingOrder = (row) => {
       periodEnd: item.periodEnd,
     })),
     processedPeriods,
+    fullSchedule,
     processedPeriodsCount,
     cancelledPeriodsCount,
     unprocessedPeriodsCount: Math.max(schedule.length - processedPeriodsCount, 0),

@@ -2,7 +2,7 @@ import { fmtDate } from "../../utils/dates";
 import AppSelect from "../../components/common/AppSelect";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { FaEnvelope, FaFileInvoiceDollar, FaPrint, FaSearch, FaRedoAlt, FaSms } from "react-icons/fa";
+import { FaEnvelope, FaPrint, FaSearch, FaRedoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import CommunicationComposerModal from "../../components/Communications/CommunicationComposerModal";
@@ -16,9 +16,6 @@ import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
-
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 
 const fmtMoney = (v) =>
   `KSh ${Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -175,26 +172,13 @@ const ManagementFeeInvoices = () => {
   return (
     <>
       <DashboardLayout lockContentScroll>
-        <div className="flex h-full flex-col overflow-hidden">
-          {/* Filter toolbar */}
-          <div className="shrink-0 border-b border-slate-200 bg-white px-4 pt-3 pb-2 shadow-sm">
-            <div className="mb-2 flex items-center justify-between">
-              <h1 className="flex items-center gap-2 text-base font-bold text-[#0B3B2E]">
-                <FaFileInvoiceDollar className="text-[#FF8C00]" />
-                Management Fee Invoices
-              </h1>
-              {selectedIds.length > 0 && canEmail && (
-                <button
-                  onClick={() => setCommModal({ ids: selectedIds })}
-                  className={`flex items-center gap-1.5 rounded px-3 py-1.5 text-xs text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
-                >
-                  <FaEnvelope size={11} />
-                  Email Selected ({selectedIds.length})
-                </button>
-              )}
-            </div>
-
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
+          <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
             <ListToolbar>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                {pagination.total} invoice{pagination.total !== 1 ? "s" : ""}
+              </span>
+              <ListToolbar.Divider />
               <ListToolbar.Input
                 type="text"
                 placeholder="Search landlord / invoice no..."
@@ -228,109 +212,119 @@ const ManagementFeeInvoices = () => {
                 clearable
                 compact
               />
-              <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applyFilters}>Search</ListToolbar.Button>
-              <ListToolbar.Button icon={FaRedoAlt} variant="dark" onClick={resetFilters}>Reset</ListToolbar.Button>
-              <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-500">
-                {pagination.total} invoice{pagination.total !== 1 ? "s" : ""}
-              </span>
-            </ListToolbar>
-          </div>
-
-          {/* Table */}
-          <MilikTable
-            columns={[
-              { label: "Fee Inv #" },
-              { label: "Stmt Ref" },
-              { label: "Landlord" },
-              { label: "Property" },
-              { label: "Period" },
-              { label: "Commission", align: "right" },
-              { label: "VAT", align: "right" },
-              { label: "Total", align: "right" },
-            ]}
-            rows={rows}
-            rowKey="_id"
-            loading={loading}
-            empty="No management fee invoices found."
-            minWidth="900px"
-            checkboxes
-            allChecked={allSelected}
-            someChecked={selectedIds.length > 0 && !allSelected}
-            onCheckAll={toggleSelectAll}
-            isChecked={(row) => selectedIds.includes(String(row._id))}
-            isSelected={(row) => selectedIds.includes(String(row._id))}
-            onCheckRow={(row) => toggleSelect(String(row._id))}
-            onRowClick={(row) => toggleSelect(String(row._id))}
-            renderRow={(row) => {
-              const commissionNet = Number(row.commissionAmount || 0);
-              const commissionTax = Number(row.commissionTaxAmount || 0);
-              const commissionGross = Number(row.commissionGrossAmount || commissionNet + commissionTax);
-              const landlordName =
-                String(row.landlord?.landlordName || "").trim() ||
-                `${row.landlord?.firstName || ""} ${row.landlord?.lastName || ""}`.trim() ||
-                "—";
-              const propertyName = row.property?.propertyName || row.property?.name || "—";
-              const invoiceNo = row.managementFeeInvoiceNumber || "—";
-              const stmtRef = row.sourceStatementNumber || "—";
-              return (
+              <ListToolbar.Button icon={FaSearch} onClick={applyFilters}>Search</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters}>Reset</ListToolbar.Button>
+              {canEmail && (
                 <>
-                  <td className="px-3 py-2 font-mono font-bold text-[#FF8C00]">{invoiceNo}</td>
-                  <td className="px-3 py-2 text-slate-600">{stmtRef}</td>
-                  <td className="px-3 py-2 font-semibold text-slate-800">{landlordName}</td>
-                  <td className="px-3 py-2 text-slate-700">{propertyName}</td>
-                  <td className="px-3 py-2 text-slate-600 whitespace-nowrap">
-                    {fmtPeriod(row.periodStart, row.periodEnd)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-semibold text-slate-800">
-                    {fmtMoney(commissionNet)}
-                  </td>
-                  <td className="px-3 py-2 text-right text-slate-600">
-                    {commissionTax > 0 ? fmtMoney(commissionTax) : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-3 py-2 text-right font-bold text-[#0B3B2E]">
-                    {fmtMoney(commissionGross)}
-                  </td>
-                </>
-              );
-            }}
-            renderActions={(row) => {
-              const id = String(row._id);
-              const invoiceNo = row.managementFeeInvoiceNumber || "—";
-              return (
-                <div className="flex items-center justify-center gap-1.5">
-                  <button
-                    title="Print PDF"
-                    disabled={printingId === id}
-                    onClick={() => handlePrintPdf(id, invoiceNo)}
-                    className="rounded p-1.5 text-purple-600 hover:bg-purple-50 hover:text-purple-800 disabled:opacity-40"
+                  <ListToolbar.Divider />
+                  <ListToolbar.Button
+                    icon={FaEnvelope}
+                    variant="outline"
+                    disabled={selectedIds.length === 0}
+                    onClick={() => setCommModal({ ids: selectedIds })}
                   >
-                    <FaPrint size={12} />
-                  </button>
-                  {canEmail && (
-                    <button
-                      title="Send Email"
-                      onClick={() => setCommModal({ ids: [id] })}
-                      className="rounded p-1.5 text-emerald-700 hover:bg-emerald-50 hover:text-emerald-900"
-                    >
-                      <FaEnvelope size={12} />
-                    </button>
-                  )}
-                </div>
-              );
-            }}
-          />
+                    Email Selected{selectedIds.length ? ` (${selectedIds.length})` : ""}
+                  </ListToolbar.Button>
+                </>
+              )}
+            </ListToolbar>
 
-          {/* Pagination — always visible */}
-          <PaginationBar
-            page={pagination.page}
-            pages={pagination.pages}
-            total={pagination.total}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
-            loading={loading}
-            label="invoices"
-          />
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
+              <MilikTable
+                columns={[
+                  { label: "Fee Inv #" },
+                  { label: "Stmt Ref" },
+                  { label: "Landlord" },
+                  { label: "Property" },
+                  { label: "Period" },
+                  { label: "Commission", align: "right" },
+                  { label: "VAT", align: "right" },
+                  { label: "Total", align: "right" },
+                ]}
+                rows={rows}
+                rowKey="_id"
+                loading={loading && rows.length === 0}
+                empty="No management fee invoices found."
+                minWidth="900px"
+                checkboxes
+                allChecked={allSelected}
+                someChecked={selectedIds.length > 0 && !allSelected}
+                onCheckAll={toggleSelectAll}
+                isChecked={(row) => selectedIds.includes(String(row._id))}
+                isSelected={(row) => selectedIds.includes(String(row._id))}
+                onCheckRow={(row) => toggleSelect(String(row._id))}
+                onRowClick={(row) => toggleSelect(String(row._id))}
+                renderRow={(row) => {
+                  const commissionNet = Number(row.commissionAmount || 0);
+                  const commissionTax = Number(row.commissionTaxAmount || 0);
+                  const commissionGross = Number(row.commissionGrossAmount || commissionNet + commissionTax);
+                  const landlordName =
+                    String(row.landlord?.landlordName || "").trim() ||
+                    `${row.landlord?.firstName || ""} ${row.landlord?.lastName || ""}`.trim() ||
+                    "—";
+                  const propertyName = row.property?.propertyName || row.property?.name || "—";
+                  const invoiceNo = row.managementFeeInvoiceNumber || "—";
+                  const stmtRef = row.sourceStatementNumber || "—";
+                  return (
+                    <>
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-slate-900 whitespace-nowrap">{invoiceNo}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600 whitespace-nowrap">{stmtRef}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{landlordName}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{propertyName}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600 whitespace-nowrap">
+                        {fmtPeriod(row.periodStart, row.periodEnd)}
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-800">
+                        {fmtMoney(commissionNet)}
+                      </td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-600">
+                        {commissionTax > 0 ? fmtMoney(commissionTax) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-3 py-1.5 text-right font-bold text-slate-900">
+                        {fmtMoney(commissionGross)}
+                      </td>
+                    </>
+                  );
+                }}
+                renderActions={(row) => {
+                  const id = String(row._id);
+                  const invoiceNo = row.managementFeeInvoiceNumber || "—";
+                  return (
+                    <div className="inline-flex items-center justify-end gap-1.5">
+                      <button
+                        title="Print PDF"
+                        disabled={printingId === id}
+                        onClick={(e) => { e.stopPropagation(); handlePrintPdf(id, invoiceNo); }}
+                        className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <FaPrint size={10} /> Print
+                      </button>
+                      {canEmail && (
+                        <button
+                          title="Send Email"
+                          onClick={(e) => { e.stopPropagation(); setCommModal({ ids: [id] }); }}
+                          className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50"
+                        >
+                          <FaEnvelope size={10} /> Email
+                        </button>
+                      )}
+                    </div>
+                  );
+                }}
+              />
+            </div>
+
+            <PaginationBar
+              page={pagination.page}
+              pages={pagination.pages}
+              total={pagination.total}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
+              loading={loading}
+              label="invoices"
+            />
+          </div>
         </div>
       </DashboardLayout>
 

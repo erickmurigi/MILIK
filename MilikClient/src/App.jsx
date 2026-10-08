@@ -83,6 +83,7 @@ const LandlordReceipts               = lazy(() => import("./pages/Landlord/Landl
 const LandlordCommissionsStatement   = lazy(() => import("./pages/Landlord/LandlordCommissionsStatement"));
 const LandlordStandingOrders         = lazy(() => import("./pages/Landlord/LandlordStandingOrders"));
 const LandlordAdvancements           = lazy(() => import("./pages/Landlord/LandlordAdvancements"));
+const AddLandlordAdvancement         = lazy(() => import("./pages/Landlord/AddLandlordAdvancement"));
 const ProcessedStatements            = lazy(() => import("./pages/Landlord/ProcessedStatements"));
 const ManagementFeeInvoices          = lazy(() => import("./pages/Landlord/ManagementFeeInvoices"));
 const LandlordStatementAllocations   = lazy(() => import("./pages/Admin/LandlordStatementAllocations"));
@@ -891,6 +892,8 @@ function App() {
             <Route path="/landlord/statements"          element={<Guard companyMode={{ allowLandlord: false }} resource="statements" moduleKey="propertyManagement"><LandlordCommissionsStatement /></Guard>} />
             <Route path="/landlords/standing-orders"    element={<Guard companyMode={{ allowLandlord: false }} resource="standingOrders" moduleKey="accounts"><LandlordStandingOrders /></Guard>} />
             <Route path="/landlords/advancement"        element={<Guard companyMode={{ allowLandlord: false }} resource="landlordAdvancements" moduleKey="accounts"><LandlordAdvancements /></Guard>} />
+            <Route path="/landlords/advancement/new"     element={<Guard companyMode={{ allowLandlord: false }} resource="landlordAdvancements" action="create" moduleKey="accounts"><AddLandlordAdvancement /></Guard>} />
+            <Route path="/landlords/advancement/:id/edit" element={<Guard companyMode={{ allowLandlord: false }} resource="landlordAdvancements" action="update" moduleKey="accounts"><AddLandlordAdvancement /></Guard>} />
             <Route path="/landlord/statement-allocations" element={<SuperAdminRoute><LandlordStatementAllocations /></SuperAdminRoute>} />
 
             {/* ── Properties & Units ────────────────────────────────────── */}

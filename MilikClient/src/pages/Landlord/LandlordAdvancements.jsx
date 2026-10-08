@@ -1,5 +1,5 @@
 ﻿
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
@@ -22,6 +22,7 @@ import {
   FaUndo,
 } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
@@ -30,20 +31,15 @@ import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import {
   cancelLandlordAdvancementRecovery,
-  createLandlordAdvancement,
   deleteLandlordAdvancement,
-  getChartOfAccounts,
   getLandlordAdvancements,
   getLandlords,
   processLandlordAdvancementRecovery,
-  updateLandlordAdvancement,
   updateLandlordAdvancementStatus,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
-import { propertyBelongsToLandlord } from "./propertyUtils";
 import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
-import { isCashbookAccount } from "../../utils/cashbookUtils";
 
 const todayIso = () => new Date().toISOString().split("T")[0];
 const money = (value) =>
@@ -54,52 +50,22 @@ const money = (value) =>
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
 
+const formInputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const formLabelClass = "mb-1 block text-xs font-bold text-slate-900";
+const FormSection = ({ title, children }) => (
+  <div className="border border-slate-200 bg-white">
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 
-const addMonths = (dateValue, months = 0) => {
-  if (!dateValue) return null;
-  const date = new Date(dateValue);
-  if (Number.isNaN(date.getTime())) return null;
-  const safeMonths = Math.max(0, Number(months || 0));
-  const originalDay = date.getDate();
-  date.setDate(1);
-  date.setMonth(date.getMonth() + safeMonths);
-  const maxDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
-  date.setDate(Math.min(originalDay, maxDay));
-  return date;
-};
-
-const computeRecoveryEndDate = ({ startDate, periodMonths, gracePeriodMonths }) => {
-  const safePeriodMonths = Math.max(0, Number(periodMonths || 0));
-  if (!startDate || safePeriodMonths <= 0) return "";
-  const effectiveStart = addMonths(startDate, gracePeriodMonths || 0);
-  if (!effectiveStart) return "";
-  const endDate = new Date(effectiveStart.getFullYear(), effectiveStart.getMonth() + safePeriodMonths, 0);
-  return Number.isNaN(endDate.getTime()) ? "" : endDate.toISOString().split("T")[0];
-};
 
 const defaultTitleForType = (advanceType) =>
   advanceType === "against_payable"
     ? "Landlord Advance - Early Payout"
     : "Landlord Advance - Recover from Next Statement";
-
-const blankForm = {
-  advanceType: "against_payable",
-  landlord: "",
-  property: "",
-  title: defaultTitleForType("against_payable"),
-  narration: "",
-  notes: "",
-  amount: "",
-  disbursementDate: todayIso(),
-  startDate: todayIso(),
-  endDate: "",
-  periodMonths: "1",
-  gracePeriodMonths: "0",
-  frequency: "monthly",
-  paymentMethod: "bank_transfer",
-  cashbook: "",
-  status: "draft",
-};
 
 const STATUS_STYLES = {
   draft: "bg-slate-100 text-slate-700",
@@ -132,13 +98,6 @@ const TYPE_OPTIONS = [
   },
 ];
 
-const INITIAL_STATUS_OPTIONS = [
-  { value: "draft", label: "Save as Draft" },
-  { value: "submitted", label: "Save and Submit" },
-  { value: "approved", label: "Save and Approve" },
-  { value: "disbursed", label: "Save and Disburse" },
-];
-
 const statusLabel = (value) =>
   String(value || "")
     .replace(/_/g, " ")
@@ -149,59 +108,9 @@ const STATUS_FILTER_OPTIONS = ["draft", "submitted", "approved", "disbursed", "r
 
 const rowTitle = (row) => row?.title || defaultTitleForType(row?.advanceType);
 
-const mapRowToForm = (row) => {
-  const advanceType = row?.advanceType || "future_recoverable";
-  return {
-    advanceType,
-    landlord: row?.landlord?._id || row?.landlord || "",
-    property: row?.property?._id || row?.property || "",
-    title: row?.title || defaultTitleForType(advanceType),
-    narration: row?.narration || "",
-    notes: row?.notes || "",
-    amount: row?.amount || "",
-    disbursementDate: row?.disbursementDate ? new Date(row.disbursementDate).toISOString().split("T")[0] : todayIso(),
-    startDate: row?.startDate ? new Date(row.startDate).toISOString().split("T")[0] : todayIso(),
-    endDate: row?.endDate ? new Date(row.endDate).toISOString().split("T")[0] : "",
-    periodMonths: row?.periodMonths ? String(row.periodMonths) : "1",
-    gracePeriodMonths: String(row?.gracePeriodMonths || 0),
-    frequency: row?.frequency || "monthly",
-    paymentMethod:
-      row?.paymentMethod === "mobile_money"
-        ? "mpesa"
-        : row?.paymentMethod === "check"
-        ? "cheque"
-        : row?.paymentMethod || "bank_transfer",
-    cashbook: row?.cashbook?._id || row?.cashbook || "",
-    status: row?.status || "draft",
-  };
-};
-
-const RecoveryHistoryRow = ({ item, onCancel }) => (
-  <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center md:justify-between">
-    <div>
-      <div className="font-bold text-slate-900">{item.periodLabel || item.periodKey}</div>
-      <div className="text-xs text-slate-500">
-        Processed {fmtDate(item.processedAt)} • Amount {money(item.amount)}
-      </div>
-      {item.note ? <div className="mt-0.5 text-xs text-slate-600">{item.note}</div> : null}
-    </div>
-    {!item.cancelledAt ? (
-      <button
-        onClick={onCancel}
-        className="inline-flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-black text-rose-700"
-      >
-        <FaUndo /> Cancel recovery
-      </button>
-    ) : (
-      <div className="rounded-xl bg-zinc-100 px-3 py-2 text-xs font-semibold text-zinc-600">
-        Cancelled {fmtDate(item.cancelledAt)}
-      </div>
-    )}
-  </div>
-);
-
 const LandlordAdvancements = () => {
   const confirm = useConfirm();
+  const navigate = useNavigate();
   const dispatch = useDispatch();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -226,38 +135,16 @@ const LandlordAdvancements = () => {
   const [rows, setRows] = useState([]);
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
-  const [cashbooks, setCashbooks] = useState([]);
   const [pageSize, setPageSize] = useState(50);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [glAdvancement, setGlAdvancement] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState("");
   const [currentPage, setCurrentPage] = useTabState("/landlords/advancement:currentPage", 1);
   const [filters, setFilters] = useTabState("/landlords/advancement:filters", { search: "", status: "all", landlordId: "all", advanceType: "all" });
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
-  const [form, setForm] = useState(blankForm);
 
   const canWrite = hasCompanyPermission(currentUser, currentCompany, "landlordAdvancements", "create", "accounts");
-
-  const _uid = currentUser?._id || currentUser?.id;
-  const _laDraftKey = (currentCompany?._id && _uid) ? `milik:draft:landlord-advance:${currentCompany._id}:${_uid}` : null;
-  const _laDraftRestored = useRef(false);
-
-  useEffect(() => {
-    if (!_laDraftKey || _laDraftRestored.current) return;
-    _laDraftRestored.current = true;
-    try {
-      const raw = window.sessionStorage.getItem(_laDraftKey);
-      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setForm(s); setShowModal(true); } }
-    } catch {}
-  }, [_laDraftKey]);
-
-  useEffect(() => {
-    if (!_laDraftKey || !_laDraftRestored.current || !showModal || editingId) return;
-    try { window.sessionStorage.setItem(_laDraftKey, JSON.stringify({ form })); } catch {}
-  }, [_laDraftKey, form, showModal, editingId]);
 
   const [recoveryModal, setRecoveryModal] = useState({
     open: false,
@@ -269,17 +156,9 @@ const LandlordAdvancements = () => {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getLandlords({ company: currentCompany._id }));
+    if (!landlords?.length) dispatch(getLandlords({ company: currentCompany._id }));
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
-    (async () => {
-      try {
-        const accounts = await getChartOfAccounts({ business: currentCompany._id, type: "asset" });
-        setCashbooks(Array.isArray(accounts) ? accounts.filter(isCashbookAccount) : []);
-      } catch (error) {
-        toast.error(error?.response?.data?.message || "Failed to load cashbooks");
-      }
-    })();
-  }, [dispatch, currentCompany?._id]);
+  }, [dispatch, currentCompany?._id, landlords?.length, propertiesLoaded]);
 
   const loadRows = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -309,94 +188,25 @@ const LandlordAdvancements = () => {
     loadRows();
   }, [loadRows]);
 
-  useEffect(() => {
-    if (!showModal) return;
-    if (form.advanceType !== "future_recoverable") return;
-
-    const computedEndDate = computeRecoveryEndDate({
-      startDate: form.startDate,
-      periodMonths: form.periodMonths,
-      gracePeriodMonths: form.gracePeriodMonths,
-    });
-
-    if (computedEndDate && computedEndDate !== form.endDate) {
-      setForm((prev) => ({ ...prev, endDate: computedEndDate }));
-    }
-  }, [showModal, form.advanceType, form.startDate, form.periodMonths, form.gracePeriodMonths, form.endDate]);
-
-  useEffect(() => {
-    if (!showModal) return;
-    setForm((prev) => {
-      if (!prev.title || prev.title === defaultTitleForType(prev.advanceType === "against_payable" ? "future_recoverable" : "against_payable")) {
-        return { ...prev, title: defaultTitleForType(prev.advanceType) };
-      }
-      return prev;
-    });
-  }, [showModal, form.advanceType]);
-
   const safeCurrentPage = Math.min(currentPage, serverPages);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [debouncedSearch, filters.status, filters.landlordId, filters.advanceType]);
 
-  const filteredProperties = useMemo(() => {
-    if (!form.landlord) return activeProperties;
-    const selectedLandlord = activeLandlords.find((item) => String(item._id) === String(form.landlord));
-    return activeProperties.filter((property) =>
-      propertyBelongsToLandlord(property, form.landlord, selectedLandlord?.landlordName)
-    );
-  }, [activeLandlords, activeProperties, form.landlord]);
-  const filteredPropertyOptions = useMemo(
-    () => filteredProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || p.propertyCode || "Property" })),
-    [filteredProperties]
-  );
-  const cashbookOptions = useMemo(
-    () => cashbooks.map((account) => ({ value: account._id, label: account.name || account.accountName || account.code })),
-    [cashbooks]
-  );
-
-  const stats = useMemo(
-    () => ({
-      total: serverTotal,
-      totalDisbursed: rows.reduce((sum, row) => sum + Number(row?.disbursedAt ? row.amount || 0 : 0), 0),
-      earlyPayouts: rows.reduce(
-        (sum, row) => sum + Number(row?.advanceType === "against_payable" ? row.alreadyPaidToLandlord || 0 : 0),
-        0
-      ),
-      recoverableOutstanding: rows.reduce(
-        (sum, row) => sum + Number(row?.advanceType === "future_recoverable" ? row.outstandingRecoverableAmount || 0 : 0),
-        0
-      ),
-      totalRecovered: rows.reduce((sum, row) => sum + Number(row.totalRecoveredAmount || 0), 0),
-    }),
-    [rows, serverTotal]
-  );
-
   const selectedRecoveryPeriod = useMemo(() => {
     const periods = recoveryModal.row?.eligibleRecoveryPeriods || [];
     return periods.find((item) => item.periodKey === recoveryModal.periodKey) || periods[0] || null;
   }, [recoveryModal.row, recoveryModal.periodKey]);
 
-  const resetModal = () => {
-    if (_laDraftKey) { try { window.sessionStorage.removeItem(_laDraftKey); } catch {} }
-    setShowModal(false);
-    setEditingId("");
-    setForm(blankForm);
-  };
-
   const openCreate = () => {
     if (!canWrite) { toast.warning("You don't have permission to create landlord advancements"); return; }
-    setEditingId("");
-    setForm(blankForm);
-    setShowModal(true);
+    navigate("/landlords/advancement/new");
   };
 
   const openEdit = (row) => {
     if (!canWrite) { toast.warning("You don't have permission to edit landlord advancements"); return; }
-    setEditingId(row._id);
-    setForm(mapRowToForm(row));
-    setShowModal(true);
+    navigate(`/landlords/advancement/${row._id}/edit`);
   };
 
   const submitAction = async (fn) => {
@@ -407,50 +217,6 @@ const LandlordAdvancements = () => {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleSave = async () => {
-    if (!form.landlord) return toast.warning("Select the landlord");
-    if (!form.property) return toast.warning("Select the property");
-    if (!Number(form.amount || 0) || Number(form.amount) <= 0) return toast.warning("Enter a valid amount");
-    if (!form.disbursementDate) return toast.warning("Disbursement date is required");
-
-    if (form.advanceType === "future_recoverable") {
-      if (!form.startDate) return toast.warning("Recovery start date is required");
-      if (!form.periodMonths && !form.endDate) return toast.warning("Provide how many statement periods to recover over");
-    }
-
-    const payload = {
-      business: currentCompany?._id,
-      company: currentCompany?._id,
-      advanceType: form.advanceType,
-      landlord: form.landlord,
-      property: form.property,
-      title: form.title?.trim() || defaultTitleForType(form.advanceType),
-      narration: form.narration?.trim() || "",
-      notes: form.notes?.trim() || "",
-      amount: Number(form.amount),
-      disbursementDate: form.disbursementDate,
-      startDate: form.advanceType === "future_recoverable" ? form.startDate : form.disbursementDate,
-      endDate: form.advanceType === "future_recoverable" ? form.endDate || null : form.disbursementDate,
-      periodMonths: form.advanceType === "future_recoverable" ? Number(form.periodMonths || 0) || null : null,
-      gracePeriodMonths: form.advanceType === "future_recoverable" ? Number(form.gracePeriodMonths || 0) : 0,
-      frequency: form.advanceType === "future_recoverable" ? form.frequency : "monthly",
-      paymentMethod: form.paymentMethod,
-      cashbook: form.cashbook || null,
-      status: form.status,
-    };
-
-    await submitAction(async () => {
-      try {
-        if (editingId) await updateLandlordAdvancement(editingId, payload);
-        else await createLandlordAdvancement(payload);
-        toast.success(`Landlord advance ${editingId ? "updated" : "saved"}`);
-        resetModal();
-      } catch (error) {
-        toast.error(error?.response?.data?.message || "Failed to save landlord advance");
-      }
-    });
   };
 
   const handleStatus = async (row, status, successMessage = "") => {
@@ -481,6 +247,12 @@ const LandlordAdvancements = () => {
     });
   };
 
+  // Default narration names the reference and the period being recovered (e.g. "Recovery
+  // of landlord advance LADV0001 for Oct 2026") so the GL/statement trail reads cleanly
+  // without the preparer having to type it out every time.
+  const buildRecoveryNarration = (row, period) =>
+    period ? `Recovery of landlord advance ${row?.referenceNo || ""} for ${period.periodLabel}`.replace(/\s+/g, " ").trim() : "";
+
   const openRecoveryModal = (row) => {
     const firstPeriod = row?.eligibleRecoveryPeriods?.[0] || null;
     setRecoveryModal({
@@ -488,7 +260,7 @@ const LandlordAdvancements = () => {
       row,
       periodKey: firstPeriod?.periodKey || "",
       amount: firstPeriod?.scheduledAmount ? String(firstPeriod.scheduledAmount) : "",
-      note: "",
+      note: buildRecoveryNarration(row, firstPeriod),
     });
   };
 
@@ -535,134 +307,92 @@ const LandlordAdvancements = () => {
     });
   };
 
+  const ACTION_BTN = "inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50";
+  const ACTION_BTN_DANGER = "inline-flex h-6 items-center gap-1 border border-red-300 bg-white px-2 text-[11px] font-bold text-red-600 hover:bg-red-50";
+
   const renderActions = (row) => {
     const actions = [];
 
     if (["draft", "rejected"].includes(row.status)) {
       actions.push(
-        <button
-          key="submit"
-          onClick={() => handleStatus(row, "submitted", "Landlord advance submitted")}
-          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-black text-white"
-        >
-          <FaPaperPlane /> Submit
+        <button key="submit" onClick={() => handleStatus(row, "submitted", "Landlord advance submitted")} className={ACTION_BTN}>
+          <FaPaperPlane size={10} /> Submit
         </button>
       );
       actions.push(
-        <button
-          key="approve"
-          onClick={() => handleStatus(row, "approved", "Landlord advance approved")}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-xs font-black text-white"
-        >
-          <FaCheck /> Approve
+        <button key="approve" onClick={() => handleStatus(row, "approved", "Landlord advance approved")} className={ACTION_BTN}>
+          <FaCheck size={10} /> Approve
         </button>
       );
     }
 
     if (["submitted", "approved", "draft"].includes(row.status)) {
       actions.push(
-        <button
-          key="disburse"
-          onClick={() => handleStatus(row, "disbursed", "Landlord advance disbursed")}
-          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white"
-        >
-          <FaMoneyBillWave /> Disburse
+        <button key="disburse" onClick={() => handleStatus(row, "disbursed", "Landlord advance disbursed")} className={ACTION_BTN}>
+          <FaMoneyBillWave size={10} /> Disburse
         </button>
       );
     }
 
     if (row.advanceType === "future_recoverable" && ["recovering", "disbursed", "paused"].includes(row.status) && (row.eligibleRecoveryPeriods || []).length > 0) {
       actions.push(
-        <button
-          key="recover"
-          onClick={() => openRecoveryModal(row)}
-          className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-3 py-2 text-xs font-black text-white"
-        >
-          <FaClock /> Recover now
+        <button key="recover" onClick={() => openRecoveryModal(row)} className={ACTION_BTN}>
+          <FaClock size={10} /> Recover now
         </button>
       );
     }
 
     if (row.advanceType === "future_recoverable" && row.status === "recovering") {
       actions.push(
-        <button
-          key="pause"
-          onClick={() => handleStatus(row, "paused", "Recoverable advance paused")}
-          className="inline-flex items-center gap-2 rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-xs font-black text-yellow-800"
-        >
-          <FaPause /> Pause
+        <button key="pause" onClick={() => handleStatus(row, "paused", "Recoverable advance paused")} className={ACTION_BTN}>
+          <FaPause size={10} /> Pause
         </button>
       );
     }
 
     if (row.advanceType === "future_recoverable" && row.status === "paused") {
       actions.push(
-        <button
-          key="resume"
-          onClick={() => handleStatus(row, "recovering", "Recoverable advance resumed")}
-          className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
-        >
-          <FaPlay /> Resume
+        <button key="resume" onClick={() => handleStatus(row, "recovering", "Recoverable advance resumed")} className={ACTION_BTN}>
+          <FaPlay size={10} /> Resume
         </button>
       );
     }
 
     if (!["reversed", "cancelled", "cleared"].includes(row.status) && row.disbursedAt) {
       actions.push(
-        <button
-          key="reverse"
-          onClick={() => handleStatus(row, "reversed", "Landlord advance reversed")}
-          className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 bg-zinc-50 px-3 py-2 text-xs font-black text-zinc-700"
-        >
-          <FaUndo /> Reverse
+        <button key="reverse" onClick={() => handleStatus(row, "reversed", "Landlord advance reversed")} className={ACTION_BTN_DANGER}>
+          <FaUndo size={10} /> Reverse
         </button>
       );
     }
 
     if (!row.disbursedAt && !["cancelled", "rejected", "submitted", "approved", "reversed"].includes(row.status)) {
       actions.push(
-        <button
-          key="cancel"
-          onClick={() => handleStatus(row, "cancelled", "Landlord advance cancelled")}
-          className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
-        >
-          <FaTimes /> Cancel
+        <button key="cancel" onClick={() => handleStatus(row, "cancelled", "Landlord advance cancelled")} className={ACTION_BTN_DANGER}>
+          <FaTimes size={10} /> Cancel
         </button>
       );
     }
 
     if (!row.disbursedAt && !["cancelled", "reversed"].includes(row.status) && canWrite) {
       actions.push(
-        <button
-          key="edit"
-          onClick={() => openEdit(row)}
-          className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700"
-        >
-          <FaEdit /> Edit
+        <button key="edit" onClick={() => openEdit(row)} className={ACTION_BTN}>
+          <FaEdit size={10} /> Edit
         </button>
       );
     }
 
     if (!row.disbursedAt && canWrite) {
       actions.push(
-        <button
-          key="delete"
-          onClick={() => handleDelete(row)}
-          className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-black text-rose-700"
-        >
-          <FaTrash /> Delete
+        <button key="delete" onClick={() => handleDelete(row)} className={ACTION_BTN_DANGER}>
+          <FaTrash size={10} /> Delete
         </button>
       );
     }
 
     actions.push(
-      <button
-        key="gl"
-        onClick={() => setGlAdvancement(row)}
-        className="inline-flex items-center gap-2 rounded-xl border border-teal-200 bg-teal-50 px-3 py-2 text-xs font-black text-teal-700"
-        title="View GL Entries"
-      >
-        <FaBook /> GL
+      <button key="gl" onClick={() => setGlAdvancement(row)} className={ACTION_BTN} title="View GL Entries">
+        <FaBook size={10} /> GL
       </button>
     );
 
@@ -705,10 +435,10 @@ const LandlordAdvancements = () => {
             compact
           />
           <ListToolbar.Divider />
-          <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canWrite} onClick={openCreate}>New Advance</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPlus} disabled={!canWrite} onClick={openCreate}>New Advance</ListToolbar.Button>
         </ListToolbar>
 
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden  border border-slate-200 bg-white shadow-sm">
           <MilikTable
             columns={[
               { label: "Reference" },
@@ -720,30 +450,116 @@ const LandlordAdvancements = () => {
             ]}
             rows={rows}
             rowKey="_id"
-            loading={loading}
+            loading={loading && rows.length === 0}
             empty="No landlord advances found."
-            renderExpanded={(row) => (
-              <>
-                <div className="grid gap-2 md:grid-cols-4">
-                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Cashbook</div><div className="mt-1 font-semibold text-slate-900">{row?.cashbook?.name || row?.cashbook?.accountName || "System default"}</div></div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Already paid</div><div className="mt-1 font-semibold text-emerald-700">{money(row.alreadyPaidToLandlord)}</div></div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Outstanding recoverable</div><div className="mt-1 font-semibold text-amber-700">{money(row.outstandingRecoverableAmount)}</div></div>
-                  <div className="rounded-lg border border-slate-200 bg-white p-2"><div className="text-[11px] font-black uppercase text-slate-500">Recovered</div><div className="mt-1 font-semibold text-slate-900">{money(row.totalRecoveredAmount)}</div></div>
+            renderExpanded={(row) => {
+              if (row.advanceType !== "future_recoverable") {
+                return (
+                  <div className="border border-slate-200 bg-white">
+                    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                      <p className="text-[11px] font-black uppercase tracking-wide text-slate-700">Early Payout Details</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 p-2.5 text-[11px] md:grid-cols-4">
+                      <div><span className="font-bold text-slate-900">Cashbook:</span> <span className="text-slate-600">{row?.cashbook?.name || row?.cashbook?.accountName || "System default"}</span></div>
+                      <div><span className="font-bold text-slate-900">Already paid:</span> <span className="text-slate-600">{money(row.alreadyPaidToLandlord)}</span></div>
+                      <div><span className="font-bold text-slate-900">Narration:</span> <span className="text-slate-600">{row.narration || "—"}</span></div>
+                      <div><span className="font-bold text-slate-900">Notes:</span> <span className="text-slate-600">{row.notes || "—"}</span></div>
+                    </div>
+                  </div>
+                );
+              }
+
+              const scheduleRows = row.amortizationSchedule || [];
+              return (
+                <div className="border border-slate-200 bg-white">
+                  <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+                    <p className="text-[11px] font-black uppercase tracking-wide text-slate-700">
+                      {statusLabel(row.frequency)} Recovery Schedule · {fmtDate(row.computedRecoveryStartDate)} – {fmtDate(row.computedRecoveryEndDate)}
+                    </p>
+                  </div>
+                  {scheduleRows.length === 0 ? (
+                    <p className="px-3 py-2.5 text-xs text-slate-500">No scheduled periods.</p>
+                  ) : (
+                    <div className="max-h-80 overflow-y-auto">
+                      <table className="w-full text-[11px]">
+                        <thead className="sticky top-0">
+                          <tr className="border-b border-slate-200 bg-slate-50">
+                            <th className="px-3 py-1 text-left font-bold uppercase tracking-wide text-slate-500">Period</th>
+                            <th className="px-3 py-1 text-left font-bold uppercase tracking-wide text-slate-500">Due</th>
+                            <th className="px-3 py-1 text-right font-bold uppercase tracking-wide text-slate-500">Amount</th>
+                            <th className="px-3 py-1 text-center font-bold uppercase tracking-wide text-slate-500">Status</th>
+                            <th className="px-3 py-1 text-right font-bold uppercase tracking-wide text-slate-500">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {scheduleRows.map((item) => {
+                            const statusTxt = item.processed ? "Recovered" : item.isEligible ? "Due" : "Upcoming";
+                            const statusCls = item.processed
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : item.isEligible
+                              ? "border-amber-200 bg-amber-50 text-amber-700"
+                              : "border-slate-200 bg-slate-50 text-slate-400";
+                            return (
+                              <tr key={item.periodKey} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                                <td className="px-3 py-1.5 font-semibold text-slate-900 border-r border-gray-100">{item.periodLabel}</td>
+                                <td className="px-3 py-1.5 text-slate-600 border-r border-gray-100">{fmtDate(item.dueDate)}</td>
+                                <td className="px-3 py-1.5 text-right font-bold tabular-nums border-r border-gray-100 text-slate-900">
+                                  {money(item.processed ? item.processedAmount : item.scheduledAmount)}
+                                </td>
+                                <td className="px-3 py-1.5 text-center border-r border-gray-100">
+                                  <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${statusCls}`}>{statusTxt}</span>
+                                </td>
+                                <td className="px-3 py-1.5 text-right">
+                                  {item.processed ? (
+                                    <button
+                                      onClick={() => handleCancelRecovery(row, item.recoveryId)}
+                                      className="inline-flex h-6 items-center gap-1 border border-red-300 bg-white px-2 text-[11px] font-bold text-red-600 hover:bg-red-50"
+                                    >
+                                      <FaUndo size={9} /> Cancel
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() =>
+                                        item.isEligible &&
+                                        openRecoveryModal({
+                                          ...row,
+                                          eligibleRecoveryPeriods: [item, ...(row.eligibleRecoveryPeriods || []).filter((entry) => entry.periodKey !== item.periodKey)],
+                                        })
+                                      }
+                                      disabled={!item.isEligible}
+                                      title={!item.isEligible ? "Not yet due" : undefined}
+                                      className="inline-flex h-6 items-center gap-1 border border-slate-300 bg-white px-2 text-[11px] font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300"
+                                    >
+                                      <FaClock size={9} /> Recover
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
-                <div className="mt-2 rounded-lg border border-slate-200 bg-white p-2 text-xs text-slate-700"><span className="font-black text-slate-900">Narration:</span> {row.narration || "—"} <span className="ml-3 font-black text-slate-900">Notes:</span> {row.notes || "—"}</div>
-              </>
-            )}
+              );
+            }}
             renderRow={(row) => {
               const landlordLabel = row?.landlord?.landlordName || [row?.landlord?.firstName, row?.landlord?.lastName].filter(Boolean).join(" ") || row?.landlord?.email || "Landlord";
               const propertyLabel = row?.property?.propertyName || row?.property?.name || row?.property?.propertyCode || "Property";
               return (
                 <>
-                  <td className="px-3 py-1 border-r border-gray-100 font-black text-slate-900">{row.referenceNo}</td>
-                  <td className="px-3 py-1 border-r border-gray-100"><div className="font-semibold text-slate-900">{landlordLabel}</div><div className="text-[10px] text-slate-500">{propertyLabel}</div></td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">{money(row.amount)}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{fmtDate(row.disbursementDate)}</td>
-                  <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold border ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-black text-slate-900 whitespace-nowrap">{row.referenceNo}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="shrink-0 font-semibold text-slate-900 truncate max-w-[60%]">{landlordLabel}</span>
+                      <span className="min-w-0 truncate text-[10px] text-slate-500">{propertyLabel}</span>
+                    </div>
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 overflow-hidden"><span className="truncate block">{TYPE_OPTIONS.find((item) => item.value === row.advanceType)?.label || statusLabel(row.advanceType)}</span></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-black text-slate-900 whitespace-nowrap">{money(row.amount)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 whitespace-nowrap">{fmtDate(row.disbursementDate)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100"><span className={`inline-flex px-2 py-0.5 text-[10px] font-bold border ${STATUS_STYLES[row.status] || STATUS_STYLES.draft}`}>{statusLabel(row.status)}</span></td>
                 </>
               );
             }}
@@ -765,331 +581,87 @@ const LandlordAdvancements = () => {
       </div>
       </div>
 
-      {showModal && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/55 p-4">
-          <div className="max-h-[92vh] w-full max-w-5xl overflow-hidden rounded-[32px] bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0B3B2E] px-6 py-5 text-white">
-              <div>
-                <div className="text-xs font-black uppercase tracking-[0.22em] text-emerald-200">
-                  {editingId ? "Edit landlord advance" : "New landlord advance"}
-                </div>
-                <h3 className="mt-1 text-2xl font-black">
-                  {form.advanceType === "against_payable" ? "Early payout / against current payable" : "Future recoverable landlord advance"}
-                </h3>
-              </div>
-              <button onClick={resetModal} className="rounded-full border border-white/30 p-2 text-white">
-                <FaTimes />
-              </button>
-            </div>
-
-            <div className="max-h-[calc(92vh-84px)] overflow-y-auto p-6">
-              <div className="grid gap-5 xl:grid-cols-3">
-                {TYPE_OPTIONS.map((option) => {
-                  const active = form.advanceType === option.value;
-                  return (
-                    <button
-                      key={option.value}
-                      onClick={() =>
-                        setForm((prev) => ({
-                          ...prev,
-                          advanceType: option.value,
-                          title: !prev.title || prev.title === defaultTitleForType(prev.advanceType) ? defaultTitleForType(option.value) : prev.title,
-                          status: prev.status === "recovering" && option.value === "against_payable" ? "draft" : prev.status,
-                        }))
-                      }
-                      className={`rounded-3xl border p-5 text-left transition ${active ? "border-[#0B3B2E] bg-emerald-50 shadow-sm" : "border-slate-200 bg-white hover:border-slate-300"}`}
-                    >
-                      <div className="font-black text-slate-900">{option.label}</div>
-                      <div className="mt-2 text-sm text-slate-600">{option.hint}</div>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-6 rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-                {form.advanceType === "against_payable" ? (
-                  <>
-                    <div className="font-black text-slate-900">This is an early payout, not a loan.</div>
-                    <div className="mt-1">Milik will validate the current landlord payable. On disbursement the module posts Dr Landlord Remittance Payable and Cr the selected cashbook.</div>
-                  </>
-                ) : (
-                  <>
-                    <div className="font-black text-slate-900">This is a recoverable advance.</div>
-                    <div className="mt-1">Milik posts the disbursement to Landlord Advances Recoverable, then lets you recover from future statements safely and auditable.</div>
-                  </>
-                )}
-              </div>
-
-              <div className="mt-6 grid gap-4 xl:grid-cols-3">
-                <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Landlord</span>
-                  <AppSelect
-                    value={form.landlord}
-                    onChange={(v) => setForm((prev) => ({ ...prev, landlord: v ?? "", property: "" }))}
-                    options={activeLandlordOptions}
-                    placeholder="Select landlord…"
-                    searchable
-                    clearable
-                    size="md"
-                  />
-                </div>
-
-                <div>
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property</span>
-                  <AppSelect
-                    value={form.property}
-                    onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
-                    options={filteredPropertyOptions}
-                    placeholder="Select property…"
-                    searchable
-                    clearable
-                    size="md"
-                  />
-                </div>
-
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Initial workflow step</span>
-                  <AppSelect
-                    value={form.status || null}
-                    onChange={(v) => setForm((prev) => ({ ...prev, status: v ?? "draft" }))}
-                    options={INITIAL_STATUS_OPTIONS}
-                    size="md"
-                  />
-                </label>
-
-                <label className="block xl:col-span-2">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Title</span>
-                  <input
-                    value={form.title}
-                    onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={form.amount}
-                    onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Disbursement date</span>
-                  <input
-                    type="date"
-                    value={form.disbursementDate}
-                    onChange={(e) => setForm((prev) => ({ ...prev, disbursementDate: e.target.value, startDate: prev.advanceType === "against_payable" ? e.target.value : prev.startDate }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment method</span>
-                  <AppSelect
-                    value={form.paymentMethod || null}
-                    onChange={(v) => setForm((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
-                    options={[
-                      { value: "bank_transfer", label: "Bank transfer" },
-                      { value: "mpesa", label: "M-Pesa" },
-                      { value: "cheque", label: "Cheque" },
-                      { value: "cash", label: "Cash" },
-                      { value: "other", label: "Other" },
-                    ]}
-                    size="md"
-                  />
-                </label>
-
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook / payout account</span>
-                  <AppSelect
-                    value={form.cashbook || null}
-                    onChange={(v) => setForm((prev) => ({ ...prev, cashbook: v ?? "" }))}
-                    options={cashbookOptions}
-                    placeholder="Use system default"
-                    searchable
-                    clearable
-                    size="md"
-                  />
-                </label>
-
-                {form.advanceType === "future_recoverable" ? (
-                  <>
-                    <label className="block">
-                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recover from next statement starting</span>
-                      <input
-                        type="date"
-                        value={form.startDate}
-                        onChange={(e) => setForm((prev) => ({ ...prev, startDate: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recover over next X statements</span>
-                      <input
-                        type="number"
-                        min="1"
-                        value={form.periodMonths}
-                        onChange={(e) => setForm((prev) => ({ ...prev, periodMonths: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Grace period (months)</span>
-                      <input
-                        type="number"
-                        min="0"
-                        value={form.gracePeriodMonths}
-                        onChange={(e) => setForm((prev) => ({ ...prev, gracePeriodMonths: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Frequency</span>
-                      <AppSelect
-                        value={form.frequency || null}
-                        onChange={(v) => setForm((prev) => ({ ...prev, frequency: v ?? "monthly" }))}
-                        options={[
-                          { value: "monthly", label: "Monthly" },
-                          { value: "weekly", label: "Weekly" },
-                          { value: "quarterly", label: "Quarterly" },
-                          { value: "yearly", label: "Yearly" },
-                        ]}
-                        size="sm"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-0.5 block text-xs font-semibold text-slate-700">Computed recovery end date</span>
-                      <input
-                        type="date"
-                        value={form.endDate}
-                        onChange={(e) => setForm((prev) => ({ ...prev, endDate: e.target.value }))}
-                        className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                      />
-                    </label>
-                  </>
-                ) : null}
-
-                <label className="block xl:col-span-3">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
-                  <textarea
-                    rows={3}
-                    value={form.narration}
-                    onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </label>
-
-                <label className="block xl:col-span-3">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Internal notes</span>
-                  <textarea
-                    rows={3}
-                    value={form.notes}
-                    onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-                    className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
-                </label>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={resetModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
-              >
-                <FaSave /> {saving ? "Saving..." : editingId ? "Update landlord advance" : "Save landlord advance"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {recoveryModal.open && (
-        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/60 p-4">
-          <div className="w-full max-w-2xl overflow-hidden rounded-[32px] bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-amber-600 px-6 py-5 text-white">
-              <div>
-                <div className="text-xs font-black uppercase tracking-[0.22em] text-amber-100">Recoverable advance</div>
-                <h3 className="mt-1 text-2xl font-black">Apply recovery to statement</h3>
-              </div>
-              <button onClick={closeRecoveryModal} className="rounded-full border border-white/30 p-2 text-white">
-                <FaTimes />
+        <div className="fixed inset-0 z-[130] flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">Apply Recovery</h2>
+              <button onClick={closeRecoveryModal} className="text-white/70 transition-colors hover:text-white">
+                <FaTimes size={14} />
               </button>
             </div>
 
-            <div className="space-y-5 p-6">
-              <div className="rounded-3xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                <div className="font-black">{rowTitle(recoveryModal.row)}</div>
-                <div className="mt-1">
-                  Recoveries post separately on the landlord statement and reduce the outstanding recoverable advance balance.
+            <div className="flex-1 overflow-y-auto bg-white px-5 py-4">
+              <FormSection title={rowTitle(recoveryModal.row)}>
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Eligible statement period</label>
+                    <AppSelect
+                      value={recoveryModal.periodKey || null}
+                      onChange={(v) => {
+                        const periods = recoveryModal.row?.eligibleRecoveryPeriods || [];
+                        const selected = periods.find((item) => item.periodKey === v);
+                        setRecoveryModal((prev) => {
+                          const previouslySelected = periods.find((item) => item.periodKey === prev.periodKey);
+                          const noteIsStillDefault = prev.note === buildRecoveryNarration(prev.row, previouslySelected);
+                          return {
+                            ...prev,
+                            periodKey: v ?? "",
+                            amount: selected?.scheduledAmount ? String(selected.scheduledAmount) : prev.amount,
+                            note: noteIsStillDefault ? buildRecoveryNarration(prev.row, selected) : prev.note,
+                          };
+                        });
+                      }}
+                      options={(recoveryModal.row?.eligibleRecoveryPeriods || []).map((item) => ({
+                        value: item.periodKey,
+                        label: `${item.periodLabel} · Scheduled ${money(item.scheduledAmount)}`,
+                      }))}
+                      size="md"
+                    />
+                    {selectedRecoveryPeriod && (
+                      <p className="mt-1 text-[10px] text-slate-500">
+                        Window: {fmtDate(selectedRecoveryPeriod.periodStart)} – {fmtDate(selectedRecoveryPeriod.periodEnd)} · Outstanding: {money(recoveryModal.row?.outstandingRecoverableAmount)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className={formLabelClass}>Recovery amount</label>
+                    <input
+                      type="number"
+                      value={recoveryModal.amount}
+                      onChange={(e) => setRecoveryModal((prev) => ({ ...prev, amount: e.target.value }))}
+                      className={formInputClass}
+                    />
+                  </div>
+
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Narration <span className="font-normal text-slate-400">(optional)</span></label>
+                    <textarea
+                      rows={2}
+                      value={recoveryModal.note}
+                      onChange={(e) => setRecoveryModal((prev) => ({ ...prev, note: e.target.value }))}
+                      className="w-full resize-none border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                    />
+                  </div>
                 </div>
-              </div>
+              </FormSection>
 
-              <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Eligible statement period</span>
-                <AppSelect
-                  value={recoveryModal.periodKey || null}
-                  onChange={(v) => {
-                    const selected = (recoveryModal.row?.eligibleRecoveryPeriods || []).find((item) => item.periodKey === v);
-                    setRecoveryModal((prev) => ({
-                      ...prev,
-                      periodKey: v ?? "",
-                      amount: selected?.scheduledAmount ? String(selected.scheduledAmount) : prev.amount,
-                    }));
-                  }}
-                  options={(recoveryModal.row?.eligibleRecoveryPeriods || []).map((item) => ({
-                    value: item.periodKey,
-                    label: `${item.periodLabel} • Scheduled ${money(item.scheduledAmount)}`,
-                  }))}
-                  size="sm"
-                />
-              </label>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="block">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">Recovery amount</span>
-                  <input
-                    type="number"
-                    value={recoveryModal.amount}
-                    onChange={(e) => setRecoveryModal((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-600"
-                  />
-                </label>
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                  <div className="font-black text-slate-900">{selectedRecoveryPeriod?.periodLabel || "No period selected"}</div>
-                  <div className="mt-2">Window: {fmtDate(selectedRecoveryPeriod?.periodStart)} to {fmtDate(selectedRecoveryPeriod?.periodEnd)}</div>
-                  <div className="mt-1">Outstanding balance: {money(recoveryModal.row?.outstandingRecoverableAmount)}</div>
-                </div>
-              </div>
-
-              <label className="block">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
-                <textarea
-                  rows={3}
-                  value={recoveryModal.note}
-                  onChange={(e) => setRecoveryModal((prev) => ({ ...prev, note: e.target.value }))}
-                  className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-600"
-                />
-              </label>
+              <p className="mt-2 text-[10px] text-slate-400">
+                Recoveries post separately on the landlord statement and reduce the outstanding recoverable advance balance.
+              </p>
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-6 py-4">
-              <button onClick={closeRecoveryModal} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700">
-                Close
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button onClick={closeRecoveryModal} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                Cancel
               </button>
               <button
                 onClick={handleProcessRecovery}
                 disabled={saving}
-                className="inline-flex items-center gap-2 rounded-xl bg-amber-600 px-5 py-3 text-sm font-black text-white disabled:opacity-60"
+                className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
               >
-                <FaCheck /> {saving ? "Processing..." : "Post recovery"}
+                <FaCheck size={11} /> {saving ? "Processing…" : "Post Recovery"}
               </button>
             </div>
           </div>

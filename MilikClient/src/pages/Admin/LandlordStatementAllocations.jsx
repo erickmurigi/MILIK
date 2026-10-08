@@ -1,7 +1,9 @@
 ﻿import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useTabState } from "../../hooks/useTabState";
-import { useSelector } from "react-redux";
+import { useEntityCache } from "../../hooks/useEntityCache";
+import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from "../../redux/selectors";
+import { getProperties } from "../../redux/propertyRedux";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
@@ -9,10 +11,11 @@ import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 import ListToolbar from "../../components/common/ListToolbar";
+import { printTabularList } from "../../utils/printKit";
 import {
-  FaSearch, FaCalendarAlt, FaExchangeAlt, FaHistory, FaShieldAlt,
-  FaTimes, FaCheck, FaInfoCircle, FaMoneyBillWave, FaFileInvoice,
-  FaReceipt, FaFileAlt, FaRedoAlt,
+  FaSearch, FaCalendarAlt, FaExchangeAlt, FaShieldAlt,
+  FaTimes, FaCheck, FaInfoCircle, FaFileInvoice,
+  FaRedoAlt, FaPrint, FaDownload,
   FaUser, FaPlus, FaChevronDown, FaChevronUp, FaWrench,
 } from "react-icons/fa";
 import { fmtDate } from "../../utils/dates";
@@ -38,14 +41,25 @@ const isTerminatedTenant = (t) => {
   return ["terminated", "inactive", "moved_out", "movedout", "closed"].includes(s) || Boolean(t?.terminatedAt);
 };
 
+// "invoice" rows carry a category (subType) of RENT_CHARGE/DEPOSIT_CHARGE/UTILITY_CHARGE/
+// LATE_PENALTY_CHARGE/OTHER_CHARGE — split into their own filter entries instead of one
+// catch-all "Invoices" bucket, since an admin usually wants just one of those at a time.
+const INVOICE_CATEGORY_TABS = [
+  { id: "invoice_RENT_CHARGE",         label: "Rent",         category: "RENT_CHARGE" },
+  { id: "invoice_DEPOSIT_CHARGE",      label: "Deposit",      category: "DEPOSIT_CHARGE" },
+  { id: "invoice_UTILITY_CHARGE",      label: "Utility",      category: "UTILITY_CHARGE" },
+  { id: "invoice_LATE_PENALTY_CHARGE", label: "Late Penalty", category: "LATE_PENALTY_CHARGE" },
+  { id: "invoice_OTHER_CHARGE",        label: "Other Charge", category: "OTHER_CHARGE" },
+];
+
 const TABS = [
-  { id: "all",           label: "All",          icon: null },
-  { id: "payment",       label: "Payments",      icon: FaReceipt },
-  { id: "invoice",       label: "Invoices",      icon: FaFileInvoice },
-  { id: "credit_note",   label: "Credit Notes",  icon: FaFileAlt },
-  { id: "debit_note",    label: "Debit Notes",   icon: FaFileAlt },
-  { id: "meter_reading", label: "Meter Rdgs",    icon: FaMoneyBillWave },
-  { id: "history",       label: "History",       icon: FaHistory },
+  { id: "all",           label: "All" },
+  { id: "payment",       label: "Payments" },
+  ...INVOICE_CATEGORY_TABS,
+  { id: "credit_note",   label: "Credit Notes" },
+  { id: "debit_note",    label: "Debit Notes" },
+  { id: "meter_reading", label: "Meter Rdgs" },
+  { id: "history",       label: "History" },
 ];
 
 const TYPE_COLOR = {
@@ -92,6 +106,20 @@ const PAYMENT_TYPE_LABEL = {
   CHEQUE: "Cheque", CARD: "Card", OTHER: "Other",
 };
 
+// Shared by the on-screen Type badge and the print/export "Type" column so both always
+// agree — see the inline comment this replaced for why the suffixes matter.
+const getRowTypeLabel = (row) => {
+  const isPaid = row._kind === "paid";
+  const baseLabel = row._meterLabel
+    || (row.category === "UTILITY_CHARGE" && row.utilityType ? titleCase(row.utilityType) : null)
+    || CAT_LABEL[row.category] || row.category || (isPaid ? "Payment" : "—");
+  return isPaid
+    ? row.isUnapplied
+      ? (row.isPrepayment && row.prepaymentLabel ? row.prepaymentLabel : "Unapplied")
+      : `${baseLabel}${row.isRecognizedAllocation ? " (Allocation)" : ""}`
+    : baseLabel;
+};
+
 // ─── SIDE PANEL ────────────────────────────────────────────────────────────────
 const SidePanel = React.memo(function SidePanel({ open, onClose, title, subtitle, wide = false, children }) {
   if (!open) return null;
@@ -104,7 +132,7 @@ const SidePanel = React.memo(function SidePanel({ open, onClose, title, subtitle
             <p className="text-sm font-black text-white">{title}</p>
             {subtitle && <p className="mt-0.5 text-xs text-white/70">{subtitle}</p>}
           </div>
-          <button onClick={onClose} className="rounded p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes size={13} /></button>
+          <button onClick={onClose} className=" p-1.5 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes size={13} /></button>
         </div>
         <div className="flex-1 overflow-y-auto">{children}</div>
       </aside>
@@ -113,11 +141,20 @@ const SidePanel = React.memo(function SidePanel({ open, onClose, title, subtitle
 });
 
 export default function LandlordStatementAllocations() {
+  const dispatch        = useDispatch();
   const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const properties     = useSelector(selectAllProperties);
   const isMilikAdmin   = Boolean(currentUser?.isSystemAdmin || currentUser?.superAdminAccess);
   const bizId          = currentCompany?._id;
+  const { propertiesLoaded } = useEntityCache(bizId);
+
+  // This page never dispatched getProperties itself — the Property filter dropdown relied
+  // entirely on some OTHER page having already populated Redux first, so opening this page
+  // directly (a plausible first stop for a Milik Admin) showed an empty dropdown.
+  useEffect(() => {
+    if (bizId && !propertiesLoaded) dispatch(getProperties({ business: bizId }));
+  }, [bizId, propertiesLoaded, dispatch]);
 
   // ── Search state ─────────────────────────────────────────────────────────────
   const [activeTab,  setActiveTab]  = useTabState("/landlord/statement-allocations:activeTab", "all");
@@ -125,9 +162,12 @@ export default function LandlordStatementAllocations() {
   const [dateFrom,   setDateFrom]   = useTabState("/landlord/statement-allocations:dateFrom", "");
   const [dateTo,     setDateTo]     = useTabState("/landlord/statement-allocations:dateTo", "");
   const [property,   setProperty]   = useTabState("/landlord/statement-allocations:property", "");
-  const [results,       setResults]       = useState([]);
+  // results/searched must survive a DashboardLayout tab switch (it unmounts this page) just
+  // like the filter inputs above do — otherwise switching tabs and back silently drops the
+  // search results even though every filter still shows selected, forcing a re-search.
+  const [results,       setResults]       = useTabState("/landlord/statement-allocations:results", []);
   const [loading,       setLoading]       = useState(false);
-  const [searched,      setSearched]      = useState(false);
+  const [searched,      setSearched]      = useTabState("/landlord/statement-allocations:searched", false);
   const [currentPage,   setCurrentPage]   = useTabState("/landlord/statement-allocations:currentPage", 1);
   const [groupsPerPage, setGroupsPerPage] = useTabState("/landlord/statement-allocations:groupsPerPage", 20);
   const [showReversed,  setShowReversed]  = useTabState("/landlord/statement-allocations:showReversed", false);
@@ -140,15 +180,18 @@ export default function LandlordStatementAllocations() {
   const [tenantDropOpen, setTenantDropOpen] = useState(false);
   const [dropPos,        setDropPos]        = useState({ top: 0, left: 0 });
   const [localTenants,   setLocalTenants]   = useState([]);
-  const [tenantsLoading, setTenantsLoading] = useState(false);
+  // Starts true (not false) deliberately — the stale-tenant-clear effect below reads this
+  // in the SAME commit as mount, before the fetch effect's setTenantsLoading(true) has had
+  // a chance to flush, so a false initial value let it slip through and see an empty list.
+  const [tenantsLoading, setTenantsLoading] = useState(true);
   const tenantRef   = useRef(null); // button wrapper — for position calc
   const dropdownRef = useRef(null); // panel — for click-outside (panel is fixed, outside tenantRef)
 
   // ── History state ─────────────────────────────────────────────────────────────
-  const [history,     setHistory]     = useState([]);
+  const [history,     setHistory]     = useTabState("/landlord/statement-allocations:history", []);
   const [histLoading, setHistLoading] = useState(false);
-  const [histPage,    setHistPage]    = useState(1);
-  const [histTotal,   setHistTotal]   = useState(0);
+  const [histPage,    setHistPage]    = useTabState("/landlord/statement-allocations:histPage", 1);
+  const [histTotal,   setHistTotal]   = useTabState("/landlord/statement-allocations:histTotal", 0);
 
   // ── Date-shift / narration panel ──────────────────────────────────────────────
   const [datePanel,    setDatePanel]    = useState(null);
@@ -182,12 +225,16 @@ export default function LandlordStatementAllocations() {
     return () => { cancelled = true; };
   }, [bizId, property]);
 
-  // Clear selected tenant if it's no longer in the fetched list (e.g. after property change)
+  // Clear selected tenant if it's no longer in the fetched list (e.g. after property change).
+  // Must wait for the fetch above to actually finish — selectedTenant survives a tab switch
+  // via useTabState, but localTenants doesn't, so right after a remount this effect would
+  // otherwise see the still-empty [] from the initial useState and wipe a perfectly valid
+  // selection before the real list has even loaded.
   useEffect(() => {
-    if (!selectedTenant) return;
+    if (!selectedTenant || tenantsLoading) return;
     const still = localTenants.find((x) => String(x._id) === String(selectedTenant._id));
     if (!still) { setSelectedTenant(null); setTenantQuery(""); }
-  }, [localTenants]); // eslint-disable-line
+  }, [localTenants, tenantsLoading]); // eslint-disable-line
 
   // ── Tenant combobox derived data ──────────────────────────────────────────────
   const tenantDropList = useMemo(() => {
@@ -237,13 +284,25 @@ export default function LandlordStatementAllocations() {
   }, [results, showReversed]);
 
   const typeCounts = useMemo(() => {
-    const c = { all: filteredBase.length, payment: 0, invoice: 0, credit_note: 0, debit_note: 0, meter_reading: 0 };
-    filteredBase.forEach((r) => { if (r.type in c) c[r.type]++; });
+    const c = { all: filteredBase.length, payment: 0, credit_note: 0, debit_note: 0, meter_reading: 0 };
+    INVOICE_CATEGORY_TABS.forEach((t) => { c[t.id] = 0; });
+    filteredBase.forEach((r) => {
+      if (r.type === "invoice") {
+        const catId = `invoice_${r.subType}`;
+        if (catId in c) c[catId]++;
+      } else if (r.type in c) {
+        c[r.type]++;
+      }
+    });
     return c;
   }, [filteredBase]);
 
   const displayResults = useMemo(() => {
     if (activeTab === "all" || activeTab === "history") return filteredBase;
+    if (activeTab.startsWith("invoice_")) {
+      const category = activeTab.slice("invoice_".length);
+      return filteredBase.filter((r) => r.type === "invoice" && r.subType === category);
+    }
     return filteredBase.filter((r) => r.type === activeTab);
   }, [filteredBase, activeTab]);
 
@@ -376,6 +435,63 @@ export default function LandlordStatementAllocations() {
   }, [tenantGroups]);
 
   const totalLedgerRows = useMemo(() => tenantGroups.reduce((s, g) => s + g.rows.length, 0), [tenantGroups]);
+
+  // Print/export the currently filtered ledger — everything already loaded in tenantGroups
+  // (the full search result, not just the paginated on-screen slice), one section per
+  // tenant to mirror the on-screen grouping.
+  const PRINT_COLUMNS = [
+    { label: "Type", value: (r) => getRowTypeLabel(r) },
+    { label: "Period", value: (r) => fmtPeriod(r.period) },
+    { label: "Narration", value: (r) => r.narration || "-" },
+    { label: "Txn No", value: (r) => (r._kind === "paid" ? r.txnNo : r.invoiceNumber) || "-" },
+    { label: "Ref No", value: (r) => r.refAlt || "-" },
+    { label: "Txn Date", value: (r) => fmtDate(r.txDate) },
+    { label: "Banking Date", value: (r) => fmtDate(r.bankingDate || r.txDate) },
+    { label: "Billed", align: "right", value: (r) => (r.bill > 0 ? fmtKES(r.bill) : "-") },
+    { label: "Paid", align: "right", bold: true, value: (r) => (r.paid > 0 ? fmtKES(r.paid) : "-") },
+    { label: "Status", align: "center", value: (r) => titleCase(r.status) },
+  ];
+
+  const handlePrintList = () => {
+    if (tenantGroups.length === 0) { toast.info("No transactions to print."); return; }
+    const printed = printTabularList({
+      title: "Transaction Ledger",
+      subtitle: `${tenantGroups.length} tenant${tenantGroups.length !== 1 ? "s" : ""} · ${totalLedgerRows} transaction${totalLedgerRows !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      summaryItems: [
+        ["Total Billed", `Ksh ${fmtKES(ledgerTotals.bill)}`],
+        ["Total Paid", `Ksh ${fmtKES(ledgerTotals.paid)}`],
+        ["Outstanding", `Ksh ${fmtKES(round2(ledgerTotals.bill - ledgerTotals.paid))}`],
+      ],
+      sections: tenantGroups.map((group) => {
+        const balance = round2(group.totals.bill - group.totals.paid);
+        const balanceLabel = balance > 0 ? `Owes Ksh ${fmtKES(balance)}` : balance < 0 ? `Credit Ksh ${fmtKES(-balance)}` : "Settled";
+        return {
+          heading: `${group.tenantName} · ${group.unitNumber}${group.propertyName && group.propertyName !== "—" ? ` · ${group.propertyName}` : ""} — ${balanceLabel}`,
+          columns: PRINT_COLUMNS,
+          rows: group.rows,
+          totalsRow: ["", "", "", "", "", "", "Totals", fmtKES(group.totals.bill), fmtKES(group.totals.paid), ""],
+        };
+      }),
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  };
+
+  const handleExportCsv = () => {
+    if (tenantGroups.length === 0) { toast.info("No transactions to export."); return; }
+    const header = ["Tenant", "Unit", "Property", ...PRINT_COLUMNS.map((c) => c.label)];
+    const rows = tenantGroups.flatMap((group) =>
+      group.rows.map((r) => [group.tenantName, group.unitNumber, group.propertyName, ...PRINT_COLUMNS.map((c) => c.value(r))])
+    );
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `statement-allocations-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // Paginate by tenant groups
   const { totalPages, safePage, paginatedGroups } = useMemo(() => {
@@ -698,22 +814,17 @@ export default function LandlordStatementAllocations() {
             {/* ── Sticky header — single scrollable line ── */}
             <ListToolbar>
 
-                {/* Tabs */}
-                {TABS.map((tab) => {
-                  const Icon = tab.icon;
-                  const count = tab.id !== "history" ? typeCounts[tab.id] : histTotal;
-                  const active = activeTab === tab.id;
-                  return (
-                    <ListToolbar.Button key={tab.id} icon={Icon} variant={active ? "primary" : "outline"} onClick={() => setActiveTab(tab.id)}>
-                      {tab.label}
-                      {searched && tab.id !== "history" && (
-                        <span className={`ml-0.5 rounded-full px-1.5 py-px text-[8px] font-black ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"}`}>
-                          {count}
-                        </span>
-                      )}
-                    </ListToolbar.Button>
-                  );
-                })}
+                {/* Transaction type — was 7 separate toolbar tiles, combined into one dropdown
+                    to leave room for the rest of the toolbar. */}
+                <AppSelect
+                  compact
+                  value={activeTab}
+                  onChange={(v) => setActiveTab(v ?? "all")}
+                  options={TABS.map((tab) => ({
+                    value: tab.id,
+                    label: tab.id !== "history" && searched ? `${tab.label} · ${typeCounts[tab.id]}` : tab.label,
+                  }))}
+                />
 
                 <ListToolbar.Divider />
 
@@ -740,7 +851,7 @@ export default function LandlordStatementAllocations() {
                       }
                       setTenantDropOpen((o) => !o);
                     }}
-                    className={`h-7 inline-flex items-center gap-1.5 rounded border px-2 text-xs transition
+                    className={`h-7 inline-flex items-center gap-1.5  border px-2 text-xs transition
                       ${selectedTenant
                         ? "border-[#0B3B2E]/40 bg-[#0B3B2E]/5 text-[#0B3B2E]"
                         : "border-slate-200 bg-white text-slate-500 hover:border-slate-300"}`}>
@@ -760,7 +871,7 @@ export default function LandlordStatementAllocations() {
                   {/* Dropdown panel — fixed so the overflow-x-auto header never clips or scrolls to it */}
                   {tenantDropOpen && (
                     <div ref={dropdownRef}
-                      className="fixed z-[999] w-72 rounded-lg border border-slate-200 bg-white shadow-xl overflow-hidden"
+                      className="fixed z-[999] w-72  border border-slate-200 bg-white shadow-xl overflow-hidden"
                       style={{ top: dropPos.top, left: dropPos.left }}>
                       {/* Search input inside dropdown */}
                       <div className="border-b border-slate-100 p-2 space-y-1.5">
@@ -772,7 +883,7 @@ export default function LandlordStatementAllocations() {
                             value={tenantQuery}
                             onChange={(e) => setTenantQuery(e.target.value)}
                             autoFocus
-                            className="h-7 w-full rounded border border-slate-200 bg-slate-50 pl-6 pr-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+                            className="h-7 w-full  border border-slate-200 bg-slate-50 pl-6 pr-2 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
                           />
                         </div>
                         <label className="flex items-center gap-1.5 cursor-pointer select-none px-0.5">
@@ -820,7 +931,7 @@ export default function LandlordStatementAllocations() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                   <p className={`truncate text-xs font-bold ${isSelected ? "text-[#0B3B2E]" : terminated ? "text-slate-500" : "text-slate-800"}`}>{tName(t)}</p>
-                                  {terminated && <span className="shrink-0 rounded bg-rose-50 px-1 py-px text-[8px] font-bold uppercase tracking-wide text-rose-500">Terminated</span>}
+                                  {terminated && <span className="shrink-0  bg-rose-50 px-1 py-px text-[8px] font-bold uppercase tracking-wide text-rose-500">Terminated</span>}
                                 </div>
                                 <p className="text-[10px] text-slate-500">
                                   {t.tenantCode && <span className="mr-2 font-mono">{t.tenantCode}</span>}
@@ -842,7 +953,7 @@ export default function LandlordStatementAllocations() {
                 <div className="relative shrink-0">
                   <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
                   <ListToolbar.Input
-                    type="text" placeholder="Ref / receipt…" value={refSearch}
+                    type="text" placeholder="Ref / Txn No…" value={refSearch}
                     onChange={(e) => setRefSearch(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && runSearch()}
                     width="w-32" className="pl-5"
@@ -872,13 +983,22 @@ export default function LandlordStatementAllocations() {
                   Show reversed
                 </label>
 
+                <ListToolbar.Divider />
+
+                <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList} disabled={totalLedgerRows === 0} title="Print">
+                  Print
+                </ListToolbar.Button>
+                <ListToolbar.Button icon={FaDownload} variant="outline" onClick={handleExportCsv} disabled={totalLedgerRows === 0} title="Export CSV">
+                  Export
+                </ListToolbar.Button>
+
                 <span className="ml-auto shrink-0 inline-flex items-center gap-1 bg-[#0B3B2E] px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
                   <FaShieldAlt size={8} /> Milik Admin
                 </span>
             </ListToolbar>
 
             {/* ── Table card ── */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden  border border-slate-200 bg-white shadow-sm">
 
               {/* History tab */}
               {activeTab === "history" ? (
@@ -893,7 +1013,7 @@ export default function LandlordStatementAllocations() {
                     ]}
                     rows={history}
                     rowKey="_id"
-                    loading={histLoading}
+                    loading={histLoading && history.length === 0}
                     empty="No adjustments recorded yet"
                     renderRow={(h) => (
                       <>
@@ -902,7 +1022,7 @@ export default function LandlordStatementAllocations() {
                           {h.actor?.firstName ? `${h.actor.firstName} ${h.actor.lastName || ""}`.trim() : h.actor?.username || "-"}
                         </td>
                         <td className="px-2 py-1">
-                          <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold ${
+                          <span className={`inline-block  px-1.5 py-px text-[9px] font-bold ${
                             h.action === "booking_date_adjusted" ? "bg-amber-50 text-amber-700 border border-amber-200"
                             : h.action === "prepayment_recognized" ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
                             : "bg-blue-50 text-blue-700 border border-blue-200"}`}>
@@ -982,7 +1102,7 @@ export default function LandlordStatementAllocations() {
                                   )}
                                   <span className="ml-1 text-[10px] text-slate-400">({group.rows.length} txn{group.rows.length !== 1 ? "s" : ""})</span>
                                 </div>
-                                <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-black border whitespace-nowrap shrink-0 ${
+                                <span className={` px-2.5 py-0.5 text-[10px] font-black border whitespace-nowrap shrink-0 ${
                                   balance > 0 ? "bg-rose-50 text-rose-700 border-rose-200"
                                   : balance < 0 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                   : "bg-slate-50 text-slate-500 border-slate-200"
@@ -1007,14 +1127,7 @@ export default function LandlordStatementAllocations() {
                             // utility invoice's narration often reads as a meter reading), not instead
                             // of it — otherwise a recognized water prepayment would misleadingly render
                             // identically to a normal, non-prepayment water payment.
-                            const baseLabel = row._meterLabel
-                              || (row.category === "UTILITY_CHARGE" && row.utilityType ? titleCase(row.utilityType) : null)
-                              || CAT_LABEL[row.category] || row.category || (isPaid ? "Payment" : "—");
-                            const catLabel = isPaid
-                              ? row.isUnapplied
-                                ? (row.isPrepayment && row.prepaymentLabel ? row.prepaymentLabel : "Unapplied")
-                                : `${baseLabel}${row.isRecognizedAllocation ? " (Allocation)" : ""}`
-                              : baseLabel;
+                            const catLabel = getRowTypeLabel(row);
                             const badgeCls = (row._meterLabel ? CAT_BADGE.METER_READING : CAT_BADGE[row.category]) || (row.isUnapplied ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600");
                             const isReversed = row.status === "reversed";
                             const rowBg = isReversed
@@ -1028,7 +1141,7 @@ export default function LandlordStatementAllocations() {
                               <tr key={row._rowKey} className={`border-b border-slate-100 transition-colors ${rowBg}`}>
                                 {/* ── Type ── */}
                                 <td className={`px-2 py-1.5 border-r border-slate-100 ${isPaid ? "border-l-2 border-l-emerald-400" : "border-l-2 border-l-transparent"}`}>
-                                  <span className={`inline-block rounded px-1.5 py-px text-[10px] font-bold leading-tight ${badgeCls}`}>
+                                  <span className={`inline-block  px-1.5 py-px text-[10px] font-bold leading-tight ${badgeCls}`}>
                                     {catLabel}
                                   </span>
                                 </td>
@@ -1075,7 +1188,7 @@ export default function LandlordStatementAllocations() {
                                 {/* ── Banking Date ── */}
                                 <td className="px-2 py-1 border-r border-slate-100 text-center whitespace-nowrap">
                                   {hasOverride
-                                    ? <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-px text-[9px] font-bold text-amber-700 border border-amber-200">⚡ {fmtDate(row.bankingDate)}</span>
+                                    ? <span className="inline-flex items-center gap-1  bg-amber-50 px-1.5 py-px text-[9px] font-bold text-amber-700 border border-amber-200">⚡ {fmtDate(row.bankingDate)}</span>
                                     : <span className="text-[11px] text-slate-500">{fmtDate(row.bankingDate || row.txDate)}</span>}
                                 </td>
 
@@ -1109,7 +1222,7 @@ export default function LandlordStatementAllocations() {
 
                                 {/* ── Status ── */}
                                 <td className="px-2 py-1 border-r border-slate-100 text-center">
-                                  <span className={`inline-block rounded-full px-1.5 py-px text-[9px] font-bold capitalize ${STATUS_CLS[row.status] || "bg-slate-50 text-slate-600 border border-slate-200"}`}>
+                                  <span className={`inline-block  px-1.5 py-px text-[9px] font-bold capitalize ${STATUS_CLS[row.status] || "bg-slate-50 text-slate-600 border border-slate-200"}`}>
                                     {(row.status || "").replace(/_/g, " ")}
                                   </span>
                                 </td>
@@ -1129,11 +1242,11 @@ export default function LandlordStatementAllocations() {
                                       <div className="relative inline-block">
                                         <button
                                           onClick={(e) => { e.stopPropagation(); setOpenActionRow(isOpen ? null : row._rowKey); }}
-                                          className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-white px-2 py-px text-[10px] font-black text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition">
+                                          className="inline-flex items-center gap-0.5  border border-slate-200 bg-white px-2 py-px text-[10px] font-black text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] transition">
                                           •••
                                         </button>
                                         {isOpen && (
-                                          <div className="absolute right-0 z-20 mt-1 w-32 rounded-lg border border-slate-200 bg-white shadow-lg py-1"
+                                          <div className="absolute right-0 z-20 mt-1 w-32  border border-slate-200 bg-white shadow-lg py-1"
                                             onClick={(e) => e.stopPropagation()}
                                             onMouseLeave={() => setOpenActionRow(null)}>
                                             {canEdit && (
@@ -1216,7 +1329,7 @@ export default function LandlordStatementAllocations() {
         subtitle={datePanel ? `${(datePanel.type || "").replace(/_/g, " ")} · ${datePanel.refNumber}` : ""}>
         {datePanel && (
           <div className="space-y-4 p-5">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
+            <div className=" border border-slate-200 bg-slate-50 p-3 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 {[["Tenant", datePanel.tenantName], ["Unit", datePanel.unitNumber], ["Amount", `Ksh ${fmtKES(datePanel.amount)}`], ["Status", datePanel.status]].map(([l, v]) => (
                   <div key={l}><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{l}</p><p className="mt-0.5 font-bold text-slate-800 capitalize">{v || "-"}</p></div>
@@ -1225,12 +1338,12 @@ export default function LandlordStatementAllocations() {
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-lg border border-slate-200 p-3">
+              <div className=" border border-slate-200 p-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Current</p>
                 <p className="mt-1 text-sm font-bold text-slate-800">{fmtDate(datePanel.bookingDate || datePanel.transactionDate)}</p>
                 {origPeriod && <p className="mt-0.5 text-xs text-slate-500">Period: <strong>{origPeriod}</strong></p>}
               </div>
-              <div className="rounded-lg border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 p-3">
+              <div className=" border border-[#0B3B2E]/20 bg-[#0B3B2E]/5 p-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-[#0B3B2E]/60">New</p>
                 <p className="mt-1 text-sm font-bold text-[#0B3B2E]">{newBookDate ? fmtDate(newBookDate) : "—"}</p>
                 {periodLabel && <p className="mt-0.5 text-xs text-[#0B3B2E]/70">Period: <strong>{periodLabel}</strong></p>}
@@ -1238,13 +1351,13 @@ export default function LandlordStatementAllocations() {
             </div>
 
             {datePanel.type === "meter_reading" && (
-              <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
+              <div className="flex gap-2  border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
                 <FaInfoCircle className="mt-0.5 shrink-0" size={11} />
                 <p>For meter readings, the linked invoice ({datePanel.linkedInvoiceNumber || "linked"}) booking date will be adjusted.</p>
               </div>
             )}
             {datePanel.type === "payment" && (
-              <div className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
+              <div className="flex gap-2  border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-700">
                 <FaInfoCircle className="mt-0.5 shrink-0" size={11} />
                 <p>Changing the booking date moves this receipt <strong>{datePanel.refNumber}</strong> to a different financial period. The original transaction date stays unchanged.</p>
               </div>
@@ -1253,7 +1366,7 @@ export default function LandlordStatementAllocations() {
             <div>
               <label className="mb-0.5 block text-xs font-semibold text-slate-700">Booking Date</label>
               <input type="date" value={newBookDate} onChange={(e) => setNewBookDate(e.target.value)}
-                className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                className="w-full  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               <p className="mt-1 text-[10px] text-slate-400">Leave unchanged to keep current date</p>
             </div>
 
@@ -1264,19 +1377,19 @@ export default function LandlordStatementAllocations() {
               )}
               <textarea rows={2} value={newNarration} onChange={(e) => setNewNarration(e.target.value)}
                 placeholder="e.g. Rent for Jun/2026 — corrected narration"
-                className="w-full resize-none rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                className="w-full resize-none  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
             </div>
 
             <div>
               <label className="mb-0.5 block text-xs font-semibold text-slate-700">Reason for change <span className="text-red-500">*</span></label>
               <textarea rows={2} value={dateReason} onChange={(e) => setDateReason(e.target.value)}
                 placeholder="e.g. PM requested move to June statement…"
-                className="w-full resize-none rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                className="w-full resize-none  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
             </div>
             <div className="flex gap-2">
-              <button onClick={closeDatePanel} className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={closeDatePanel} className="flex-1  border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
               <button onClick={saveDateShift} disabled={dateSaving || !dateReason.trim()}
-                className="flex-1 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                className="flex-1  bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                 {dateSaving ? "Saving…" : "Save Changes"}
               </button>
             </div>
@@ -1307,7 +1420,7 @@ export default function LandlordStatementAllocations() {
                 <p className="mb-2 text-xs font-black uppercase tracking-wider text-slate-700">Allocation Breakdown</p>
                 <div className="space-y-1.5">
                   {reallocRows.length === 0 && (
-                    <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-400">
+                    <p className=" border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-400">
                       No allocations yet — add invoices below
                     </p>
                   )}
@@ -1321,7 +1434,7 @@ export default function LandlordStatementAllocations() {
                         : `Outstanding: Ksh ${fmtKES(row.outstanding)}`
                       : null;
                     return (
-                      <div key={idx} className={`rounded-lg border px-3 py-2 text-xs ${isDeposit ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
+                      <div key={idx} className={` border px-3 py-2 text-xs ${isDeposit ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"}`}>
                         <div className="flex items-center gap-2">
                           <div className="flex-1 min-w-0">
                             <p className="truncate font-bold text-slate-800">{row.invoiceNumber || "Unapplied"}</p>
@@ -1337,7 +1450,7 @@ export default function LandlordStatementAllocations() {
                           <span className="text-[10px] text-slate-400 shrink-0">Ksh</span>
                           <input type="number" min="0" step="0.01" value={row.amount}
                             onChange={(e) => updateRow(idx, e.target.value)}
-                            className="w-28 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-right outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                            className="w-28  border border-slate-200 bg-white px-2 py-1 text-xs text-right outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                           <button onClick={() => removeRow(idx)} className="text-slate-400 hover:text-red-500 shrink-0"><FaTimes size={11} /></button>
                         </div>
                         {isDeposit && (
@@ -1351,7 +1464,7 @@ export default function LandlordStatementAllocations() {
                 </div>
 
                 {/* Running total + balance bar */}
-                <div className={`mt-2 flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${reallocValid ? "border-emerald-200 bg-emerald-50" : remaining > 0 ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}>
+                <div className={`mt-2 flex items-center justify-between  border px-3 py-2 text-xs ${reallocValid ? "border-emerald-200 bg-emerald-50" : remaining > 0 ? "border-amber-200 bg-amber-50" : "border-red-200 bg-red-50"}`}>
                   <span className={`font-bold ${reallocValid ? "text-emerald-700" : remaining > 0 ? "text-amber-700" : "text-red-600"}`}>
                     {reallocValid
                       ? <span className="flex items-center gap-1"><FaCheck size={9} /> Total matches payment</span>
@@ -1369,7 +1482,7 @@ export default function LandlordStatementAllocations() {
                   </button>
                   {prepayTypeOptions.length > 1 && (
                     <select value={prepayType} onChange={(e) => setPrepayType(e.target.value)}
-                      className="h-6 rounded border border-slate-200 bg-white px-1.5 text-[10px] font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
+                      className="h-6  border border-slate-200 bg-white px-1.5 text-[10px] font-semibold text-slate-700 outline-none focus:border-[#0B3B2E]">
                       {prepayTypeOptions.map((o) => (
                         <option key={o.billItemKey} value={o.billItemKey}>{o.label}</option>
                       ))}
@@ -1377,7 +1490,7 @@ export default function LandlordStatementAllocations() {
                   )}
                   <button onClick={markAsPrepayment}
                     title="Clear all rows and park the full amount as an unallocated prepayment credit"
-                    className="inline-flex items-center gap-1 rounded border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition-colors">
+                    className="inline-flex items-center gap-1  border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 px-2.5 py-1 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white transition-colors">
                     <FaExchangeAlt size={8} /> Mark as Prepayment
                   </button>
                 </div>
@@ -1392,13 +1505,13 @@ export default function LandlordStatementAllocations() {
                     {!invLoading && <span className="ml-1 text-[10px] font-normal normal-case text-slate-500">({filteredAvailInvoices.length})</span>}
                   </p>
                   {remaining > 0 && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
+                    <span className=" bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 border border-amber-200">
                       Ksh {fmtKES(remaining)} to allocate
                     </span>
                   )}
                   <button onClick={runRepair} disabled={repairing || invLoading}
                     title="Recompute all invoice balances for this tenant from scratch — fixes stale outstanding figures"
-                    className="ml-auto inline-flex items-center gap-1 rounded border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-600 hover:text-white hover:border-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    className="ml-auto inline-flex items-center gap-1  border border-rose-300 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700 hover:bg-rose-600 hover:text-white hover:border-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
                     <FaWrench size={8} /> {repairing ? "Repairing…" : "Repair Balances"}
                   </button>
                 </div>
@@ -1409,22 +1522,22 @@ export default function LandlordStatementAllocations() {
                     <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" size={9} />
                     <input type="text" placeholder="Filter by invoice number or category…" value={invFilter}
                       onChange={(e) => setInvFilter(e.target.value)}
-                      className="w-full rounded border border-slate-200 bg-white py-1.5 pl-6 pr-3 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                      className="w-full  border border-slate-200 bg-white py-1.5 pl-6 pr-3 text-xs text-slate-700 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
                   </div>
                 )}
 
                 {!invLoading && filteredAvailInvoices.length === 0 && availInvoices.length > 0 && (
-                  <p className="rounded-lg border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-400">
+                  <p className=" border border-dashed border-slate-200 px-3 py-3 text-center text-xs text-slate-400">
                     No invoices match the filter
                   </p>
                 )}
                 {!invLoading && availInvoices.length === 0 && (
-                  <div className="rounded-lg border border-dashed border-[#0B3B2E]/20 bg-[#0B3B2E]/[0.03] px-4 py-4 text-center">
+                  <div className=" border border-dashed border-[#0B3B2E]/20 bg-[#0B3B2E]/[0.03] px-4 py-4 text-center">
                     <FaFileInvoice className="mx-auto mb-2 text-slate-300" size={18} />
                     <p className="text-xs font-semibold text-slate-600">No open invoices for this tenant</p>
                     <p className="mt-0.5 text-[10px] text-slate-400">The receipt can be held as an unallocated prepayment until an invoice is raised.</p>
                     <button onClick={markAsPrepayment}
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-[10px] font-black text-white hover:bg-[#0A3127] transition-colors">
+                      className="mt-3 inline-flex items-center gap-1.5  bg-[#0B3B2E] px-3 py-1.5 text-[10px] font-black text-white hover:bg-[#0A3127] transition-colors">
                       <FaExchangeAlt size={9} /> Mark as Prepayment
                     </button>
                     <p className="mt-1.5 text-[9px] text-slate-400">Credit will be auto-applied when the next invoice is raised</p>
@@ -1432,7 +1545,7 @@ export default function LandlordStatementAllocations() {
                 )}
 
                 {!invLoading && filteredAvailInvoices.length > 0 && (
-                  <div className="rounded-lg border border-slate-200 text-xs overflow-hidden">
+                  <div className=" border border-slate-200 text-xs overflow-hidden">
                     {/* Header */}
                     <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
                       <span>Invoice</span>
@@ -1458,8 +1571,8 @@ export default function LandlordStatementAllocations() {
                               )}
                               <div className="flex items-center gap-1 mt-px">
                                 <p className="text-[10px] text-slate-400">{CAT_LABEL[inv.category] || inv.category}</p>
-                                {inv._currentlyAllocated && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 rounded px-1 leading-tight">Currently allocated</span>}
-                                {noOutstanding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded px-1 leading-tight">Balance unclear — click Repair Balances above</span>}
+                                {inv._currentlyAllocated && <span className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200  px-1 leading-tight">Currently allocated</span>}
+                                {noOutstanding && <span className="text-[9px] font-bold text-rose-600 bg-rose-50 border border-rose-200  px-1 leading-tight">Balance unclear — click Repair Balances above</span>}
                               </div>
                             </div>
                             <span className="shrink-0 text-[10px] text-slate-400">{fmtDate(inv.invoiceDate)}</span>
@@ -1472,7 +1585,7 @@ export default function LandlordStatementAllocations() {
                               disabled={already || noOutstanding}
                               onClick={() => !already && !noOutstanding && addInvoice(inv)}
                               title={already ? "Already in allocation" : noOutstanding ? "Invoice has no outstanding balance" : `Add — auto-fills Ksh ${fmtKES(smartAmt)}`}
-                              className={`shrink-0 inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold transition
+                              className={`shrink-0 inline-flex items-center gap-1  border px-2 py-0.5 text-[10px] font-bold transition
                                 ${already || noOutstanding
                                   ? "cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400"
                                   : "border-[#0B3B2E]/30 bg-[#0B3B2E]/5 text-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"}`}>
@@ -1499,12 +1612,12 @@ export default function LandlordStatementAllocations() {
                 <label className="mb-0.5 block text-xs font-semibold text-slate-700">Reason for reallocation <span className="text-red-500">*</span></label>
                 <textarea rows={2} value={reallocReason} onChange={(e) => setReallocReason(e.target.value)}
                   placeholder="e.g. PM requested allocation to June rent invoice instead of deposit"
-                  className="w-full resize-none rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
+                  className="w-full resize-none  border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
               </div>
               <div className="flex gap-2">
-                <button onClick={closeReallocPanel} className="flex-1 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button onClick={closeReallocPanel} className="flex-1  border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
                 <button onClick={saveRealloc} disabled={reallocSaving || !reallocValid || !reallocReason.trim()}
-                  className="flex-1 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+                  className="flex-1  bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
                   {reallocSaving ? "Saving…" : "Save Reallocation"}
                 </button>
               </div>

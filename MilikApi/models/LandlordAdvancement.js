@@ -45,6 +45,11 @@ const recoveryHistorySchema = new mongoose.Schema(
       ref: "FinancialLedgerEntry",
       default: null,
     },
+    interestOffsetEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FinancialLedgerEntry",
+      default: null,
+    },
     processedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

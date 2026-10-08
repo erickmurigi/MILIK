@@ -210,6 +210,13 @@ const resolveAdvanceRecoverableAccount = async (businessId) => {
   return ChartOfAccount.findOne({ business: businessId, code: "1210" }).lean();
 };
 
+const resolveAdvanceInterestIncomeAccount = async (businessId) => {
+  await ensureSystemChartOfAccounts(businessId);
+  const exact = await findSystemAccountByCode(businessId, "4301");
+  if (exact) return exact;
+  return ChartOfAccount.findOne({ business: businessId, code: "4301" }).lean();
+};
+
 const statementCursorFor = (statement) => {
   const cursor = statement?.cutoffAt || statement?.periodEnd || null;
   return cursor ? normalizeToEndOfDay(cursor) : null;
@@ -334,12 +341,19 @@ const computeSchedule = (row) => {
     gracePeriodMonths: row.gracePeriodMonths,
   });
 
+  // Capped at the advance's own computed recovery end date (not "today") so the full
+  // schedule — including periods still in the future — is available for the single
+  // tabular schedule view, the same shape Standing Orders' fullSchedule uses. Falls back
+  // to a 2-year horizon for the rare legacy record with neither periodMonths nor endDate.
+  const fallbackHorizon = !scheduleWindow.endDate && !row.endDate
+    ? (() => { const d = new Date(); d.setFullYear(d.getFullYear() + 2); return d; })()
+    : null;
   const schedule = buildRunSchedule({
     startDate: scheduleWindow.effectiveStartDate || row.startDate,
     endDate: scheduleWindow.endDate || row.endDate,
     frequency: row.frequency,
     dayOfMonth: row.dayOfMonth,
-    capAt: new Date(),
+    capAt: fallbackHorizon,
   });
 
   const processedKeys = new Set(
@@ -352,24 +366,74 @@ const computeSchedule = (row) => {
   const installmentCount = Math.max(schedule.length || 1, 1);
   const baseInstallment = installmentCount > 0 ? round2(principalTarget / installmentCount) : round2(principalTarget);
 
-  let scheduledTotal = 0;
-  return schedule.map((item, index) => {
+  // Principal per period, computed once up front — reducing-balance interest needs to
+  // know how much principal is still outstanding BEFORE each period, which depends on
+  // how much every earlier period already took.
+  let runningPrincipal = 0;
+  const principalByIndex = schedule.map((_item, index) => {
     const isLast = index === schedule.length - 1;
-    const amount = isLast ? round2(principalTarget - scheduledTotal) : baseInstallment;
-    scheduledTotal = round2(scheduledTotal + amount);
+    const value = isLast ? round2(principalTarget - runningPrincipal) : baseInstallment;
+    runningPrincipal = round2(runningPrincipal + value);
+    return value;
+  });
+
+  // Total interest is the SAME figure — principal × rate% — regardless of interestType;
+  // only its distribution across periods differs. That keeps "the interest rate" meaning
+  // one consistent total cost to whoever enters it, no matter which method is picked.
+  const interestRate = Math.max(Number(row.interestRate || 0), 0);
+  const totalInterestBudget = round2((principalTarget * interestRate) / 100);
+  const interestType = String(row.interestType || "simple_flat").toLowerCase() === "reducing_balance" ? "reducing_balance" : "simple_flat";
+
+  let interestByIndex;
+  if (totalInterestBudget <= 0) {
+    interestByIndex = schedule.map(() => 0);
+  } else if (interestType === "reducing_balance") {
+    // Weight each period's share of the total interest budget by the principal balance
+    // still outstanding at the START of that period — more interest while more is owed,
+    // tapering as it's paid down, like a real loan amortization — rather than the flat
+    // equal-every-period split below.
+    let balanceBeforePeriod = principalTarget;
+    const weights = principalByIndex.map((principalThisPeriod) => {
+      const weight = balanceBeforePeriod;
+      balanceBeforePeriod = round2(balanceBeforePeriod - principalThisPeriod);
+      return weight;
+    });
+    const totalWeight = weights.reduce((sum, w) => sum + w, 0) || 1;
+    let runningInterest = 0;
+    interestByIndex = weights.map((weight, index) => {
+      const isLast = index === weights.length - 1;
+      const value = isLast ? round2(totalInterestBudget - runningInterest) : round2(totalInterestBudget * (weight / totalWeight));
+      runningInterest = round2(runningInterest + value);
+      return value;
+    });
+  } else {
+    const base = round2(totalInterestBudget / installmentCount);
+    let runningInterest = 0;
+    interestByIndex = schedule.map((_item, index) => {
+      const isLast = index === schedule.length - 1;
+      const value = isLast ? round2(totalInterestBudget - runningInterest) : base;
+      runningInterest = round2(runningInterest + value);
+      return value;
+    });
+  }
+
+  return schedule.map((item, index) => {
+    const principalAmount = principalByIndex[index];
+    const interestAmount = interestByIndex[index];
     const processedEntry = getActiveRecoveryHistory(row).find(
       (history) => String(history?.periodKey || "") === item.periodKey
     );
 
     return {
       ...item,
-      scheduledAmount: amount,
-      scheduledPrincipalAmount: amount,
-      scheduledInterestAmount: 0,
+      scheduledAmount: round2(principalAmount + interestAmount),
+      scheduledPrincipalAmount: principalAmount,
+      scheduledInterestAmount: interestAmount,
       processed: processedKeys.has(item.periodKey),
       processedAt: processedEntry?.processedAt || null,
       processedAmount: processedEntry ? round2(processedEntry.amount || 0) : 0,
       referenceNo: processedEntry?.referenceNo || "",
+      recoveryId: processedEntry?._id ? String(processedEntry._id) : null,
     };
   });
 };
@@ -474,6 +538,10 @@ const serializeAdvancement = (row) => {
           scheduledInterestAmount: item.scheduledInterestAmount,
         }))
       : [];
+  // Merge eligibility onto the full schedule for the single tabular schedule view —
+  // same shape as Standing Orders' fullSchedule (processed / isEligible / upcoming).
+  const eligibleKeys = new Set(eligiblePeriods.map((item) => item.periodKey));
+  const scheduleWithEligibility = schedule.map((item) => ({ ...item, isEligible: !item.processed && eligibleKeys.has(item.periodKey) }));
 
   const processedPeriods = activeHistory
     .map((run) => ({
@@ -517,7 +585,7 @@ const serializeAdvancement = (row) => {
     status: lifecycleStatus,
     computedRecoveryStartDate: scheduleWindow.effectiveStartDate || plain.startDate || null,
     computedRecoveryEndDate: scheduleWindow.endDate || plain.endDate || null,
-    amortizationSchedule: schedule,
+    amortizationSchedule: scheduleWithEligibility,
     eligibleRecoveryPeriods: eligiblePeriods,
     processedPeriods,
     cancelledPeriods,
@@ -626,7 +694,7 @@ const postDisbursementIfMissing = async ({ row, actorUserId, paymentMethod, cash
 
   const statementWindow = computeStatementWindowForDisbursement(row);
 
-  let primaryEntry;
+  let primaryEntry, offsetEntry;
   try {
     primaryEntry = await postEntry({
       business: accountingContext.businessId,
@@ -652,7 +720,7 @@ const postDisbursementIfMissing = async ({ row, actorUserId, paymentMethod, cash
       status: "approved",
     });
 
-    await postEntry({
+    offsetEntry = await postEntry({
       business: accountingContext.businessId,
       property: accountingContext.propertyId,
       landlord: accountingContext.landlordId,
@@ -856,9 +924,6 @@ const applyDraftOrPreDisbursementUpdates = async ({ row, req, businessId }) => {
     const interestType = String(req.body?.interestType || "").trim().toLowerCase();
     row.interestType = ["simple_flat", "reducing_balance"].includes(interestType) ? interestType : "simple_flat";
   }
-  if (Object.prototype.hasOwnProperty.call(req.body || {}, "scheduledInterestTotal")) {
-    row.scheduledInterestTotal = Math.max(Number(req.body?.scheduledInterestTotal || 0), 0);
-  }
 
   if (Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") || Object.prototype.hasOwnProperty.call(req.body || {}, "property")) {
     const targetLandlord = Object.prototype.hasOwnProperty.call(req.body || {}, "landlord") ? req.body?.landlord : row.landlord;
@@ -884,6 +949,15 @@ const applyDraftOrPreDisbursementUpdates = async ({ row, req, businessId }) => {
     });
     row.endDate = scheduleWindow.endDate || row.endDate;
     row.payableSnapshotAmount = 0;
+
+    // Authoritative, same reasoning as createLandlordAdvancement — recomputed server-side
+    // from amount/interestRate/interestType/schedule so it can't drift from what
+    // computeSchedule will actually use when recoveries are posted.
+    const schedulePreview = computeSchedule(row);
+    const scheduledInterestTotal = round2(schedulePreview.reduce((sum, item) => sum + Number(item.scheduledInterestAmount || 0), 0));
+    row.scheduledInterestTotal = scheduledInterestTotal;
+    row.totalRecoverableAmount = round2(row.amount + scheduledInterestTotal);
+    row.balanceOutstanding = row.totalRecoverableAmount;
   } else {
     row.startDate = row.disbursementDate || row.startDate;
     row.endDate = row.disbursementDate || row.endDate || row.startDate;
@@ -1159,6 +1233,15 @@ export const createLandlordAdvancement = async (req, res, next) => {
         landlordId: row.landlord,
         amount: row.amount,
       });
+    } else {
+      // Authoritative, not the client-supplied scheduledInterestTotal above — computed
+      // server-side from interestRate/interestType so it can never drift from what
+      // computeSchedule (and therefore the GL postings on recovery) will actually use.
+      const schedulePreview = computeSchedule(row);
+      const scheduledInterestTotal = round2(schedulePreview.reduce((sum, item) => sum + Number(item.scheduledInterestAmount || 0), 0));
+      row.scheduledInterestTotal = scheduledInterestTotal;
+      row.totalRecoverableAmount = round2(row.amount + scheduledInterestTotal);
+      row.balanceOutstanding = row.totalRecoverableAmount;
     }
 
     if (status === "submitted") {
@@ -1232,6 +1315,21 @@ export const getLandlordAdvancements = async (req, res, next) => {
     const data = serialized.slice((pageNum - 1) * limitNum, pageNum * limitNum);
 
     res.status(200).json({ data, total, page: pageNum, pages: Math.ceil(total / limitNum) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getLandlordAdvancement = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, "Company context is required"));
+    if (!isValidObjectId(req.params.id)) return next(createError(400, "Invalid advancement id"));
+
+    const row = await populateQuery(LandlordAdvancement.findOne({ _id: req.params.id, business: businessId })).lean();
+    if (!row) return next(createError(404, "Landlord advancement not found"));
+
+    res.status(200).json({ data: serializeAdvancement(row) });
   } catch (error) {
     next(error);
   }
@@ -1384,8 +1482,21 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     });
     const remittancePayableAccount = await resolveLandlordRemittancePayableAccount(businessId);
     const advanceRecoverableAccount = await resolveAdvanceRecoverableAccount(businessId);
+    const advanceInterestIncomeAccount = await resolveAdvanceInterestIncomeAccount(businessId);
     if (!remittancePayableAccount?._id || !advanceRecoverableAccount?._id) {
       return next(createError(400, "Advancement recovery posting accounts could not be resolved."));
+    }
+
+    // Split the posted amount (which may be less than scheduled, for a partial recovery)
+    // by the same principal:interest ratio the schedule assigned this period, so interest
+    // income is recognized proportionally rather than a partial payment always eating into
+    // principal first.
+    const scheduledTotal = Number(selectedPeriod.scheduledAmount || 0);
+    const scheduledPrincipal = Number(selectedPeriod.scheduledPrincipalAmount || 0);
+    const principalPortion = scheduledTotal > 0 ? round2(amount * (scheduledPrincipal / scheduledTotal)) : round2(amount);
+    const interestPortion = round2(amount - principalPortion);
+    if (interestPortion > 0 && !advanceInterestIncomeAccount?._id) {
+      return next(createError(400, "Advancement interest income account could not be resolved."));
     }
 
     const processedAt = normalizeToStartOfDay(req.body?.processedAt || req.body?.runDate || selectedPeriod.dueDate || new Date());
@@ -1393,7 +1504,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     const sourceTransactionId = `${row._id}:${selectedPeriod.periodKey}`;
     const notes = String(req.body?.note || row.narration || row.title || "Recoverable landlord advance recovery").trim();
 
-    let visibleEntry, offsetEntry;
+    let visibleEntry, offsetEntry, interestEntry;
     try {
       visibleEntry = await postEntry({
         business: accountingContext.businessId,
@@ -1438,7 +1549,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
         statementPeriodStart: selectedPeriod.periodStart,
         statementPeriodEnd: selectedPeriod.periodEnd,
         category: "ADVANCE_RECOVERY",
-        amount: round2(amount),
+        amount: round2(principalPortion),
         direction: "credit",
         accountId: advanceRecoverableAccount._id,
         journalGroupId,
@@ -1459,9 +1570,47 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
         approvedAt: processedAt,
         status: "approved",
       });
+
+      if (interestPortion > 0) {
+        interestEntry = await postEntry({
+          business: accountingContext.businessId,
+          property: accountingContext.propertyId,
+          landlord: accountingContext.landlordId,
+          sourceTransactionType: "advance",
+          sourceTransactionId,
+          transactionDate: processedAt,
+          statementPeriodStart: selectedPeriod.periodStart,
+          statementPeriodEnd: selectedPeriod.periodEnd,
+          category: "ADVANCE_RECOVERY",
+          amount: round2(interestPortion),
+          direction: "credit",
+          accountId: advanceInterestIncomeAccount._id,
+          journalGroupId,
+          payer: "manager",
+          receiver: "system",
+          notes,
+          metadata: {
+            includeInLandlordStatement: false,
+            advancementId: String(row._id),
+            referenceNo: row.referenceNo,
+            advanceType,
+            periodKey: selectedPeriod.periodKey,
+            periodLabel: selectedPeriod.periodLabel,
+            postingKind: "landlord_advancement_interest_income",
+          },
+          createdBy: actorUserId,
+          approvedBy: actorUserId,
+          approvedAt: processedAt,
+          status: "approved",
+        });
+      }
     } catch (error) {
-      if (visibleEntry?._id) {
-        await postReversal({ entryId: visibleEntry._id, reason: `Auto-reversal: GL balance protection for advancement recovery ${row.referenceNo || row._id}`, userId: actorUserId }).catch(() => null);
+      // Roll back whichever legs already succeeded before the one that failed — same
+      // partial-posting hazard the disbursement flow had (see the offsetEntry fix),
+      // just with a third possible leg now.
+      const postedSoFar = [visibleEntry, offsetEntry, interestEntry].filter((entry) => entry?._id);
+      for (const entry of postedSoFar) {
+        await postReversal({ entryId: entry._id, reason: `Auto-reversal: GL balance protection for advancement recovery ${row.referenceNo || row._id}`, userId: actorUserId }).catch(() => null);
       }
       throw error;
     }
@@ -1474,14 +1623,15 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
       periodKey: selectedPeriod.periodKey,
       periodLabel: selectedPeriod.periodLabel,
       amount: round2(amount),
-      principalAmount: round2(amount),
-      interestAmount: 0,
+      principalAmount: round2(principalPortion),
+      interestAmount: round2(interestPortion),
       note: notes,
       referenceNo: `${row.referenceNo}-${selectedPeriod.periodKey}`,
       processedBy: actorUserId,
       journalGroupId,
       visibleStatementEntryId: visibleEntry._id,
       offsetEntryId: offsetEntry._id,
+      interestOffsetEntryId: interestEntry?._id || null,
       cancelledAt: null,
       cancelledBy: null,
       cancellationReason: "",
@@ -1492,6 +1642,7 @@ export const processLandlordAdvancementRecovery = async (req, res, next) => {
     await aggregateChartOfAccountBalances(String(row.business), [
       String(remittancePayableAccount._id),
       String(advanceRecoverableAccount._id),
+      ...(interestEntry ? [String(advanceInterestIncomeAccount._id)] : []),
     ]);
 
     await persistAndRespond(res, row, 200);
@@ -1557,12 +1708,18 @@ export const cancelLandlordAdvancementRecovery = async (req, res, next) => {
       return reversal;
     };
 
-    const firstRecoveryReversal = await reverseOne(recoveryRow.visibleStatementEntryId);
+    const completedReversals = [];
     try {
-      await reverseOne(recoveryRow.offsetEntryId);
+      completedReversals.push(await reverseOne(recoveryRow.visibleStatementEntryId));
+      completedReversals.push(await reverseOne(recoveryRow.offsetEntryId));
+      if (recoveryRow.interestOffsetEntryId) {
+        completedReversals.push(await reverseOne(recoveryRow.interestOffsetEntryId));
+      }
     } catch (e) {
-      if (firstRecoveryReversal?.reversalEntry?._id) {
-        await postReversal({ entryId: firstRecoveryReversal.reversalEntry._id, reason: `Auto-reversal: undo partial ${reason}`, userId: actorUserId }).catch(() => null);
+      for (const completed of completedReversals) {
+        if (completed?.reversalEntry?._id) {
+          await postReversal({ entryId: completed.reversalEntry._id, reason: `Auto-reversal: undo partial ${reason}`, userId: actorUserId }).catch(() => null);
+        }
       }
       throw e;
     }

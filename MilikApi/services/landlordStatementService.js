@@ -1391,7 +1391,7 @@ const consolidateMultiUnitTenantRows = (rows) => {
     "balanceBF", "invoicedRent", "invoicedGarbage", "invoicedWater", "invoicedTax",
     "paidRent", "paidGarbage", "paidWater", "paidTax", "unappliedCredits",
     "totalUtilityInvoiced", "totalUtilityPaid", "totalDepositInvoiced", "totalDepositPaid", "perMonth",
-    "rawReceivedThisPeriod",
+    "rawReceivedThisPeriod", "priorPeriodCashRecognizedThisPeriod",
   ];
   const groups = new Map();
   const passthrough = [];
@@ -2015,6 +2015,16 @@ const createStatementAccumulator = ({
             const rentRecognized = round2(Number(impact.rentAmount || 0));
             const utilityRecognized = round2(Number(impact.utilityAmount || 0));
             const taxRecognized = round2(Number(impact.taxAmount || 0));
+            // Same recognition the three branches below feed into paidRent/paidTax/utility
+            // (so the "Paid" badge shows this invoice settled) also belongs in totalPaid —
+            // otherwise a prior-period prepayment finally applied this period shows as
+            // settled in "Paid" but invisible in "Total Paid"/collections.
+            const priorPeriodCashRecognized = round2(rentRecognized + utilityRecognized + taxRecognized);
+            if (priorPeriodCashRecognized !== 0) {
+              row.priorPeriodCashRecognizedThisPeriod = round2(
+                Number(row.priorPeriodCashRecognizedThisPeriod || 0) + priorPeriodCashRecognized
+              );
+            }
 
             if (rentRecognized !== 0) {
               row.paidRent += rentRecognized;
@@ -3962,6 +3972,9 @@ export const generateLandlordStatement = async ({
   const totalRawReceived = round2(
     filteredTenantRows.reduce((sum, row) => sum + Number(row.rawReceivedThisPeriod || 0), 0)
   );
+  const totalPriorPeriodCashRecognized = round2(
+    filteredTenantRows.reduce((sum, row) => sum + Number(row.priorPeriodCashRecognizedThisPeriod || 0), 0)
+  );
 
   // No manager, no management commission — force to 0 regardless of whatever stray
   // commissionPercentage/commissionFixedAmount the property record happens to carry
@@ -4279,8 +4292,17 @@ export const generateLandlordStatement = async ({
       // commission purposes) and not rawReceivedThisPeriod alone (that deliberately
       // excludes deposit so it never feeds Bal C/F, a rent-ledger-only figure) — this is
       // the true grand total, so it visibly reconciles against Total Invoiced (rent +
-      // deposit) the way Bal C/F's own math already does internally.
-      totalPaid: round2(Number(row.rawReceivedThisPeriod || 0) + Number(row.totalDepositPaid || 0)),
+      // deposit) the way Bal C/F's own math already does internally. Also folds in
+      // priorPeriodCashRecognizedThisPeriod — a prior-period prepayment only just applied
+      // to an invoice this period — so this never shows blank while that same invoice's
+      // "Paid" badge shows settled. Deliberately NOT added to rawReceivedThisPeriod itself,
+      // so Bal C/F and commission keep recognising that cash in the period it was actually
+      // received, unchanged.
+      totalPaid: round2(
+        Number(row.rawReceivedThisPeriod || 0) +
+          Number(row.totalDepositPaid || 0) +
+          Number(row.priorPeriodCashRecognizedThisPeriod || 0)
+      ),
       unappliedCredits: round2(row.unappliedCredits || 0),
       balance: row.balanceCF,
     })),
@@ -4303,7 +4325,7 @@ export const generateLandlordStatement = async ({
       depositPaid: totalDepositCollected,
       depositInvoiced: totalDepositInvoiced,
       expenses: displayNonCommissionDeductions,
-      totalPaid: round2(totalRawReceived + totalDepositCollected),
+      totalPaid: round2(totalRawReceived + totalDepositCollected + totalPriorPeriodCashRecognized),
       closingBalance: totalBalanceCF,
       overpayments: totalOverpayments,
     },
