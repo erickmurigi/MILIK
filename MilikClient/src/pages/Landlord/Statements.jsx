@@ -1051,11 +1051,6 @@ const Statements = () => {
     () => buildStatementPeriodLabel(workspace, draftStatement || {}),
     [draftStatement?._id, draftStatement?.periodStart, draftStatement?.periodEnd, workspace]
   );
-  const broughtForwardCreditApplications = workspace?.broughtForwardCreditApplications || {};
-  const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications?.rows)
-    ? broughtForwardCreditApplications.rows
-    : [];
-  const broughtForwardCreditApplicationTotals = broughtForwardCreditApplications?.totals || {};
   const totals = workspace?.totals || {};
   const expenseRows = workspace?.expenseRows || workspace?.deductionRows || [];
   const additionRows = workspace?.additionRows || [];
@@ -1300,7 +1295,6 @@ const Statements = () => {
     directToLandlordRows.length > 0 ||
     depositSettlementRows.length > 0 ||
     depositMemoRows.length > 0 ||
-    broughtForwardCreditApplicationRows.length > 0 ||
     advanceRecoveryRows.length > 0 ||
     earlyPayoutRows.length > 0;
   const hasInvoiceVatColumn = useMemo(
@@ -2248,40 +2242,6 @@ const Statements = () => {
                           </div>
                         </div>
                       )}
-
-                      {broughtForwardCreditApplicationRows.length > 0 && (
-                        <div>
-                          <div className="overflow-hidden border border-slate-200 bg-white">
-                            <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-slate-800">Brought Forward Prepayments</span>
-                              <span className="text-[10px] font-black text-slate-800">{currency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</span>
-                            </div>
-                            <table className="min-w-full text-[11px]">
-                              <thead>
-                                <tr className="border-b border-slate-200 bg-slate-50">
-                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">#</th>
-                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Description</th>
-                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Receipt</th>
-                                  <th className="px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wide text-slate-400">Unit</th>
-                                  <th className="px-2 py-1 text-right text-[9px] font-bold uppercase tracking-wide text-slate-400">Amount</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {broughtForwardCreditApplicationRows.map((item, index) => (
-                                  <tr key={item._id || item.id || `bf-credit-${index}`} className="odd:bg-white even:bg-sky-50/20 hover:bg-slate-100 transition-colors">
-                                    <td className="px-2 py-0.5 text-[10px] text-slate-400">{index + 1}</td>
-                                    <td className="px-2 py-0.5 text-slate-700">{item.description || "B/F prepayment applied"}</td>
-                                    <td className="px-2 py-0.5 text-slate-500">{item.receiptReference || "—"}</td>
-                                    <td className="px-2 py-0.5 text-slate-500">{item.unit || "—"}</td>
-                                    <td className="px-2 py-0.5 text-right font-semibold text-sky-700">{currency(item.amount)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
 
                       {nonDepositExpenseRows.length > 0 && (
                         <div>

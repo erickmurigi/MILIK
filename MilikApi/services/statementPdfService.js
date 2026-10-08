@@ -772,11 +772,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
       }
       return Array.from(map.values());
     })();
-    const broughtForwardCreditApplications = workspace.broughtForwardCreditApplications || {};
-    const broughtForwardCreditApplicationRows = Array.isArray(broughtForwardCreditApplications.rows)
-      ? broughtForwardCreditApplications.rows
-      : [];
-    const broughtForwardCreditApplicationTotals = broughtForwardCreditApplications.totals || {};
     const printableAdditionsTotal = sumPrintableAmounts(additionRows);
     const printableDeductionsTotal = sumPrintableAmounts(expenseRows);
     const printableDirectToLandlordTotal = sumPrintableAmounts(directToLandlordRows);
@@ -1057,25 +1052,6 @@ export const generateStatementPdf = async (statementId, businessId, { statement:
                   <tr><td colspan="2" class="num">Total</td><td class="num">${formatCurrency(printableDeductionsTotal)}</td></tr>
                 </tfoot>
               </table>
-
-              ${broughtForwardCreditApplicationRows.length > 0 ? `
-                <div class="section-title">B/F Prepayments Applied</div>
-                <table class="simple-table">
-                  <thead>
-                    <tr><th>Receipt / Prepayment</th><th>Applied To</th><th class="num">Amount</th></tr>
-                  </thead>
-                  <tbody>
-                    ${broughtForwardCreditApplicationRows.map((row) => `
-                      <tr>
-                        <td>${esc(row.receiptReference || row.description || "B/F prepayment")}</td>
-                        <td>${esc(row.chargeReference || row.description || "Applied charge")}</td>
-                        <td class="num">${formatCurrency(row.amount || 0)}</td>
-                      </tr>`).join("")}
-                  </tbody>
-                  <tfoot>
-                    <tr><td colspan="2" class="num">Total applied</td><td class="num">${formatCurrency(broughtForwardCreditApplicationTotals.totalApplied || 0)}</td></tr>
-                  </tfoot>
-                </table>` : ""}
             </td>
             <td>
               ${!isSelfManaged ? `

@@ -981,7 +981,7 @@ const AddReceipt = () => {
                   {/* Property */}
                   <div>
                     <label className={labelClass}>{termProperty} <span className="text-red-500">*</span></label>
-                    <AppSelect size="sm"
+                    <AppSelect
                       value={formData.propertyId}
                       onChange={(v) => onPropertyChange(v ?? "")}
                       options={activeProperties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Unnamed Property" }))}
@@ -1012,7 +1012,7 @@ const AddReceipt = () => {
                         Include terminated
                       </label>
                     </div>
-                    <AppSelect size="sm"
+                    <AppSelect
                       value={formData.tenantId}
                       onChange={(v) => setFormData((prev) => ({ ...prev, tenantId: v ?? "" }))}
                       options={tenantOptions.map((t) => buildTenantOption(t))}
@@ -1074,7 +1074,7 @@ const AddReceipt = () => {
 
                   {/* Payment Method */}
                   <div>
-                    <AppSelect size="sm"
+                    <AppSelect
                       label="Payment Method *"
                       value={formData.paymentMethod}
                       onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "mobile_money" }))}
@@ -1137,7 +1137,7 @@ const AddReceipt = () => {
                         {cashbookOptions[0].code ? `${cashbookOptions[0].code} · ${cashbookOptions[0].name}` : cashbookOptions[0].name}
                       </div>
                     ) : (
-                      <AppSelect size="sm"
+                      <AppSelect
                         value={formData.cashbook}
                         onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
                         options={cashbookOptions.map((option) => ({
@@ -1526,7 +1526,7 @@ const AddReceipt = () => {
                             return (
                               <div key={idx} className="flex items-center gap-2">
                                 <div className="flex-1">
-                                  <AppSelect size="sm"
+                                  <AppSelect
                                     value={line.billItemKey}
                                     onChange={(v) => {
                                       const opt = prepaymentTypeOptions.find((o) => o.billItemKey === v);
