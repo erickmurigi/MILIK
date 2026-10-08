@@ -1079,19 +1079,57 @@ export const getTenants = async (req, res, next) => {
     const limit = Math.min(500, Math.max(1, parseInt(req.query.limit) || 100));
     const skip = (page - 1) * limit;
 
-    const [tenants, total] = await Promise.all([
-      populateTenantQuery(
-        Tenant.find(filter)
-          // Keep only the most recent transfer entry — enough for the list/menu to know
-          // whether a "Rollback Transfer" action is available, without shipping the tenant's
-          // full transfer history on every row.
-          .select({ unitTransferHistory: { $slice: -1 } })
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-      ).lean(),
-      Tenant.countDocuments(filter),
-    ]);
+    // Sort/paginate by the SAME order the UI displays (property, then unit number
+    // natural-sorted, then tenant name) — not createdAt. Unit number lives on the
+    // Unit collection, so a true sort needs a join; we do it in two cheap steps
+    // rather than an aggregation pipeline so populateTenantQuery's existing
+    // population logic (unit + additionalUnits + nested property) stays untouched:
+    //   1) fetch a lightweight id+name+unit list for every matching tenant, sort it
+    //      in JS with the exact comparator the frontend used to use client-side,
+    //      and slice out the requested page of ids.
+    //   2) fetch the full populated documents for just that page of ids, then
+    //      reorder them to match step 1 (Mongo's $in does not preserve order).
+    // Previously this paginated with `.sort({ createdAt: -1 }).skip().limit()` while
+    // the frontend re-sorted only the received page into property/unit order for
+    // display — so different page sizes landed on different, non-overlapping
+    // "most recently created" windows that didn't correspond to the unit order the
+    // user saw, making pagination look inconsistent/random between page sizes.
+    const sortableTenants = await Tenant.find(filter)
+      .select({ name: 1, unit: 1 })
+      .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName name" } })
+      .limit(20000)
+      .lean();
+
+    const sortKey = (t) => ({
+      property: String(t?.unit?.property?.propertyName || t?.unit?.property?.name || "").toLowerCase(),
+      unit: String(t?.unit?.unitNumber || ""),
+      name: String(t?.name || ""),
+    });
+
+    sortableTenants.sort((a, b) => {
+      const ka = sortKey(a);
+      const kb = sortKey(b);
+      if (ka.property !== kb.property) return ka.property.localeCompare(kb.property);
+      const unitCmp = ka.unit.localeCompare(kb.unit, undefined, { numeric: true, sensitivity: "base" });
+      if (unitCmp !== 0) return unitCmp;
+      return ka.name.localeCompare(kb.name);
+    });
+
+    const total = sortableTenants.length;
+    const sortedPageIds = sortableTenants.slice(skip, skip + limit).map((t) => t._id);
+    const pageOrder = new Map(sortedPageIds.map((id, index) => [String(id), index]));
+
+    const tenants = sortedPageIds.length
+      ? (
+          await populateTenantQuery(
+            Tenant.find({ _id: { $in: sortedPageIds } })
+              // Keep only the most recent transfer entry — enough for the list/menu to know
+              // whether a "Rollback Transfer" action is available, without shipping the tenant's
+              // full transfer history on every row.
+              .select({ unitTransferHistory: { $slice: -1 } })
+          ).lean()
+        ).sort((a, b) => pageOrder.get(String(a._id)) - pageOrder.get(String(b._id)))
+      : [];
 
     const enrichedTenants = tenants.map((tenantDoc) => ({
       ...tenantDoc,

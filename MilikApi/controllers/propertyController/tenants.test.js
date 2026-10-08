@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createTenant, getTenant, updateTenant, updateTenantStatus, transferTenantUnit } from "./tenants.js";
+import { createTenant, getTenant, getTenants, updateTenant, updateTenantStatus, transferTenantUnit } from "./tenants.js";
 import { callController } from "../../test/callController.js";
 import Unit from "../../models/Unit.js";
 import Tenant from "../../models/Tenant.js";
@@ -9,8 +9,59 @@ import {
   createTestUser,
   createTestLease,
   createTestChartOfAccounts,
+  createTestProperty,
 } from "../../test/factories.js";
 import { createTestInvoice } from "../../test/factories.landlord.js";
+
+// Regression test: getTenants used to paginate with `.sort({ createdAt: -1 })` while the
+// frontend re-sorted only the received page into property/unit order for display. Because
+// the server's skip/limit windows were computed against creation-recency (not the order the
+// UI shows), different page sizes landed on different, non-overlapping windows of tenants —
+// e.g. page 1 at limit=2 could show entirely different tenants than the first two rows of
+// page 1 at limit=4. Fixed by sorting server-side by property/unit/name BEFORE paginating.
+describe("getTenants pagination order", () => {
+  it("paginates in property/unit order, independent of creation order, and nests across page sizes", async () => {
+    const { property, company } = await createTestProperty({});
+    const user = await createTestUser({ company });
+
+    // Deliberately create units/tenants OUT OF unit-number order, so a createdAt-based
+    // sort would not coincidentally match the expected ascending-by-unit display order.
+    const unitNumbers = ["305", "101", "204", "102", "306", "103"];
+    for (const unitNumber of unitNumbers) {
+      const { unit } = await createTestUnit({ property, company, unitNumber });
+      await createTestTenant({ unit, property, company, name: `Tenant ${unitNumber}` });
+    }
+
+    const expectedOrder = ["101", "102", "103", "204", "305", "306"];
+
+    const smallPage = await callController(getTenants, {
+      query: { business: String(company._id), page: "1", limit: "2" },
+      user,
+    });
+    expect(smallPage.payload.data.map((t) => t.unit.unitNumber)).toEqual(expectedOrder.slice(0, 2));
+
+    const largerPage = await callController(getTenants, {
+      query: { business: String(company._id), page: "1", limit: "4" },
+      user,
+    });
+    expect(largerPage.payload.data.map((t) => t.unit.unitNumber)).toEqual(expectedOrder.slice(0, 4));
+
+    // The smaller page must be an exact prefix of the larger page — pagination windows
+    // should nest, not jump to an unrelated subset when the page size changes.
+    expect(smallPage.payload.data.map((t) => String(t._id))).toEqual(
+      largerPage.payload.data.slice(0, 2).map((t) => String(t._id))
+    );
+
+    const secondPage = await callController(getTenants, {
+      query: { business: String(company._id), page: "2", limit: "2" },
+      user,
+    });
+    expect(secondPage.payload.data.map((t) => t.unit.unitNumber)).toEqual(expectedOrder.slice(2, 4));
+
+    expect(smallPage.payload.total).toBe(6);
+    expect(largerPage.payload.total).toBe(6);
+  });
+});
 
 describe("createTenant", () => {
   it("creates a tenant on a vacant unit and occupies the unit", async () => {
