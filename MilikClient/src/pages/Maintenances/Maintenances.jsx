@@ -12,14 +12,13 @@ import { getTenants } from "../../redux/tenantsRedux";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import {
   FaCheckCircle,
-  FaClock,
   FaDownload,
   FaEdit,
   FaExclamationTriangle,
   FaFilter,
   FaPlus,
+  FaPrint,
   FaRedoAlt,
-  FaSearch,
   FaTimes,
   FaTools,
   FaTrash,
@@ -35,6 +34,7 @@ import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
+import printTabularList from '../../utils/printList';
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -240,26 +240,6 @@ const Maintenances = () => {
     });
   }, [priorityFilter, requests, searchTerm, statusFilter]);
 
-  const stats = useMemo(() => {
-    const acc = { total: serverTotal, pending: 0, inProgress: 0, completed: 0, cancelled: 0, emergency: 0 };
-    requests.forEach(r => {
-      if (r?.status === "pending") acc.pending++;
-      if (r?.status === "in_progress") acc.inProgress++;
-      if (r?.status === "completed") acc.completed++;
-      if (r?.status === "cancelled") acc.cancelled++;
-      if (r?.priority === "emergency") acc.emergency++;
-    });
-    return acc;
-  }, [requests, serverTotal]);
-
-  const SUMMARY_CHIPS = useMemo(() => [
-    { key: "pending",     label: "Pending",     count: stats.pending,    dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200",   filterType: "status"   },
-    { key: "in_progress", label: "In Progress", count: stats.inProgress, dot: "bg-blue-400",    text: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200",    filterType: "status"   },
-    { key: "completed",   label: "Completed",   count: stats.completed,  dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", filterType: "status"   },
-    { key: "cancelled",   label: "Cancelled",   count: stats.cancelled,  dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200",   filterType: "status"   },
-    { key: "emergency",   label: "Emergency",   count: stats.emergency,  dot: "bg-rose-500",    text: "text-rose-700",    bg: "bg-rose-50",    border: "border-rose-200",    filterType: "priority" },
-  ], [stats]);
-
   const propertySelectOptions = useMemo(
     () => properties.map((p) => ({ value: p._id, label: getPropertyName(p) })),
     [properties]
@@ -396,47 +376,53 @@ const Maintenances = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handlePrint = () => {
+    if (filteredRequests.length === 0) { toast.info("There are no maintenance requests to print."); return; }
+    const printed = printTabularList({
+      title: "Maintenance Requests",
+      subtitle: `${filteredRequests.length} request${filteredRequests.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      columns: [
+        { label: "Title", value: (r) => r.title || "—", bold: true },
+        { label: "Property", value: (r) => getRequestPropertyName(r) || "—" },
+        { label: "Unit", value: (r) => r.unit?.unitNumber || "—" },
+        { label: "Tenant", value: (r) => r.tenant?.name || "—" },
+        { label: "Priority", value: (r) => r.priority || "medium" },
+        { label: "Status", value: (r) => String(r.status || "pending").replace(/_/g, " ") },
+        { label: "Assigned To", value: (r) => r.assignedTo || "—" },
+        { label: "Scheduled", value: (r) => (r.scheduledDate ? fmtDate(r.scheduledDate) : "—") },
+        { label: "Est. Cost", align: "right", value: (r) => money(r.estimatedCost) },
+        { label: "Actual Cost", align: "right", value: (r) => money(r.actualCost) },
+      ],
+      rows: filteredRequests,
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  };
+
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
-
-        {/* Summary chips */}
-        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          {SUMMARY_CHIPS.map(({ key, label, count, dot, text, bg, border, filterType }) => {
-            const active = filterType === "status" ? statusFilter === key : priorityFilter === key;
-            const toggle = () => filterType === "status" ? setStatusFilter(active ? "all" : key) : setPriorityFilter(active ? "all" : key);
-            return (
-              <button key={key} type="button" onClick={toggle}
-                className={`inline-flex items-center gap-2 border px-3 py-1.5 transition-all ${bg} ${border} ${active ? "ring-2 ring-offset-1 ring-[#0B3B2E]" : "hover:opacity-80"}`}>
-                <span className={`h-2 w-2 rounded-full ${dot}`} />
-                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
-                <span className={`text-sm font-black ${text}`}>{count}</span>
-                {active && <FaTimes size={8} className="ml-1 text-slate-500" />}
-              </button>
-            );
-          })}
-          <div className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-slate-400" />
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
-            <span className="text-sm font-black text-slate-700">{stats.total}</span>
-          </div>
-        </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
 
         {/* Filter bar */}
         <ListToolbar>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{serverTotal} request{serverTotal !== 1 ? "s" : ""}</span>
+          <ListToolbar.Divider />
           <ListToolbar.Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search requests…" width="w-40" />
           <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable compact />
           <AppSelect value={priorityFilter} onChange={(v) => setPriorityFilter(v ?? "")} options={PRIORITY_OPTIONS} placeholder="All priorities" clearable compact />
           <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => { setSearchTerm(""); setStatusFilter(""); setPriorityFilter(""); }}>Reset</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRequests}>Refresh</ListToolbar.Button>
           <ListToolbar.Divider />
-          <ListToolbar.Button icon={FaDownload} variant="outline" onClick={exportCsv}>CSV</ListToolbar.Button>
+          <ListToolbar.Button icon={FaDownload} variant="outline" onClick={exportCsv}>Export</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint}>Print</ListToolbar.Button>
           {canCreate && (
             <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>New Request</ListToolbar.Button>
           )}
         </ListToolbar>
 
         {/* Table */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
         <MilikTable
           columns={[
             { label: 'Request' },
@@ -446,7 +432,7 @@ const Maintenances = () => {
             { label: 'Dates' },
           ]}
           rows={pageRows}
-          loading={loading}
+          loading={loading && pageRows.length === 0}
           empty="No maintenance requests found."
           minWidth="900px"
           rowClassName={(item) => `align-top${item?.priority === 'emergency' ? ' !bg-rose-50/60' : ''}`}
@@ -456,7 +442,7 @@ const Maintenances = () => {
               <>
                 <td className="px-3 py-1 border-r border-gray-100 max-w-[240px]">
                   <div className="flex items-start gap-2">
-                    <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${isEmergency ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
+                    <div className={`mt-0.5 flex-shrink-0 p-2 text-xs ${isEmergency ? "bg-rose-100 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
                       {isEmergency ? <FaExclamationTriangle /> : <FaTools />}
                     </div>
                     <div className="min-w-0">
@@ -501,7 +487,7 @@ const Maintenances = () => {
                   <button
                     onClick={() => quickUpdateStatus(item, "in_progress")}
                     disabled={busy}
-                    className="rounded border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                    className="border border-blue-300 bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50"
                   >
                     Start
                   </button>
@@ -510,7 +496,7 @@ const Maintenances = () => {
                   <button
                     onClick={() => quickUpdateStatus(item, "completed")}
                     disabled={busy}
-                    className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+                    className="border border-emerald-300 bg-emerald-50 px-2 py-1 text-[10px] font-black text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                   >
                     Complete
                   </button>
@@ -518,7 +504,7 @@ const Maintenances = () => {
                 {canUpdate && (
                   <button
                     onClick={() => openEditModal(item)}
-                    className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+                    className="border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
                   >
                     <FaEdit />
                   </button>
@@ -526,7 +512,7 @@ const Maintenances = () => {
                 {canDelete && (
                   <button
                     onClick={() => handleDelete(item)}
-                    className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                    className="border border-red-300 bg-white px-2 py-1 text-[10px] font-black text-red-600 hover:bg-red-50"
                   >
                     <FaTrash />
                   </button>
@@ -546,6 +532,8 @@ const Maintenances = () => {
           loading={loading}
           label="maintenances"
         />
+        </div>
+        </div>
       </div>
 
       {/* Modal */}

@@ -88,6 +88,7 @@ const MENU_PERMISSION_MAP = {
   "liability-subledger": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "tax-reports": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   settings: { resource: "companySettings", action: "view" },
+  users: { resource: "users", action: "view" },
   "meter-readings": { resource: "meterReadings", action: "view", moduleKey: "propertyManagement" },
   maintenance: { resource: "maintenances", action: "view", moduleKey: "propertyManagement" },
   inspections: { resource: "inspections", action: "view", moduleKey: "propertyManagement" },
@@ -1698,7 +1699,7 @@ const TopToolbar = ({
         { id: "landlord-standing-orders", label: `${termLandlord} Standing Orders`, icon: FaCalendarAlt },
         { id: "landlord-advancement", label: `${termLandlord} Advances`, icon: FaMoneyBillWave },
         { id: "management-fee-invoices", label: "Management Fee Invoices", icon: FaFileInvoice },
-        { id: "processed-statements", label: "Statement History", icon: FaCheckCircle },
+        { id: "processed-statements", label: "Landlord Statement History", icon: FaCheckCircle },
         ...(currentUser?.isSystemAdmin || currentUser?.superAdminAccess
           ? [{ id: "statement-allocations", label: "Statement Allocations", icon: FaExchangeAlt }]
           : []),

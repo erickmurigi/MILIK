@@ -14,16 +14,14 @@ import { getUnits } from "../../redux/unitRedux";
 import { getTenants } from "../../redux/tenantsRedux";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import {
-  FaCalendarAlt,
   FaCheckCircle,
   FaClipboardCheck,
   FaDownload,
   FaEdit,
-  FaExclamationTriangle,
   FaFilter,
   FaPlus,
+  FaPrint,
   FaRedoAlt,
-  FaSearch,
   FaTimes,
   FaTrash,
 } from "react-icons/fa";
@@ -38,6 +36,7 @@ import { fmtDate } from "../../utils/dates";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
+import printTabularList from '../../utils/printList';
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -251,27 +250,6 @@ const Inspections = () => {
   // Server handles filtering; client-side pass-through only
   const filteredInspections = inspections;
 
-  const stats = useMemo(() => {
-    let scheduled = 0, inProgress = 0, completed = 0, cancelled = 0, totalIssues = 0, scoreSum = 0, scoreCount = 0;
-    inspections.forEach(i => {
-      if (i?.status === "scheduled") scheduled++;
-      if (i?.status === "in_progress") inProgress++;
-      if (i?.status === "completed") completed++;
-      if (i?.status === "cancelled") cancelled++;
-      totalIssues += Number(i?.issuesFound || 0);
-      const s = Number(i?.score);
-      if (Number.isFinite(s)) { scoreSum += s; scoreCount++; }
-    });
-    return { total: serverTotal, scheduled, inProgress, completed, cancelled, totalIssues, avgScore: scoreCount > 0 ? (scoreSum / scoreCount).toFixed(1) : "—" };
-  }, [inspections, serverTotal]);
-
-  const SUMMARY_CHIPS = useMemo(() => [
-    { key: "scheduled",   label: "Scheduled",   count: stats.scheduled,  dot: "bg-amber-400",   text: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-200",   filterType: "status" },
-    { key: "in_progress", label: "In Progress", count: stats.inProgress, dot: "bg-blue-400",    text: "text-blue-700",    bg: "bg-blue-50",    border: "border-blue-200",    filterType: "status" },
-    { key: "completed",   label: "Completed",   count: stats.completed,  dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-200", filterType: "status" },
-    { key: "cancelled",   label: "Cancelled",   count: stats.cancelled,  dot: "bg-slate-400",   text: "text-slate-600",   bg: "bg-slate-50",   border: "border-slate-200",   filterType: "status" },
-  ], [stats]);
-
   const propertySelectOptions = useMemo(
     () => properties.map((p) => ({ value: p._id, label: getPropertyName(p) })),
     [properties]
@@ -399,54 +377,54 @@ const Inspections = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handlePrint = () => {
+    if (filteredInspections.length === 0) { toast.info("There are no inspections to print."); return; }
+    const printed = printTabularList({
+      title: "Inspections",
+      subtitle: `${filteredInspections.length} inspection${filteredInspections.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      columns: [
+        { label: "Inspection #", value: (r) => r.inspectionNumber || "—", bold: true },
+        { label: "Type", value: (r) => formatTypeLabel(r.type) },
+        { label: "Status", value: (r) => String(r.status || "scheduled").replace(/_/g, " ") },
+        { label: "Property", value: (r) => getInspectionPropertyName(r) || "—" },
+        { label: "Unit", value: (r) => r.unit?.unitNumber || "—" },
+        { label: "Tenant", value: (r) => r.tenant?.name || "—" },
+        { label: "Inspector", value: (r) => r.inspectorName || "—" },
+        { label: "Scheduled", value: (r) => (r.scheduledDate ? fmtDate(r.scheduledDate) : "—") },
+        { label: "Completed", value: (r) => (r.completedDate ? fmtDate(r.completedDate) : "—") },
+        { label: "Score", align: "right", value: (r) => (Number.isFinite(Number(r.score)) ? `${Number(r.score)}/100` : "—") },
+        { label: "Issues", align: "right", value: (r) => Number(r.issuesFound || 0) },
+      ],
+      rows: filteredInspections,
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+  };
+
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
-
-        {/* Summary chips */}
-        <div className="shrink-0 flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-          {SUMMARY_CHIPS.map(({ key, label, count, dot, text, bg, border }) => {
-            const active = statusFilter === key;
-            return (
-              <button key={key} type="button" onClick={() => setStatusFilter(active ? "all" : key)}
-                className={`inline-flex items-center gap-2 border px-3 py-1.5 transition-all ${bg} ${border} ${active ? "ring-2 ring-offset-1 ring-[#0B3B2E]" : "hover:opacity-80"}`}>
-                <span className={`h-2 w-2 rounded-full ${dot}`} />
-                <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</span>
-                <span className={`text-sm font-black ${text}`}>{count}</span>
-                {active && <FaTimes size={8} className="ml-1 text-slate-500" />}
-              </button>
-            );
-          })}
-          <div className="inline-flex items-center gap-2 border border-slate-200 bg-white px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-slate-400" />
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Total</span>
-            <span className="text-sm font-black text-slate-700">{stats.total}</span>
-          </div>
-          <div className="inline-flex items-center gap-2 border border-blue-100 bg-blue-50 px-3 py-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Avg Score</span>
-            <span className="text-sm font-black text-blue-700">{stats.avgScore}</span>
-          </div>
-          <div className="inline-flex items-center gap-2 border border-rose-100 bg-rose-50 px-3 py-1.5">
-            <span className="text-[10px] font-black uppercase tracking-wide text-slate-500">Issues</span>
-            <span className="text-sm font-black text-rose-700">{stats.totalIssues}</span>
-          </div>
-        </div>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
 
         {/* Filter bar */}
         <ListToolbar>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{serverTotal} inspection{serverTotal !== 1 ? "s" : ""}</span>
+          <ListToolbar.Divider />
           <ListToolbar.Input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search inspections…" width="w-40" />
           <AppSelect value={statusFilter} onChange={(v) => setStatusFilter(v ?? "")} options={STATUS_OPTIONS} placeholder="All statuses" clearable compact />
           <AppSelect value={typeFilter} onChange={(v) => setTypeFilter(v ?? "")} options={TYPE_OPTIONS} placeholder="All types" clearable compact />
           <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => { setSearchTerm(""); setStatusFilter(""); setTypeFilter(""); }}>Reset</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadInspections}>Refresh</ListToolbar.Button>
           <ListToolbar.Divider />
-          <ListToolbar.Button icon={FaDownload} variant="outline" onClick={exportCsv}>CSV</ListToolbar.Button>
+          <ListToolbar.Button icon={FaDownload} variant="outline" onClick={exportCsv}>Export</ListToolbar.Button>
+          <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint}>Print</ListToolbar.Button>
           {canCreate && (
             <ListToolbar.Button icon={FaPlus} onClick={openCreateModal}>Schedule Inspection</ListToolbar.Button>
           )}
         </ListToolbar>
 
         {/* Table */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
         <MilikTable
           columns={[
             { label: 'Inspection' },
@@ -456,7 +434,7 @@ const Inspections = () => {
             { label: 'Next Inspection' },
           ]}
           rows={pageRows}
-          loading={loading}
+          loading={loading && pageRows.length === 0}
           empty="No inspections found."
           minWidth="960px"
           rowClassName={(item) => `align-top${item?.type === 'emergency' ? ' !bg-rose-50/60' : ''}`}
@@ -466,7 +444,7 @@ const Inspections = () => {
               <>
                 <td className="px-3 py-1 border-r border-gray-100 max-w-[220px]">
                   <div className="flex items-start gap-2">
-                    <div className={`mt-0.5 flex-shrink-0 rounded-lg p-2 text-xs ${item?.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
+                    <div className={`mt-0.5 flex-shrink-0 p-2 text-xs ${item?.status === "completed" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-500"}`}>
                       {item?.status === "completed" ? <FaCheckCircle /> : <FaClipboardCheck />}
                     </div>
                     <div className="min-w-0">
@@ -515,7 +493,7 @@ const Inspections = () => {
               {canUpdate && (
                 <button
                   onClick={() => openEditModal(item)}
-                  className="rounded border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
+                  className="border border-slate-300 bg-white px-2 py-1 text-[10px] font-black text-slate-700 hover:bg-slate-50"
                 >
                   <FaEdit />
                 </button>
@@ -523,7 +501,7 @@ const Inspections = () => {
               {canDelete && (
                 <button
                   onClick={() => handleDelete(item)}
-                  className="rounded border border-rose-300 bg-white px-2 py-1 text-[10px] font-black text-rose-600 hover:bg-rose-50"
+                  className="border border-red-300 bg-white px-2 py-1 text-[10px] font-black text-red-600 hover:bg-red-50"
                 >
                   <FaTrash />
                 </button>
@@ -542,6 +520,8 @@ const Inspections = () => {
           loading={loading}
           label="inspections"
         />
+        </div>
+        </div>
       </div>
 
       {/* Modal */}

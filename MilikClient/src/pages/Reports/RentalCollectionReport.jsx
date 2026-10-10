@@ -3,13 +3,13 @@ import { useTabState } from '../../hooks/useTabState';
 import { useEntityCache } from '../../hooks/useEntityCache';
 import { useDispatch, useSelector } from 'react-redux';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllTenants, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getRentalCollectionReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
 import { getTenants } from '../../redux/tenantsRedux';
-import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import { FaFileDownload, FaPrint, FaRedoAlt, FaSyncAlt } from 'react-icons/fa';
 import useDebounce from '../../hooks/useDebounce';
-import ResetFiltersButton from '../../components/common/ResetFiltersButton';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { buildTenantOption } from '../../utils/tenantUtils';
@@ -50,7 +50,6 @@ const RentalCollectionReport = () => {
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const { propertiesLoaded, tenantsLoaded } = useEntityCache(businessId);
   const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
-  const companyName = currentCompany?.name || currentCompany?.companyName || currentCompany?.businessName || currentUser?.company?.name || currentUser?.company?.companyName || 'Milik';
 
   const [loading, setLoading] = useState(false);
   const filtersInitialized = useRef(false);
@@ -157,6 +156,8 @@ const RentalCollectionReport = () => {
 
   // ── Month / Year period selector ──────────────────────────────────────────
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
+  // Stable option objects — avoids busting AppSelect's internal useMemo every render
+  const yearSelectOptions = useMemo(() => yearOptions.map((y) => ({ value: y, label: y })), [yearOptions]);
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
     if (!filters.startDate) return { selMonth: null, selYear: fallbackYear };
@@ -302,52 +303,38 @@ const RentalCollectionReport = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
-        <style>{`
-          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #0B3B2E; box-shadow: 0 0 0 1px rgba(11,59,46,0.2); outline: none; }
-        `}</style>
-        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
+          <ListToolbar>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              {Number(summary.totalPayments || report.rows?.length || 0)} receipt{Number(summary.totalPayments || report.rows?.length || 0) !== 1 ? "s" : ""}
+            </span>
+            <ListToolbar.Divider />
+            <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable compact />
+            <AppSelect value={selYear} onChange={(v) => applyMonthYear(selMonth, v ?? selYear)} options={yearSelectOptions} compact />
+            <ListToolbar.Input type="date" width="w-32" value={filters.startDate} onChange={setFilter("startDate")} />
+            <ListToolbar.Input type="date" width="w-32" value={filters.endDate} onChange={setFilter("endDate")} />
+            <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable compact />
+            <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder={termProperty} searchable clearable compact />
+            <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder={termTenant} searchable clearable compact />
+            {(!isLandlordMode || units.length > 0) && (
+              <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder={termUnit} searchable clearable compact />
+            )}
+            {!isLandlordMode && (
+              <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder={termLandlord} searchable clearable compact />
+            )}
+            <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} placeholder="Method" clearable compact />
+            <ListToolbar.Input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook…" width="w-28" />
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters} disabled={loading}>Reset</ListToolbar.Button>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV} disabled={!canExportReports}>Export</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaSyncAlt} variant="outline" onClick={() => loadReport()}>Refresh</ListToolbar.Button>
+          </ListToolbar>
 
-            {/* ── Toolbar ── */}
-            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" className="shrink-0 w-28" />
-              <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 shrink-0 w-20 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <div className="flex shrink-0 items-center gap-1">
-                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <span className="shrink-0 text-[10px] font-semibold text-slate-400">–</span>
-                <input type="date" value={filters.endDate} onChange={setFilter("endDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </div>
-              <AppSelect value={filters.zone || null} onChange={(v) => setFilters((p) => ({ ...p, zone: v ?? "", propertyId: "" }))} options={zoneOptions} placeholder="Zone" searchable clearable size="sm" className="shrink-0 w-28" />
-              <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((p) => ({ ...p, propertyId: v ?? "", zone: "" }))} options={propertyOptions} placeholder={termProperty} searchable clearable size="sm" className="shrink-0 w-36" />
-              <AppSelect value={filters.tenantId || null} onChange={(v) => setFilters((p) => ({ ...p, tenantId: v ?? "", unitId: "" }))} options={tenantOptions} placeholder={termTenant} searchable clearable size="sm" className="shrink-0 w-36" />
-              {(!isLandlordMode || units.length > 0) && (
-                <AppSelect value={filters.unitId || null} onChange={(v) => setFilters((p) => ({ ...p, unitId: v ?? "" }))} options={unitOptions} placeholder={termUnit} searchable clearable size="sm" className="shrink-0 w-28" />
-              )}
-              {!isLandlordMode && (
-                <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((p) => ({ ...p, landlordId: v ?? "" }))} options={landlordOptions} placeholder={termLandlord} searchable clearable size="sm" className="shrink-0 w-36" />
-              )}
-              <AppSelect value={filters.paymentMethod || null} onChange={(v) => setFilters((p) => ({ ...p, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} placeholder="Method" clearable size="sm" className="shrink-0 w-32" />
-              <input value={filters.cashbook} onChange={setFilter("cashbook")} placeholder="Cashbook..." className="h-7 shrink-0 w-28 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-            </div>
-
-            {/* ── Actions bar ── */}
-            <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-2 py-1.5">
-              <span className="text-[10px] font-semibold text-slate-400">
-                {Number(summary.totalPayments || report.rows?.length || 0)} receipt{Number(summary.totalPayments || report.rows?.length || 0) !== 1 ? "s" : ""}
-              </span>
-              <div className="flex flex-shrink-0 items-center gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export</button>
-                <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
-                <ResetFiltersButton onReset={resetFilters} disabled={loading} />
-                <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
-              </div>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-1.5">
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white border border-slate-200 shadow-lg">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
@@ -450,7 +437,6 @@ const RentalCollectionReport = () => {
             </div>
           </div>
         </div>
-      </div>
     </DashboardLayout>
   );
 };

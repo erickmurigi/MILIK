@@ -198,7 +198,9 @@ export const getMaintenanceStats = async (req, res, next) => {
           pending:     { $sum: { $cond: [{ $eq: ["$status", "pending"] },      1, 0] } },
           inProgress:  { $sum: { $cond: [{ $eq: ["$status", "in_progress"] },  1, 0] } },
           completed:   { $sum: { $cond: [{ $eq: ["$status", "completed"] },    1, 0] } },
+          cancelled:   { $sum: { $cond: [{ $eq: ["$status", "cancelled"] },    1, 0] } },
           highPriority:{ $sum: { $cond: [{ $eq: ["$priority", "high"] },       1, 0] } },
+          emergency:   { $sum: { $cond: [{ $eq: ["$priority", "emergency"] },  1, 0] } },
           totalCost:   { $sum: { $cond: [{ $eq: ["$status", "completed"] }, "$actualCost", 0] } },
         },
       },
@@ -209,7 +211,9 @@ export const getMaintenanceStats = async (req, res, next) => {
       pending:      result?.pending      ?? 0,
       inProgress:   result?.inProgress   ?? 0,
       completed:    result?.completed    ?? 0,
+      cancelled:    result?.cancelled    ?? 0,
       highPriority: result?.highPriority ?? 0,
+      emergency:    result?.emergency    ?? 0,
       totalCost:    result?.totalCost    ?? 0,
     });
   } catch (err) {

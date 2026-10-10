@@ -4,11 +4,11 @@ import { useDispatch, useSelector } from 'react-redux';
 import AppSelect from '../../components/common/AppSelect';
 import { useTerms } from '../../hooks/useTerm';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
+import ListToolbar from '../../components/common/ListToolbar';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties } from '../../redux/selectors';
 import { getTenantPaidBalanceReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
-import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
-import ResetFiltersButton from '../../components/common/ResetFiltersButton';
+import { FaFileDownload, FaPrint, FaRedoAlt, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
 import { fmtDate } from '../../utils/dates';
@@ -105,6 +105,11 @@ const sumOtherPaid = (rows) => rows.reduce((s, r) => s + calcOtherPaid(r), 0);
 const sumBalBF = (rows) => rows.reduce((s, r) => s + calcBalBF(r), 0);
 
 const STATUS_LABEL = { owing: 'Arrears', credit: 'Overpaid', settled: 'Settled' };
+const STATUS_FILTER_OPTIONS = [
+  { value: 'owing', label: 'Arrears' },
+  { value: 'credit', label: 'Overpaid' },
+  { value: 'settled', label: 'Settled' },
+];
 
 
 // Inline <style> content moved here so it is not a new string on every render
@@ -284,6 +289,9 @@ const PaidBalanceReport = () => {
   }), [searchFilteredRows]);
 
   const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
+  // Stable option arrays — avoids busting AppSelect's internal useMemo every render
+  const yearSelectOptions = useMemo(() => yearOptions.map((y) => ({ value: y, label: y })), [yearOptions]);
+  const propertyFilterOptions = useMemo(() => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name })), [properties]);
   const { selMonth, selYear } = useMemo(() => {
     const fallbackYear = String(new Date().getFullYear());
     if (!filters.asOfDate) return { selMonth: null, selYear: fallbackYear };
@@ -425,44 +433,31 @@ const PaidBalanceReport = () => {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
+      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
         <style>{REPORT_STYLE}</style>
-        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
+          <ListToolbar>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              {searchFilteredRows.length} tenant{searchFilteredRows.length !== 1 ? "s" : ""}{summary.owingCount ? ` · ${summary.owingCount} in arrears` : ""}
+            </span>
+            <ListToolbar.Divider />
+            <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable compact />
+            <AppSelect value={selYear} onChange={(v) => applyMonthYear(selMonth, v ?? selYear)} options={yearSelectOptions} compact />
+            <ListToolbar.Input type="date" width="w-32" value={filters.startDate} onChange={setFilter("startDate")} />
+            <ListToolbar.Input type="date" width="w-32" value={filters.asOfDate} onChange={setFilter("asOfDate")} />
+            <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={propertyFilterOptions} placeholder={termProperty} searchable clearable compact />
+            <AppSelect value={filters.status === 'all' ? null : filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={STATUS_FILTER_OPTIONS} placeholder="All tenant positions" clearable compact />
+            <ListToolbar.Input value={filters.search} onChange={setFilter("search")} placeholder={`Search ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} width="w-52" />
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters} disabled={loading}>Reset</ListToolbar.Button>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV} disabled={!canExportReports}>Export</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaSyncAlt} variant="outline" onClick={() => loadReport()}>Refresh</ListToolbar.Button>
+          </ListToolbar>
 
-            {/* ── Toolbar ── */}
-            <div className="filter-bar sticky top-0 z-30 flex-shrink-0 flex items-center gap-1.5 overflow-x-auto border-b border-slate-200 bg-slate-50/95 p-1.5 shadow-sm backdrop-blur">
-              <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable size="sm" className="shrink-0 w-28" />
-              <select value={selYear} onChange={(e) => applyMonthYear(selMonth, e.target.value)} className="h-7 shrink-0 w-20 rounded-md border border-slate-200 bg-white px-2 text-[11px] text-slate-700 focus:border-[#0B3B2E] focus:outline-none">
-                {yearOptions.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <div className="flex shrink-0 items-center gap-1">
-                <input type="date" value={filters.startDate} onChange={setFilter("startDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-                <span className="shrink-0 text-[10px] font-semibold text-slate-400">–</span>
-                <input type="date" value={filters.asOfDate} onChange={setFilter("asOfDate")} className="h-7 w-32 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </div>
-              <AppSelect value={filters.propertyId} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={properties.map((p) => ({ value: p._id, label: p.propertyName || p.name }))} placeholder="All properties" searchable clearable size="sm" className="shrink-0 w-40" />
-              <AppSelect value={filters.status} onChange={(v) => setFilters((prev) => ({ ...prev, status: v ?? "all" }))} options={[{ value: "owing", label: "Arrears" }, { value: "credit", label: "Overpaid" }, { value: "settled", label: "Settled" }]} placeholder="All tenant positions" clearable size="sm" className="shrink-0 w-40" />
-              <input value={filters.search} onChange={setFilter("search")} placeholder={`Search ${termTenant.toLowerCase()}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} className="h-7 shrink-0 w-52 rounded-md border border-slate-200 bg-white px-2 text-[11px] transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-            </div>
-
-            {/* ── Actions bar ── */}
-            <div className="flex-shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-2 py-1.5">
-              <span className="text-[10px] font-semibold text-slate-400">
-                {searchFilteredRows.length} tenant{searchFilteredRows.length !== 1 ? "s" : ""}
-                {summary.owingCount ? ` · ${summary.owingCount} in arrears` : ""}
-              </span>
-              <div className="flex flex-shrink-0 items-center gap-1.5">
-                <button onClick={handleExportCSV} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaFileDownload /> Export CSV</button>
-                <button onClick={handlePrint} disabled={!canExportReports} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white disabled:opacity-40"><FaPrint /> Print</button>
-                <ResetFiltersButton onReset={resetFilters} disabled={loading} />
-                <button onClick={() => loadReport()} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-700 transition hover:border-[#0B3B2E] hover:bg-[#0B3B2E] hover:text-white"><FaSyncAlt className={loading ? 'animate-spin' : ''} /> Refresh</button>
-              </div>
-            </div>
-
-            {/* ── Table ── */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white p-1.5">
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white border border-slate-200 shadow-lg">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <div className="min-h-0 flex-1 overflow-auto">
                   <table className="min-w-full text-[10px] border-collapse">
                     <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
@@ -577,8 +572,6 @@ const PaidBalanceReport = () => {
                 </div>
               </div>
             </div>
-
-          </div>
         </div>
       </div>
     </DashboardLayout>

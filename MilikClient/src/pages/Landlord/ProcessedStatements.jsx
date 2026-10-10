@@ -61,6 +61,16 @@ const getStatementDisplayAmount = (statement) =>
 const getStatementAmountHeading = (statement) =>
   isNegativeProcessedStatement(statement) ? "Landlord Owes Manager" : "Net Due";
 
+const MONTH_OPTIONS = [
+  { value: "", label: "All Months" },
+  { value: "01", label: "January" }, { value: "02", label: "February" }, { value: "03", label: "March" },
+  { value: "04", label: "April" },   { value: "05", label: "May" },       { value: "06", label: "June" },
+  { value: "07", label: "July" },    { value: "08", label: "August" },    { value: "09", label: "September" },
+  { value: "10", label: "October" }, { value: "11", label: "November" },  { value: "12", label: "December" },
+];
+const thisYear = new Date().getFullYear();
+const YEAR_OPTIONS = Array.from({ length: 5 }, (_, i) => ({ value: String(thisYear - i), label: String(thisYear - i) }));
+
 const ProcessedStatements = () => {
   const dispatch  = useDispatch();
   const navigate  = useNavigate();
@@ -85,12 +95,19 @@ const ProcessedStatements = () => {
   const [activeTab, setActiveTab] = useTabState("/landlord/processed-statements:activeTab", "outstanding");
   const [searchText, setSearchText] = useTabState("/landlord/processed-statements:searchText", fromLedger ? (location.state?.propertyName || "") : "");
   const [sortBy, setSortBy] = useTabState("/landlord/processed-statements:sortBy", "date-desc");
+  const [periodMonth, setPeriodMonth] = useTabState("/landlord/processed-statements:periodMonth", "");
+  const [periodYear, setPeriodYear] = useTabState("/landlord/processed-statements:periodYear", String(thisYear));
   const [currentPage, setCurrentPage] = useTabState("/landlord/processed-statements:currentPage", 1);
 
-  // Refs so loadStatements always reads current values without stale closure
-  const tabRef = useRef("outstanding");
-  const sortByRef = useRef("date-desc");
-  const searchRef = useRef("");
+  // Refs so loadStatements always reads current values without stale closure. Seeded from
+  // the useTabState values above (not hardcoded defaults) — this page's tab remounts on
+  // every switch away and back, so without this the ref would reset to "outstanding" while
+  // the UI still showed whatever tab was restored, loading the wrong tab's data silently.
+  const tabRef = useRef(activeTab);
+  const sortByRef = useRef(sortBy);
+  const searchRef = useRef(searchText);
+  const periodMonthRef = useRef(periodMonth);
+  const periodYearRef = useRef(periodYear);
   const [showPayModal, setShowPayModal] = useState(null);
   const [showRecoveryModal, setShowRecoveryModal] = useState(null);
   const [showCommissionModal, setShowCommissionModal] = useState(null);
@@ -109,6 +126,7 @@ const ProcessedStatements = () => {
     try {
       const params = { tab: tabRef.current, page, limit: pageSizeRef.current, sortBy: sortByRef.current };
       if (searchRef.current) params.search = searchRef.current;
+      if (periodYearRef.current && periodMonthRef.current) params.month = `${periodYearRef.current}-${periodMonthRef.current}`;
       const res = await adminRequests.get(`/processed-statements/business/${businessId}`, { params });
       setStatements(res.data.statements || []);
       setPagination({
@@ -169,6 +187,20 @@ const ProcessedStatements = () => {
   const handleSortChange = (val) => {
     sortByRef.current = val;
     setSortBy(val);
+    setCurrentPage(1);
+    loadStatements(1);
+  };
+
+  const handlePeriodMonthChange = (val) => {
+    periodMonthRef.current = val || "";
+    setPeriodMonth(val || "");
+    setCurrentPage(1);
+    loadStatements(1);
+  };
+
+  const handlePeriodYearChange = (val) => {
+    periodYearRef.current = val || "";
+    setPeriodYear(val || "");
     setCurrentPage(1);
     loadStatements(1);
   };
@@ -505,6 +537,22 @@ const ProcessedStatements = () => {
                   { value: "date-desc", label: "Newest First" },
                   { value: "date-asc", label: "Oldest First" },
                 ]}
+                compact
+              />
+              <AppSelect
+                value={periodMonth || null}
+                onChange={(v) => handlePeriodMonthChange(v ?? "")}
+                options={MONTH_OPTIONS}
+                placeholder="All Months"
+                clearable
+                compact
+              />
+              <AppSelect
+                value={periodYear || null}
+                onChange={(v) => handlePeriodYearChange(v ?? "")}
+                options={YEAR_OPTIONS}
+                placeholder="All Years"
+                clearable
                 compact
               />
               <ListToolbar.Divider />

@@ -6,6 +6,7 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   FaArrowLeft,
   FaCheck,
+  FaDownload,
   FaEdit,
   FaEye,
   FaMoneyBillWave,
@@ -28,12 +29,7 @@ import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useConfirm } from "../../context/ConfirmContext";
 import { fmtDate } from "../../utils/dates";
 import { formatMoney } from "../../utils/money";
-import { printDocument, formatMoney as formatPrintMoney } from "../../utils/printKit";
-
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
-const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
+import { printDocument, printTabularList, formatMoney as formatPrintMoney } from "../../utils/printKit";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -62,6 +58,17 @@ const LINKED_DOCUMENT_OPTIONS = [
   { value: "expense_requisition", label: "Expense Requisition" },
   { value: "manual_reference", label: "Manual Reference" },
 ];
+
+const formInputClass = "h-7 w-full border border-slate-300 bg-white px-2.5 text-xs text-slate-900 placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const formLabelClass = "mb-0.5 block text-xs font-bold text-slate-900";
+const FormSection = ({ title, children }) => (
+  <div className="border border-slate-200 bg-white">
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 
 const ensureArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -224,16 +231,75 @@ const LandlordReceipts = () => {
     }
   }, [resolvedFormLandlord?.id, formData.property, formData.landlord]);
 
-  const stats = useMemo(() => {
-    const total = receipts.reduce((sum, row) => sum + Number(row?.amount || 0), 0);
-    const posted = receipts.filter((row) => row?.status === "posted").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
-    const draft = receipts.filter((row) => row?.status === "draft").reduce((sum, row) => sum + Number(row?.amount || 0), 0);
-    return {
-      count: totalReceipts,
-      posted,
-      draft,
-    };
-  }, [receipts, totalReceipts]);
+  // The on-screen table is server-paginated (one page at a time) — printing or exporting
+  // the whole filtered register needs its own fetch with every matching row.
+  const fetchAllFilteredReceipts = async () => {
+    const result = await getLandlordReceipts({
+      business: currentCompany._id,
+      page: 1,
+      limit: 2000,
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.category ? { category: filters.category } : {}),
+      ...(filters.landlord ? { landlord: filters.landlord } : {}),
+      ...(filters.property ? { property: filters.property } : {}),
+      ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    });
+    return ensureArray(result?.data);
+  };
+
+  const PRINT_COLUMNS = [
+    { label: "Date", value: (r) => fmtDate(r.receiptDate) },
+    { label: "Receipt No", value: (r) => r.receiptNumber || "-" },
+    { label: "Landlord", value: (r) => r?.landlord?.landlordName || "-" },
+    { label: "Property", value: (r) => r?.property?.propertyName || "-" },
+    { label: "Category", value: (r) => CATEGORY_OPTIONS.find((item) => item.value === r?.category)?.label || r?.category || "-" },
+    { label: "Amount", align: "right", bold: true, value: (r) => formatMoney(r?.amount || 0) },
+    { label: "Status", align: "center", value: (r) => String(r?.status || "draft").toUpperCase() },
+  ];
+
+  const handlePrintList = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const printRows = await fetchAllFilteredReceipts();
+      if (printRows.length === 0) { toast.info("There are no landlord receipts to print."); return; }
+      const totalAmount = printRows.reduce((s, r) => s + Number(r.amount || 0), 0);
+      const printed = printTabularList({
+        title: "Landlord Receipts",
+        subtitle: `${printRows.length.toLocaleString()} receipt${printRows.length !== 1 ? "s" : ""}`,
+        company: currentCompany,
+        summaryItems: [
+          ["Total Receipts", printRows.length.toLocaleString()],
+          ["Total Amount", formatMoney(totalAmount)],
+        ],
+        columns: PRINT_COLUMNS,
+        rows: printRows,
+        totalsRow: ["", "", "", "", "Total", formatMoney(totalAmount), ""],
+      });
+      if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load landlord receipts for printing");
+    }
+  };
+
+  const handleExportCsv = async () => {
+    if (!currentCompany?._id) return;
+    try {
+      const exportRows = await fetchAllFilteredReceipts();
+      if (exportRows.length === 0) { toast.info("There are no landlord receipts to export."); return; }
+      const header = PRINT_COLUMNS.map((c) => c.label);
+      const rows = exportRows.map((r) => PRINT_COLUMNS.map((c) => c.value(r)));
+      const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `landlord-receipts-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || "Failed to load landlord receipts for export");
+    }
+  };
 
   useEffect(() => {
     if (formData.category !== "advance_settlement" || !currentCompany?._id || !formData.property) {
@@ -437,17 +503,25 @@ const LandlordReceipts = () => {
               clearable
               compact
             />
+            <AppSelect
+              value={filters.property}
+              onChange={(v) => { setCurrentPage(1); setFilters((prev) => ({ ...prev, property: v ?? "" })); }}
+              options={landlordPropertyOptions}
+              placeholder="All Properties"
+              searchable
+              clearable
+              compact
+            />
 
             <ListToolbar.Divider />
-            <span className="shrink-0 border border-slate-200 bg-white px-1 py-0.5 text-[8px] font-bold text-slate-600">{totalReceipts} receipts</span>
-            <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-700">Posted: {formatMoney(stats.posted)}</span>
-            <span className="shrink-0 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[8px] font-bold text-amber-700">Draft: {formatMoney(stats.draft)}</span>
+            <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaDownload} variant="outline" onClick={handleExportCsv}>Export</ListToolbar.Button>
+            <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadData}>Refresh</ListToolbar.Button>
             <ListToolbar.Divider />
-            <ListToolbar.Button icon={FaRedoAlt} variant="accent" onClick={loadData}>Refresh</ListToolbar.Button>
             <ListToolbar.Button icon={FaPlus} disabled={!canCreate} onClick={openCreateModal}>Add Receipt</ListToolbar.Button>
           </ListToolbar>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
             <MilikTable
               columns={[
                 { label: "Date" },
@@ -460,22 +534,22 @@ const LandlordReceipts = () => {
               ]}
               rows={receipts}
               rowKey="_id"
-              loading={isLoading}
+              loading={isLoading && receipts.length === 0}
               empty="No landlord receipts found for the selected filters."
               minWidth="1180px"
               renderRow={(row) => (
                 <>
-                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{fmtDate(row.receiptDate)}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 font-bold text-blue-700">{row.receiptNumber || "-"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">
-                    <div className="font-bold text-slate-900">{row?.landlord?.landlordName || "-"}</div>
-                    <div className="text-[10px] text-slate-500">{row?.landlord?.landlordCode || ""}</div>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700 whitespace-nowrap">{fmtDate(row.receiptDate)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-blue-700 whitespace-nowrap">{row.receiptNumber || "-"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">
+                    <span className="font-semibold text-slate-900">{row?.landlord?.landlordName || "-"}</span>
+                    {row?.landlord?.landlordCode && <span className="ml-1.5 font-normal text-slate-500">· {row.landlord.landlordCode}</span>}
                   </td>
-                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{formatMoney(row?.amount || 0)}</td>
-                  <td className="px-3 py-1 border-r border-gray-100">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${row?.status === "posted" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : row?.status === "reversed" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-orange-50 text-orange-700 border-orange-200"}`}>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row?.property?.propertyName || "-"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{CATEGORY_OPTIONS.find((item) => item.value === row?.category)?.label || row?.category || "-"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900 tabular-nums">{formatMoney(row?.amount || 0)}</td>
+                  <td className="px-3 py-1.5">
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase border ${row?.status === "posted" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : row?.status === "reversed" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}>
                       {row?.status || "draft"}
                     </span>
                   </td>
@@ -483,17 +557,17 @@ const LandlordReceipts = () => {
               )}
               renderActions={(row) => (
                 <div className="inline-flex flex-wrap justify-end gap-1">
-                  <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="View"><FaEye size={12} /></button>
-                  <button type="button" onClick={() => handlePrint(row)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
+                  <button type="button" onClick={() => { setActiveReceipt(row); setShowDetailModal(true); }} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="View"><FaEye size={11} /></button>
+                  <button type="button" onClick={() => handlePrint(row)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Print"><FaPrint size={11} /></button>
                   {row?.status === "draft" && (
                     <>
-                      {canCreate && <button type="button" onClick={() => openEditModal(row)} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800" title="Edit"><FaEdit size={12} /></button>}
-                      {canCreate && <button type="button" onClick={() => handlePost(row)} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800" title="Post"><FaCheck size={12} /></button>}
-                      {canCreate && <button type="button" onClick={() => handleDelete(row)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete"><FaTrash size={12} /></button>}
+                      {canCreate && <button type="button" onClick={() => openEditModal(row)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Edit"><FaEdit size={11} /></button>}
+                      {canCreate && <button type="button" onClick={() => handlePost(row)} className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50" title="Post"><FaCheck size={11} /></button>}
+                      {canCreate && <button type="button" onClick={() => handleDelete(row)} className="px-2 py-1 border border-red-300 bg-white text-red-600 hover:bg-red-50" title="Delete"><FaTrash size={11} /></button>}
                     </>
                   )}
                   {row?.status === "posted" && (
-                    canReverse && <button type="button" onClick={() => handleReverse(row)} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800" title="Reverse"><FaUndo size={12} /></button>
+                    canReverse && <button type="button" onClick={() => handleReverse(row)} className="px-2 py-1 border border-red-300 bg-white text-red-600 hover:bg-red-50" title="Reverse"><FaUndo size={11} /></button>
                   )}
                 </div>
               )}
@@ -514,143 +588,148 @@ const LandlordReceipts = () => {
       </div>
 
       {showFormModal && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="sticky top-0 z-10 flex items-center justify-between bg-[#0B3B2E] px-5 py-4 text-white rounded-t-2xl">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-200">Landlord Receipts</p>
-                <h2 className="text-lg font-black">{editingReceiptId ? "Edit Landlord Receipt" : "Add Landlord Receipt"}</h2>
-              </div>
-              <button type="button" onClick={() => setShowFormModal(false)} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">{editingReceiptId ? "Edit Landlord Receipt" : "Add Landlord Receipt"}</h2>
+              <button type="button" onClick={() => setShowFormModal(false)} className="text-white/70 transition-colors hover:text-white"><FaTimes size={14} /></button>
             </div>
-            <div className="grid gap-3 px-5 py-4 md:grid-cols-2">
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Property <span className="text-red-500">*</span></span>
-                <AppSelect
-                  value={formData.property}
-                  onChange={(v) => setFormData((prev) => ({ ...prev, property: v ?? "" }))}
-                  options={landlordPropertyOptions}
-                  placeholder="Select property…"
-                  searchable
-                  size="sm"
-                />
-              </div>
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Landlord</span>
-                <input
-                  type="text"
-                  readOnly
-                  value={resolvedFormLandlord?.name || ""}
-                  className="w-full rounded border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700 outline-none disabled:cursor-not-allowed"
-                  placeholder={formData.property ? "No landlord linked to selected property" : "Select property first"}
-                />
-                <p className="mt-0.5 text-[10px] text-slate-500">Auto-filled from the selected property.</p>
-              </div>
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Receipt date <span className="text-red-500">*</span></span>
-                <input type="date" value={formData.receiptDate} onChange={(e) => setFormData((prev) => ({ ...prev, receiptDate: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </div>
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span>
-                <input type="number" min="0" step="0.01" value={formData.amount} onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" />
-              </div>
-              <div className="md:col-span-2">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Receipt category</span>
-                <AppSelect
-                  value={formData.category || null}
-                  onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "owner_float", linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))}
-                  options={CATEGORY_OPTIONS}
-                  size="sm"
-                />
-                <p className="mt-0.5 text-[10px] text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>
-              </div>
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Payment method</span>
-                <AppSelect
-                  value={formData.paymentMethod || null}
-                  onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
-                  options={PAYMENT_METHOD_OPTIONS}
-                  size="sm"
-                />
-              </div>
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Cashbook</span>
-                <AppSelect
-                  value={formData.cashbook || null}
-                  onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
-                  options={cashbookOptions}
-                  placeholder="Select cashbook…"
-                  searchable
-                  clearable
-                  size="sm"
-                />
-              </div>
-              <div>
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Reference number</span>
-                <input type="text" value={formData.referenceNumber} onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Bank ref / M-Pesa code / cheque no" />
-              </div>
-              {formData.category === "advance_settlement" ? (
-                <div className="md:col-span-2">
-                  <span className="mb-0.5 block text-xs font-semibold text-slate-700">
-                    Advancement to settle <span className="text-slate-400 font-normal">(select the advance this receipt clears)</span>
-                  </span>
-                  {advancements.length === 0 ? (
-                    <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
-                      No disbursed advancements found for this property. Select a property with active advancements first.
-                    </p>
-                  ) : (
+            <div className="flex-1 space-y-2.5 overflow-y-auto bg-white px-5 py-4">
+              <FormSection title="Receipt Details">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  <div>
+                    <label className={formLabelClass}>Property <span className="font-normal text-red-500">*</span></label>
                     <AppSelect
-                      value={formData.linkedDocumentId}
-                      onChange={(v) => {
-                        const adv = advancements.find((a) => String(a._id) === v);
-                        setFormData((prev) => ({
-                          ...prev,
-                          linkedDocumentType: "landlord_advancement",
-                          linkedDocumentId: v ?? "",
-                          linkedDocumentRef: adv?.referenceNo || "",
-                          amount: adv ? String(Number(adv.balanceOutstanding || 0)) : prev.amount,
-                        }));
-                      }}
-                      options={advancements.map((adv) => ({ value: adv._id, label: `${adv.referenceNo} — ${adv.title} — Balance: KES ${Number(adv.balanceOutstanding || 0).toLocaleString()}` }))}
-                      placeholder="— Select advancement —"
+                      value={formData.property}
+                      onChange={(v) => setFormData((prev) => ({ ...prev, property: v ?? "" }))}
+                      options={landlordPropertyOptions}
+                      placeholder="Select property…"
+                      searchable
+                      size="sm"
+                    />
+                  </div>
+                  <div>
+                    <label className={formLabelClass}>Landlord</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={resolvedFormLandlord?.name || ""}
+                      className={`${formInputClass} bg-slate-50 text-slate-600`}
+                      placeholder={formData.property ? "No landlord linked to selected property" : "Select property first"}
+                    />
+                  </div>
+                  <div>
+                    <label className={formLabelClass}>Receipt date <span className="font-normal text-red-500">*</span></label>
+                    <input type="date" value={formData.receiptDate} onChange={(e) => setFormData((prev) => ({ ...prev, receiptDate: e.target.value }))} className={formInputClass} />
+                  </div>
+                  <div>
+                    <label className={formLabelClass}>Amount <span className="font-normal text-red-500">*</span></label>
+                    <input type="number" min="0" step="0.01" value={formData.amount} onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))} className={formInputClass} />
+                  </div>
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Receipt category</label>
+                    <AppSelect
+                      value={formData.category || null}
+                      onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "owner_float", linkedDocumentType: "", linkedDocumentId: "", linkedDocumentRef: "" }))}
+                      options={CATEGORY_OPTIONS}
+                      size="sm"
+                    />
+                    <p className="mt-0.5 text-[10px] text-slate-500">Posting rule: Dr selected cashbook, {CATEGORY_OPTIONS.find((item) => item.value === formData.category)?.accountHint || "controlled category account"}.</p>
+                  </div>
+                  <div>
+                    <label className={formLabelClass}>Payment method</label>
+                    <AppSelect
+                      value={formData.paymentMethod || null}
+                      onChange={(v) => setFormData((prev) => ({ ...prev, paymentMethod: v ?? "bank_transfer" }))}
+                      options={PAYMENT_METHOD_OPTIONS}
+                      size="sm"
+                    />
+                  </div>
+                  <div>
+                    <label className={formLabelClass}>Cashbook</label>
+                    <AppSelect
+                      value={formData.cashbook || null}
+                      onChange={(v) => setFormData((prev) => ({ ...prev, cashbook: v ?? "" }))}
+                      options={cashbookOptions}
+                      placeholder="Select cashbook…"
                       searchable
                       clearable
                       size="sm"
                     />
-                  )}
+                  </div>
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Reference number</label>
+                    <input type="text" value={formData.referenceNumber} onChange={(e) => setFormData((prev) => ({ ...prev, referenceNumber: e.target.value }))} className={formInputClass} placeholder="Bank ref / M-Pesa code / cheque no" />
+                  </div>
                 </div>
-              ) : (
-                <>
-                  <div>
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document type</span>
-                    <AppSelect
-                      value={formData.linkedDocumentType || null}
-                      onChange={(v) => setFormData((prev) => ({ ...prev, linkedDocumentType: v ?? "" }))}
-                      options={LINKED_DOCUMENT_OPTIONS.filter((o) => o.value !== "")}
-                      placeholder="None"
-                      clearable
-                      size="sm"
-                    />
+              </FormSection>
+
+              <FormSection title="Linking & Notes">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+                  {formData.category === "advance_settlement" ? (
+                    <div className="col-span-2">
+                      <label className={formLabelClass}>
+                        Advancement to settle <span className="font-normal text-slate-400">(select the advance this receipt clears)</span>
+                      </label>
+                      {advancements.length === 0 ? (
+                        <p className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-700">
+                          No disbursed advancements found for this property. Select a property with active advancements first.
+                        </p>
+                      ) : (
+                        <AppSelect
+                          value={formData.linkedDocumentId}
+                          onChange={(v) => {
+                            const adv = advancements.find((a) => String(a._id) === v);
+                            setFormData((prev) => ({
+                              ...prev,
+                              linkedDocumentType: "landlord_advancement",
+                              linkedDocumentId: v ?? "",
+                              linkedDocumentRef: adv?.referenceNo || "",
+                              amount: adv ? String(Number(adv.balanceOutstanding || 0)) : prev.amount,
+                            }));
+                          }}
+                          options={advancements.map((adv) => ({ value: adv._id, label: `${adv.referenceNo} — ${adv.title} — Balance: KES ${Number(adv.balanceOutstanding || 0).toLocaleString()}` }))}
+                          placeholder="— Select advancement —"
+                          searchable
+                          clearable
+                          size="sm"
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className={formLabelClass}>Linked document type</label>
+                        <AppSelect
+                          value={formData.linkedDocumentType || null}
+                          onChange={(v) => setFormData((prev) => ({ ...prev, linkedDocumentType: v ?? "" }))}
+                          options={LINKED_DOCUMENT_OPTIONS.filter((o) => o.value !== "")}
+                          placeholder="None"
+                          clearable
+                          size="sm"
+                        />
+                      </div>
+                      <div>
+                        <label className={formLabelClass}>Linked document ID</label>
+                        <input type="text" value={formData.linkedDocumentId} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentId: e.target.value }))} className={formInputClass} placeholder="Optional internal document id" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className={formLabelClass}>Linked document reference</label>
+                        <input type="text" value={formData.linkedDocumentRef} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentRef: e.target.value }))} className={formInputClass} placeholder="Statement no / voucher no / manual ref" />
+                      </div>
+                    </>
+                  )}
+                  <div className="col-span-2">
+                    <label className={formLabelClass}>Narration</label>
+                    <textarea rows={3} value={formData.narration} onChange={(e) => setFormData((prev) => ({ ...prev, narration: e.target.value }))} className="w-full resize-none border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Explain why this money was received from the landlord" />
                   </div>
-                  <div>
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document ID</span>
-                    <input type="text" value={formData.linkedDocumentId} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentId: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Optional internal document id" />
-                  </div>
-                  <div>
-                    <span className="mb-0.5 block text-xs font-semibold text-slate-700">Linked document reference</span>
-                    <input type="text" value={formData.linkedDocumentRef} onChange={(e) => setFormData((prev) => ({ ...prev, linkedDocumentRef: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Statement no / voucher no / manual ref" />
-                  </div>
-                </>
-              )}
-              <div className="md:col-span-2">
-                <span className="mb-0.5 block text-xs font-semibold text-slate-700">Narration</span>
-                <textarea rows={3} value={formData.narration} onChange={(e) => setFormData((prev) => ({ ...prev, narration: e.target.value }))} className="w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" placeholder="Explain why this money was received from the landlord" />
-              </div>
+                </div>
+              </FormSection>
             </div>
-            <div className="flex items-center justify-end gap-3 border-t border-slate-200 px-5 py-4">
-              <button type="button" onClick={() => setShowFormModal(false)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button type="button" onClick={handleSave} disabled={saving} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-black text-white disabled:cursor-not-allowed disabled:opacity-60 ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}>
-                <FaPlus /> {saving ? "Saving..." : editingReceiptId ? "Update Draft" : "Save Draft"}
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button type="button" onClick={() => setShowFormModal(false)} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button type="button" onClick={handleSave} disabled={saving} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                <FaPlus size={11} /> {saving ? "Saving…" : editingReceiptId ? "Update Draft" : "Save Draft"}
               </button>
             </div>
           </div>
@@ -658,86 +737,61 @@ const LandlordReceipts = () => {
       )}
 
       {showDetailModal && activeReceipt && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-              <div>
-                <h2 className="text-xl font-black text-slate-900">Landlord Receipt Details</h2>
-                <p className="mt-1 text-sm text-slate-500">{activeReceipt?.receiptNumber || "Receipt"}</p>
-              </div>
-              <button type="button" onClick={() => setShowDetailModal(false)} className="rounded-2xl border border-slate-200 p-3 text-slate-500 hover:bg-slate-100"><FaTimes /></button>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/45 p-4">
+          <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
+            <div className="flex flex-shrink-0 items-center justify-between bg-[#0B3B2E] px-4 py-3 text-white">
+              <h2 className="text-sm font-black uppercase tracking-wide">Landlord Receipt — {activeReceipt?.receiptNumber || "Receipt"}</h2>
+              <button type="button" onClick={() => setShowDetailModal(false)} className="text-white/70 transition-colors hover:text-white"><FaTimes size={14} /></button>
             </div>
-            <div className="space-y-5 px-6 py-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Landlord</p>
-                  <p className="mt-2 text-lg font-black text-slate-900">{activeReceipt?.landlord?.landlordName || "-"}</p>
-                  <p className="mt-1 text-sm text-slate-600">{activeReceipt?.landlord?.landlordCode || "-"}</p>
+            <div className="flex-1 space-y-2.5 overflow-y-auto bg-white px-5 py-4">
+              <FormSection title="Landlord & Property">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs">
+                  <div><span className="font-bold text-slate-900">Landlord:</span> <span className="text-slate-600">{activeReceipt?.landlord?.landlordName || "-"} {activeReceipt?.landlord?.landlordCode ? `(${activeReceipt.landlord.landlordCode})` : ""}</span></div>
+                  <div><span className="font-bold text-slate-900">Property:</span> <span className="text-slate-600">{activeReceipt?.property?.propertyName || "-"} {activeReceipt?.property?.propertyCode ? `(${activeReceipt.property.propertyCode})` : ""}</span></div>
+                  <div><span className="font-bold text-slate-900">Status:</span> <span className="text-slate-600">{String(activeReceipt?.status || "draft").toUpperCase()}</span></div>
+                  <div><span className="font-bold text-slate-900">Date:</span> <span className="text-slate-600">{fmtDate(activeReceipt?.receiptDate)}</span></div>
+                  <div><span className="font-bold text-slate-900">Amount:</span> <span className="text-slate-600">{formatMoney(activeReceipt?.amount || 0)}</span></div>
+                  <div><span className="font-bold text-slate-900">Reference:</span> <span className="text-slate-600">{activeReceipt?.referenceNumber || "-"}</span></div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Property</p>
-                  <p className="mt-2 text-lg font-black text-slate-900">{activeReceipt?.property?.propertyName || "-"}</p>
-                  <p className="mt-1 text-sm text-slate-600">{activeReceipt?.property?.propertyCode || "-"}</p>
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Receipt status</p>
-                  <p className="mt-2 text-xl font-black text-slate-900">{String(activeReceipt?.status || "draft").toUpperCase()}</p>
-                  <p className="mt-1 text-sm text-slate-500">Date: {fmtDate(activeReceipt?.receiptDate)}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Amount</p>
-                  <p className="mt-2 text-xl font-black text-slate-900">{formatMoney(activeReceipt?.amount || 0)}</p>
-                  <p className="mt-1 text-sm text-slate-500">Reference: {activeReceipt?.referenceNumber || "-"}</p>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Controlled posting meaning</p>
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
-                    <div className="mb-1 font-black">Debit leg</div>
+              </FormSection>
+
+              <FormSection title="Controlled Posting">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800">
+                    <div className="mb-0.5 font-black uppercase tracking-wide">Debit leg</div>
                     Dr {activeReceipt?.cashbook || "Selected cashbook"}
                   </div>
-                  <div className="rounded-2xl bg-slate-100 p-4 text-sm font-semibold text-slate-800">
-                    <div className="mb-1 font-black">Credit leg</div>
+                  <div className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800">
+                    <div className="mb-0.5 font-black uppercase tracking-wide">Credit leg</div>
                     {CATEGORY_OPTIONS.find((item) => item.value === activeReceipt?.category)?.accountHint || "Controlled category account"}
                   </div>
                 </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Audit</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                    <p><span className="font-black text-slate-900">Created by:</span> {actorName(activeReceipt?.createdBy)}</p>
-                    <p><span className="font-black text-slate-900">Posted by:</span> {actorName(activeReceipt?.postedBy)}</p>
-                    <p><span className="font-black text-slate-900">Reversed by:</span> {actorName(activeReceipt?.reversedBy)}</p>
-                  </div>
+              </FormSection>
+
+              <FormSection title="Audit & Linked Document">
+                <div className="grid grid-cols-2 gap-x-3 gap-y-2.5 text-xs">
+                  <div><span className="font-bold text-slate-900">Created by:</span> <span className="text-slate-600">{actorName(activeReceipt?.createdBy)}</span></div>
+                  <div><span className="font-bold text-slate-900">Posted by:</span> <span className="text-slate-600">{actorName(activeReceipt?.postedBy)}</span></div>
+                  <div><span className="font-bold text-slate-900">Reversed by:</span> <span className="text-slate-600">{actorName(activeReceipt?.reversedBy)}</span></div>
+                  <div><span className="font-bold text-slate-900">Linked type:</span> <span className="text-slate-600">{activeReceipt?.linkedDocumentType || "-"}</span></div>
+                  <div><span className="font-bold text-slate-900">Linked ref:</span> <span className="text-slate-600">{activeReceipt?.linkedDocumentRef || activeReceipt?.linkedDocumentId || "-"}</span></div>
                 </div>
-                <div className="rounded-2xl border border-slate-200 p-4">
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Linked document</p>
-                  <div className="mt-3 space-y-2 text-sm text-slate-700">
-                    <p><span className="font-black text-slate-900">Type:</span> {activeReceipt?.linkedDocumentType || "-"}</p>
-                    <p><span className="font-black text-slate-900">ID:</span> {activeReceipt?.linkedDocumentId || "-"}</p>
-                    <p><span className="font-black text-slate-900">Reference:</span> {activeReceipt?.linkedDocumentRef || "-"}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-slate-200 p-4">
-                <p className="text-xs font-black uppercase tracking-[0.22em] text-slate-500">Narration</p>
-                <p className="mt-3 text-sm leading-6 text-slate-700">{activeReceipt?.narration || "No narration provided."}</p>
-              </div>
+              </FormSection>
+
+              <FormSection title="Narration">
+                <p className="text-xs leading-5 text-slate-700">{activeReceipt?.narration || "No narration provided."}</p>
+              </FormSection>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 px-6 py-5">
-              <button type="button" onClick={() => handlePrint(activeReceipt)} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-100"><FaPrint /> Print</button>
+            <div className="flex flex-shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-5 py-3">
+              <button type="button" onClick={() => handlePrint(activeReceipt)} className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaPrint size={11} /> Print</button>
               {activeReceipt?.status === "draft" && canCreate && (
                 <>
-                  <button type="button" onClick={() => { setShowDetailModal(false); openEditModal(activeReceipt); }} className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-100"><FaEdit /> Edit Draft</button>
-                  <button type="button" onClick={() => { setShowDetailModal(false); handlePost(activeReceipt); }} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}><FaCheck /> Post</button>
+                  <button type="button" onClick={() => { setShowDetailModal(false); openEditModal(activeReceipt); }} className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaEdit size={11} /> Edit Draft</button>
+                  <button type="button" onClick={() => { setShowDetailModal(false); handlePost(activeReceipt); }} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127]"><FaCheck size={11} /> Post</button>
                 </>
               )}
               {activeReceipt?.status === "posted" && canReverse && (
-                <button type="button" onClick={() => { setShowDetailModal(false); handleReverse(activeReceipt); }} className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-black text-white ${MILIK_ORANGE} ${MILIK_ORANGE_HOVER}`}><FaUndo /> Reverse</button>
+                <button type="button" onClick={() => { setShowDetailModal(false); handleReverse(activeReceipt); }} className="inline-flex h-8 items-center gap-1.5 border border-red-300 bg-white px-3 text-xs font-bold text-red-600 hover:bg-red-50"><FaUndo size={11} /> Reverse</button>
               )}
             </div>
           </div>

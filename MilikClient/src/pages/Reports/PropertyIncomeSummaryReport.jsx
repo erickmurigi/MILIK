@@ -9,7 +9,7 @@ import MilikTable from '../../components/common/MilikTable';
 import { selectCurrentUser, selectCurrentCompany, selectAllProperties, selectAllLandlords } from '../../redux/selectors';
 import { getLandlords, getPropertyIncomeSummaryReport } from '../../redux/apiCalls';
 import { getProperties } from '../../redux/propertyRedux';
-import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
+import { FaFileDownload, FaPrint, FaRedoAlt, FaSyncAlt } from 'react-icons/fa';
 import useDebounce from '../../hooks/useDebounce';
 import { toast } from 'react-toastify';
 import { hasCompanyPermission } from '../../utils/permissions';
@@ -18,12 +18,19 @@ import { fmtDate } from '../../utils/dates';
 import { formatMoney } from '../../utils/money';
 import printTabularList from '../../utils/printList';
 
-const MILIK_GREEN = '#0B3B2E';
 const formatPercent = (value) => (value === null || value === undefined ? '—' : `${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 1 })}%`);
 const toDateInputValue = (value) => new Date(value).toISOString().split('T')[0];
 const formatCategory = (value) => (value ? String(value).replace(/_/g, ' ') : '—');
 
-const EXPENSE_CATEGORIES = ['maintenance', 'repair', 'utility', 'tax', 'insurance', 'supplies', 'other'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  .map((label, i) => ({ value: String(i + 1), label }));
+
+const defaultFilters = () => ({
+  startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
+  endDate: toDateInputValue(new Date()),
+  propertyId: '',
+  landlordId: '',
+});
 
 const PropertyIncomeSummaryReport = () => {
   const dispatch = useDispatch();
@@ -45,13 +52,9 @@ const PropertyIncomeSummaryReport = () => {
 
   const [loading, setLoading] = useState(false);
   const filtersInitialized = useRef(false);
-  const [filters, setFilters] = useTabState("/reports/property-income-summary:filters", () => ({
-    startDate: toDateInputValue(new Date(new Date().getFullYear(), new Date().getMonth(), 1)),
-    endDate: toDateInputValue(new Date()),
-    propertyId: '',
-    landlordId: '',
-  }));
+  const [filters, setFilters] = useTabState("/reports/property-income-summary:filters", defaultFilters);
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
+  const resetFilters = () => setFilters(defaultFilters());
   const [report, setReport] = useState({ summary: {}, byProperty: [], expensesByCategory: [] });
 
   useEffect(() => {
@@ -61,11 +64,11 @@ const PropertyIncomeSummaryReport = () => {
   }, [businessId, dispatch, isLandlordMode]);
 
   const loadReportRef = useRef(null);
-  const loadReport = useCallback(async () => {
+  const loadReport = useCallback(async (filterOverrides = {}) => {
     if (!businessId) return;
     setLoading(true);
     try {
-      const data = await getPropertyIncomeSummaryReport({ business: businessId, ...filters });
+      const data = await getPropertyIncomeSummaryReport({ business: businessId, ...filters, ...filterOverrides });
       setReport({
         summary: data?.summary || {},
         byProperty: Array.isArray(data?.byProperty) ? data.byProperty : [],
@@ -89,6 +92,31 @@ const PropertyIncomeSummaryReport = () => {
     if (!filtersInitialized.current) { filtersInitialized.current = true; return; }
     loadReportRef.current();
   }, [debouncedTrigger]);
+
+  // ── Month / Year period selector ──────────────────────────────────────────
+  const yearOptions = useMemo(() => { const y = new Date().getFullYear(); return [y + 1, y, y - 1, y - 2, y - 3].map(String); }, []);
+  // Stable option objects — avoids busting AppSelect's internal useMemo every render
+  const yearSelectOptions = useMemo(() => yearOptions.map((y) => ({ value: y, label: y })), [yearOptions]);
+  const { selMonth, selYear } = useMemo(() => {
+    const fallbackYear = String(new Date().getFullYear());
+    if (!filters.startDate) return { selMonth: null, selYear: fallbackYear };
+    const s = new Date(filters.startDate + 'T00:00:00');
+    const lastDay = new Date(s.getFullYear(), s.getMonth() + 1, 0);
+    const expectedEnd = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+    if (filters.startDate.endsWith('-01') && filters.endDate === expectedEnd) {
+      return { selMonth: String(s.getMonth() + 1), selYear: String(s.getFullYear()) };
+    }
+    return { selMonth: null, selYear: String(s.getFullYear()) };
+  }, [filters.startDate, filters.endDate]);
+  const applyMonthYear = (month, year) => {
+    const m = Number(month); const y = Number(year);
+    if (!m || !y) return;
+    const lastDay = new Date(y, m, 0).getDate();
+    const startDate = `${y}-${String(m).padStart(2, '0')}-01`;
+    const endDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    setFilters((prev) => ({ ...prev, startDate, endDate }));
+    loadReport({ startDate, endDate });
+  };
 
   const summary = report.summary || {};
   const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed Property'])), [properties]);
@@ -350,123 +378,95 @@ const PropertyIncomeSummaryReport = () => {
         </div>
       </div>
 
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
-        <style>{`
-          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #0B3B2E; box-shadow: 0 0 0 1px rgba(11,59,46,0.2); outline: none; }
-        `}</style>
+      <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
+          <ListToolbar>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              {(report.byProperty || []).length} {(report.byProperty || []).length === 1 ? termProperty.toLowerCase() : termProperties.toLowerCase()}
+            </span>
+            <ListToolbar.Divider />
+            <AppSelect value={selMonth} onChange={(v) => applyMonthYear(v, selYear)} options={MONTHS} placeholder="Month" clearable compact />
+            <AppSelect value={selYear} onChange={(v) => applyMonthYear(selMonth, v ?? selYear)} options={yearSelectOptions} compact />
+            <ListToolbar.Input type="date" width="w-32" value={filters.startDate} onChange={setFilter("startDate")} />
+            <ListToolbar.Input type="date" width="w-32" value={filters.endDate} onChange={setFilter("endDate")} />
+            <AppSelect value={filters.propertyId || null} onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))} options={propertyOptions} placeholder={termProperty} searchable clearable compact />
+            {!isLandlordMode && (
+              <AppSelect value={filters.landlordId || null} onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))} options={landlordOptions} placeholder={termLandlord} searchable clearable compact />
+            )}
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters} disabled={loading}>Reset</ListToolbar.Button>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV} disabled={!canExportReports}>Export</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaSyncAlt} variant="outline" onClick={() => loadReport()}>Refresh</ListToolbar.Button>
+          </ListToolbar>
 
-        <div className="mx-auto flex w-full max-w-none min-h-0 flex-1 flex-col">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-
-            {/* Filter bar */}
-            <ListToolbar>
-              <ListToolbar.Input type="date" width="w-32" value={filters.startDate} onChange={setFilter("startDate")} />
-              <ListToolbar.Input type="date" width="w-32" value={filters.endDate} onChange={setFilter("endDate")} />
-              <AppSelect
-                value={filters.propertyId}
-                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
-                options={propertyOptions}
-                placeholder="All properties"
-                searchable
-                clearable
-                compact
-                className="shrink-0 w-40"
+          <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+            <div className="flex min-h-0 flex-[2] flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
+              <MilikTable
+                columns={[
+                  { label: termProperty },
+                  { label: "Rent Invoiced", align: "right" },
+                  { label: "Utilities Invoiced", align: "right" },
+                  { label: "Total Invoiced", align: "right" },
+                  { label: "Collected", align: "right" },
+                  { label: "Expenses", align: "right" },
+                  { label: "Net Income (Cash)", align: "right" },
+                  { label: "Collection %", align: "right" },
+                ]}
+                rows={report.byProperty || []}
+                rowKey={(row) => row.propertyId || row.propertyName}
+                loading={loading && (report.byProperty || []).length === 0}
+                empty="No data found for the selected filters."
+                renderFooter={() => (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-slate-200 font-black text-slate-700">Totals</td>
+                    <td className="px-3 py-1.5 border-r border-slate-200 text-right font-black text-slate-700">{formatMoney((report.byProperty || []).reduce((s, r) => s + Number(r.rentInvoiced || 0), 0))}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-200 text-right font-black text-slate-700">{formatMoney((report.byProperty || []).reduce((s, r) => s + Number(r.utilitiesInvoiced || 0), 0))}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-200 text-right font-black text-slate-700">{formatMoney(summary.totalInvoiced)}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-200 text-right font-black text-emerald-700">{formatMoney(summary.totalCollected)}</td>
+                    <td className="px-3 py-1.5 border-r border-slate-200 text-right font-black text-red-600">{formatMoney(summary.totalExpenses)}</td>
+                    <td className={`px-3 py-1.5 border-r border-slate-200 text-right font-black ${Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(summary.netIncome)}</td>
+                    <td className="px-3 py-1.5 text-right font-black text-slate-700">{formatPercent(summary.collectionRate)}</td>
+                  </>
+                )}
+                renderRow={(row) => (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.propertyName}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-700 tabular-nums">{formatMoney(row.rentInvoiced)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-700 tabular-nums">{formatMoney(row.utilitiesInvoiced)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-700 tabular-nums">{formatMoney(row.totalInvoiced)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-emerald-700 tabular-nums">{formatMoney(row.totalCollected)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right text-red-600 tabular-nums">{formatMoney(row.totalExpenses)}</td>
+                    <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-semibold tabular-nums ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(row.netIncome)}</td>
+                    <td className="px-3 py-1.5 text-right text-slate-700 tabular-nums">{formatPercent(row.collectionRate)}</td>
+                  </>
+                )}
               />
-              {!isLandlordMode && (
-                <AppSelect
-                  value={filters.landlordId}
-                  onChange={(v) => setFilters((prev) => ({ ...prev, landlordId: v ?? '' }))}
-                  options={landlordOptions}
-                  placeholder={`All ${termLandlords.toLowerCase()}`}
-                  searchable
-                  clearable
-                  compact
-                  className="shrink-0 w-40"
-                />
-              )}
-              <div className="ml-auto flex shrink-0 items-center gap-0.5">
-                <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? 'Export CSV' : 'No export permission'}>Export CSV</ListToolbar.Button>
-                <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? 'Print' : 'No print permission'}>Print</ListToolbar.Button>
-                <ListToolbar.Button variant="outline" onClick={loadReport}>
-                  <FaSyncAlt size={7} className={loading ? 'animate-spin' : ''} /> Refresh
-                </ListToolbar.Button>
-              </div>
-            </ListToolbar>
-
-            {/* ── Tables ── */}
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-
-              {/* Income & Expenses by Property */}
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="flex-shrink-0 border-b border-[#0B3B2E]/10 bg-[#0B3B2E] px-3 py-1.5 text-xs font-bold text-white">Income &amp; Expenses by Property</div>
-                <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
-                  <MilikTable
-                    columns={[
-                      { label: termProperty },
-                      { label: "Rent Invoiced", align: "right" },
-                      { label: "Utilities Invoiced", align: "right" },
-                      { label: "Total Invoiced", align: "right" },
-                      { label: "Collected", align: "right" },
-                      { label: "Expenses", align: "right" },
-                      { label: "Net Income (Cash)", align: "right" },
-                      { label: "Collection %", align: "right" },
-                    ]}
-                    rows={report.byProperty || []}
-                    rowKey={(row) => row.propertyId || row.propertyName}
-                    loading={loading}
-                    empty="No data found for the selected filters."
-                    renderFooter={(report.byProperty || []).length > 1 ? () => (
-                      <>
-                        <td className="px-3 py-2 font-black text-slate-700">Totals</td>
-                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.rentInvoiced||0),0))}</td>
-                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney((report.byProperty||[]).reduce((s,r)=>s+Number(r.utilitiesInvoiced||0),0))}</td>
-                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatMoney(summary.totalInvoiced)}</td>
-                        <td className="px-3 py-2 text-right font-black text-emerald-700">{formatMoney(summary.totalCollected)}</td>
-                        <td className="px-3 py-2 text-right font-black text-red-600">{formatMoney(summary.totalExpenses)}</td>
-                        <td className={`px-3 py-2 text-right font-black ${Number(summary.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(summary.netIncome)}</td>
-                        <td className="px-3 py-2 text-right font-black text-slate-700">{formatPercent(summary.collectionRate)}</td>
-                      </>
-                    ) : undefined}
-                    renderRow={(row) => (
-                      <>
-                        <td className="px-3 py-1.5 border-r border-slate-100 font-semibold text-slate-900">{row.propertyName}</td>
-                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.rentInvoiced)}</td>
-                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.utilitiesInvoiced)}</td>
-                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-slate-700">{formatMoney(row.totalInvoiced)}</td>
-                        <td className="px-3 py-1.5 border-r border-slate-100 text-right font-semibold text-emerald-700">{formatMoney(row.totalCollected)}</td>
-                        <td className="px-3 py-1.5 border-r border-slate-100 text-right text-red-600">{formatMoney(row.totalExpenses)}</td>
-                        <td className={`px-3 py-1.5 border-r border-slate-100 text-right font-semibold ${Number(row.netIncome || 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{formatMoney(row.netIncome)}</td>
-                        <td className="px-3 py-1.5 text-right text-slate-700">{formatPercent(row.collectionRate)}</td>
-                      </>
-                    )}
-                  />
-                </div>
-              </div>
-
-              {/* Expenses by Category — fixed-height footer section */}
-              {(report.expensesByCategory || []).length > 0 && (
-                <div className="flex-shrink-0 border-t-2 border-slate-200" style={{ maxHeight: '170px', overflowY: 'auto' }}>
-                  <table className="min-w-full text-[11px] border-collapse">
-                    <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-                      <tr>
-                        <th className="px-3 py-1.5 text-left font-bold border-r border-white/10">Expense Category</th>
-                        <th className="px-3 py-1.5 text-right font-bold border-r border-white/10">Total</th>
-                        <th className="px-3 py-1.5 text-right font-bold">Transactions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(report.expensesByCategory || []).map((row, i) => (
-                        <tr key={row.category} className={`border-b border-slate-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'} hover:bg-emerald-50/30`}>
-                          <td className="px-3 py-1.5 border-r border-slate-100 capitalize font-semibold text-slate-900">{formatCategory(row.category)}</td>
-                          <td className="px-3 py-1.5 border-r border-slate-100 text-right text-red-600">{formatMoney(row.total)}</td>
-                          <td className="px-3 py-1.5 text-right text-slate-700">{row.count}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
+
+            {/* Expenses by Category */}
+            {(report.expensesByCategory || []).length > 0 && (
+              <div className="flex max-h-[180px] flex-[1] flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
+                <MilikTable
+                  columns={[
+                    { label: "Expense Category" },
+                    { label: "Total", align: "right" },
+                    { label: "Transactions", align: "right" },
+                  ]}
+                  rows={report.expensesByCategory || []}
+                  rowKey="category"
+                  empty="No expenses in the selected period."
+                  renderRow={(row) => (
+                    <>
+                      <td className="px-3 py-1.5 border-r border-gray-100 capitalize font-semibold text-slate-900">{formatCategory(row.category)}</td>
+                      <td className="px-3 py-1.5 border-r border-gray-100 text-right text-red-600 tabular-nums">{formatMoney(row.total)}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-700 tabular-nums">{row.count}</td>
+                    </>
+                  )}
+                />
+              </div>
+            )}
           </div>
         </div>
       </div>

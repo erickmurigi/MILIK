@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSelector } from 'react-redux';
-import { FaDoorOpen, FaPrint, FaRedoAlt } from 'react-icons/fa';
+import { useTabState } from '../../hooks/useTabState';
+import { FaFileDownload, FaPrint, FaSyncAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import ListToolbar from '../../components/common/ListToolbar';
@@ -14,6 +15,12 @@ import printTabularList from '../../utils/printList';
 
 const fmt = (v) => `KES ${Number(v || 0).toLocaleString('en-KE', { minimumFractionDigits: 2 })}`;
 const pct = (v) => `${Number(v || 0).toFixed(1)}%`;
+
+// This report's data isn't in Redux — it's local state, so it'd normally be refetched
+// from scratch every time this tab remounts. A module-level cache (outside React, so
+// it survives unmount) gives the same "instant on revisit" behavior as useEntityCache.
+const STALE_MS = 30_000;
+const reportCache = new Map();
 
 const vacancyColor = (rate) => {
   if (rate >= 30) return 'text-red-600 font-bold';
@@ -30,33 +37,48 @@ export default function ZoneVacancyReport() {
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser    = useSelector(selectCurrentUser);
   const companyName    = currentCompany?.companyName || currentCompany?.name || currentUser?.company?.companyName || 'Company';
+  const businessId     = currentCompany?._id || '';
 
   const [report,     setReport]     = useState(null);
   const [loading,    setLoading]    = useState(false);
-  const [zoneFilter, setZoneFilter] = useState('');
+  const [zoneFilter, setZoneFilter] = useTabState("/reports/zone-vacancy:zoneFilter", '');
 
-  const loadReport = useCallback(async () => {
+  // Cached per business — instant render on tab revisit within the staleness window.
+  // `force: true` (Refresh button) always hits the server.
+  const loadReport = useCallback(async ({ force = false } = {}) => {
+    const cached = reportCache.get(businessId);
+    if (!force && cached && Date.now() - cached.loadedAt < STALE_MS) {
+      setReport(cached.report);
+      return;
+    }
     setLoading(true);
     try {
       const res = await adminRequests.get('/zones/reports/vacancy');
       setReport(res.data);
+      reportCache.set(businessId, { report: res.data, loadedAt: Date.now() });
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to load report');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [businessId]);
 
   useEffect(() => { loadReport(); }, [loadReport]);
 
-  const allRows    = report?.rows        || [];
-  const summary    = report?.zoneSummary || [];
+  const allRows = report?.rows        || [];
+  const summary = report?.zoneSummary || [];
 
-  const zoneOptions = [...new Set(allRows.map((r) => r.zoneName))]
-    .sort().map((z) => ({ value: z, label: z }));
+  // Stable option array — avoids busting AppSelect's internal useMemo every render
+  const zoneOptions = useMemo(
+    () => [...new Set(allRows.map((r) => r.zoneName))].sort().map((z) => ({ value: z, label: z })),
+    [allRows]
+  );
 
-  const rows = zoneFilter ? allRows.filter((r) => r.zoneName === zoneFilter) : allRows;
-  const filteredPotentialRent = rows.reduce((s, r) => s + r.rent, 0);
+  const rows = useMemo(
+    () => (zoneFilter ? allRows.filter((r) => r.zoneName === zoneFilter) : allRows),
+    [allRows, zoneFilter]
+  );
+  const filteredPotentialRent = useMemo(() => rows.reduce((s, r) => s + r.rent, 0), [rows]);
 
   const handlePrint = () => {
     const overall = report?.totalUnits > 0 ? pct(report.totalVacant / report.totalUnits * 100) : '0%';
@@ -96,33 +118,47 @@ export default function ZoneVacancyReport() {
     if (!printed) toast.error('Pop-up blocked — allow pop-ups for this site to print');
   };
 
+  const exportCsv = () => {
+    if (rows.length === 0) { toast.info('There are no vacant units to export.'); return; }
+    const header = ['Unit', 'Property', 'Zone', 'Type', 'Vacant Since', 'Days', 'Rent / Mo. (KES)'];
+    const body = rows.map((r) => [
+      r.unitNumber,
+      r.propertyName,
+      r.zoneName,
+      UNIT_TYPE_LABELS[r.unitType] || r.unitType,
+      r.vacantSince ? new Date(r.vacantSince).toLocaleDateString() : '',
+      r.daysVacant,
+      r.rent,
+    ]);
+    const csv = [header, ...body].map((line) => line.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `zone_vacancy_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex flex-col h-full min-h-0 bg-white overflow-hidden">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
+          <ListToolbar>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{rows.length} vacant unit{rows.length !== 1 ? 's' : ''}</span>
+            <ListToolbar.Divider />
+            <AppSelect value={zoneFilter || null} onChange={(v) => setZoneFilter(v ?? '')}
+              options={zoneOptions} placeholder="All Zones" searchable clearable compact />
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={exportCsv}>Export</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaSyncAlt} variant="outline" onClick={() => loadReport({ force: true })}>Refresh</ListToolbar.Button>
+            <span className="ml-auto shrink-0 text-[10px] text-slate-400">{companyName} · As at {new Date().toLocaleDateString()}</span>
+          </ListToolbar>
 
-        {/* Toolbar */}
-        <ListToolbar>
-          <FaDoorOpen className="text-amber-500 shrink-0" size={11} />
-          <span className="text-[9px] font-black text-slate-700 shrink-0">Zone Vacancy</span>
-          <ListToolbar.Divider />
-          <AppSelect value={zoneFilter} onChange={(v) => setZoneFilter(v ?? '')}
-            options={zoneOptions} placeholder="All Zones" clearable compact />
-          <ListToolbar.Button icon={FaRedoAlt} onClick={loadReport} disabled={loading}>
-            {loading ? 'Loading…' : 'Refresh'}
-          </ListToolbar.Button>
-          <ListToolbar.Divider />
-          <ListToolbar.Button icon={FaPrint} variant="dark" onClick={handlePrint}>
-            Print
-          </ListToolbar.Button>
-          <span className="ml-auto shrink-0 text-[9px] text-slate-400">{companyName} · As at {new Date().toLocaleDateString()}</span>
-        </ListToolbar>
-
-        {/* Fixed header section */}
-        <div className="flex-none px-2 pt-2">
           {/* Zone summary */}
           {summary.length > 0 && (
-            <div className="border border-slate-200 rounded-lg overflow-hidden mb-2" style={{ maxHeight: '180px', display: 'flex', flexDirection: 'column' }}>
-              <div className="bg-[#0B3B2E] px-3 py-1.5 text-[10px] font-black uppercase tracking-wide text-white shrink-0">Vacancy by Zone</div>
+            <div className="flex flex-shrink-0 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg" style={{ maxHeight: '180px' }}>
               <MilikTable
                 columns={[
                   { label: "Zone" },
@@ -133,6 +169,7 @@ export default function ZoneVacancyReport() {
                 ]}
                 rows={summary}
                 rowKey={(z) => String(z.zoneId || z.zoneName)}
+                loading={loading && summary.length === 0}
                 renderRow={(z) => (
                   <>
                     <td className="px-3 py-1.5 border-r border-gray-100">
@@ -151,11 +188,9 @@ export default function ZoneVacancyReport() {
               />
             </div>
           )}
-        </div>
 
-        {/* Vacant units detail — fills remaining height */}
-        <div className="min-h-0 flex-1 overflow-hidden flex flex-col px-2 pb-2">
-          <div className="min-h-0 flex-1 overflow-hidden flex flex-col border border-gray-200 rounded-lg">
+          {/* Vacant units detail — fills remaining height */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
             <MilikTable
               columns={[
                 { label: "Unit" },
@@ -168,7 +203,7 @@ export default function ZoneVacancyReport() {
               ]}
               rows={rows}
               rowKey="unitId"
-              loading={loading}
+              loading={loading && rows.length === 0}
               empty="No vacant units"
               renderFooter={rows.length > 0 ? () => (
                 <>

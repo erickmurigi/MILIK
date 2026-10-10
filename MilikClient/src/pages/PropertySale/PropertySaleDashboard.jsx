@@ -1,11 +1,11 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
-  FaBuilding, FaChartLine, FaCheck, FaClipboard, FaClock,
-  FaExclamationTriangle, FaFileAlt, FaHandshake, FaMoneyBillWave, FaPlus,
-  FaRedoAlt, FaTag, FaTimesCircle, FaUserFriends, FaUsers, FaUserTie,
+  FaBuilding, FaChartLine, FaCheck, FaChevronRight, FaClipboard, FaClock,
+  FaExclamationTriangle, FaFileAlt, FaHandshake, FaMoneyBillWave,
+  FaTag, FaTimesCircle, FaUserFriends, FaUsers, FaUserTie,
 } from "react-icons/fa";
 import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import PropertySaleShell from "./PropertySaleShell";
@@ -50,7 +50,6 @@ const PropertySaleDashboard = () => {
   const pipelineStages = useMemo(() => pipelineStagesOf(T), [T]);
   const QUICK_LINKS = useMemo(() => quickLinksOf(T), [T]);
   const navigate    = useNavigate();
-  const queryClient = useQueryClient();
   const biz         = useSelector((s) => s.company?.currentCompany?._id);
 
   const { data, isFetching: loading } = useQuery({
@@ -98,27 +97,7 @@ const PropertySaleDashboard = () => {
   const closedValue      = s.deals?.closedValue ?? 0;
 
   return (
-    <PropertySaleShell
-      title="Dashboard"
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/sale/listings")}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-          >
-            <FaPlus size={9} /> New {T.saleListing}
-          </button>
-        </>
-      }
-    >
+    <PropertySaleShell>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
 
         {/* ── Overdue Schedule Alert ─────────────────────────────────────── */}
@@ -152,11 +131,11 @@ const PropertySaleDashboard = () => {
 
         {/* ── KPI stat cards ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
-          <StatCard label={`Available ${T.saleListings}`} value={loading ? "…" : (s.listings?.available ?? 0)} icon={FaBuilding}      tone="green"  sub="Ready to sell" />
-          <StatCard label={`Active ${T.saleDeals}`} value={loading ? "…" : (s.deals?.active ?? 0)}       icon={FaHandshake}     tone="orange" sub={loading ? "" : fmtKES(activeDealsValue)} />
-          <StatCard label="Total Collected"    value={loading ? "…" : fmtKES(totalCollected)}        icon={FaMoneyBillWave} tone="green"  sub={`${s.payments?.count ?? 0} payments`} />
-          <StatCard label="Commissions Due"    value={loading ? "…" : fmtKES(commissionsDue)}        icon={FaChartLine}     tone="orange" sub="Pending payout" />
-          <StatCard label={`Active ${T.saleLeads}`} value={loading ? "…" : (leads.active ?? 0)}            icon={FaUserFriends}   tone="green"  sub={`${leads.total ?? 0} total`} />
+          <StatCard compact label={`Available ${T.saleListings}`} value={loading ? "…" : (s.listings?.available ?? 0)} icon={FaBuilding}      tone="green"  sub="Ready to sell" />
+          <StatCard compact label={`Active ${T.saleDeals}`} value={loading ? "…" : (s.deals?.active ?? 0)}       icon={FaHandshake}     tone="orange" sub={loading ? "" : fmtKES(activeDealsValue)} />
+          <StatCard compact label="Total Collected"    value={loading ? "…" : fmtKES(totalCollected)}        icon={FaMoneyBillWave} tone="green"  sub={`${s.payments?.count ?? 0} payments`} />
+          <StatCard compact label="Commissions Due"    value={loading ? "…" : fmtKES(commissionsDue)}        icon={FaChartLine}     tone="orange" sub="Pending payout" />
+          <StatCard compact label={`Active ${T.saleLeads}`} value={loading ? "…" : (leads.active ?? 0)}            icon={FaUserFriends}   tone="green"  sub={`${leads.total ?? 0} total`} />
         </div>
 
         {/* ── Pipeline strip ─────────────────────────────────────────────── */}
@@ -165,23 +144,26 @@ const PropertySaleDashboard = () => {
             {closedValue > 0 ? `${fmtKES(closedValue)} closed` : "No closed deals yet"}
           </span>
         }>
-          <div className="grid grid-cols-5 divide-x divide-slate-100">
-            {pipelineStages.map(({ key, label, icon: Icon, ring, num, bg, hover, link }) => (
+          <div className="grid grid-cols-2 sm:grid-cols-5">
+            {pipelineStages.map(({ key, label, icon: Icon, ring, num, bg, hover, link }, index) => (
               <button
                 key={key}
                 type="button"
                 onClick={() => navigate(link)}
-                className={`group flex flex-col items-center justify-between gap-1 px-2 py-3 transition ${hover} sm:flex-row sm:gap-2 sm:px-3`}
+                className={`group relative flex items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 transition sm:border-b-0 ${index > 0 ? "sm:border-l" : ""} ${hover}`}
               >
-                <div className="flex flex-col items-center gap-1 sm:flex-row sm:gap-2">
+                <div className="flex items-center gap-2">
                   <span className={`inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full border-2 ${ring} ${bg}`}>
                     <Icon className={`h-3 w-3 ${num}`} />
                   </span>
                   <span className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{label}</span>
                 </div>
-                <span className={`text-xl font-black leading-none tabular-nums ${num}`}>
+                <span className={`text-xl font-black leading-none tabular-nums ${pipelineCounts[key] ? num : "text-slate-300"}`}>
                   {loading ? "…" : pipelineCounts[key]}
                 </span>
+                {index < pipelineStages.length - 1 && (
+                  <FaChevronRight className="pointer-events-none absolute -right-1.5 top-1/2 z-10 hidden h-3 w-3 -translate-y-1/2 bg-white text-slate-300 sm:block" />
+                )}
               </button>
             ))}
           </div>
@@ -232,7 +214,7 @@ const PropertySaleDashboard = () => {
               {/* Desktop table */}
               <div className="hidden overflow-x-auto xl:block">
                 <table className="w-full min-w-[640px] text-xs">
-                  <thead>
+                  <thead className="sticky top-0 z-10">
                     <tr className="bg-[#0B3B2E]">
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">{T.saleDeal} No.</th>
                       <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Property</th>
@@ -302,7 +284,7 @@ const PropertySaleDashboard = () => {
               >
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[560px] text-xs">
-                    <thead>
+                    <thead className="sticky top-0 z-10">
                       <tr className="bg-slate-800">
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">No.</th>
                         <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-white">Title</th>
@@ -351,22 +333,19 @@ const PropertySaleDashboard = () => {
             <Card title="Portfolio Summary">
               <div className="divide-y divide-slate-100">
                 {[
-                  { label: `Total ${T.saleListings}`,      value: s.listings?.total ?? 0,                     note: "all statuses" },
-                  { label: "Available",            value: s.listings?.available ?? 0,                 note: "ready to sell",      bold: true },
-                  { label: "Under Negotiation",    value: (s.listings?.reserved ?? 0) + (s.deals?.active ?? 0), note: "offers + active deals", warn: true },
-                  { label: `Closed ${T.saleDeals} Value`,   value: fmtKES(closedValue),                        note: "total revenue closed", money: true },
-                  { label: "Outstanding Balance",  value: fmtKES((activeDealsValue || 0) - (totalCollected || 0)), note: "still to collect",    warn: activeDealsValue > totalCollected },
+                  { label: `Total ${T.saleListings}`,     value: s.listings?.total ?? 0,      note: "all statuses" },
+                  { label: "Available",           value: s.listings?.available ?? 0,  note: "ready to sell",         bold: true },
+                  { label: "Under Negotiation",   value: (s.listings?.reserved ?? 0) + (s.deals?.active ?? 0), note: "offers + active deals", warn: ((s.listings?.reserved ?? 0) + (s.deals?.active ?? 0)) > 0 },
+                  { label: `Closed ${T.saleDeals} Value`, value: fmtKES(closedValue),         note: "total revenue closed",  money: true },
+                  { label: "Outstanding Balance", value: fmtKES((activeDealsValue || 0) - (totalCollected || 0)), note: "still to collect", warn: activeDealsValue > totalCollected },
                 ].map(({ label, value, note, bold, warn, money }) => (
-                  <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
-                    <div>
-                      <p className="text-xs font-bold text-slate-700">{label}</p>
-                      <p className="text-[10px] text-slate-400">{note}</p>
-                    </div>
-                    <span className={`text-right font-extrabold tabular-nums ${
-                      bold ? "text-emerald-700 text-base"
-                      : warn ? "text-orange-600 text-base"
-                      : money ? "text-sm text-[#0B3B2E]"
-                      : "text-slate-900 text-base"
+                  <div key={label} title={note} className="flex items-center justify-between gap-2 px-3 py-2.5">
+                    <p className="text-xs font-semibold text-slate-600">{label}</p>
+                    <span className={`text-right font-extrabold tabular-nums text-xs ${
+                      bold ? "text-emerald-700" :
+                      warn ? "text-orange-600" :
+                      money ? "text-[#0B3B2E]" :
+                      "text-slate-900"
                     }`}>
                       {loading ? "…" : value}
                     </span>

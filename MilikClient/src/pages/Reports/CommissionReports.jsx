@@ -22,11 +22,6 @@ import { useTerms } from "../../hooks/useTerm";
 import { formatMoney } from "../../utils/money";
 import printTabularList from "../../utils/printList";
 
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
-const MILIK_ORANGE = "bg-[#FF8C00]";
-const MILIK_ORANGE_HOVER = "hover:bg-[#e67e00]";
-
 const formatCurrency = (value = 0) =>
   `KES ${Number(value || 0).toLocaleString("en-KE", {
     minimumFractionDigits: 2,
@@ -401,11 +396,13 @@ const CommissionReports = () => {
           </table>
         </div>
       </div>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
 
           {/* Filter bar */}
           <ListToolbar>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{totals.statements} rows</span>
+            <ListToolbar.Divider />
             <ListToolbar.Input type="month" width="w-32" value={appliedFilters.monthFrom} onChange={setFilter("monthFrom")} />
             <ListToolbar.Input type="month" width="w-32" value={appliedFilters.monthTo} onChange={setFilter("monthTo")} />
             <AppSelect
@@ -418,7 +415,6 @@ const CommissionReports = () => {
               placeholder="All statuses"
               clearable
               compact
-              className="shrink-0 w-36"
             />
             <div className="relative shrink-0 w-56">
               <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" size={8} />
@@ -430,18 +426,16 @@ const CommissionReports = () => {
                 placeholder={`Search statement, ${termProperty.toLowerCase()}, ${termLandlord.toLowerCase()} or basis…`}
               />
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-0.5">
-              {canExportReports && <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV}>Export CSV</ListToolbar.Button>}
-              {canExportReports && <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint}>Print</ListToolbar.Button>}
-              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters}>Reset</ListToolbar.Button>
-              <ListToolbar.Button variant="outline" onClick={loadData} disabled={loading}>
-                <FaRedoAlt size={7} className={loading ? 'animate-spin' : ''} /> Reload
-              </ListToolbar.Button>
-            </div>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={resetFilters}>Reset</ListToolbar.Button>
+            <ListToolbar.Divider />
+            {canExportReports && <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={handleExportCSV}>Export</ListToolbar.Button>}
+            {canExportReports && <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint}>Print</ListToolbar.Button>}
+            <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadData} disabled={loading}>Reload</ListToolbar.Button>
           </ListToolbar>
 
           {/* Table */}
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
             <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
               <MilikTable
                 columns={[
@@ -457,7 +451,7 @@ const CommissionReports = () => {
                 ]}
                 rows={paginatedRows}
                 rowKey="id"
-                loading={loading}
+                loading={loading && paginatedRows.length === 0}
                 empty={!currentCompany?._id ? "Select an active company to view the commission report." : "No commission data found for the selected filter range."}
                 renderFooter={filteredRows.length > 0 ? () => (
                   <>

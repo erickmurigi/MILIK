@@ -212,6 +212,12 @@ export const getInspectionStats = async (req, res, next) => {
               $cond: [{ $eq: ["$status", "completed"] }, 1, 0],
             },
           },
+          cancelled: {
+            $sum: {
+              $cond: [{ $eq: ["$status", "cancelled"] }, 1, 0],
+            },
+          },
+          totalIssues: { $sum: { $ifNull: ["$issuesFound", 0] } },
           averageScore: {
             $avg: {
               $cond: [{ $ifNull: ["$score", false] }, "$score", null],
@@ -226,6 +232,8 @@ export const getInspectionStats = async (req, res, next) => {
       scheduled: Number(summary?.scheduled || 0),
       inProgress: Number(summary?.inProgress || 0),
       completed: Number(summary?.completed || 0),
+      cancelled: Number(summary?.cancelled || 0),
+      totalIssues: Number(summary?.totalIssues || 0),
       averageScore: Number(summary?.averageScore || 0),
     });
   } catch (error) {

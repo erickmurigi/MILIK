@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FaBan, FaCheckCircle, FaEllipsisV, FaLock, FaPlus,
-  FaShieldAlt, FaUnlock, FaUserEdit, FaUsers,
+  FaShieldAlt, FaUnlock, FaUserEdit,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -15,10 +15,7 @@ import { getUsers } from "../../redux/apiCalls";
 import { selectAllUsers } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 
-const PAGE_SIZE = 25;
 const STATUS_FILTERS = ["All", "Active", "Locked", "Inactive"];
-
-const GRN = "#0B3B2E";
 
 const userStatusInfo = (user) => {
   if (user?.locked)           return { label: "Locked",   cls: "border-amber-200 bg-amber-50 text-amber-700"   };
@@ -52,6 +49,7 @@ export default function CompanyUsers() {
   const [search,       setSearch]       = useTabState("/users:search",       "");
   const [statusFilter, setStatusFilter] = useTabState("/users:statusFilter", "All");
   const [page,         setPage]         = useTabState("/users:page",         1);
+  const [pageSize,     setPageSize]     = useState(25);
   const [actionMenuId, setActionMenuId] = useState(null);
   const [togglingId,   setTogglingId]   = useState(null);
 
@@ -87,8 +85,8 @@ export default function CompanyUsers() {
     });
   }, [users, search]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   const active   = users.filter((u) => !u.locked && u.isActive !== false).length;
   const locked   = users.filter((u) =>  u.locked).length;
@@ -122,52 +120,39 @@ export default function CompanyUsers() {
 
   return (
     <DashboardLayout lockContentScroll>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 text-slate-900">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
 
-        {/* Dark header */}
-        <div className="flex-shrink-0 bg-[#0B3B2E] px-4 py-2.5">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FaUsers className="text-sm text-[#B7C9C0]" />
-              <div>
-                <h1 className="text-[12px] font-bold uppercase tracking-wide text-white">Users &amp; Access</h1>
-                <p className="mt-0.5 text-[10px] text-[#B7C9C0]">
-                  {active} active · {locked} locked · {inactive} inactive
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => navigate("/users/new", { state: { returnTo: "/users" } })}
-              className="inline-flex items-center gap-1.5 border border-white/30 bg-white/10 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-white/20"
-            >
-              <FaPlus className="text-[10px]" /> Add User
-            </button>
-          </div>
-        </div>
-
-        {/* Toolbar */}
-        <ListToolbar>
-          <ListToolbar.Input
-            width="w-56"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search name, email, phone…"
-          />
-          <ListToolbar.Divider />
-          {STATUS_FILTERS.map((f) => (
-            <ListToolbar.Button
-              key={f}
-              variant={statusFilter === f ? "primary" : "outline"}
-              onClick={() => setStatusFilter(f)}
-            >
-              {f}
+          {/* Toolbar */}
+          <ListToolbar>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{active} active</span>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{locked} locked</span>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{inactive} inactive</span>
+            <ListToolbar.Divider />
+            <ListToolbar.Input
+              width="w-56"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, email, phone…"
+            />
+            {STATUS_FILTERS.map((f) => (
+              <ListToolbar.Button
+                key={f}
+                variant={statusFilter === f ? "primary" : "outline"}
+                onClick={() => setStatusFilter(f)}
+              >
+                {f}
+              </ListToolbar.Button>
+            ))}
+            <ListToolbar.Divider />
+            <span className="shrink-0 text-[10px] font-semibold text-slate-400">{filtered.length} user{filtered.length !== 1 ? "s" : ""}</span>
+            <ListToolbar.Button icon={FaPlus} onClick={() => navigate("/users/new", { state: { returnTo: "/users" } })} className="ml-auto">
+              Add User
             </ListToolbar.Button>
-          ))}
-          <span className="ml-auto text-[9px] text-slate-400">{filtered.length} user{filtered.length !== 1 ? "s" : ""}</span>
-        </ListToolbar>
+          </ListToolbar>
 
-        {/* Table */}
-        <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
+          {/* Table */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
           <MilikTable
             columns={[
               { label: "Name" },
@@ -179,7 +164,7 @@ export default function CompanyUsers() {
             ]}
             rows={paginated}
             rowKey="_id"
-            loading={isFetching}
+            loading={isFetching && paginated.length === 0}
             empty={search ? "No users match your search." : "No users found."}
             rowClassName={(user) => (togglingId === user._id ? "opacity-60" : "")}
             renderActions={(user) => {
@@ -190,17 +175,17 @@ export default function CompanyUsers() {
                   <button
                     onClick={() => navigate(`/users/${user._id}/edit`, { state: { returnTo: "/users" } })}
                     title="Edit user"
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
+                    className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                   >
-                    <FaUserEdit className="text-[11px]" />
+                    <FaUserEdit size={11} />
                   </button>
                   <div className="relative" onClick={(e) => e.stopPropagation()}>
                     <button
                       onClick={() => setActionMenuId(actionMenuId === user._id ? null : user._id)}
                       title="More actions"
-                      className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
+                      className="px-2 py-1 border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
                     >
-                      <FaEllipsisV className="text-[11px]" />
+                      <FaEllipsisV size={11} />
                     </button>
                     {actionMenuId === user._id && (
                       <div className="absolute right-0 top-full z-50 mt-1 w-44 border border-slate-200 bg-white shadow-lg">
@@ -249,7 +234,7 @@ export default function CompanyUsers() {
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[#0B3B2E] text-[9px] font-black text-white">
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center bg-[#0B3B2E] text-[9px] font-black text-white">
                         {initials || "?"}
                       </span>
                       <div>
@@ -296,13 +281,19 @@ export default function CompanyUsers() {
               );
             }}
           />
+          <PaginationBar
+            page={page}
+            pages={totalPages}
+            total={filtered.length}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+            loading={isFetching}
+            label="users"
+          />
+          </div>
+
         </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <PaginationBar page={page} pages={totalPages} total={filtered.length} onPageChange={setPage} />
-        )}
-
       </div>
     </DashboardLayout>
   );

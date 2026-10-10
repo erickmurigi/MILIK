@@ -3,7 +3,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { useTerms } from "../../hooks/useTerm";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
-import { FaClock, FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
+import { FaFileDownload, FaFilter, FaPrint, FaSyncAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import AppSelect from "../../components/common/AppSelect";
@@ -311,60 +311,52 @@ const RentalAgedAnalysisReport = () => {
         </div>
       </div>
 
-      <div className="no-print milik-report-page flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-1.5">
-        <style>{`
-          .milik-report-page select:focus, .milik-report-page input:focus { border-color: #f45b0b; box-shadow: 0 0 0 1px rgba(244, 91, 11, 0.45); outline: none; }
-          .milik-report-page select option:checked { background: #f45b0b; color: #ffffff; }
-          .milik-report-page select option:hover { background: #f45b0b; color: #ffffff; }
-        `}</style>
+      <div className="no-print flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-2">
+        <div className="mx-auto flex h-full w-full max-w-none min-h-0 flex-1 flex-col gap-2">
+          <ListToolbar>
+            <div className="relative shrink-0">
+              <FaFilter className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+              <ListToolbar.Input width="w-44" className="pl-5" value={filters.search} onChange={setFilter("search")} placeholder={`${termTenant}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} />
+            </div>
+            <AppSelect
+              value={filters.zone || null}
+              onChange={(v) => setFilters((prev) => ({ ...prev, zone: v ?? "", propertyId: "" }))}
+              options={zoneOptions}
+              placeholder="All zones"
+              searchable
+              clearable
+              compact
+            />
+            <AppSelect
+              value={filters.propertyId}
+              onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", zone: "" }))}
+              options={propertyOptions}
+              placeholder={`All ${termProperties.toLowerCase()}`}
+              searchable
+              clearable
+              compact
+            />
+            <AppSelect
+              value={filters.category}
+              onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
+              options={[
+                { value: "RENT_CHARGE", label: "Rent only" },
+                { value: "UTILITY_CHARGE", label: "Utility only" },
+                { value: "LATE_PENALTY_CHARGE", label: "Late penalties only" },
+              ]}
+              placeholder="All charges"
+              clearable
+              compact
+            />
+            <ListToolbar.Divider />
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">{totals.count} rows</span>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaFileDownload} variant="outline" onClick={exportCsv} disabled={!canExportReports}>Export</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaSyncAlt} variant="outline" onClick={() => loadData(undefined, { force: true })}>Refresh</ListToolbar.Button>
+          </ListToolbar>
 
-        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-
-            <ListToolbar>
-              <div className="relative shrink-0">
-                <FaFilter className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[9px] text-orange-500" />
-                <ListToolbar.Input width="w-44" className="pl-5" value={filters.search} onChange={setFilter("search")} placeholder={`${termTenant}, ${termProperty.toLowerCase()}, ${termUnit.toLowerCase()}`} />
-              </div>
-              <AppSelect
-                value={filters.zone || null}
-                onChange={(v) => setFilters((prev) => ({ ...prev, zone: v ?? "", propertyId: "" }))}
-                options={zoneOptions}
-                placeholder="All zones"
-                searchable
-                clearable
-                compact
-              />
-              <AppSelect
-                value={filters.propertyId}
-                onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? "", zone: "" }))}
-                options={propertyOptions}
-                placeholder={`All ${termProperties.toLowerCase()}`}
-                searchable
-                clearable
-                compact
-              />
-              <AppSelect
-                value={filters.category}
-                onChange={(v) => setFilters((prev) => ({ ...prev, category: v ?? "" }))}
-                options={[
-                  { value: "RENT_CHARGE", label: "Rent only" },
-                  { value: "UTILITY_CHARGE", label: "Utility only" },
-                  { value: "LATE_PENALTY_CHARGE", label: "Late penalties only" },
-                ]}
-                placeholder="All charges"
-                clearable
-                compact
-              />
-              <span className="shrink-0 inline-flex h-[20px] items-center gap-1 border border-slate-200 bg-white px-2 text-[9px] font-semibold text-slate-700"><FaClock className="text-amber-600" /> {totals.count} rows</span>
-              <ListToolbar.Divider />
-              <ListToolbar.Button icon={FaFileDownload} variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={exportCsv} disabled={!canExportReports}>CSV</ListToolbar.Button>
-              <ListToolbar.Button icon={FaPrint} variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={handlePrint} disabled={!canExportReports}>Print</ListToolbar.Button>
-              <ListToolbar.Button variant="outline" className="hover:bg-orange-50 hover:text-orange-700" onClick={() => loadData(undefined, { force: true })}>
-                <FaSyncAlt size={7} className={loading ? 'animate-spin' : ''} /> Refresh
-              </ListToolbar.Button>
-            </ListToolbar>
-
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-lg">
             <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
               <MilikTable
                 tableFixed
@@ -382,6 +374,7 @@ const RentalAgedAnalysisReport = () => {
                 ]}
                 rows={paginatedRows}
                 rowKey="tenantId"
+                loading={loading && paginatedRows.length === 0}
                 empty="No aged receivables found for the current filters."
                 renderRow={(row) => (
                   <>
@@ -394,7 +387,7 @@ const RentalAgedAnalysisReport = () => {
                     <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-red-500">{formatMoney(row.days90)}</td>
                     <td className="px-2 py-1 border-r border-gray-100 text-right font-semibold text-red-700">{formatMoney(row.days90Plus)}</td>
                     <td className="px-2 py-1 border-r border-gray-100 text-right font-black text-slate-900">{formatMoney(row.total)}</td>
-                    <td className="px-2 py-1 text-slate-700">{row.oldestDueDate ? new Date(row.oldestDueDate).toLocaleDateString() : '-'}</td>
+                    <td className="px-2 py-1 text-slate-700">{row.oldestDueDate ? fmtDate(row.oldestDueDate) : '-'}</td>
                   </>
                 )}
               />
