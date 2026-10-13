@@ -22,6 +22,7 @@ import { printPaymentReceiptById } from "./SalePaymentReceipt";
 import { printDealSummaryById } from "./SaleDealSummary";
 import { printDealStatementById } from "./SaleDealStatement";
 import { useTerms, prefixedTerm } from "../../hooks/useTerm";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
@@ -50,7 +51,7 @@ const PAYMENT_TYPE_OPTIONS   = PAYMENT_TYPES.map((t) => ({ value: t, label: fmtL
 const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }));
 const COMMISSION_TYPE_OPTIONS = [{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }];
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
-const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "" };
+const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "", collectionMethod: "direct", advocate: "" };
 
 const dealTableCols = (T) => [
   { label: `${T.saleDeal} No.` },
@@ -275,7 +276,7 @@ function CloseDealModal({ deal, cashbookOptions, actionKey, onClose, onConfirm }
   );
 }
 
-function RecordPaymentModal({ deal, saving, cashbookOptions, onClose, onSubmit }) {
+function RecordPaymentModal({ deal, saving, cashbookOptions, useAdvocates, advocateFormOptions, onClose, onSubmit }) {
   const [payForm, setPayForm] = useState(blankPayForm);
   return (
     <Modal
@@ -345,6 +346,29 @@ function RecordPaymentModal({ deal, saving, cashbookOptions, onClose, onSubmit }
             size="md"
           />
         </div>
+        {useAdvocates && (
+          <div className="md:col-span-2 grid grid-cols-2 gap-2">
+            <div>
+              <AppSelect
+                label="Collected"
+                value={payForm.collectionMethod}
+                onChange={(v) => setPayForm((f) => ({ ...f, collectionMethod: v ?? "direct", advocate: v === "advocate_trust" ? f.advocate : "" }))}
+                options={[{ value: "direct", label: "Direct to company" }, { value: "advocate_trust", label: "Via advocate trust account" }]}
+                size="md"
+              />
+            </div>
+            {payForm.collectionMethod === "advocate_trust" && (
+              <div>
+                <AppSelect label="Advocate *" value={payForm.advocate} onChange={(v) => setPayForm((f) => ({ ...f, advocate: v ?? "" }))} options={advocateFormOptions} placeholder="Select advocate…" size="md" searchable />
+              </div>
+            )}
+          </div>
+        )}
+        {payForm.collectionMethod === "advocate_trust" && (
+          <div className="md:col-span-2 -mt-2">
+            <p className="text-[10px] text-slate-500">This money sits in the advocate's trust account until they remit it — record that remittance separately from Trust Remittances once it arrives.</p>
+          </div>
+        )}
         <div className="md:col-span-2">
           <label className={labelClass}>
             {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference (Optional)"}
@@ -559,6 +583,7 @@ const SaleDeals = () => {
   const [linkingPaymentId,    setLinkingPaymentId]    = useState("");
 
   const biz = currentCompany?._id;
+  const { saleSettings, advocateFormOptions } = useSaleFormOptions(biz);
 
   const { data: dealsData, isLoading: loading, isFetching } = useQuery({
     queryKey: ["sale-deals", biz, appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo, page, pageSize],
@@ -827,6 +852,7 @@ const SaleDeals = () => {
   const handleRecordPayment = async (payForm) => {
     if (!payingDeal) return;
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.warning("Valid amount required");
+    if (payForm.collectionMethod === "advocate_trust" && !payForm.advocate) return toast.warning("Select which advocate collected this payment");
     setPayingSave(true);
     try {
       const { cashbook, ...payBase } = payForm;
@@ -1293,7 +1319,7 @@ const SaleDeals = () => {
 
       {/* Record Payment Modal */}
       {payingDeal && (
-        <RecordPaymentModal deal={payingDeal} saving={payingSave} cashbookOptions={cashbookOptions} onClose={() => setPayingDeal(null)} onSubmit={handleRecordPayment} />
+        <RecordPaymentModal deal={payingDeal} saving={payingSave} cashbookOptions={cashbookOptions} useAdvocates={Boolean(saleSettings?.useAdvocates)} advocateFormOptions={advocateFormOptions} onClose={() => setPayingDeal(null)} onSubmit={handleRecordPayment} />
       )}
 
       {/* Schedule Builder Modal */}

@@ -18,6 +18,7 @@ import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
 import { printSaleDocument } from "./salePrint";
 import { printPaymentReceiptById } from "./SalePaymentReceipt";
+import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 
 const STATUS_BADGE = {
   paid:      "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -64,6 +65,7 @@ const EMPTY_FORM = {
   deal: "", amount: "", paymentType: "installment",
   paymentMethod: "bank_transfer", cashbook: "",
   reference: "", paymentDate: todayISO(), notes: "",
+  collectionMethod: "direct", advocate: "",
 };
 
 
@@ -161,7 +163,7 @@ function EditPaymentModal({ target, cashbookOptions, hasCashbooks, saving, onClo
   );
 }
 
-function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCashbooks, saving, onClose, onSubmit }) {
+function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCashbooks, saving, onClose, onSubmit, useAdvocates, advocateFormOptions }) {
   const T = useTerms("saleDeal");
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedDeal, setSelectedDeal] = useState(null);
@@ -244,6 +246,38 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
           )}
         </div>
 
+        {/* Collection method — was it received directly, or did a conveyancing advocate collect it
+            into their own trust account first? Only shown once Advocates is switched on in Settings. */}
+        {useAdvocates && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <AppSelect
+                label="Collected"
+                value={form.collectionMethod}
+                onChange={(v) => setForm((f) => ({ ...f, collectionMethod: v ?? "direct", advocate: v === "advocate_trust" ? f.advocate : "" }))}
+                options={[{ value: "direct", label: "Direct to company" }, { value: "advocate_trust", label: "Via advocate trust account" }]}
+                size="md"
+              />
+            </div>
+            {form.collectionMethod === "advocate_trust" && (
+              <div>
+                <AppSelect
+                  label="Advocate *"
+                  value={form.advocate}
+                  onChange={(v) => setForm((f) => ({ ...f, advocate: v ?? "" }))}
+                  options={advocateFormOptions}
+                  placeholder="Select advocate…"
+                  size="md"
+                  searchable
+                />
+              </div>
+            )}
+          </div>
+        )}
+        {form.collectionMethod === "advocate_trust" && (
+          <p className="-mt-2 text-[10px] text-slate-500">This money sits in the advocate's trust account until they remit it — record that remittance separately from Trust Remittances once it arrives.</p>
+        )}
+
         {/* Amount + Date */}
         <div className="grid grid-cols-2 gap-2">
           <div>
@@ -290,6 +324,7 @@ const SalePayments = () => {
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz            = currentCompany?._id;
+  const { saleSettings, advocateFormOptions } = useSaleFormOptions(biz);
 
   const [showCreate,   setShowCreate]   = useState(false);
   const [saving,       setSaving]       = useState(false);
@@ -359,6 +394,10 @@ const SalePayments = () => {
     }
     if (!form.cashbook && cashbookAccounts.length > 0) {
       toast.warn("Please select a receiving cashbook");
+      return;
+    }
+    if (form.collectionMethod === "advocate_trust" && !form.advocate) {
+      toast.warn("Select which advocate collected this payment");
       return;
     }
     setSaving(true);
@@ -518,7 +557,7 @@ const SalePayments = () => {
 
       {/* Record Payment Modal */}
       {showCreate && (
-        <RecordPaymentModal deals={deals} activeDealOptions={activeDealOptions} cashbookOptions={cashbookOptions} hasCashbooks={cashbookAccounts.length > 0} saving={saving} onClose={() => setShowCreate(false)} onSubmit={handleCreate} />
+        <RecordPaymentModal deals={deals} activeDealOptions={activeDealOptions} cashbookOptions={cashbookOptions} hasCashbooks={cashbookAccounts.length > 0} saving={saving} onClose={() => setShowCreate(false)} onSubmit={handleCreate} useAdvocates={Boolean(saleSettings?.useAdvocates)} advocateFormOptions={advocateFormOptions} />
       )}
     </PropertySaleShell>
   );

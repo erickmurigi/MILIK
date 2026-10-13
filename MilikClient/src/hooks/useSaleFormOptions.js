@@ -27,6 +27,12 @@ export default function useSaleFormOptions(biz) {
     enabled: !!biz && Boolean(saleSettings?.useOwners),
     staleTime: 5 * 60_000,
   });
+  const { data: advocatesData } = useQuery({
+    queryKey: ["sale-advocates-ref", biz, "active"],
+    queryFn: () => saleApi.listAdvocates({ business: biz, status: "active", limit: 200 }),
+    enabled: !!biz && Boolean(saleSettings?.useAdvocates),
+    staleTime: 5 * 60_000,
+  });
 
   const propertyTypeOptions = useMemo(() => {
     const active = (saleSettings?.propertyTypes ?? []).filter((t) => t.isActive !== false);
@@ -49,5 +55,8 @@ export default function useSaleFormOptions(biz) {
   const owners = useMemo(() => ownersData?.data ?? [], [ownersData]);
   const ownerFormOptions = useMemo(() => owners.map((o) => ({ value: o._id, label: `${o.fullName} (${o.ownerNumber})` })), [owners]);
 
-  return { saleSettings, settingsPending, propertyTypeOptions, propertyTypeDefs, agentFormOptions, agentFilterOptions, ownerFormOptions };
+  const advocates = useMemo(() => advocatesData?.data ?? [], [advocatesData]);
+  const advocateFormOptions = useMemo(() => advocates.map((a) => ({ value: a._id, label: a.firm ? `${a.fullName} (${a.firm})` : a.fullName })), [advocates]);
+
+  return { saleSettings, settingsPending, propertyTypeOptions, propertyTypeDefs, agentFormOptions, agentFilterOptions, ownerFormOptions, advocateFormOptions };
 }
