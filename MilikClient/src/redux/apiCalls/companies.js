@@ -112,12 +112,8 @@ export const deleteCompany = (id) => async (dispatch) => {
 
 // TOGGLE company lock
 export const toggleCompanyLock = (id) => async (dispatch) => {
-  try {
-    const res = await adminRequests.patch(`/companies/${id}/toggle-lock`);
-    // Use updateCompanySuccess so all restored fields (isActive, accountStatus) propagate
-    dispatch(updateCompanySuccess({ id, company: res.data }));
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.patch(`/companies/${id}/toggle-lock`);
+  // Use updateCompanySuccess so all restored fields (isActive, accountStatus) propagate
+  dispatch(updateCompanySuccess({ id, company: res.data }));
+  return res.data;
 };

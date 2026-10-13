@@ -69,7 +69,6 @@ const leadTableCols = (T) => [
   { label: "Next Follow-up" },
 ];
 
-const selectCls = "h-7 border border-slate-200 bg-white px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none";
 const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 
 const rowClassName = (row) => isOld(row.nextFollowUpDate, row.status) ? "border-l-2 border-l-rose-400" : "";
@@ -448,7 +447,7 @@ export default function SaleLeads() {
     staleTime: 30_000,
   });
 
-  const { data: leadDetail, refetch: refetchDetail } = useQuery({
+  const { data: leadDetail } = useQuery({
     queryKey: ["sale-lead-detail", biz, selected?._id],
     queryFn:  () => saleApi.getLead(selected._id, { business: biz }),
     enabled:  !!biz && !!selected?._id,
@@ -575,7 +574,7 @@ export default function SaleLeads() {
       qc.invalidateQueries({ queryKey: ["sale-activities-lead", biz, selected._id] });
       qc.invalidateQueries({ queryKey: ["sale-lead-detail", biz, selected._id] });
       toast.success("Activity removed");
-    } catch (err) { toast.error("Delete failed"); }
+    } catch { toast.error("Delete failed"); }
   };
 
   // ── Communication ──────────────────────────────────────────────────────────
@@ -709,7 +708,7 @@ export default function SaleLeads() {
         <FaEdit size={9} />
       </button>
       {row.status !== "converted" && (
-        <button onClick={() => handleDelete(row)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+        <button onClick={() => handleDelete(row)} title="Delete" className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
           <FaTrash size={9} />
         </button>
       )}

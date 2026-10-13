@@ -13,9 +13,12 @@ import { currentUserId, escapeRegex, netJobPrice, parseDateRange, resolveActiveB
 import { accrueCommissionForJob, cancelJobCommissions, markJobCommissionsPayable } from "../services/commissionService.js";
 import { carpetUpload, fileUrlFromName, deletePhotoFile } from "../middleware/carpetUpload.js";
 import { autoEnrollPlate, awardLoyaltyStamp } from "./loyaltyController.js";
+import { computeAccountBalance } from "./creditAccountsController.js";
 import { AMOUNT_TOLERANCE } from "./paymentsController.js";
 import { normalizePlate, buildPlateRegex } from "../utils/plateUtils.js";
 import CarWashCustomer from "../models/CarWashCustomer.js";
+import CarWashCustomerCredit from "../models/CarWashCustomerCredit.js";
+import { postCarWashCreditAppliedLedger } from "../services/carwashAccountingService.js";
 import CarWashLoyaltyCard from "../models/CarWashLoyaltyCard.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
@@ -47,6 +50,9 @@ const resolveServiceLines = async (business, rawLines, plateNumber = null) => {
   // reward line must be checked against the customer's actual CarWashLoyaltyCard before
   // it is accepted, and its price is always derived server-side (never client-supplied).
   const rewardLineCount = sliced.filter((r) => r.isRewardLine).length;
+  if (rewardLineCount > 1) {
+    throw createError(400, "Only one loyalty reward can be redeemed per job");
+  }
   if (rewardLineCount > 0) {
     const normalizedPlate = normalizePlate(plateNumber || "");
     if (!normalizedPlate) throw createError(400, "A vehicle plate is required to redeem a loyalty reward");
@@ -179,10 +185,24 @@ export const listJobs = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const branchId = resolveActiveBranchId(req);
     const filter = { business };
-    if (branchId) filter.branch = branchId;
+    if (branchId) {
+      filter.branch = branchId;
+    } else if (req.query.branch && mongoose.Types.ObjectId.isValid(req.query.branch)) {
+      // Only a consolidated/unscoped user gets to pick a branch — a branch-scoped
+      // user's own assignment above is never overridable by a query param.
+      filter.branch = new mongoose.Types.ObjectId(req.query.branch);
+    }
     if (req.query.jobType && JOB_TYPES.has(String(req.query.jobType).trim().toLowerCase())) filter.jobType = String(req.query.jobType).trim().toLowerCase();
     if (req.query.status) filter.status = String(req.query.status).trim().toLowerCase();
     if (req.query.paymentStatus) filter.paymentStatus = String(req.query.paymentStatus).trim().toLowerCase();
+    if (req.query.paymentMethod) {
+      // No paymentMethod on the job itself — it lives on its CarWashPayment record(s) —
+      // so resolve matching job ids from payments first, same pattern as the staff-name search below.
+      const method = String(req.query.paymentMethod).trim().toLowerCase();
+      const matchingPayments = await CarWashPayment.find({ business, method }).select("job").lean();
+      const jobIds = [...new Set(matchingPayments.map((p) => String(p.job)))];
+      filter._id = { $in: jobIds.map((id) => new mongoose.Types.ObjectId(id)) };
+    }
     if (req.query.service && mongoose.Types.ObjectId.isValid(req.query.service)) {
       // Match both old root-level service and new serviceLines entries
       const svcId = new mongoose.Types.ObjectId(req.query.service);
@@ -220,12 +240,16 @@ export const listJobs = async (req, res, next) => {
     if (req.query.search) {
       const search = escapeRegex(String(req.query.search).trim());
       const plateSearch = escapeRegex(normalizePlate(String(req.query.search)));
+      // assignedStaff is an array of refs with no denormalized name on the job — resolve
+      // matching staff ids first so the combined search bar can match by staff name too.
+      const matchingStaff = await CarWashStaff.find({ business, name: new RegExp(search, "i") }).select("_id").lean();
       const searchOr = [
         { jobNumber: new RegExp(search, "i") },
         { plateNumber: new RegExp(plateSearch || search, "i") },
         { itemDescription: new RegExp(search, "i") },
         { customerName: new RegExp(search, "i") },
         { phone: new RegExp(search, "i") },
+        ...(matchingStaff.length ? [{ assignedStaff: { $in: matchingStaff.map((s) => s._id) } }] : []),
       ];
       filter.$and = filter.$and ? [...filter.$and, { $or: searchOr }] : [{ $or: searchOr }];
     }
@@ -311,7 +335,7 @@ export const createJob = async (req, res, next) => {
     }
 
     const hasRewardLine = serviceLines.some((l) => l.isRewardLine);
-    if (totalPrice <= 0 && !req.body._allowZeroPrice && !hasRewardLine) {
+    if (totalPrice <= 0 && !hasRewardLine) {
       return next(createError(400, "Total job price must be greater than zero"));
     }
 
@@ -337,7 +361,7 @@ export const createJob = async (req, res, next) => {
       assertStaffArrayBelongsToBusiness(business, staffSource),
       wantsCreditAccountLookup
         ? CarWashCreditAccount.findOne({ _id: String(rawAccountId), business, status: "active" })
-            .select("_id accountType contactPerson accountNumber")
+            .select("_id accountType contactPerson accountNumber creditLimit plates")
             .lean()
         : Promise.resolve(null),
     ]);
@@ -356,6 +380,8 @@ export const createJob = async (req, res, next) => {
       }
     }
 
+    const netPrice = round2(Math.max(0, totalPrice - discountAmount));
+
     const userId = currentUserId(req);
     const ctxBranch = resolveActiveBranchId(req);
     const bodyBranch = req.body.branch && mongoose.Types.ObjectId.isValid(String(req.body.branch)) ? String(req.body.branch) : null;
@@ -366,11 +392,15 @@ export const createJob = async (req, res, next) => {
     let resolvedCreditAccount = null;
     let resolvedCreditAccountType = null;
     let resolvedCreditAccountCompanyName = "";
+    let resolvedCreditAccountLimit = 0;
+    let resolvedCreditAccountPlates = [];
     if (wantsCreditAccountLookup) {
       if (!acc) return next(createError(400, "Credit account not found or not active"));
       resolvedCreditAccount = acc._id;
       resolvedCreditAccountType = acc.accountType;
       resolvedCreditAccountCompanyName = acc.contactPerson || acc.accountNumber || "";
+      resolvedCreditAccountLimit = Number(acc.creditLimit || 0);
+      resolvedCreditAccountPlates = Array.isArray(acc.plates) ? acc.plates : [];
     }
 
     // Auto-detect account by plate â€” covers prepaid, credit, and monthly accounts.
@@ -382,10 +412,33 @@ export const createJob = async (req, res, next) => {
         plates: plateNumber,
         status: "active",
         accountType: { $ne: "voucher" },
-      }).sort({ accountType: -1 }).select("_id accountType").lean(); // prepaid > monthly > credit alphabetically desc
+      }).sort({ accountType: -1 }).select("_id accountType creditLimit plates").lean(); // prepaid > monthly > credit alphabetically desc
       if (autoAcc) {
         resolvedCreditAccount = autoAcc._id;
         resolvedCreditAccountType = autoAcc.accountType;
+        resolvedCreditAccountLimit = Number(autoAcc.creditLimit || 0);
+        resolvedCreditAccountPlates = Array.isArray(autoAcc.plates) ? autoAcc.plates : [];
+      }
+    }
+
+    // Hard-enforce the credit limit for monthly/credit accounts (prepaid has no "limit" concept
+    // â€” it just runs out of wallet balance, handled separately below; voucher accounts are
+    // billed externally and were already excluded from auto-detection above). A limit of 0
+    // means "no limit configured" â€” status quo for every account until a limit is explicitly
+    // set on the Credit Accounts page. This was previously informational-only (the UI showed
+    // an "over limit" badge but nothing blocked the job) â€” now a hard block, by request.
+    if (
+      resolvedCreditAccount &&
+      (resolvedCreditAccountType === "monthly" || resolvedCreditAccountType === "credit") &&
+      resolvedCreditAccountLimit > 0
+    ) {
+      const existingBalance = await computeAccountBalance(business, resolvedCreditAccount, resolvedCreditAccountPlates);
+      const projectedBalance = round2(existingBalance + netPrice);
+      if (projectedBalance > resolvedCreditAccountLimit) {
+        return next(createError(
+          400,
+          `This job would push the account over its credit limit (balance would be KES ${projectedBalance.toLocaleString()} of a KES ${resolvedCreditAccountLimit.toLocaleString()} limit) â€” collect payment, raise the limit, or clear the outstanding balance first.`
+        ));
       }
     }
 
@@ -455,7 +508,13 @@ export const createJob = async (req, res, next) => {
         job.jobType === "vehicle" &&
         !job.isVoucher &&
         (job.status === "paid" || (job.status === "done" && job.creditAccount));
-      if (shouldStampOnCreate) {
+      // A reward-redemption job must consume its pending reward right here, atomically with
+      // creation â€” not deferred to a later "done"/"paid" transition. resolveServiceLines only
+      // validated availability above; it did not reserve it, so without this, a single pending
+      // reward could back more than one job created before the first is ever marked done.
+      // awardLoyaltyStamp is idempotent per-job (stampHistory guard), so if this job later also
+      // qualifies for shouldStampOnCreate-style handling elsewhere, re-calling it is a safe no-op.
+      if (shouldStampOnCreate || job.rewardRedemption) {
         try {
           await awardLoyaltyStamp({ business, job });
         } catch (err) {
@@ -475,9 +534,14 @@ export const createJob = async (req, res, next) => {
       }
     }
 
+    // Tracks how much of netPrice has been covered so far by auto-applied mechanisms
+    // (prepaid wallet below, then customer overpayment credit right after it) so each
+    // stage knows how much is still outstanding before it acts.
+    let appliedSoFar = 0;
+
     // Auto-apply prepaid credit â€” atomically deduct min(accountCredit, netPrice) with no race condition.
     // Uses a MongoDB 4.2+ aggregation-pipeline update so the read-modify-write is a single atomic op.
-    const netPrice = round2(Math.max(0, totalPrice - discountAmount));
+    // (netPrice computed earlier, alongside the credit-limit enforcement check.)
     if (resolvedCreditAccount && netPrice > 0 && resolvedCreditAccountType !== "voucher") {
       try {
         // Atomically floor accountCredit at 0 while returning the pre-update value.
@@ -489,6 +553,7 @@ export const createJob = async (req, res, next) => {
         );
         if (prevAcc) {
           const autoApply = round2(Math.min(prevAcc.accountCredit, netPrice));
+          appliedSoFar = autoApply;
           await CarWashPayment.create({
             business,
             branch: branchId || null,
@@ -513,6 +578,103 @@ export const createJob = async (req, res, next) => {
         }
       } catch (err) {
         console.error("[CW Job] Prepaid auto-deduct failed:", err?.message);
+      }
+    }
+
+    // Auto-apply any active customer overpayment credit (CarWashCustomerCredit) toward whatever
+    // is still owed after the prepaid-wallet deduction above. This is a different, customer-level
+    // credit pool from the CarWashCreditAccount system (that's a business account the customer/
+    // company set up; this is personal change left over from a past cash/M-Pesa overpayment).
+    // Reuses the exact ledger function the manual "Apply Credit" action already uses in
+    // production (postCarWashCreditAppliedLedger) — never duplicate that posting logic.
+    // A credit larger than what's still due is SPLIT rather than skipped: the consumed portion
+    // becomes its own new "applied" credit record (so the ledger's sourceTransactionId points at
+    // a distinct document, not a reused id that may be split again later), and the original
+    // record's amount is reduced by that portion and stays active for a future job — never
+    // mutated in place beyond that amount reduction, so its own history/ledger trail stays intact.
+    // Not applied to voucher jobs (billed to a third party, not this customer) — same exclusion
+    // the prepaid block already uses.
+    if (plateNumber && jobType === "vehicle" && resolvedCreditAccountType !== "voucher") {
+      const stillDue = round2(Math.max(0, netPrice - appliedSoFar));
+      if (stillDue > 0.009) {
+        try {
+          const customer = await CarWashCustomer.findOne({ business, plates: plateNumber }).select("_id").lean();
+          if (customer) {
+            const activeCredits = await CarWashCustomerCredit.find({ business, customer: customer._id, status: "active" }).sort({ createdAt: 1 });
+            let remaining = stillDue;
+            let totalApplied = 0;
+            for (const credit of activeCredits) {
+              if (remaining <= 0.009) break;
+              const creditAmount = round2(Number(credit.amount || 0));
+              if (creditAmount <= 0) continue;
+
+              if (creditAmount <= remaining + 0.009) {
+                // Fits entirely within what's still due — consume the whole record.
+                await postCarWashCreditAppliedLedger({ businessId: business, credit, appliedToJob: job, userId });
+                credit.status = "applied";
+                credit.appliedToJob = job._id;
+                credit.appliedAt = new Date();
+                credit.appliedBy = userId;
+                credit.updatedBy = userId;
+                await credit.save();
+                remaining = round2(remaining - creditAmount);
+                totalApplied = round2(totalApplied + creditAmount);
+              } else {
+                // Bigger than what's needed — split. The consumed portion becomes its own new
+                // "applied" record; the original keeps the leftover and stays active.
+                const usedAmount = remaining;
+                const leftoverAmount = round2(creditAmount - usedAmount);
+                const appliedSplit = await CarWashCustomerCredit.create({
+                  business,
+                  customer: credit.customer,
+                  plates: credit.plates,
+                  amount: usedAmount,
+                  status: "applied",
+                  sourceJob: credit.sourceJob,
+                  sourcePayment: credit.sourcePayment,
+                  appliedToJob: job._id,
+                  appliedAt: new Date(),
+                  appliedBy: userId,
+                  notes: `Split from credit ${credit._id} for partial auto-apply`,
+                  createdBy: userId,
+                  updatedBy: userId,
+                });
+                await postCarWashCreditAppliedLedger({ businessId: business, credit: appliedSplit, appliedToJob: job, userId });
+                credit.amount = leftoverAmount;
+                credit.updatedBy = userId;
+                await credit.save();
+                remaining = 0;
+                totalApplied = round2(totalApplied + usedAmount);
+                break; // fully covered — no need to look at any further credits
+              }
+            }
+            if (totalApplied > 0.009) {
+              await CarWashPayment.create({
+                business,
+                branch: branchId || null,
+                job: job._id,
+                amount: totalApplied,
+                method: "credit",
+                reference: "Auto-applied from customer credit balance",
+                paymentDate: new Date(),
+                createdBy: userId,
+                updatedBy: userId,
+              });
+              appliedSoFar = round2(appliedSoFar + totalApplied);
+              const newPaymentStatus = appliedSoFar >= netPrice - 0.009 ? "paid" : "partial";
+              await CarWashJob.updateOne({ _id: job._id }, { paymentStatus: newPaymentStatus });
+              job.paymentStatus = newPaymentStatus;
+              accrueCommissionForJob({ req, job }).catch((err) =>
+                console.error("[CW Job] Commission accrual failed (customer credit):", err?.message)
+              );
+              if (newPaymentStatus === "paid") {
+                markJobCommissionsPayable({ business, jobId: job._id }).catch(() => {});
+              }
+            }
+          }
+        } catch (err) {
+          console.error("[CW Job] Customer credit auto-apply failed:", err?.message);
+        }
       }
     }
 

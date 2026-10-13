@@ -260,6 +260,10 @@ const SaleProjectDetail     = lazy(() => import("./pages/PropertySale/SaleProjec
 const SaleUnits             = lazy(() => import("./pages/PropertySale/SaleUnits"));
 const SaleBuyers            = lazy(() => import("./pages/PropertySale/SaleBuyers"));
 const SaleAgents            = lazy(() => import("./pages/PropertySale/SaleAgents"));
+const SaleOwners            = lazy(() => import("./pages/PropertySale/SaleOwners"));
+const SaleOwnerStatements   = lazy(() => import("./pages/PropertySale/SaleOwnerStatements"));
+const SaleAdvocates         = lazy(() => import("./pages/PropertySale/SaleAdvocates"));
+const SaleAdvocateRemittances = lazy(() => import("./pages/PropertySale/SaleAdvocateRemittances"));
 const SaleOffers            = lazy(() => import("./pages/PropertySale/SaleOffers"));
 const SaleDeals             = lazy(() => import("./pages/PropertySale/SaleDeals"));
 const SalePayments          = lazy(() => import("./pages/PropertySale/SalePayments"));
@@ -827,6 +831,10 @@ function App() {
             <Route path="/sale/units"                        element={<Guard moduleKey="propertySale" resource="saleListings"><SaleUnits /></Guard>} />
             <Route path="/sale/buyers"                       element={<Guard moduleKey="propertySale" resource="saleBuyers"><SaleBuyers /></Guard>} />
             <Route path="/sale/agents"                       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgents /></Guard>} />
+            <Route path="/sale/owners"                       element={<Guard moduleKey="propertySale" resource="saleOwners"><SaleOwners /></Guard>} />
+            <Route path="/sale/owner-statements"             element={<Guard moduleKey="propertySale" resource="saleOwnerStatements"><SaleOwnerStatements /></Guard>} />
+            <Route path="/sale/advocates"                    element={<Guard moduleKey="propertySale" resource="saleAdvocates"><SaleAdvocates /></Guard>} />
+            <Route path="/sale/advocate-remittances"         element={<Guard moduleKey="propertySale" resource="saleAdvocates"><SaleAdvocateRemittances /></Guard>} />
             <Route path="/sale/offers"                       element={<Guard moduleKey="propertySale" resource="saleOffers"><SaleOffers /></Guard>} />
             <Route path="/sale/deals"                        element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDeals /></Guard>} />
             <Route path="/sale/payments"                     element={<Guard moduleKey="propertySale" resource="salePayments"><SalePayments /></Guard>} />

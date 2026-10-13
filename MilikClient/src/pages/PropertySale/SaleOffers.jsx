@@ -601,7 +601,7 @@ const SaleOffers = () => {
           </button>
         )}
         {["pending", "rejected", "expired", "withdrawn"].includes(o.status) && (
-          <button onClick={() => handleDelete(o)} title="Delete" className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+          <button onClick={() => handleDelete(o)} title="Delete" className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
             <FaTimes />
           </button>
         )}

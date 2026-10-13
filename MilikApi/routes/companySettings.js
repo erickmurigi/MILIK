@@ -16,6 +16,10 @@ import {
   addBillingPeriod,
   updateBillingPeriod,
   deleteBillingPeriod,
+  getExpenseCategories,
+  addExpenseCategory,
+  updateExpenseCategory,
+  deleteExpenseCategory,
   addExpenseItem,
   updateExpenseItem,
   deleteExpenseItem,
@@ -82,6 +86,12 @@ router.put("/:businessId/hr-accounting-defaults", verifySetupAccess, updateHrAcc
 
 // Inventory Accounting Defaults — setup/admin only
 router.put("/:businessId/inventory-accounting-defaults", verifySetupAccess, updateInventoryAccountingDefaults);
+
+// Expense Categories — setup/admin only
+router.get("/:businessId/expense-categories", verifyUser, getExpenseCategories);
+router.post("/:businessId/expense-categories", verifySetupAccess, addExpenseCategory);
+router.put("/:businessId/expense-categories/:itemId", verifySetupAccess, updateExpenseCategory);
+router.delete("/:businessId/expense-categories/:itemId", verifySetupAccess, deleteExpenseCategory);
 
 // Expense Items — setup/admin only
 router.post("/:businessId/expenses", verifySetupAccess, addExpenseItem);

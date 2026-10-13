@@ -30,7 +30,6 @@ import {
   getLeases,
   getUtilities,
   getTenantStatementBundle,
-  createTenantInvoice,
   updateLease,
   updateLeaseReviews,
   sendCommunicationMessage,
@@ -200,29 +199,6 @@ const formatDisplayDate = (value) => {
 
 const round2 = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
 
-const buildCombinedInvoiceMetadata = ({ utilityAmount = 0, utilityLabel = "", periodLabel = "" } = {}) => ({
-  billItemKey: "rent_utility:combined",
-  billItemLabel: "Combined Rent + Utilities",
-  invoicePriorityCategory: "rent",
-  sourceTransactionType: "tenant_statement_combined",
-  utilityBreakdown:
-    Number(utilityAmount || 0) > 0
-      ? [
-          {
-            label: String(utilityLabel || "Utility").trim() || "Utility",
-            amount: Number(utilityAmount || 0),
-            periodLabel,
-          },
-        ]
-      : [],
-});
-
-
-
-const isReceiptReversed = (payment) => {
-  const postingStatus = String(payment?.postingStatus || "").toLowerCase();
-  return payment?.isReversed === true || Boolean(payment?.reversalOf) || postingStatus === "reversed";
-};
 
 const getReceiptAllocationRows = (payment) =>
   Array.isArray(payment?.allocations) ? payment.allocations : [];
@@ -485,62 +461,6 @@ const TenantStatement = () => {
     return labels.length ? labels.join(", ") : "-";
   };
 
-  const resolveTenantInvoiceContext = (targetTenant) => {
-    if (!targetTenant?._id) {
-      throw new Error("Tenant context is missing.");
-    }
-
-    const unitId = targetTenant?.unit?._id || targetTenant?.unit || null;
-    const matchedUnit = unitsFromStore.find(
-      (unit) => String(unit?._id || "") === String(unitId || "")
-    );
-
-    const propertyId =
-      targetTenant?.property?._id ||
-      targetTenant?.property ||
-      matchedUnit?.property?._id ||
-      matchedUnit?.property ||
-      targetTenant?.unit?.property?._id ||
-      targetTenant?.unit?.property ||
-      null;
-
-    const matchedProperty = propertiesFromStore.find(
-      (property) => String(property?._id || "") === String(propertyId || "")
-    );
-
-    const landlordId =
-      matchedProperty?.landlords?.[0]?.landlordId?._id ||
-      matchedProperty?.landlords?.[0]?.landlordId ||
-      matchedProperty?.landlords?.[0]?._id ||
-      matchedProperty?.landlords?.[0] ||
-      targetTenant?.landlord?._id ||
-      targetTenant?.landlord ||
-      null;
-
-    if (!currentCompany?._id) {
-      throw new Error("Business context is missing.");
-    }
-
-    if (!propertyId) {
-      throw new Error("Property is missing on the selected tenant.");
-    }
-
-    if (!landlordId) {
-      throw new Error("Landlord is missing on the selected property's record.");
-    }
-
-    if (!unitId) {
-      throw new Error("Unit is missing on the selected tenant.");
-    }
-
-    return {
-      business: currentCompany._id,
-      property: propertyId,
-      landlord: landlordId,
-      unit: unitId,
-    };
-  };
-
   // Every lease belonging to this tenant (one per occupied unit for a multi-unit
   // tenant), best-first: active > pending > draft > renewed > expired > terminated
   // > cancelled, then most-recently-started within a status tier.
@@ -646,22 +566,6 @@ const TenantStatement = () => {
     };
     loadInvoices();
   }, [currentCompany?._id, tenantId, invoiceRefresh]);
-
-  const handleCreateInvoice = async (invoiceData) => {
-    try {
-      await createTenantInvoice(invoiceData);
-      toast.success("Invoice created successfully");
-      setInvoiceRefresh((v) => v + 1);
-      setShowInvoiceModal(false);
-      window.dispatchEvent(new Event("invoicesUpdated"));
-    } catch (err) {
-      toast.error("Failed to create invoice: " + (err?.response?.data?.error || err.message));
-    }
-  };
-
-  const handleCancelInvoice = async () => {
-    toast.info("Invoice cancellation is not enabled in the current backend route yet.");
-  };
 
   // Stable reference so child handlers that call this don't cause re-renders of memoized subtrees
   const getInvoicesForPeriod = useCallback((periodRow, categories = ["RENT_CHARGE", "UTILITY_CHARGE"]) => {

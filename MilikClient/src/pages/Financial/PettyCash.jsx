@@ -38,7 +38,6 @@ import {
   postPettyCashReplenishment,
   rejectPettyCashReplenishment,
   requestPettyCashReplenishment,
-  updatePettyCashAccount,
   voidPettyCashDisbursement,
 } from "../../redux/pettyCashApi";
 

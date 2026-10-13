@@ -313,7 +313,9 @@ const RESULT_META = {
   error:     { label: "Error",     cls: "bg-red-50 border-red-200 text-red-700"             },
 };
 
-const ImportResultsSummary = ({ results, onClose }) => (
+const ImportResultsSummary = ({ results }) => {
+  const { tenant: termTenant } = useTerms("tenant");
+  return (
   <>
     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
       {[
@@ -361,7 +363,8 @@ const ImportResultsSummary = ({ results, onClose }) => (
       </table>
     </div>
   </>
-);
+  );
+};
 
 // ─── Upload / Import Modal ────────────────────────────────────────────────────
 function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
@@ -560,7 +563,7 @@ function UploadModal({ businessId, paybills = [], onClose, onUploaded }) {
           )}
 
           {/* ── Results ── */}
-          {results && <ImportResultsSummary results={results} onClose={onClose} />}
+          {results && <ImportResultsSummary results={results} />}
         </div>
 
         {/* Footer */}
@@ -615,7 +618,6 @@ export default function PmsMpesaNotifications() {
   const [summary,       setSummary]       = useState([]);
   const [pagination,    setPagination]    = useState({ page: 1, limit: pageSize, total: 0, pages: 1 });
   const [loading,       setLoading]       = useState(false);
-  const [expanded,      setExpanded]      = useState(null);
   const [assignTarget,  setAssignTarget]  = useState(null);
   const [ignoreTarget,  setIgnoreTarget]  = useState(null);
   const [showUpload,    setShowUpload]    = useState(false);
@@ -675,7 +677,7 @@ export default function PmsMpesaNotifications() {
     try {
       await adminRequests.delete(`/mpesa-collections/${id}`, { params: { business: businessId } });
       toast.success("Collection record deleted.");
-      setExpanded(null); load();
+      load();
     } catch (err) { toast.error(err?.response?.data?.message || "Delete failed"); }
     finally      { setDeletingId(null); }
   }, [businessId, load]);
@@ -770,7 +772,6 @@ export default function PmsMpesaNotifications() {
   // array is correct (not just "happens to work today").
   const renderMpesaRow = useCallback((n) => {
     const canRecord = (n.matchingStatus === "unmatched" || n.matchingStatus === "matched_tenant") && !!n.tenant && !n.matchedReceipt;
-    const isIgnored = n.matchingStatus === "ignored";
     return (
       <>
         <td className="px-3 py-1.5 border-r border-gray-100 text-[10px] text-slate-500 whitespace-nowrap tabular-nums">{fmtDate(n.transactionDate || n.createdAt)}</td>

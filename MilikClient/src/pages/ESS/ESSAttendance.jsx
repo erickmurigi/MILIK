@@ -17,7 +17,7 @@ export default function ESSAttendance() {
   const [month,    setMonth]    = useTabState("/ess/attendance:month", () => new Date().getMonth() + 1);
   const [year,     setYear]     = useTabState("/ess/attendance:year", () => new Date().getFullYear());
   const [records,  setRecords]  = useState([]);
-  const [total,    setTotal]    = useState(0);
+  const [,         setTotal]    = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [page,     setPage]     = useTabState("/ess/attendance:page", 1);
   const [today,    setToday]    = useState(null);

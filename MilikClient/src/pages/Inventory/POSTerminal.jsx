@@ -209,7 +209,6 @@ const POSTerminal = () => {
   const cartDiscAmt   = cartDiscount.type === "percent"
     ? round2(lineNet * Math.min(100, Math.max(0, Number(cartDiscount.value || 0))) / 100)
     : round2(Math.max(0, Number(cartDiscount.value || 0)));
-  const totalDisc     = round2(totalLineDisc + cartDiscAmt);
   const totalVat      = round2(cart.reduce((s, l) => s + round2((l.unitPrice - l.discount) * l.qty * (l.vatRate / 100)), 0));
   const grandTotal    = round2(lineNet - cartDiscAmt + totalVat);
   const payTotal      = round2(payments.reduce((s, p) => s + Number(p.amount || 0), 0));

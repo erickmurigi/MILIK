@@ -29,7 +29,7 @@ export const getUtilities = async (dispatch, business) => {
     const res = await adminRequests.get(`/utilities?business=${business}`);
     dispatch(getUtilitiesSuccess(res.data));
     dispatch(setUtilityLoadMeta({ loadedFor: businessKey, loadedAt: Date.now() }));
-  } catch (err) {
+  } catch {
     dispatch(getUtilitiesFailure());
   }
 };
@@ -40,7 +40,7 @@ export const getUtility = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/utilities/${id}`);
     dispatch(getUtilitiesSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getUtilitiesFailure());
   }
 };

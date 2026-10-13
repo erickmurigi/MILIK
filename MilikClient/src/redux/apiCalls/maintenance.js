@@ -31,7 +31,7 @@ export const getMaintenances = async (dispatch, business, status = null, priorit
 
     const res = await adminRequests.get(url);
     dispatch(getMaintenancesSuccess(extractList(res.data)));
-  } catch (err) {
+  } catch {
     dispatch(getMaintenancesFailure());
   }
 };
@@ -42,7 +42,7 @@ export const getMaintenance = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/maintenances/${id}`);
     dispatch(getMaintenancesSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getMaintenancesFailure());
   }
 };
@@ -101,10 +101,6 @@ export const updateMaintenanceStatus = async (dispatch, id, statusData) => {
 
 // Get maintenance stats
 export const getMaintenanceStats = async (business) => {
-  try {
-    const res = await adminRequests.get(`/maintenances/get/stats?business=${business}`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/maintenances/get/stats?business=${business}`);
+  return res.data;
 };

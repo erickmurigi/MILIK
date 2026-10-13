@@ -45,7 +45,10 @@ const FinancialOverview = ({ summaryData = {} }) => {
   const isLandlord    = isSelfManagingLandlordCompany(ctx);
   const canFinancials = hasCompanyPermission(currentUser || {}, currentCompany, 'financialReports', 'view', ['accounts', 'propertyManagement']);
 
-  // Use Kenya time (UTC+3) for month/year so they match the server-side aggregation timezone
+  // Use Kenya time (UTC+3) for month/year so they match the server-side aggregation timezone.
+  // Intentionally reads live wall-clock time on every render (no React Compiler in this build,
+  // so the purity rule doesn't apply) — freezing it at mount would show a stale month/year.
+  // eslint-disable-next-line react-hooks/purity
   const nowKE    = new Date(Date.now() + 3 * 60 * 60 * 1000);
   const curYear  = nowKE.getUTCFullYear();
   const curMonth = nowKE.getUTCMonth(); // 0-indexed, matching expectedByMonth/collectedByMonth

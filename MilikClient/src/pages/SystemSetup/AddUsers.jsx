@@ -44,6 +44,7 @@ const PROFILE_OPTIONS = [
   { value: 'Property Agent', label: 'Property Agent', description: 'View & manage tenants, leases, receipts & maintenance requests' },
   { value: 'Field Officer',  label: 'Field Officer',  description: 'On-site: log inspections, close maintenance jobs, submit meter readings & view tenant balances' },
   { value: 'Sales Agent',    label: 'Sales Agent',    description: 'Property sales: listings, buyers, offers, deals & commissions' },
+  { value: 'Advocate',       label: 'Advocate',       description: 'External conveyancing advocate — view-only access to their own assigned property sale deals and payments' },
   { value: 'HR Officer',     label: 'HR Officer',     description: 'Employee management, leave applications & payroll viewing' },
   { value: 'Viewer',         label: 'Viewer',         description: 'Read-only access across all assigned modules — no create or edit actions' },
 ];
@@ -55,6 +56,7 @@ const PROFILE_MODULE_ROLES = {
   'Property Agent': { propertyManagement: 'agent',           accounts: 'clerk',         propertySale: null,           hr: null,         inventory: null,              carwash: null      },
   'Field Officer':  { propertyManagement: 'fieldOfficer',    accounts: null,            propertySale: null,           hr: null,         inventory: null,              carwash: null      },
   'Sales Agent':    { propertyManagement: null,              accounts: null,            propertySale: 'salesAgent',   hr: null,         inventory: null,              carwash: null      },
+  'Advocate':       { propertyManagement: null,              accounts: null,            propertySale: 'advocate',     hr: null,         inventory: null,              carwash: null      },
   'HR Officer':     { propertyManagement: null,              accounts: null,            propertySale: null,           hr: 'hrOfficer',  inventory: null,              carwash: null      },
   'Viewer':         {},
   // Legacy backward-compat
@@ -121,6 +123,23 @@ const makeDefaultAssignment = (company) => {
   };
 };
 
+// Property Sales' granular permission grants (moduleRolePresets.js) are stored under camelCase
+// resource keys (e.g. 'saleDeals'), but the actual API routes check kebab-case keys instead
+// (e.g. "sale-deals") and several routes check resources — CRM leads/activities, owners, owner
+// statements, dashboard, advocates, advocate-payments — that don't exist in the permission
+// catalog at all. Net effect: for every existing propertySale role, the granular grants never
+// match anything at the API layer, so moduleAccess ('Full access' below) is the ONLY thing that
+// actually gates these routes server-side — explicit per-resource restrictions are cosmetic
+// until that catalog is reconciled with the routes (a separate, larger piece of work).
+//
+// That makes 'Full access' unsafe specifically for the Advocate role: it's meant for an external
+// third party and should never get create/update/delete/approve/pay access across the module.
+// Scoping ONLY this roleKey to 'View only' closes that gap without touching any other profile's
+// existing behavior (Sales Agent etc. have the same underlying issue, but changing their access
+// today would newly block real write actions they already rely on, for no safety gain — that's a
+// call for whoever does the fuller permission-catalog fix, not a side effect of adding Advocate).
+const VIEW_ONLY_PROPERTY_SALE_ROLES = new Set(['advocate']);
+
 const applyProfileToAssignment = (profile, assignment, company) => {
   const roleMap = PROFILE_MODULE_ROLES[profile] || {};
   const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
@@ -130,7 +149,8 @@ const applyProfileToAssignment = (profile, assignment, company) => {
     const accessKey = MODULE_KEY_MAP[moduleKey] || moduleKey;
     const roleKey = roleMap[moduleKey];
     if (roleKey) {
-      newModuleAccess[accessKey] = 'Full access';
+      const forceViewOnly = moduleKey === 'propertySale' && VIEW_ONLY_PROPERTY_SALE_ROLES.has(roleKey);
+      newModuleAccess[accessKey] = forceViewOnly ? 'View only' : 'Full access';
       newPermissions = applyModuleRole(newPermissions, moduleKey, roleKey);
     } else {
       newModuleAccess[accessKey] = 'View only';

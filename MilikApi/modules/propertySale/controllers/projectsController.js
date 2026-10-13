@@ -6,6 +6,8 @@ import SaleDeal from "../models/SaleDeal.js";
 import SaleOffer from "../models/SaleOffer.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SaleOwner from "../models/SaleOwner.js";
+import SaleAdvocate from "../models/SaleAdvocate.js";
 import {
   currentUserId, escapeRegex, generateSequentialNumber, reserveSequentialNumberBlock, resolveActiveBusinessId,
 } from "../services/businessScope.js";
@@ -27,14 +29,18 @@ const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 const optionalNumber = (v) => (v === "" || v == null ? null : Number(v));
 
 // Fields an admin can set on a project (status only changes through archive, numbers only through the sequence)
-const PROJECT_FIELDS = ["name", "description", "location", "town", "county", "country", "currency", "assignedAgent", "launchDate", "targetUnits", "targetValue", "notes"];
+const PROJECT_FIELDS = ["name", "description", "location", "town", "county", "country", "currency", "assignedAgent", "owner", "assignedAdvocate", "launchDate", "targetUnits", "targetValue", "notes"];
 const AGENT_FIELDS = "fullName agentNumber phone";
+const OWNER_FIELDS = "fullName ownerNumber phone";
+const ADVOCATE_FIELDS = "fullName advocateNumber firm phone";
 
 const pickProjectBody = (body = {}) => {
   const out = {};
   for (const key of PROJECT_FIELDS) if (key in body) out[key] = body[key];
   if ("name" in out) out.name = String(out.name ?? "").trim();
   if ("assignedAgent" in out) out.assignedAgent = out.assignedAgent || null;
+  if ("owner" in out) out.owner = out.owner || null;
+  if ("assignedAdvocate" in out) out.assignedAdvocate = out.assignedAdvocate || null;
   if ("launchDate" in out) out.launchDate = out.launchDate || null;
   if ("targetUnits" in out) out.targetUnits = optionalNumber(out.targetUnits);
   if ("targetValue" in out) out.targetValue = optionalNumber(out.targetValue);
@@ -54,6 +60,22 @@ const agentProblem = async (business, agentId) => {
   if (!mongoose.isValidObjectId(String(agentId))) return "Assigned agent not found or inactive";
   const agent = await SaleAgent.findOne({ _id: agentId, business, status: "active" }).select("_id").lean();
   return agent ? null : "Assigned agent not found or inactive";
+};
+
+// A project's owner must be an active owner of the same company
+const ownerProblem = async (business, ownerId) => {
+  if (!ownerId) return null;
+  if (!mongoose.isValidObjectId(String(ownerId))) return "Owner not found or inactive";
+  const owner = await SaleOwner.findOne({ _id: ownerId, business, status: "active" }).select("_id").lean();
+  return owner ? null : "Owner not found or inactive";
+};
+
+// A project's assigned advocate must be an active advocate of the same company
+const advocateProblem = async (business, advocateId) => {
+  if (!advocateId) return null;
+  if (!mongoose.isValidObjectId(String(advocateId))) return "Assigned advocate not found or inactive";
+  const advocate = await SaleAdvocate.findOne({ _id: advocateId, business, status: "active" }).select("_id").lean();
+  return advocate ? null : "Assigned advocate not found or inactive";
 };
 
 const findProject = (business, id) =>
@@ -101,7 +123,7 @@ export const listProjects = async (req, res, next) => {
     }
 
     const [projects, total] = await Promise.all([
-      SaleProject.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("assignedAgent", AGENT_FIELDS).lean(),
+      SaleProject.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("assignedAgent", AGENT_FIELDS).populate("owner", OWNER_FIELDS).populate("assignedAdvocate", ADVOCATE_FIELDS).lean(),
       SaleProject.countDocuments(filter),
     ]);
 
@@ -215,6 +237,8 @@ export const getProject = async (req, res, next) => {
     const [performance] = await Promise.all([
       projectPerformance(req, business, project, units),
       project.populate("assignedAgent", AGENT_FIELDS),
+      project.populate("owner", OWNER_FIELDS),
+      project.populate("assignedAdvocate", ADVOCATE_FIELDS),
     ]);
 
     res.status(200).json({ ...project.toObject(), ...summary, performance });
@@ -234,10 +258,14 @@ export const createProject = async (req, res, next) => {
     if (await nameTaken(business, data.name)) return next(createError(409, "A project with this name already exists"));
     const agentError = await agentProblem(business, data.assignedAgent);
     if (agentError) return next(createError(400, agentError));
+    const ownerError = await ownerProblem(business, data.owner);
+    if (ownerError) return next(createError(400, ownerError));
+    const advocateError = await advocateProblem(business, data.assignedAdvocate);
+    if (advocateError) return next(createError(400, advocateError));
 
     const projectNumber = await generateSequentialNumber(SaleProject, business, "PRJ");
     const project = await SaleProject.create({ ...data, business, projectNumber, createdBy: userId, updatedBy: userId });
-    await project.populate("assignedAgent", AGENT_FIELDS);
+    await Promise.all([project.populate("assignedAgent", AGENT_FIELDS), project.populate("owner", OWNER_FIELDS), project.populate("assignedAdvocate", ADVOCATE_FIELDS)]);
     res.status(201).json({ ...project.toObject(), ...summarise([]) });
   } catch (err) {
     next(err);
@@ -261,10 +289,18 @@ export const updateProject = async (req, res, next) => {
       const agentError = await agentProblem(business, data.assignedAgent);
       if (agentError) return next(createError(400, agentError));
     }
+    if (data.owner && String(data.owner) !== String(project.owner || "")) {
+      const ownerError = await ownerProblem(business, data.owner);
+      if (ownerError) return next(createError(400, ownerError));
+    }
+    if (data.assignedAdvocate && String(data.assignedAdvocate) !== String(project.assignedAdvocate || "")) {
+      const advocateError = await advocateProblem(business, data.assignedAdvocate);
+      if (advocateError) return next(createError(400, advocateError));
+    }
 
     project.set({ ...data, updatedBy: userId });
     await project.save();
-    await project.populate("assignedAgent", AGENT_FIELDS);
+    await Promise.all([project.populate("assignedAgent", AGENT_FIELDS), project.populate("owner", OWNER_FIELDS), project.populate("assignedAdvocate", ADVOCATE_FIELDS)]);
     res.status(200).json(project.toObject());
   } catch (err) {
     next(err);

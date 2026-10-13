@@ -121,7 +121,7 @@ const Properties = () => {
   const [selectedProperties, setSelectedProperties] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set()); // property ids currently expanded — Set, matches MilikTable's expandedKeys shape
-  const [isResizing, setIsResizing] = useState(false);
+  const [isResizing] = useState(false);
 
   // Dropdown (Archive/Restore placeholder)
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
@@ -338,32 +338,28 @@ const Properties = () => {
       return { successful: [], failed: [{ error: 'No company selected' }] };
     }
 
-    try {
-      const response = await adminRequests.post('/properties/bulk-import', {
-        properties,
-        business: currentCompany._id
-      });
+    const response = await adminRequests.post('/properties/bulk-import', {
+      properties,
+      business: currentCompany._id
+    });
 
-      // Refresh properties list
-      const params = {
-        page: currentPage,
-        limit: pageSize,
-        search: "",
-        status: appliedFilters.status,
-        zone: appliedFilters.zone,
-        category: appliedFilters.category,
-        code: appliedFilters.code,
-        name: appliedFilters.name,
-        lrNumber: appliedFilters.lr,
-        landlord: appliedFilters.landlord,
-        location: appliedFilters.location,
-      };
-      dispatch(getProperties(params));
+    // Refresh properties list
+    const params = {
+      page: currentPage,
+      limit: pageSize,
+      search: "",
+      status: appliedFilters.status,
+      zone: appliedFilters.zone,
+      category: appliedFilters.category,
+      code: appliedFilters.code,
+      name: appliedFilters.name,
+      lrNumber: appliedFilters.lr,
+      landlord: appliedFilters.landlord,
+      location: appliedFilters.location,
+    };
+    dispatch(getProperties(params));
 
-      return response.data?.data || { successful: [], failed: [] };
-    } catch (error) {
-      throw error;
-    }
+    return response.data?.data || { successful: [], failed: [] };
   };
 
   const handlePrintList = () => {

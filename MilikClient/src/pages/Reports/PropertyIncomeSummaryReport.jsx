@@ -40,7 +40,7 @@ const PropertyIncomeSummaryReport = () => {
   const properties = useSelector(selectAllProperties);
   const landlords = useSelector(selectAllLandlords);
   const isLandlordMode = isSelfManagingLandlordCompany(currentCompany || currentUser?.company);
-  const { property: termProperty, landlord: termLandlord, landlords: termLandlords, properties: termProperties } = useTerms("property", "landlord", "landlords", "properties");
+  const { property: termProperty, landlord: termLandlord, properties: termProperties } = useTerms("property", "landlord", "landlords", "properties");
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const companyName = currentCompany?.name
@@ -141,7 +141,6 @@ const PropertyIncomeSummaryReport = () => {
     const expensesByCategory = Array.isArray(report.expensesByCategory) ? report.expensesByCategory : [];
     const totalInvoiced = Number(summary.totalInvoiced || 0);
     const totalCollected = Number(summary.totalCollected || 0);
-    const totalExpenses = Number(summary.totalExpenses || 0);
     const netIncome = Number(summary.netIncome || 0);
 
     const topProperty = [...byProperty].sort((a, b) => Number(b?.netIncome || 0) - Number(a?.netIncome || 0))[0] || null;

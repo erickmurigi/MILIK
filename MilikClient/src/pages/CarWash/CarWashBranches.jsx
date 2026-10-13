@@ -26,8 +26,6 @@ const emptyForm = {
   active: true, isDefault: false,
 };
 
-const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
-
 const CarWashBranches = () => {
   const queryClient = useQueryClient();
   const confirm = useConfirm();

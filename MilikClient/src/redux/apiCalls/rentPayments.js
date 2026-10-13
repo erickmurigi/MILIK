@@ -50,7 +50,7 @@ export const getRentPayments = async (dispatch, business, tenant = null, unit = 
     if (isUnfiltered) {
       dispatch(setRentPaymentsLoaded({ business }));
     }
-  } catch (err) {
+  } catch {
     dispatch(getRentPaymentsFailure());
   }
 };
@@ -90,7 +90,7 @@ export const getRentPayment = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/rent-payments/${id}`);
     dispatch(getRentPaymentsSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getRentPaymentsFailure());
   }
 };
@@ -231,16 +231,12 @@ export const cancelReversalRentPayment = cancelRentPaymentReversal;
 
 // Get payment summary
 export const getPaymentSummary = async (business, month = null, year = null) => {
-  try {
-    let url = `/rent-payments/get/summary?business=${business}`;
-    if (month) url += `&month=${month}`;
-    if (year) url += `&year=${year}`;
+  let url = `/rent-payments/get/summary?business=${business}`;
+  if (month) url += `&month=${month}`;
+  if (year) url += `&year=${year}`;
 
-    const res = await adminRequests.get(url);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(url);
+  return res.data;
 };
 
 // Download receipt PDF

@@ -148,6 +148,66 @@ export const updateCommissionDefaults = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+// The company's own agency-commission rate (as the owner's selling agent) — independent of commissionDefaults,
+// which is the broker/SaleAgent rate. No WHT here: this is the company's own revenue, never paid out.
+export const updateOwnerCommissionDefaults = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const settings = await ensureSettings(business);
+    const { rate, commissionType } = req.body;
+    if (rate           != null) settings.ownerCommissionDefaults.rate           = Number(rate);
+    if (commissionType != null) settings.ownerCommissionDefaults.commissionType = commissionType;
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
+// A schedule's tiers must be ascending by threshold, and each tier's releasePct is a CUMULATIVE target
+// (not an incremental share — 30%->25% then 100%->100% means "25% of the commission has been released
+// by 30% paid, then the rest by 100% paid", not "25% + 100%"), so releasePct must also be non-decreasing
+// as the threshold rises. A schedule that never reaches 100% cumulative is valid on purpose — an
+// unreached remainder simply never auto-releases until more tiers are added, so a partial/in-progress
+// config is never hard-blocked.
+const tiersProblem = (tiers, label) => {
+  if (!Array.isArray(tiers)) return `${label} must be a list`;
+  let lastThreshold = -1;
+  let lastRelease = -1;
+  for (const t of tiers) {
+    const threshold = Number(t?.thresholdPct);
+    const release   = Number(t?.releasePct);
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 100) return `${label}: each threshold must be between 0 and 100`;
+    if (!Number.isFinite(release) || release < 0 || release > 100) return `${label}: each release % must be between 0 and 100`;
+    if (threshold <= lastThreshold) return `${label}: thresholds must be in ascending order`;
+    if (release < lastRelease) return `${label}: cumulative release % can't decrease at a later threshold`;
+    lastThreshold = threshold;
+    lastRelease = release;
+  }
+  return null;
+};
+
+// Company-wide switch: staged/tiered release of owner commission and broker commission, keyed off the
+// buyer's cumulative % of agreedPrice paid on a deal
+export const updateCommissionReleaseSchedule = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const { enabled, ownerCommissionTiers = [], brokerCommissionTiers = [] } = req.body;
+    if (typeof enabled !== "boolean") return next(createError(400, "enabled must be true or false"));
+    const ownerError  = tiersProblem(ownerCommissionTiers, "Owner commission tiers");
+    if (ownerError) return next(createError(400, ownerError));
+    const brokerError = tiersProblem(brokerCommissionTiers, "Broker commission tiers");
+    if (brokerError) return next(createError(400, brokerError));
+
+    const settings = await ensureSettings(business);
+    settings.commissionReleaseSchedule = {
+      enabled,
+      ownerCommissionTiers:  ownerCommissionTiers.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) })),
+      brokerCommissionTiers: brokerCommissionTiers.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) })),
+    };
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
 // Company-wide switch: agent-linked users see only their own records ("own") or the whole business ("all")
 export const updateAgentVisibility = async (req, res, next) => {
   try {
@@ -169,6 +229,30 @@ export const updateUseProjects = async (req, res, next) => {
     if (typeof req.body?.enabled !== "boolean") return next(createError(400, "enabled must be true or false"));
     const settings = await ensureSettings(business);
     settings.useProjects = req.body.enabled;
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
+// Company-wide switch: shows the Owners page and the owner-commission/statement features
+export const updateUseOwners = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    if (typeof req.body?.enabled !== "boolean") return next(createError(400, "enabled must be true or false"));
+    const settings = await ensureSettings(business);
+    settings.useOwners = req.body.enabled;
+    await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
+// Company-wide switch: shows the Advocates page and the advocate-trust/remittance features
+export const updateUseAdvocates = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    if (typeof req.body?.enabled !== "boolean") return next(createError(400, "enabled must be true or false"));
+    const settings = await ensureSettings(business);
+    settings.useAdvocates = req.body.enabled;
     await settings.save();
     res.json({ settings });
   } catch (err) { next(err); }

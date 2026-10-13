@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 
-const PAYMENT_METHODS = ["cash", "mpesa", "bank", "card", "prepaid", "other"];
+// "prepaid" and "credit" are reserved for automatic backend settlement (wallet auto-deduct,
+// customer overpayment-credit auto-apply) — never offered as a choice on the manual payment
+// form (see paymentsController.js's own, stricter PAYMENT_METHODS validation set).
+const PAYMENT_METHODS = ["cash", "mpesa", "bank", "card", "prepaid", "credit", "other"];
 const RECONCILIATION_STATUSES = ["pending", "reconciled", "flagged"];
 
 const carWashPaymentSchema = new mongoose.Schema(

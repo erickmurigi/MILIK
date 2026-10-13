@@ -16,10 +16,8 @@ import { clearClientSessionStorage } from "../../utils/sessionCleanup";
 import { clearAllTabCache } from "../../hooks/useTabState";
 import { getAccessibleCompanies, switchCompany } from "../../redux/apiCalls";
 import { setCurrentCompany } from "../../redux/companiesRedux";
-import {
-  getCompanyOperatingModeLabel, hasCompanyModule, hasAnyCompanyModule,
-  GL_ACCESS_MODULES, isSelfManagingLandlordCompany,
-} from "../../utils/companyModules";
+import { getCompanyOperatingModeLabel, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { isModuleVisibleToUser } from "../../utils/moduleVisibility";
 import { useTermPresetLabel, useTerm } from "../../hooks/useTerm";
 
 const initials = (value = "") =>
@@ -132,11 +130,13 @@ const StartMenu = ({ variant = "floating" }) => {
     return moduleRegistry
       .map((item) => item.id !== "milik" ? item : { ...item, label: isLandlordMode ? "MILIK Landlord" : item.label })
       .map((item) => item.id !== "propertySale" ? item : { ...item, label: saleModuleName })
-      .filter((item) => item.id === "accounts"
-        ? hasAnyCompanyModule(activeCompanyCtx, GL_ACCESS_MODULES)
-        : hasCompanyModule(activeCompanyCtx, item.moduleKey)
-      );
-  }, [activeCompanyCtx, isLandlordMode, saleModuleName]);
+      // Covers the "accounts" (any GL module) and "clients" (resource-gated route, no
+      // moduleAccess equivalent) special-casing that used to be duplicated inline here.
+      // "Coming soon" tiles (procurement/pos/dms) have no real route and no company ever
+      // has those flags enabled yet, so this resolves to the same "always hidden" result
+      // for them as before — just via one shared check instead of a second ad hoc one.
+      .filter((item) => isModuleVisibleToUser(currentUser, activeCompanyCtx, item.moduleKey));
+  }, [activeCompanyCtx, isLandlordMode, saleModuleName, currentUser]);
 
   const configItems = useMemo(() => {
     const items = [

@@ -61,7 +61,7 @@ const RecordClientPaymentModal = ({ invoice, onClose, onRecorded }) => {
           setCashbookOptions(cashbooks);
           setForm((f) => (f.cashbookAccountId ? f : { ...f, cashbookAccountId: cashbooks[0]?._id || '' }));
         }
-      } catch (_err) {
+      } catch {
         // Non-fatal — the submit button below stays disabled without a
         // resolvable cashbook, and the error surfaces there instead.
       }

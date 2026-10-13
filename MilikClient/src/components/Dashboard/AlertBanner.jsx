@@ -1,7 +1,7 @@
 import React from 'react';
 import { FaBell } from 'react-icons/fa';
 
-const AlertBanner = ({ darkMode }) => {
+const AlertBanner = () => {
   return (
     <div className="mb-6 p-4 bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between">
       <div className="flex items-center space-x-3">

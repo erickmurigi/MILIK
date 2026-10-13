@@ -9,6 +9,9 @@ import Landlord from "../../models/Landlord.js";
 import "../../models/User.js";
 import ServiceProvider from "../../models/ServiceProvider.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import SaleOwner from "../../modules/propertySale/models/SaleOwner.js";
+import SaleProject from "../../modules/propertySale/models/SaleProject.js";
+import { resolvePSAccount } from "../../modules/propertySale/services/propertySaleAccountingService.js";
 import { emitToCompany } from "../../utils/socketManager.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
@@ -38,9 +41,10 @@ const PAYMENT_METHODS = ["bank_transfer", "mobile_money", "cash", "cheque", "oth
 const PAYEE_BANK_KEYS = ["bankName", "branchName", "accountName", "accountNumber", "mobileNumber"];
 const pickPayeeBank = (src = {}) => Object.fromEntries(PAYEE_BANK_KEYS.map((k) => [k, String(src?.[k] || "").trim()]));
 
-// A voucher's payee bank starts from the linked service provider or landlord. Anything typed on the
-// voucher wins, and blanks are filled from the record.
-const resolvePayeeBank = async ({ businessId, serviceProvider = null, landlord = null, requested = null }) => {
+// A voucher's payee bank starts from the linked service provider, landlord, or (for a
+// sale_owner_expense voucher) property-sale owner. Anything typed on the voucher wins, and
+// blanks are filled from the record.
+const resolvePayeeBank = async ({ businessId, serviceProvider = null, landlord = null, saleOwner = null, requested = null }) => {
   const own = pickPayeeBank(requested || {});
   const fields = PAYEE_BANK_KEYS.join(" ");
   let source = null;
@@ -48,6 +52,8 @@ const resolvePayeeBank = async ({ businessId, serviceProvider = null, landlord =
     source = await ServiceProvider.findOne({ _id: serviceProvider, business: businessId }).select(fields).lean();
   } else if (landlord) {
     source = await Landlord.findOne({ _id: landlord, company: businessId }).select(fields).lean();
+  } else if (saleOwner) {
+    source = await SaleOwner.findOne({ _id: saleOwner, business: businessId }).select(fields).lean();
   }
   if (!source) return own;
   return Object.fromEntries(PAYEE_BANK_KEYS.map((k) => [k, own[k] || String(source[k] || "").trim()]));
@@ -99,7 +105,7 @@ const sanitizeVoucherFields = (body = {}) => {
   for (const [key, label] of [
     ["property", "property"], ["landlord", "landlord"], ["liabilityAccount", "liability account"], ["debitAccount", "debit account"],
     ["settlementAccount", "settlement account"], ["whtAccountId", "withholding tax account"], ["sourceRequisition", "source requisition"],
-    ["serviceProvider", "service provider"],
+    ["serviceProvider", "service provider"], ["saleProject", "sale project"], ["saleOwner", "sale owner"],
   ]) {
     if (has(key)) out[key] = optionalId(body[key], label);
   }
@@ -137,8 +143,10 @@ const sanitizeVoucherFields = (body = {}) => {
 };
 
 const MAX_VOUCHER_LINES = 50;
-// Landlord-side vouchers post to a property control account and cover one property, so their lines never pick an expense account
-const CONTROL_ACCOUNT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund"]);
+// Landlord-side vouchers post to a property control account (and a sale_owner_expense voucher posts to
+// the single Owner Expense Recoverable account, 1313) and each covers one scope, so their lines never
+// pick an expense account of their own
+const CONTROL_ACCOUNT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund", "sale_owner_expense"]);
 
 const linesHaveExpenseAccounts = (lines = []) =>
   Array.isArray(lines) && lines.length > 0 && lines.every((line) => line?.expenseAccount);
@@ -612,6 +620,14 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
     return resolveLandlordRemittancePayableAccount(businessId);
   }
 
+  if (voucher.category === "sale_owner_expense") {
+    const account = await resolvePSAccount(businessId, "1313");
+    if (!account?._id) {
+      throw createError(400, "Owner Expense Recoverable account (1313) could not be resolved for this voucher.");
+    }
+    return account;
+  }
+
   if (["landlord_maintenance", "landlord_other"].includes(voucher.category)) {
     const context =
       accountingContext ||
@@ -723,6 +739,30 @@ const voucherRequiresProperty = (voucherCategory) =>
 const voucherRequiresExplicitDebitAccount = (voucherCategory) =>
   EXPLICIT_DEBIT_ACCOUNT_CATEGORIES.has(String(voucherCategory || ""));
 
+// A sale_owner_expense voucher recharges a cost to one property-sale owner — mirrors how a
+// landlord voucher requires a property, but for the unrelated SaleOwner/SaleProject pair.
+const SALE_OWNER_REQUIRED_CATEGORIES = new Set(["sale_owner_expense"]);
+const voucherRequiresSaleOwner = (voucherCategory) =>
+  SALE_OWNER_REQUIRED_CATEGORIES.has(String(voucherCategory || ""));
+
+// Validates the sale owner (required for sale_owner_expense) and, if given, the sale project
+// belong to this business. A voucher with no saleOwnerId is a no-op — every other category.
+const resolveVoucherSaleOwnerContext = async ({ businessId, saleOwnerId = null, saleProjectId = null }) => {
+  if (!saleOwnerId) return { saleOwnerId: null, saleProjectId: null };
+
+  const owner = await SaleOwner.findOne({ _id: saleOwnerId, business: businessId }).select("_id").lean();
+  if (!owner) throw createError(400, "Selected sale owner was not found for this business.");
+
+  let projectId = null;
+  if (saleProjectId) {
+    const project = await SaleProject.findOne({ _id: saleProjectId, business: businessId }).select("_id").lean();
+    if (!project) throw createError(400, "Selected sale project was not found for this business.");
+    projectId = project._id;
+  }
+
+  return { saleOwnerId: owner._id, saleProjectId: projectId };
+};
+
 const isCashbookLikeAccount = (account = {}) => {
   const text = `${account?.name || ""} ${account?.group || ""} ${account?.subGroup || ""}`.toLowerCase();
   return account?.type === "asset" && /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/.test(text);
@@ -752,6 +792,8 @@ const populateVoucherQuery = (query) =>
   query
     .populate("property", "propertyName name")
     .populate("landlord", "name landlordName")
+    .populate("saleOwner", "fullName ownerNumber")
+    .populate("saleProject", "name projectNumber")
     .populate("approvedBy", "surname otherNames email")
     .populate("paidBy", "surname otherNames email")
     .populate("reversedBy", "surname otherNames email")
@@ -1086,6 +1128,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
     service_provider: "Service Provider Payment",
     landlord_advance: "Landlord Advance",
     landlord_standing_order: "Landlord Standing Order",
+    sale_owner_expense: "Owner Expense Recoverable",
   }[voucher.category] || "Payment Voucher";
   const narration = String(voucher.narration || voucher.reference || `${_voucherCategoryLabel} — ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
@@ -1127,7 +1170,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
         metadata: {
           voucherNo: voucher.voucherNo,
           voucherCategory: voucher.category,
-          postingRole: voucher.category === "deposit_refund" ? "landlord_payable_reduction" : ["landlord_maintenance", "landlord_other"].includes(voucher.category) ? "property_control_deduction" : "expense_or_deduction",
+          postingRole: voucher.category === "deposit_refund" ? "landlord_payable_reduction" : voucher.category === "sale_owner_expense" ? "owner_recoverable_accrual" : ["landlord_maintenance", "landlord_other"].includes(voucher.category) ? "property_control_deduction" : "expense_or_deduction",
           includeInLandlordStatement: false,
           expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
         },
@@ -1235,6 +1278,7 @@ const ensureVoucherSettlementPosting = async ({ voucher, actorUserId, paidDate =
     service_provider: "Service Provider Payment",
     landlord_advance: "Landlord Advance",
     landlord_standing_order: "Landlord Standing Order",
+    sale_owner_expense: "Owner Expense Recoverable",
   }[voucher.category] || "Payment Voucher";
   const narration = String(voucher.narration || voucher.reference || `${_voucherCategoryLabel} — ${voucher.voucherNo}`).trim();
   const amount = Math.abs(Number(voucher.amount || 0));
@@ -1377,6 +1421,10 @@ export const createPaymentVoucher = async (req, res, next) => {
       return next(createError(400, "Invalid property supplied"));
     }
 
+    if (voucherRequiresSaleOwner(voucherCategory) && !input.saleOwner) {
+      return next(createError(400, "Sale owner is required for this voucher category"));
+    }
+
     const lineResult = await resolveVoucherLines({
       businessId,
       rawLines: input.lines,
@@ -1424,11 +1472,18 @@ export const createPaymentVoucher = async (req, res, next) => {
       voucherCategory,
     });
 
+    const saleOwnerContext = await resolveVoucherSaleOwnerContext({
+      businessId,
+      saleOwnerId: input.saleOwner || null,
+      saleProjectId: input.saleProject || null,
+    });
+
     const whtAmt = Math.max(0, Math.round(Number(input.whtAmount || 0) * 100) / 100);
     const payeeBank = await resolvePayeeBank({
       businessId,
       serviceProvider: input.serviceProvider && isValidObjectId(input.serviceProvider) ? input.serviceProvider : null,
       landlord: accountingContext.landlordId || null,
+      saleOwner: saleOwnerContext.saleOwnerId || null,
       requested: input.payeeBank,
     });
 
@@ -1438,6 +1493,8 @@ export const createPaymentVoucher = async (req, res, next) => {
       category: voucherCategory,
       property: input.property || null,
       landlord: accountingContext.landlordId || null,
+      saleOwner: saleOwnerContext.saleOwnerId || null,
+      saleProject: saleOwnerContext.saleProjectId || null,
       liabilityAccount: headerPayable,
       debitAccount: input.debitAccount || null,
       settlementAccount: input.settlementAccount || null,
@@ -1560,7 +1617,7 @@ export const getPaymentVouchers = async (req, res, next) => {
       return next(createError(400, "User must have a company context"));
     }
 
-    const { category, status, property, landlord, search, startDate, endDate } = req.query;
+    const { category, status, property, landlord, saleOwner, saleProject, search, startDate, endDate } = req.query;
     const filter = { business };
 
     // filters arrive from the query string: only plain, valid values are accepted (no objects, no malformed ids)
@@ -1582,6 +1639,14 @@ export const getPaymentVouchers = async (req, res, next) => {
     if (landlord) {
       if (typeof landlord !== "string" || !OBJECT_ID.test(landlord)) return next(createError(400, "Invalid landlord filter"));
       filter.landlord = landlord;
+    }
+    if (saleOwner) {
+      if (typeof saleOwner !== "string" || !OBJECT_ID.test(saleOwner)) return next(createError(400, "Invalid sale owner filter"));
+      filter.saleOwner = saleOwner;
+    }
+    if (saleProject) {
+      if (typeof saleProject !== "string" || !OBJECT_ID.test(saleProject)) return next(createError(400, "Invalid sale project filter"));
+      filter.saleProject = saleProject;
     }
 
     if (startDate || endDate) {
@@ -1655,6 +1720,12 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
     if (Object.prototype.hasOwnProperty.call(payload, "landlord") && !payload.landlord) {
       payload.landlord = null;
     }
+    if (Object.prototype.hasOwnProperty.call(payload, "saleOwner") && !payload.saleOwner) {
+      payload.saleOwner = null;
+    }
+    if (Object.prototype.hasOwnProperty.call(payload, "saleProject") && !payload.saleProject) {
+      payload.saleProject = null;
+    }
 
     if (Object.prototype.hasOwnProperty.call(payload, "serviceProvider")) {
       payload.serviceProvider = payload.serviceProvider && isValidObjectId(payload.serviceProvider) ? payload.serviceProvider : null;
@@ -1673,6 +1744,7 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
         businessId: business,
         serviceProvider: payload.serviceProvider ?? existing.serviceProvider,
         landlord: payload.landlord ?? existing.landlord,
+        saleOwner: payload.saleOwner ?? existing.saleOwner,
         requested: payload.payeeBank,
       });
     }
@@ -1737,10 +1809,21 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
       return next(createError(400, "Property is required for this voucher category."));
     }
 
+    const saleOwnerId = Object.prototype.hasOwnProperty.call(payload, "saleOwner")
+      ? payload.saleOwner || null
+      : existing.saleOwner || null;
+    const saleProjectId = Object.prototype.hasOwnProperty.call(payload, "saleProject")
+      ? payload.saleProject || null
+      : existing.saleProject || null;
+
+    if (voucherRequiresSaleOwner(effectiveCategory) && !isValidObjectId(saleOwnerId)) {
+      return next(createError(400, "Sale owner is required for this voucher category."));
+    }
+
     if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !linesHaveExpenseAccounts(effectiveLines) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
       return next(createError(400, "Debit posting account is required for this voucher category."));
     }
-    const [sourceRequisition, accountingContext] = await Promise.all([
+    const [sourceRequisition, accountingContext, saleOwnerContext] = await Promise.all([
       resolveVoucherSourceRequisition({
         businessId: business,
         requisitionId: requestedSourceRequisitionId || null,
@@ -1753,10 +1836,17 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
         landlordId: payload.landlord || existing.landlord || null,
         voucherCategory: payload.category || existing.category || "",
       }),
+      resolveVoucherSaleOwnerContext({
+        businessId: business,
+        saleOwnerId,
+        saleProjectId,
+      }),
     ]);
 
     payload.landlord = accountingContext.landlordId || null;
     payload.sourceRequisition = sourceRequisition?._id || existing.sourceRequisition || null;
+    payload.saleOwner = saleOwnerContext.saleOwnerId || null;
+    payload.saleProject = saleOwnerContext.saleProjectId || null;
 
     const updated = await populateVoucherQuery(
       PaymentVoucher.findOneAndUpdate(
@@ -1992,8 +2082,9 @@ export const getPayeeBankPreview = async (req, res, next) => {
       });
       landlord = context?.landlordId || null;
     }
+    const saleOwner = !serviceProvider && !landlord && isValidObjectId(req.query.saleOwner) ? req.query.saleOwner : null;
 
-    const payeeBank = await resolvePayeeBank({ businessId, serviceProvider, landlord });
+    const payeeBank = await resolvePayeeBank({ businessId, serviceProvider, landlord, saleOwner });
     return res.status(200).json({ payeeBank });
   } catch (err) {
     return next(err);

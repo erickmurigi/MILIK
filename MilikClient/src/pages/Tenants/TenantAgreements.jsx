@@ -399,7 +399,6 @@ const TenantAgreements = () => {
   }, [filteredRows]);
 
   const totalPages = Math.max(1, Math.ceil(sortedFilteredRows.length / pageSize));
-  const pageNumbers = useMemo(() => [...Array(totalPages)].map((_, i) => i + 1), [totalPages]);
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * pageSize;
   const endIndex = startIndex + pageSize;
@@ -774,7 +773,6 @@ const TenantAgreements = () => {
               onRowClick={(row) => toggleAgreementSelect(row.id)}
               isSelected={(row) => selectedAgreementsSet.has(row.id)}
               renderRow={(row) => {
-                const normalizedStatus = String(row.status || "").toLowerCase();
                 const hasDocument = Boolean(String(row.raw?.documentUrl || "").trim());
                 return (
                   <>

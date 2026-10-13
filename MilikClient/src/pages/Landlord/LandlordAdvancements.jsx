@@ -38,10 +38,9 @@ import {
   updateLandlordAdvancementStatus,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
-import { selectCurrentCompany, selectCurrentUser, selectAllLandlords, selectAllProperties } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectAllLandlords } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 
-const todayIso = () => new Date().toISOString().split("T")[0];
 const money = (value) =>
   new Intl.NumberFormat("en-KE", {
     style: "currency",
@@ -116,15 +115,10 @@ const LandlordAdvancements = () => {
   const currentUser = useSelector(selectCurrentUser);
   const landlords = useSelector(selectAllLandlords);
   const { propertiesLoaded } = useEntityCache(currentCompany?._id);
-  const properties = useSelector(selectAllProperties);
 
   const activeLandlords = useMemo(
     () => landlords.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
     [landlords]
-  );
-  const activeProperties = useMemo(
-    () => properties.filter((item) => String(item?.status || "active").toLowerCase() !== "archived"),
-    [properties]
   );
   // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
   const activeLandlordOptions = useMemo(

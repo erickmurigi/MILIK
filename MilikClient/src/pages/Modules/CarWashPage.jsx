@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   FaArrowRight, FaBolt, FaBuilding, FaCar, FaCheckCircle,
-  FaClipboardList, FaCoins, FaHandshake, FaLayerGroup, FaUsers, FaWarehouse, FaWallet,
+  FaClipboardList, FaCoins, FaHandshake, FaLayerGroup, FaUsers, FaWallet, FaWarehouse,
 } from "react-icons/fa";
 import ModulePageShell from "./ModulePageShell";
+import MetricTile from "../../components/MetricTile";
+import BrandPatternPanel from "../../components/BrandPatternPanel";
 import { setTitle, setDesc, setKeywords, setCanonical, setOg, setTw, setSchema, removeSchema } from "../../utils/pageMeta";
 
 const SITE = "https://milikproperty.com";
@@ -66,17 +68,11 @@ const highlights = [
   "Full accounting included — income, expenses, reports",
 ];
 
-const stats = [
-  { value: "Real-time", label: "Job queue updates" },
-  { value: "Auto", label: "Commission calculation" },
-  { value: "Instant", label: "Customer SMS alerts" },
-];
-
 const otherModules = [
-  { icon: <FaBuilding />, title: "Property Management", desc: "Tenant billing, M-PESA rent collection and landlord statements.", href: "/property-management", color: "text-[#0B3B2E]", bg: "bg-[#0B3B2E]/10" },
-  { icon: <FaUsers />, title: "Human Resources", desc: "Payroll, leave management and staff appraisals.", href: "/human-resources", color: "text-violet-700", bg: "bg-violet-50" },
-  { icon: <FaWarehouse />, title: "Inventory & POS", desc: "Stock management, purchase orders and point of sale.", href: "/inventory-pos", color: "text-orange-700", bg: "bg-orange-50" },
-  { icon: <FaHandshake />, title: "Property Sales", desc: "Listings, buyer tracking and agent commissions.", href: "/property-sales", color: "text-emerald-700", bg: "bg-emerald-50" },
+  { icon: <FaBuilding />, title: "Property Management", desc: "Tenant billing, M-PESA rent collection and landlord statements.", href: "/property-management" },
+  { icon: <FaUsers />, title: "Human Resources", desc: "Payroll, leave management and staff appraisals.", href: "/human-resources" },
+  { icon: <FaWarehouse />, title: "Inventory & POS", desc: "Stock management, purchase orders and point of sale.", href: "/inventory-pos" },
+  { icon: <FaHandshake />, title: "Property Sales", desc: "Listings, buyer tracking and agent commissions.", href: "/property-sales" },
 ];
 
 export default function CarWashPage() {
@@ -92,7 +88,7 @@ export default function CarWashPage() {
     setOg("og:title", "Car Wash Management System Kenya | Milik");
     setOg("og:description", "Track car wash jobs by plate, manage payments, run customer loyalty and calculate staff commissions — all in one system built for Kenya.");
     setOg("og:url", url);
-    setOg("og:image", `${SITE}/logo.png`);
+    setOg("og:image", `${SITE}/og-image.png`);
     setOg("og:image:width", "512");
     setOg("og:image:height", "512");
     setOg("og:image:alt", "Milik Car Wash Management System Kenya");
@@ -100,7 +96,7 @@ export default function CarWashPage() {
     setTw("twitter:site", "@milikproperty");
     setTw("twitter:title", "Car Wash Management System Kenya | Milik");
     setTw("twitter:description", "Track jobs by plate, manage loyalty programs and staff commissions for your car wash business.");
-    setTw("twitter:image", `${SITE}/logo.png`);
+    setTw("twitter:image", `${SITE}/og-image.png`);
     setSchema("page", {
       "@context": "https://schema.org",
       "@graph": [
@@ -154,186 +150,68 @@ export default function CarWashPage() {
       {(openTrialModal) => (
         <>
           {/* Hero */}
-          <section className="relative overflow-hidden bg-gradient-to-br from-sky-50 via-white to-white lg:h-[calc(100vh-78px)]">
-            <div className="mx-auto h-full max-w-7xl px-4 py-10 sm:px-6 lg:flex lg:items-center lg:px-8 lg:py-0">
-              <div className="grid w-full gap-8 lg:h-full lg:grid-cols-2 lg:items-stretch lg:gap-10">
-                <div className="lg:self-center">
-                  <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-sky-700 shadow-sm">
-                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-sky-50 text-sky-700">
-                      <FaCar className="text-[9px]" />
-                    </span>
-                    Car Wash Management
-                  </div>
-                  <h1 className="mt-4 text-2xl font-extrabold leading-tight tracking-[-0.02em] text-slate-950 sm:text-3xl lg:text-[2.2rem]">
-                    Track every job, reward loyal customers and pay your staff fairly — all in one system.
-                  </h1>
-                  <p className="mt-3 text-sm leading-6 text-slate-600">
-                    No more paper job cards, manual stamp counting or guessing who's owed what at end of month. Milik tracks everything from the moment a car pulls in to when the till closes.
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-y border-slate-200 py-3">
-                    {stats.map((s) => (
-                      <div key={s.label}>
-                        <p className="text-base font-extrabold text-sky-700">{s.value}</p>
-                        <p className="mt-0.5 text-[10px] font-semibold text-slate-500">{s.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => openTrialModal("property_manager")}
-                      className="inline-flex items-center gap-2 rounded-full bg-sky-700 px-5 py-2 text-xs font-bold text-white shadow-lg shadow-sky-700/20 transition hover:bg-sky-800"
-                    >
-                      Request a Free Demo <FaArrowRight />
-                    </button>
-                    <Link
-                      to="/#pricing"
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-300 bg-white px-5 py-2 text-xs font-bold text-slate-800 transition hover:border-sky-700 hover:text-sky-700"
-                    >
-                      View Pricing
-                    </Link>
-                  </div>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {highlights.map((h) => (
-                      <div key={h} className="flex items-start gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                        <FaCheckCircle className="mt-0.5 shrink-0 text-[10px] text-sky-700" />
-                        <span className="text-xs font-semibold leading-4 text-slate-700">{h}</span>
-                      </div>
-                    ))}
-                  </div>
+          <section className="border-b border-slate-200 bg-[#f7faf8]">
+            <div className="mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-2 lg:items-start lg:gap-14 lg:px-8 lg:py-16">
+              <div>
+                <div className="inline-flex items-center gap-2 border border-[#0B3B2E]/15 bg-white px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.24em] text-[#0B3B2E]">
+                  Car Wash Management
                 </div>
-                <div className="module-hero-img-shell lg:h-full">
-                  <div className="module-hero-img-frame lg:h-full">
-                    <div className="module-hero-visual">
-                      <svg viewBox="0 0 380 480" fill="none" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-                        <defs>
-                          <linearGradient id="cwSky" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#7dd3fc" />
-                            <stop offset="100%" stopColor="#0369a1" />
-                          </linearGradient>
-                          <linearGradient id="cwFloor" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#bae6fd" />
-                            <stop offset="100%" stopColor="#7dd3fc" />
-                          </linearGradient>
-                          <linearGradient id="cwGantry" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#0c4a6e" />
-                            <stop offset="100%" stopColor="#082f49" />
-                          </linearGradient>
-                          <linearGradient id="cwBody" x1="0" y1="0" x2="1" y2="0.4">
-                            <stop offset="0%" stopColor="#f0f9ff" />
-                            <stop offset="55%" stopColor="#bae6fd" />
-                            <stop offset="100%" stopColor="#38bdf8" />
-                          </linearGradient>
-                          <linearGradient id="cwGlass" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#e0f2fe" />
-                            <stop offset="100%" stopColor="#7dd3fc" />
-                          </linearGradient>
-                        </defs>
+                <h1 className="mt-4 text-2xl font-extrabold leading-[1.15] tracking-tight text-slate-950 sm:text-3xl lg:text-[2.2rem]">
+                  Track every job, reward loyal customers and pay your staff fairly — all in one system.
+                </h1>
+                <p className="mt-3 text-sm leading-6 text-slate-600">
+                  No more paper job cards, manual stamp counting or guessing who's owed what at end of month. Milik tracks everything from the moment a car pulls in to when the till closes.
+                </p>
 
-                        <rect width="380" height="480" fill="url(#cwSky)" />
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => openTrialModal("car_wash")}
+                    className="inline-flex items-center gap-2 border border-[#0B3B2E] bg-[#0B3B2E] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#0A3127]"
+                  >
+                    Request a Free Demo <FaArrowRight />
+                  </button>
+                  <Link
+                    to="/#pricing"
+                    className="inline-flex items-center gap-2 border border-slate-300 bg-white px-5 py-3 text-sm font-bold text-slate-800 transition hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
+                  >
+                    View Pricing
+                  </Link>
+                </div>
 
-                        <circle cx="322" cy="54" r="30" fill="#fff9cc" opacity="0.5" />
-                        <circle cx="322" cy="54" r="18" fill="#ffe566" opacity="0.5" />
-
-                        <ellipse cx="64" cy="60" rx="36" ry="16" fill="white" opacity="0.55" />
-                        <ellipse cx="92" cy="52" rx="24" ry="12" fill="white" opacity="0.55" />
-                        <ellipse cx="252" cy="88" rx="30" ry="12" fill="white" opacity="0.4" />
-
-                        <rect x="0" y="392" width="380" height="88" fill="url(#cwFloor)" />
-                        <rect x="0" y="390" width="380" height="5" fill="#0ea5e9" opacity="0.5" />
-                        <rect x="10" y="410" width="360" height="4" rx="2" fill="#0284c7" opacity="0.25" />
-                        <rect x="10" y="430" width="360" height="4" rx="2" fill="#0284c7" opacity="0.2" />
-                        <rect x="10" y="450" width="360" height="4" rx="2" fill="#0284c7" opacity="0.18" />
-                        <ellipse cx="190" cy="452" rx="118" ry="16" fill="#0c4a6e" opacity="0.18" />
-
-                        <rect x="52" y="96" width="20" height="300" rx="8" fill="url(#cwGantry)" />
-                        <rect x="308" y="96" width="20" height="300" rx="8" fill="url(#cwGantry)" />
-                        <rect x="44" y="80" width="292" height="30" rx="12" fill="url(#cwGantry)" />
-                        <rect x="56" y="88" width="268" height="8" rx="4" fill="#38bdf8" opacity="0.4" />
-
-                        <rect x="68" y="112" width="8" height="46" rx="4" fill="#0ea5e9" opacity="0.75" />
-                        <rect x="98" y="112" width="8" height="38" rx="4" fill="#0ea5e9" opacity="0.65" />
-                        <rect x="272" y="112" width="8" height="42" rx="4" fill="#0ea5e9" opacity="0.7" />
-                        <rect x="302" y="112" width="8" height="34" rx="4" fill="#0ea5e9" opacity="0.6" />
-
-                        <circle cx="80" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
-                        <circle cx="140" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
-                        <circle cx="190" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
-                        <circle cx="240" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
-                        <circle cx="300" cy="94" r="6" fill="#e0f2fe" opacity="0.9" />
-
-                        <line x1="80" y1="100" x2="58" y2="150" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
-                        <line x1="140" y1="100" x2="122" y2="158" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.5" />
-                        <line x1="240" y1="100" x2="258" y2="158" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.5" />
-                        <line x1="300" y1="100" x2="322" y2="150" stroke="#e0f2fe" strokeWidth="3" strokeLinecap="round" opacity="0.55" />
-
-                        <circle cx="96" cy="176" r="5" fill="white" opacity="0.85" />
-                        <circle cx="112" cy="196" r="3.5" fill="white" opacity="0.75" />
-                        <circle cx="84" cy="210" r="4" fill="white" opacity="0.65" />
-                        <circle cx="278" cy="182" r="4.5" fill="white" opacity="0.8" />
-                        <circle cx="296" cy="204" r="3" fill="white" opacity="0.7" />
-                        <circle cx="266" cy="222" r="4" fill="white" opacity="0.6" />
-
-                        <ellipse cx="190" cy="392" rx="108" ry="14" fill="#082f49" opacity="0.22" />
-
-                        <rect x="94" y="284" width="192" height="72" rx="24" fill="url(#cwBody)" />
-                        <path d="M120 284 Q150 232 190 232 Q230 232 260 284 Z" fill="url(#cwBody)" />
-                        <path d="M132 280 Q156 246 190 246 Q224 246 248 280 Z" fill="url(#cwGlass)" opacity="0.9" />
-                        <rect x="188" y="252" width="4" height="28" fill="#0284c7" opacity="0.5" />
-                        <rect x="94" y="330" width="192" height="14" rx="4" fill="#0284c7" opacity="0.35" />
-                        <rect x="104" y="296" width="46" height="8" rx="4" fill="white" opacity="0.55" />
-
-                        <circle cx="140" cy="356" r="26" fill="#0c4a6e" />
-                        <circle cx="140" cy="356" r="12" fill="#7dd3fc" />
-                        <circle cx="238" cy="356" r="26" fill="#0c4a6e" />
-                        <circle cx="238" cy="356" r="12" fill="#7dd3fc" />
-
-                        <rect x="86" y="300" width="10" height="20" rx="3" fill="#0ea5e9" opacity="0.8" />
-                        <rect x="284" y="300" width="10" height="20" rx="3" fill="#0ea5e9" opacity="0.8" />
-
-                        <g opacity="0.55">
-                          <rect x="20" y="316" width="42" height="4" rx="2" fill="white" />
-                          <rect x="14" y="330" width="34" height="4" rx="2" fill="white" opacity="0.7" />
-                          <rect x="318" y="316" width="42" height="4" rx="2" fill="white" />
-                          <rect x="332" y="330" width="34" height="4" rx="2" fill="white" opacity="0.7" />
-                        </g>
-
-                        <circle cx="150" cy="270" r="6" fill="white" opacity="0.8" />
-                        <circle cx="230" cy="264" r="4" fill="white" opacity="0.7" />
-                        <circle cx="170" cy="256" r="3" fill="white" opacity="0.6" />
-
-                        <rect x="30" y="140" width="18" height="60" rx="6" fill="#0c4a6e" opacity="0.85" />
-                        <rect x="26" y="128" width="26" height="16" rx="4" fill="#082f49" />
-                        <rect x="30" y="200" width="18" height="8" rx="3" fill="#082f49" />
-                        <text x="39" y="140" textAnchor="middle" fontSize="9" fontWeight="800" fill="#e0f2fe" transform="rotate(-90 39 140)">WASH</text>
-                      </svg>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {highlights.map((h) => (
+                    <div key={h} className="flex items-start gap-2 border border-slate-200 bg-white px-3 py-2">
+                      <FaCheckCircle className="mt-0.5 shrink-0 text-[10px] text-[#0B3B2E]" />
+                      <span className="text-xs font-semibold leading-4 text-slate-700">{h}</span>
                     </div>
-                    <div className="absolute inset-0 bg-gradient-to-t from-sky-900/45 via-transparent to-transparent" />
-                    <div className="module-hero-badge bg-sky-700/90 text-white">
-                      <div>
-                        <p className="module-hero-badge-title">Car Wash</p>
-                      </div>
-                      <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/15 text-lg">
-                        <FaCar />
-                      </span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
+
+              <BrandPatternPanel eyebrow="What Car Wash tracks · example workspace">
+                <div className="grid grid-cols-2 gap-3">
+                  <MetricTile label="Jobs today" value="24" />
+                  <MetricTile label="Loyalty members" value="140" />
+                  <MetricTile label="Collected today" value="KSh 18.2K" big accent className="col-span-2" />
+                  <MetricTile label="Avg. commission" value="KSh 350" />
+                  <MetricTile label="Jobs in queue" value="3" />
+                </div>
+              </BrandPatternPanel>
             </div>
           </section>
 
           {/* Features */}
-          <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+          <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">What it does</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#FF8C00]">What it does</p>
               <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">What the car wash module handles — from first job to end-of-day close.</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">The tools your team actually needs, without the ones they don't. Straightforward to learn, reliable in daily use.</p>
             </div>
-            <div className="mt-7 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {features.map((f) => (
-                <div key={f.title} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl">
-                  <div className="inline-flex rounded-xl bg-sky-50 p-2.5 text-xl text-sky-700">{f.icon}</div>
+                <div key={f.title} className="border border-slate-200 bg-white p-5">
+                  <div className="inline-flex border border-slate-200 bg-slate-50 p-2.5 text-lg text-[#0B3B2E]">{f.icon}</div>
                   <h3 className="mt-4 text-base font-extrabold text-slate-900">{f.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-slate-600">{f.description}</p>
                 </div>
@@ -342,15 +220,15 @@ export default function CarWashPage() {
           </section>
 
           {/* Use cases */}
-          <section className="bg-white py-10">
+          <section className="border-y border-slate-200 bg-white py-14">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
               <div className="max-w-2xl">
-                <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Who uses it</p>
+                <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#FF8C00]">Who uses it</p>
                 <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Right for single locations and multi-branch operators alike.</h2>
               </div>
-              <div className="mt-7 grid gap-4 lg:grid-cols-3">
+              <div className="mt-8 grid gap-4 lg:grid-cols-3">
                 {useCases.map((uc) => (
-                  <div key={uc.title} className="rounded-2xl border border-slate-200 bg-sky-50/40 p-5 shadow-sm">
+                  <div key={uc.title} className="border border-slate-200 bg-[#f7faf8] p-5">
                     <h3 className="text-base font-extrabold text-slate-900">{uc.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-slate-600">{uc.description}</p>
                   </div>
@@ -360,24 +238,24 @@ export default function CarWashPage() {
           </section>
 
           {/* Other modules */}
-          <section className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+          <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
             <div className="max-w-2xl">
-              <p className="text-xs font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Other modules</p>
+              <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#FF8C00]">Other modules</p>
               <h2 className="mt-2 text-2xl font-extrabold text-slate-950 sm:text-3xl">Also managing property, staff or stock? Milik handles those too.</h2>
               <p className="mt-3 text-sm leading-6 text-slate-600">Milik modules stack onto each other. Add property management, payroll, inventory or property sales to the same workspace — same login, same accounting, no extra setup.</p>
             </div>
-            <div className="mt-7 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {otherModules.map((mod) => (
                 <Link
                   key={mod.href}
                   to={mod.href}
-                  className="group rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-1 hover:shadow-xl"
+                  className="group border border-slate-200 bg-white p-5 transition hover:border-[#0B3B2E]"
                 >
-                  <div className={`inline-flex rounded-xl p-2.5 text-xl ${mod.bg} ${mod.color}`}>{mod.icon}</div>
+                  <div className="inline-flex border border-slate-200 bg-slate-50 p-2.5 text-lg text-[#0B3B2E]">{mod.icon}</div>
                   <h3 className="mt-3 text-sm font-extrabold text-slate-900">{mod.title}</h3>
                   <p className="mt-1.5 text-xs leading-5 text-slate-600">{mod.desc}</p>
-                  <p className={`mt-3 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.16em] ${mod.color}`}>
-                    Learn more <FaArrowRight className="text-[9px]" />
+                  <p className="mt-3 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[#0B3B2E]">
+                    Learn more <FaArrowRight className="text-[9px] transition group-hover:translate-x-0.5" />
                   </p>
                 </Link>
               ))}
@@ -385,25 +263,25 @@ export default function CarWashPage() {
           </section>
 
           {/* CTA */}
-          <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
-            <div className="rounded-2xl bg-gradient-to-r from-sky-800 via-sky-700 to-sky-900 px-6 py-8 text-white shadow-2xl">
+          <section className="mx-auto max-w-7xl px-4 pb-14 sm:px-6 lg:px-8">
+            <div className="border border-slate-800 bg-slate-900 p-6 text-white sm:p-8">
               <div className="max-w-2xl">
-                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-sky-200">Ready to streamline your car wash?</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#FF8C00]">Ready to streamline your car wash?</p>
                 <h2 className="mt-2 text-2xl font-extrabold sm:text-3xl">See the car wash module in the guided demo workspace.</h2>
-                <p className="mt-3 text-sm leading-6 text-white/85">
-                  Explore job flows, loyalty programs, cashbooks and staff commissions with real sample data.
+                <p className="mt-3 text-sm leading-6 text-white/80">
+                  Request a free demo and explore job flows, loyalty programs, cashbooks and staff commissions with real sample data.
                 </p>
-                <div className="mt-5 flex flex-wrap gap-3">
+                <div className="mt-6 flex flex-wrap gap-3">
                   <button
                     type="button"
-                    onClick={() => openTrialModal("property_manager")}
-                    className="inline-flex items-center gap-2 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-sky-800 transition hover:bg-sky-50"
+                    onClick={() => openTrialModal("car_wash")}
+                    className="inline-flex items-center gap-2 border border-white bg-white px-5 py-2.5 text-sm font-bold text-[#0B3B2E] transition hover:bg-slate-100"
                   >
                     Request a Free Demo <FaArrowRight />
                   </button>
                   <Link
                     to="/login"
-                    className="inline-flex items-center gap-2 rounded-full border border-white/30 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
+                    className="inline-flex items-center gap-2 border border-white/30 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10"
                   >
                     Existing customer sign in
                   </Link>

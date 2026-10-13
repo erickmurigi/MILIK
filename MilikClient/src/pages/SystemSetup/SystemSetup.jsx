@@ -48,7 +48,7 @@ import {
   getCompanyOperatingModeLabel,
   getEnabledCompanyModuleKeys,
 } from "../../utils/companyModules";
-import { selectCurrentUser, selectCurrentCompany, selectAllCompanies, selectCompanyIsFetching, selectAllUsers, selectUserIsFetching } from "../../redux/selectors";
+import { selectCurrentUser, selectAllCompanies, selectCompanyIsFetching, selectAllUsers, selectUserIsFetching } from "../../redux/selectors";
 import AppSelect from "../../components/common/AppSelect";
 import StatusBadge from "../../components/common/StatusBadge";
 import { fmtDate } from "../../utils/dates";
@@ -87,15 +87,6 @@ const getCompanyStatusLabel = (company = {}) => {
   if (company?.locked) return "Locked";
   if (!isCompanyActive(company)) return "Inactive";
   return company?.accountStatus || "Active";
-};
-
-const getStatusTone = (status = "") => {
-  const s = normalizeText(status);
-  if (["active", "live"].includes(s)) return "bg-emerald-100 text-emerald-700 border-emerald-200";
-  if (["demo", "trial"].includes(s)) return "bg-violet-100 text-violet-700 border-violet-200";
-  if (s === "locked") return "bg-rose-100 text-rose-700 border-rose-200";
-  if (["inactive", "suspended", "disabled", "archived"].includes(s)) return "bg-slate-100 text-slate-500 border-slate-200";
-  return "bg-amber-100 text-amber-700 border-amber-200";
 };
 
 const getReadinessTone = (score) => {
@@ -913,7 +904,6 @@ export default function SystemSetupPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const currentCompany = useSelector(selectCurrentCompany);
   const companies = useSelector(selectAllCompanies);
   const companiesFetching = useSelector(selectCompanyIsFetching);
   const users = useSelector(selectAllUsers);

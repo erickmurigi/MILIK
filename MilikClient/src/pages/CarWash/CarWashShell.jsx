@@ -1,15 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { FaCodeBranch, FaTv } from "react-icons/fa";
+import React from "react";
+import { FaTv } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
-import { carWashApi, getActiveBranchId, normalizeListPayload } from "../../services/carWashApi";
 
 const CarWashShell = ({ title, action, children, showToolbar = true }) => {
-  const [branchName, setBranchName] = useState("");
-  // The active branch derives from milik_user + milik_active_company_id, which only
-  // change on login or company switch — both of which navigate away from /carwash/*
-  // (see StartMenu's switchCompany flow), unmounting this component. Safe to compute once.
-  const assignedBranchId = useMemo(() => getActiveBranchId(), []);
-
   const openQueueDisplay = () => {
     // Use the same ID that all carwash API calls use — not currentCompany._id,
     // which may be the super-admin's own company rather than the active client company.
@@ -17,17 +10,6 @@ const CarWashShell = ({ title, action, children, showToolbar = true }) => {
     if (!activeId) return;
     window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
   };
-
-  useEffect(() => {
-    if (!assignedBranchId) return;
-    carWashApi.listBranches({ active: true })
-      .then((result) => {
-        const branches = normalizeListPayload(result, "branches");
-        const match = branches.find((b) => b._id === assignedBranchId);
-        if (match) setBranchName(match.name);
-      })
-      .catch(() => {});
-  }, [assignedBranchId]);
 
   return (
     <DashboardLayout lockContentScroll>
@@ -39,12 +21,6 @@ const CarWashShell = ({ title, action, children, showToolbar = true }) => {
               <span className="text-sm font-extrabold text-slate-900">{title}</span>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <div className="flex items-center gap-1.5 border border-[#B7C9C0] bg-[#F1F6F3] px-2.5 py-1">
-                <FaCodeBranch className="text-[#0B3B2E] text-[11px]" />
-                <span className="text-xs font-bold text-[#0B3B2E]">
-                  {assignedBranchId ? (branchName || "Loading…") : "All Branches"}
-                </span>
-              </div>
               <button
                 type="button"
                 onClick={openQueueDisplay}

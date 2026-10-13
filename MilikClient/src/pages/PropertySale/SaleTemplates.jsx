@@ -262,14 +262,14 @@ export default function SaleTemplates() {
                       </td>
                       <td className="px-3 py-1.5">
                         <div className="flex items-center gap-1">
-                          <button onClick={() => openEdit(t)} className="rounded px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-100">Edit</button>
+                          <button onClick={() => openEdit(t)} className="border border-slate-300 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50">Edit</button>
                           <button
                             onClick={() => toggleStatus(t)}
-                            className={`rounded px-2 py-1 text-[10px] font-bold ${isActive ? "text-amber-600 hover:bg-amber-50" : "text-emerald-600 hover:bg-emerald-50"}`}
+                            className={`border px-2 py-1 text-[10px] font-bold ${isActive ? "border-amber-200 bg-white text-amber-600 hover:bg-amber-50" : "border-emerald-200 bg-white text-emerald-600 hover:bg-emerald-50"}`}
                           >
                             {isActive ? "Disable" : "Enable"}
                           </button>
-                          <button onClick={() => deleteTemplate(t)} className="rounded px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50">Delete</button>
+                          <button onClick={() => deleteTemplate(t)} className="border border-red-200 bg-white px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-50">Delete</button>
                         </div>
                       </td>
                     </tr>

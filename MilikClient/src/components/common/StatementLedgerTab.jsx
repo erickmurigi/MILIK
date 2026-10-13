@@ -155,7 +155,6 @@ export default function StatementLedgerTab({
     hasAutoScrolledRef.current = true;
   }, [visibleTx]);
 
-  const openingBalance = hasBbf ? bbf : null;
   const closingBalance = useMemo(() =>
     visibleTx.length > 0 ? visibleTx[visibleTx.length - 1].balance : hasBbf ? bbf : null,
     [visibleTx, hasBbf, bbf]

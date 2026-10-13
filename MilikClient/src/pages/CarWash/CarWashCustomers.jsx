@@ -4,9 +4,9 @@ import { useSelector } from "react-redux";
 import {
   FaCar, FaCarSide, FaClock, FaCommentDots, FaEdit,
   FaExclamationTriangle, FaIdCard, FaMobileAlt, FaMoneyBillWave,
-  FaPhone, FaPrint, FaRedoAlt, FaSearch, FaTimes, FaUser, FaPiggyBank,
-  FaDownload, FaFilter, FaStar, FaCheckSquare, FaSquare, FaCodeBranch,
-  FaSortUp, FaSortDown, FaSort, FaChevronDown, FaChevronUp,
+  FaPhone, FaPrint, FaRedoAlt, FaTimes, FaUser, FaPiggyBank,
+  FaDownload, FaFilter, FaCheckSquare, FaSquare, FaCodeBranch,
+  FaSortUp, FaSortDown, FaSort, FaChevronDown, FaChevronUp, FaTv,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
@@ -35,13 +35,13 @@ const CUSTOMER_COLUMNS = [
   { label: "Visits", sortKey: "visits", className: "hidden md:table-cell" },
   { label: "Last Visit", sortKey: "lastVisit", className: "hidden lg:table-cell" },
   { label: "Lifetime Spend", sortKey: "spend", className: "hidden xl:table-cell" },
-  { label: "Outstanding", sortKey: "outstanding", className: "text-red-300" },
+  { label: "Outstanding", sortKey: "outstanding" },
   { label: "Loyalty", className: "hidden xl:table-cell" },
   { label: "Account", className: "hidden xl:table-cell" },
 ];
 
 const acctTypePill = {
-  credit:  "bg-purple-100 text-purple-700 border-purple-200",
+  credit:  "bg-teal-100 text-teal-700 border-teal-200",
   monthly: "bg-blue-100 text-blue-700 border-blue-200",
 };
 
@@ -148,12 +148,12 @@ const CustomerDetail = React.memo(({ customer, program }) => {
             <span className="flex items-center gap-1 text-slate-500"><FaPhone size={9} className="text-slate-300" />{customer.phone || "No phone"}</span>
             <span className="flex flex-wrap gap-1">
               {(customer.plates || []).map((p) => (
-                <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700">{p}</span>
+                <span key={p} className="border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-mono font-bold text-slate-700">{p}</span>
               ))}
             </span>
             {card && <StampBar card={card} program={program} />}
             {acc && (
-              <span className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+              <span className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
                 <FaIdCard size={8} />{acc.accountNumber} · {acc.accountType}
               </span>
             )}
@@ -170,7 +170,7 @@ const CustomerDetail = React.memo(({ customer, program }) => {
         ) : !jobs.length ? (
           <div className="py-4 text-center text-[11px] text-slate-400">No job history on record</div>
         ) : (
-          <div className="overflow-x-auto rounded border border-slate-200">
+          <div className="overflow-x-auto border border-slate-200">
             <table className="w-full min-w-[520px] border-collapse text-xs">
               <thead>
                 <tr className="bg-[#0B3B2E]">
@@ -184,7 +184,7 @@ const CustomerDetail = React.memo(({ customer, program }) => {
                   <tr key={String(j._id)} className={i % 2 === 0 ? "bg-white" : "bg-slate-50/60"}>
                     <td className={STMT_TD}>{j.dateFmt}</td>
                     <td className={`${STMT_TD} font-mono text-[10px] text-slate-500`}>{j.jobNumber}</td>
-                    <td className={STMT_TD}><span className="rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono font-bold text-slate-700 text-[10px]">{j.plateNumber}</span></td>
+                    <td className={STMT_TD}><span className="border border-slate-200 bg-white px-1.5 py-0.5 font-mono font-bold text-slate-700 text-[10px]">{j.plateNumber}</span></td>
                     <td className={`${STMT_TD} max-w-[160px] truncate`}>{j.serviceName}</td>
                     <td className={`${STMT_TD} text-right tabular-nums`}>{fmt(j.charge)}</td>
                     <td className={`${STMT_TD} text-right tabular-nums text-emerald-700`}>{j.paid > 0 ? fmt(j.paid) : <span className="text-slate-300">—</span>}</td>
@@ -207,18 +207,15 @@ const CustomerDetail = React.memo(({ customer, program }) => {
   );
 });
 
-// ─── Row action icon button ────────────────────────────────────────────────────
+// ─── Row action icon button — plain icon-only convention, red reserved for destructive ──
 const ACTN_COLORS = {
-  slate: "border-slate-200 text-slate-500 hover:border-slate-400 hover:text-slate-700 hover:bg-slate-50",
-  green: "border-slate-200 text-slate-500 hover:border-[#0B3B2E] hover:text-[#0B3B2E] hover:bg-[#F1F6F3]",
-  amber: "border-slate-200 text-slate-500 hover:border-amber-400 hover:text-amber-700 hover:bg-amber-50",
-  blue:  "border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50",
-  red:   "border-red-200 text-red-400 hover:border-red-400 hover:text-red-700 hover:bg-red-50",
+  slate: "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+  red:   "text-red-600 hover:bg-red-50 hover:text-red-800",
 };
 const ActionBtn = React.memo(({ icon: Icon, title, onClick, color = "slate", disabled = false }) => (
   <button type="button" title={title} onClick={onClick} disabled={disabled}
-    className={`h-6 w-6 flex-shrink-0 flex items-center justify-center rounded border text-[10px] transition-colors ${disabled ? "border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed" : ACTN_COLORS[color] || ACTN_COLORS.slate}`}>
-    <Icon size={10} />
+    className={`p-1 flex-shrink-0 transition-colors ${disabled ? "text-slate-300 cursor-not-allowed" : ACTN_COLORS[color] || ACTN_COLORS.slate}`}>
+    <Icon size={12} />
   </button>
 ));
 
@@ -291,9 +288,9 @@ const MergeDuplicatesModal = ({ onClose, onDone }) => {
         <div className="space-y-4">
           <p className="text-xs text-slate-500">{groups.length} plate{groups.length !== 1 ? "s" : ""} appear in more than one customer record. Select which record to keep — the other(s) will be merged into it.</p>
           {groups.map((group) => (
-            <div key={group.plate} className="rounded border border-amber-200 bg-amber-50 p-3 space-y-2">
+            <div key={group.plate} className="border border-amber-200 bg-amber-50 p-3 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="rounded border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs font-bold text-slate-700">{group.plate}</span>
+                <span className="border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs font-bold text-slate-700">{group.plate}</span>
                 <button
                   type="button"
                   onClick={() => handleMerge(group)}
@@ -305,7 +302,7 @@ const MergeDuplicatesModal = ({ onClose, onDone }) => {
               </div>
               <div className="space-y-1">
                 {group.customers.map((c) => (
-                  <label key={String(c._id)} className={`flex items-center gap-2 rounded border p-2 cursor-pointer text-xs transition-colors ${keepIds[group.plate] === String(c._id) ? "border-[#0B3B2E] bg-white" : "border-slate-200 bg-white hover:border-slate-300"}`}>
+                  <label key={String(c._id)} className={`flex items-center gap-2 border p-2 cursor-pointer text-xs transition-colors ${keepIds[group.plate] === String(c._id) ? "border-[#0B3B2E] bg-white" : "border-slate-200 bg-white hover:border-slate-300"}`}>
                     <input type="radio" name={`keep-${group.plate}`} value={String(c._id)}
                       checked={keepIds[group.plate] === String(c._id)}
                       onChange={() => setKeepIds((prev) => ({ ...prev, [group.plate]: String(c._id) }))}
@@ -316,7 +313,7 @@ const MergeDuplicatesModal = ({ onClose, onDone }) => {
                       <p className="text-[10px] text-slate-400">{c.phone || "No phone"} · Plates: {(c.plates || []).join(", ")}</p>
                     </div>
                     {keepIds[group.plate] === String(c._id) && (
-                      <span className="rounded bg-[#0B3B2E] px-1.5 py-0.5 text-[9px] font-bold text-white">KEEP</span>
+                      <span className="bg-[#0B3B2E] px-1.5 py-0.5 text-[9px] font-bold text-white">KEEP</span>
                     )}
                   </label>
                 ))}
@@ -631,38 +628,37 @@ export default function CarWashCustomers() {
   const renderRow = useCallback((c) => {
     const hasOutstanding = c.outstanding > 0.01;
     const hasCreditBal   = (c.creditBalance || 0) > 0.01;
-    const hasPlates      = (c.plates || []).length > 0;
     const card = c.loyaltyCard;
     const acc  = c.creditAccount;
     return (
       <>
         {/* Customer */}
-        <td className="px-4 py-2">
+        <td className="px-3 py-1.5 border-r border-gray-100">
           <div className="flex items-center gap-1.5">
             {c.lastVisit && <div className={`h-1.5 w-1.5 rounded-full flex-shrink-0 ${lastVisitDot(c.lastVisit)}`} title={`Last visit: ${fmtDate(c.lastVisit)}`} />}
-            <div className="font-semibold text-slate-800 truncate max-w-[180px]">
+            <div className="font-bold text-slate-900 truncate max-w-[180px]">
               {c.name || <span className="italic text-slate-400 font-normal">Unnamed</span>}
             </div>
           </div>
-          <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+          <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
             {c.phone ? <><FaPhone size={8} className="text-slate-300" /> {c.phone}</> : <span className="italic">No phone</span>}
           </div>
         </td>
 
         {/* Plates */}
-        <td className="hidden md:table-cell px-4 py-2">
+        <td className="hidden md:table-cell px-3 py-1.5 border-r border-gray-100">
           <div className="flex flex-wrap gap-1">
             {(c.plates || []).slice(0, 2).map((p) => (
-              <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
+              <span key={p} className="border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>
             ))}
             {(c.plates || []).length > 2 && (
-              <span className="rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500" title={(c.plates || []).slice(2).join(", ")}>+{c.plates.length - 2}</span>
+              <span className="border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500" title={(c.plates || []).slice(2).join(", ")}>+{c.plates.length - 2}</span>
             )}
           </div>
         </td>
 
         {/* Visits */}
-        <td className="hidden md:table-cell px-4 py-2 text-center">
+        <td className="hidden md:table-cell px-3 py-1.5 border-r border-gray-100 text-center">
           <div className="flex items-center justify-center gap-1">
             <FaCarSide size={9} className="text-slate-300" />
             <span className="font-semibold tabular-nums text-slate-700">{c.totalJobs || 0}</span>
@@ -670,7 +666,7 @@ export default function CarWashCustomers() {
         </td>
 
         {/* Last visit */}
-        <td className="hidden lg:table-cell px-4 py-2 text-right">
+        <td className="hidden lg:table-cell px-3 py-1.5 border-r border-gray-100 text-right">
           <div className={`flex items-center justify-end gap-1 text-[11px] ${lastVisitClass(c.lastVisit)}`}>
             <FaClock size={8} className="opacity-60 flex-shrink-0" />
             <span className="tabular-nums">{fmtDate(c.lastVisit)}</span>
@@ -678,19 +674,19 @@ export default function CarWashCustomers() {
         </td>
 
         {/* Lifetime spend */}
-        <td className="hidden xl:table-cell px-4 py-2 text-right tabular-nums font-medium text-slate-700 text-[11px]">
+        <td className="hidden xl:table-cell px-3 py-1.5 border-r border-gray-100 text-right tabular-nums font-medium text-slate-700 text-[11px]">
           {c.totalPaid > 0 ? fmt(c.totalPaid) : <span className="text-slate-300">—</span>}
         </td>
 
         {/* Outstanding / Credit */}
-        <td className="px-4 py-2 text-right tabular-nums text-[11px]">
+        <td className="px-3 py-1.5 border-r border-gray-100 text-right tabular-nums text-[11px]">
           <div className="flex flex-col items-end gap-0.5">
             {hasOutstanding
               ? <span className="font-bold text-red-600">{fmt(c.outstanding)}</span>
               : <span className="text-slate-200">—</span>}
             {hasCreditBal && (
               <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
-                className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200">
+                className="inline-flex items-center gap-1 bg-emerald-100 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-700 hover:bg-emerald-200">
                 <FaPiggyBank size={7} />{fmt(c.creditBalance)}
               </button>
             )}
@@ -698,15 +694,15 @@ export default function CarWashCustomers() {
         </td>
 
         {/* Loyalty */}
-        <td className="hidden xl:table-cell px-4 py-2">
+        <td className="hidden xl:table-cell px-3 py-1.5 border-r border-gray-100">
           <StampBar card={card} program={loyaltyProgram} />
         </td>
 
         {/* Account */}
-        <td className="hidden xl:table-cell px-4 py-2" onClick={(e) => e.stopPropagation()}>
+        <td className="hidden xl:table-cell px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
           {acc ? (
             <button type="button" onClick={() => navigate("/carwash/customers/credit-accounts")}
-              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
+              className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
               <FaIdCard size={8} />{acc.accountType}
             </button>
           ) : <span className="text-slate-200 text-[10px]">—</span>}
@@ -720,11 +716,11 @@ export default function CarWashCustomers() {
     const hasOutstanding = c.outstanding > 0.01;
     return (
       <div className="flex items-center justify-end gap-1">
-        <ActionBtn icon={FaCar} title="View jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
-        {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
-        {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
+        <ActionBtn icon={FaCar} title="View jobs" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
+        {canManage && <ActionBtn icon={FaEdit} title="Edit customer" onClick={(e) => openEdit(e, c)} />}
+        {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" onClick={(e) => openSms(e, c)} />}
         {hasOutstanding && canManage && hasPlates && (
-          <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)}`} color="red" onClick={(e) => openSettle(e, c)} />
+          <ActionBtn icon={FaMoneyBillWave} title={`Settle ${fmt(c.outstanding)}`} onClick={(e) => openSettle(e, c)} />
         )}
       </div>
     );
@@ -744,234 +740,197 @@ export default function CarWashCustomers() {
     finally { setPaying(false); }
   };
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell>
-      <div className="flex flex-1 min-h-0 flex-col overflow-hidden bg-white">
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        {summaryStats.totalOutstanding > 0.01 && (
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Outstanding: {fmt(summaryStats.totalOutstanding)}{summaryStats.isGlobal ? " (all)" : ""}
+          </span>
+        )}
+        {summaryStats.totalCredit > 0.01 && (
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Credit: {fmt(summaryStats.totalCredit)}{summaryStats.isGlobal ? " (all)" : ""}
+          </span>
+        )}
+        <ListToolbar.Divider />
+        <ListToolbar.Input
+          ref={searchRef}
+          width="w-[170px]"
+          placeholder="Name / phone / plate"
+          value={search}
+          onChange={(e) => handleSearch(e.target.value)}
+        />
+        <ListToolbar.Button
+          icon={FaExclamationTriangle}
+          variant="outline"
+          className={filterOutstanding ? "!border-red-300 !bg-red-50 !text-red-700" : ""}
+          onClick={() => { setFilterOutstanding((v) => !v); setPage(1); }}
+        >
+          Outstanding
+        </ListToolbar.Button>
+        <ListToolbar.Button
+          icon={FaPiggyBank}
+          variant="outline"
+          className={filterCredit ? "!border-emerald-500 !bg-emerald-50 !text-emerald-700" : ""}
+          onClick={() => { setFilterCredit((v) => !v); setPage(1); }}
+        >
+          With Credit
+        </ListToolbar.Button>
+        <ListToolbar.Button
+          icon={FaFilter}
+          variant="outline"
+          className={hasAdvancedFilters ? "!border-[#FF8C00] !bg-orange-50 !text-[#FF8C00]" : ""}
+          onClick={() => setFiltersOpen((v) => !v)}
+        >
+          Filters
+          {activeFilterCount > 0 && <span className="bg-[#FF8C00] text-white text-[8px] font-bold px-1 leading-none py-0.5">{activeFilterCount}</span>}
+          {filtersOpen ? <FaChevronUp size={7} /> : <FaChevronDown size={7} />}
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        <ListToolbar.Button variant="outline" onClick={handleExportCsv} disabled={exporting || loading}>
+          <FaDownload size={7} className={exporting ? "animate-bounce" : ""} /> {exporting ? "Exporting…" : "Export"}
+        </ListToolbar.Button>
+        <ListToolbar.Button
+          icon={FaBalanceScale}
+          variant="outline"
+          className="!border-amber-300 !bg-amber-50 !text-amber-700 hover:!bg-amber-100"
+          onClick={() => navigate("/carwash/customers/opening-balances")}
+        >
+          Opening Balances
+        </ListToolbar.Button>
+        {canManage && (
+          <ListToolbar.Button
+            icon={FaCodeBranch}
+            variant="outline"
+            onClick={() => setShowMerge(true)}
+            title="Find and merge duplicate customer records"
+          >
+            Duplicates
+          </ListToolbar.Button>
+        )}
+        {canManage && (
+          <ListToolbar.Button
+            variant="outline"
+            className="!border-emerald-300 !bg-emerald-50 !text-emerald-700 hover:!bg-emerald-100"
+            disabled={syncing || loading}
+            onClick={async () => {
+              setSyncing(true);
+              try {
+                const r = await carWashApi.backfillCustomersAndStamps();
+                toast.success(`Sync done — ${r?.customersCreated ?? 0} created, ${r?.stampsAwarded ?? 0} stamps`);
+                queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
+              } catch (err) { toast.error(err?.message || "Sync failed"); }
+              finally { setSyncing(false); }
+            }}
+          >
+            <FaRedoAlt size={7} className={syncing ? "animate-spin" : ""} /> {syncing ? "Syncing..." : "Sync Jobs"}
+          </ListToolbar.Button>
+        )}
+        <ListToolbar.Button
+          variant="outline"
+          onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-customers"] })}
+          disabled={loading}
+        >
+          <FaRedoAlt size={7} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canManage && (
+          <ListToolbar.Button icon={FaCommentDots} variant="accent" disabled={selectedIds.size === 0} onClick={() => setBulkSmsOpen(true)}>
+            SMS Selected{selectedIds.size > 0 ? ` (${selectedIds.size})` : ""}
+          </ListToolbar.Button>
+        )}
+        {selectedIds.size > 0 && (
+          <ListToolbar.Button icon={FaTimes} variant="outline" onClick={clearSelection}>
+            Clear
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
 
-        {/* ── Header ──────────────────────────────────────────────────────────── */}
-        <div className="flex-shrink-0 border-b border-slate-200 bg-white px-2 py-1">
-          <div className="flex flex-wrap items-center justify-between gap-1">
-            <div className="min-w-0">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Car Wash</p>
-              <h2 className="text-sm font-bold text-slate-800 truncate leading-tight">Customers</h2>
+      {/* ── Advanced filter panel ──────────────────────────────────────── */}
+      {filtersOpen && (
+        <div className="mb-1 border border-[#FF8C00]/40 bg-orange-50/40 p-2.5">
+          <div className="flex flex-wrap gap-3">
+            {/* Dormant */}
+            <div className="min-w-[140px]">
+              <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-orange-600">Not visited in</label>
+              <AppSelect
+                value={dormantDays || ""}
+                onChange={(v) => { setDormantDays(Number(v ?? 0)); setPage(1); }}
+                options={[
+                  { value: 30, label: "30+ days" },
+                  { value: 60, label: "60+ days" },
+                  { value: 90, label: "90+ days" },
+                  { value: 180, label: "180+ days" },
+                  { value: 365, label: "1+ year" },
+                ]}
+                placeholder="Any time"
+                size="sm"
+                clearable
+              />
             </div>
 
-            {/* Actions toolbar */}
-            <div className="flex flex-wrap items-center gap-1">
-              {/* Search */}
-              <div className="relative">
-                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-400" size={8} />
-                <input ref={searchRef} type="text" placeholder="Name / phone / plate..." value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="h-[20px] w-36 border border-slate-300 bg-white pl-5 pr-6 text-[9px] focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 sm:w-48 transition-all"
-                />
-                {search && (
-                  <button type="button" onClick={() => handleSearch("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"><FaTimes size={8} /></button>
-                )}
+            {/* Loyalty */}
+            <div className="min-w-[160px]">
+              <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-orange-600">Loyalty</label>
+              <AppSelect
+                value={loyaltyFilter}
+                onChange={(v) => { setLoyaltyFilter(v ?? ""); setPage(1); }}
+                options={[
+                  { value: "member", label: "Loyalty members" },
+                  { value: "near_reward", label: "Near reward (≤2 stamps away)" },
+                  { value: "has_reward", label: "Has pending reward" },
+                  { value: "no_stamps", label: "No stamps yet" },
+                ]}
+                placeholder="All customers"
+                size="sm"
+                clearable
+              />
+            </div>
+
+            {/* Spend range */}
+            <div className="flex items-end gap-1">
+              <div>
+                <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-orange-600">Min spend</label>
+                <input type="number" value={minSpend} onChange={(e) => { setMinSpend(e.target.value); setPage(1); }} placeholder="0"
+                  className="h-7 w-24 border border-slate-300 bg-white px-2 text-xs focus:border-[#FF8C00] focus:outline-none" />
               </div>
-
-              {/* Outstanding toggle */}
-              <ListToolbar.Button
-                icon={FaExclamationTriangle}
-                variant="outline"
-                className={filterOutstanding ? "!border-red-200 !bg-red-50 !text-red-700" : ""}
-                onClick={() => { setFilterOutstanding((v) => !v); setPage(1); }}
-              >
-                <span className="hidden sm:inline">Outstanding only</span><span className="sm:hidden">Unpaid</span>
-              </ListToolbar.Button>
-
-              {/* Credit toggle */}
-              <ListToolbar.Button
-                icon={FaPiggyBank}
-                variant="outline"
-                className={filterCredit ? "!border-emerald-600 !bg-emerald-50 !text-emerald-700" : ""}
-                onClick={() => { setFilterCredit((v) => !v); setPage(1); }}
-              >
-                <span className="hidden sm:inline">With credit</span>
-              </ListToolbar.Button>
-
-              {/* Advanced filters toggle */}
-              <ListToolbar.Button
-                icon={FaFilter}
-                variant="outline"
-                className={hasAdvancedFilters ? "!border-violet-400 !bg-violet-50 !text-violet-700" : ""}
-                onClick={() => setFiltersOpen((v) => !v)}
-              >
-                <span className="hidden sm:inline">Filters</span>
-                {activeFilterCount > 0 && <span className="bg-violet-500 text-white text-[8px] font-bold px-1 leading-none py-0.5">{activeFilterCount}</span>}
-                {filtersOpen ? <FaChevronUp size={7} /> : <FaChevronDown size={7} />}
-              </ListToolbar.Button>
-
-              {/* Export CSV */}
-              <ListToolbar.Button variant="outline" onClick={handleExportCsv} disabled={exporting || loading}>
-                <FaDownload size={7} className={exporting ? "animate-bounce" : ""} />
-                <span className="hidden sm:inline">{exporting ? "Exporting…" : "Export"}</span>
-              </ListToolbar.Button>
-
-              {/* Opening Balances */}
-              <ListToolbar.Button
-                icon={FaBalanceScale}
-                variant="outline"
-                className="!border-amber-300 !bg-amber-50 !text-amber-700 hover:!bg-amber-100"
-                onClick={() => navigate("/carwash/customers/opening-balances")}
-              >
-                <span className="hidden sm:inline">Opening Balances</span>
-              </ListToolbar.Button>
-
-              {/* Merge Duplicates */}
-              {canManage && (
-                <ListToolbar.Button
-                  icon={FaCodeBranch}
-                  variant="outline"
-                  onClick={() => setShowMerge(true)}
-                  title="Find and merge duplicate customer records"
-                >
-                  <span className="hidden lg:inline">Duplicates</span>
-                </ListToolbar.Button>
-              )}
-
-              {/* Sync */}
-              {canManage && (
-                <ListToolbar.Button
-                  variant="outline"
-                  className="!border-emerald-300 !bg-emerald-50 !text-emerald-700 hover:!bg-emerald-100"
-                  disabled={syncing || loading}
-                  onClick={async () => {
-                    setSyncing(true);
-                    try {
-                      const r = await carWashApi.backfillCustomersAndStamps();
-                      toast.success(`Sync done — ${r?.customersCreated ?? 0} created, ${r?.stampsAwarded ?? 0} stamps`);
-                      queryClient.invalidateQueries({ queryKey: ["cw-customers"] });
-                    } catch (err) { toast.error(err?.message || "Sync failed"); }
-                    finally { setSyncing(false); }
-                  }}
-                >
-                  <FaRedoAlt size={7} className={syncing ? "animate-spin" : ""} />
-                  <span className="hidden sm:inline">{syncing ? "Syncing..." : "Sync Jobs"}</span>
-                </ListToolbar.Button>
-              )}
-
-              {/* Refresh */}
-              <ListToolbar.Button
-                variant="outline"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-customers"] })}
-                disabled={loading}
-              >
-                <FaRedoAlt size={7} className={loading ? "animate-spin" : ""} />
-                <span className="hidden sm:inline">Refresh</span>
-              </ListToolbar.Button>
-            </div>
-          </div>
-
-          {/* ── Advanced filter panel ──────────────────────────────────────── */}
-          {filtersOpen && (
-            <div className="mt-2 rounded border border-violet-200 bg-violet-50/50 p-3">
-              <div className="flex flex-wrap gap-3">
-                {/* Dormant */}
-                <div className="min-w-[140px]">
-                  <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-violet-600">Not visited in</label>
-                  <AppSelect
-                    value={dormantDays || ""}
-                    onChange={(v) => { setDormantDays(Number(v ?? 0)); setPage(1); }}
-                    options={[
-                      { value: 30, label: "30+ days" },
-                      { value: 60, label: "60+ days" },
-                      { value: 90, label: "90+ days" },
-                      { value: 180, label: "180+ days" },
-                      { value: 365, label: "1+ year" },
-                    ]}
-                    placeholder="Any time"
-                    size="sm"
-                    clearable
-                  />
-                </div>
-
-                {/* Loyalty */}
-                <div className="min-w-[160px]">
-                  <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-violet-600">Loyalty</label>
-                  <AppSelect
-                    value={loyaltyFilter}
-                    onChange={(v) => { setLoyaltyFilter(v ?? ""); setPage(1); }}
-                    options={[
-                      { value: "member", label: "Loyalty members" },
-                      { value: "near_reward", label: "Near reward (≤2 stamps away)" },
-                      { value: "has_reward", label: "Has pending reward" },
-                      { value: "no_stamps", label: "No stamps yet" },
-                    ]}
-                    placeholder="All customers"
-                    size="sm"
-                    clearable
-                  />
-                </div>
-
-                {/* Spend range */}
-                <div className="flex items-end gap-1">
-                  <div>
-                    <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-violet-600">Min spend</label>
-                    <input type="number" value={minSpend} onChange={(e) => { setMinSpend(e.target.value); setPage(1); }} placeholder="0"
-                      className="h-7 w-24 rounded border border-slate-300 bg-white px-2 text-xs focus:border-violet-400 focus:outline-none" />
-                  </div>
-                  <span className="pb-1 text-slate-400 text-xs">–</span>
-                  <div>
-                    <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-violet-600">Max spend</label>
-                    <input type="number" value={maxSpend} onChange={(e) => { setMaxSpend(e.target.value); setPage(1); }} placeholder="∞"
-                      className="h-7 w-24 rounded border border-slate-300 bg-white px-2 text-xs focus:border-violet-400 focus:outline-none" />
-                  </div>
-                </div>
-
-                {/* Clear */}
-                {hasAdvancedFilters && (
-                  <div className="flex items-end">
-                    <button type="button" onClick={resetFilters}
-                      className="h-7 flex items-center gap-1 rounded border border-red-200 bg-red-50 px-2 text-[11px] font-semibold text-red-600 hover:bg-red-100">
-                      <FaTimes size={8} /> Clear all
-                    </button>
-                  </div>
-                )}
+              <span className="pb-1 text-slate-400 text-xs">–</span>
+              <div>
+                <label className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-orange-600">Max spend</label>
+                <input type="number" value={maxSpend} onChange={(e) => { setMaxSpend(e.target.value); setPage(1); }} placeholder="∞"
+                  className="h-7 w-24 border border-slate-300 bg-white px-2 text-xs focus:border-[#FF8C00] focus:outline-none" />
               </div>
             </div>
-          )}
 
-          {/* Summary strip */}
-          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-slate-500">
-            <span className="font-semibold text-slate-700">{total} customer{total !== 1 ? "s" : ""}</span>
-            {summaryStats.totalOutstanding > 0.01 && (
-              <span className="flex items-center gap-1 text-red-600">
-                <FaExclamationTriangle size={8} />
-                <strong>{fmt(summaryStats.totalOutstanding)}</strong> outstanding{summaryStats.isGlobal ? " (all)" : ""}
-              </span>
-            )}
-            {summaryStats.totalCredit > 0.01 && (
-              <button type="button" onClick={() => navigate("/carwash/customers/credit-balances")} className="flex items-center gap-1 text-emerald-700 hover:underline">
-                <FaPiggyBank size={8} /><strong>{fmt(summaryStats.totalCredit)}</strong> credit{summaryStats.isGlobal ? " (all)" : ""}
-              </button>
-            )}
-            {summaryStats.withLoyalty > 0 && (
-              <span className="text-amber-600">{summaryStats.withLoyalty} loyalty member{summaryStats.withLoyalty !== 1 ? "s" : ""}</span>
+            {/* Clear */}
+            {hasAdvancedFilters && (
+              <div className="flex items-end">
+                <button type="button" onClick={resetFilters}
+                  className="h-7 flex items-center gap-1 border border-red-200 bg-red-50 px-2 text-[11px] font-semibold text-red-600 hover:bg-red-100">
+                  <FaTimes size={8} /> Clear all
+                </button>
+              </div>
             )}
           </div>
         </div>
+      )}
 
-        {/* ── Bulk action bar ──────────────────────────────────────────────── */}
-        {selectedIds.size > 0 && (
-          <div className="flex-shrink-0 flex items-center gap-2 border-b border-violet-200 bg-violet-50 px-3 py-1.5">
-            <span className="text-xs font-bold text-violet-700">{selectedIds.size} selected</span>
-            <button type="button" onClick={() => setBulkSmsOpen(true)}
-              className="flex items-center gap-1 h-6 rounded border border-violet-400 bg-violet-100 px-2 text-[11px] font-semibold text-violet-700 hover:bg-violet-200">
-              <FaCommentDots size={9} /> SMS Selected
-            </button>
-            <button type="button" onClick={clearSelection}
-              className="flex items-center gap-1 h-6 rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50">
-              <FaTimes size={9} /> Clear
-            </button>
-          </div>
-        )}
-
-        {/* ── Data area ──────────────────────────────────────────────────────── */}
-        <div className="flex-1 min-h-0 overflow-auto">
+      <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
 
           {/* Mobile cards */}
-          <div className="sm:hidden divide-y divide-slate-100">
+          <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-100">
             {loading && !customers.length ? (
               <p className="py-16 text-center text-sm text-slate-400">Loading…</p>
             ) : !displayed.length ? (
@@ -989,10 +948,10 @@ export default function CarWashCustomers() {
               const acc  = c.creditAccount;
               const isSelected = selectedIds.has(String(c._id));
               return (
-                <div key={String(c._id)} className={`p-3 space-y-2 ${hasOutstanding ? "border-l-[3px] border-red-400" : hasCreditBal ? "border-l-[3px] border-emerald-400" : ""} ${isSelected ? "bg-violet-50" : ""}`}>
+                <div key={String(c._id)} className={`p-3 space-y-2 ${hasOutstanding ? "border-l-[3px] border-red-400" : hasCreditBal ? "border-l-[3px] border-emerald-400" : ""} ${isSelected ? "bg-[#C8E6D4]" : ""}`}>
                   <div className="flex items-start justify-between gap-2 cursor-pointer" onClick={() => toggleExpand(String(c._id))}>
                     <div className="flex items-start gap-2 min-w-0">
-                      <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(String(c._id)); }} className="mt-0.5 flex-shrink-0 text-violet-400 hover:text-violet-600">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); toggleSelect(String(c._id)); }} className="mt-0.5 flex-shrink-0 text-slate-300 hover:text-[#0B3B2E]">
                         {isSelected ? <FaCheckSquare size={14} /> : <FaSquare size={14} className="text-slate-300" />}
                       </button>
                       <div className="min-w-0">
@@ -1004,7 +963,7 @@ export default function CarWashCustomers() {
                       {hasOutstanding && <span className="text-xs font-bold text-red-600">{fmt(c.outstanding)}</span>}
                       {hasCreditBal && (
                         <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-balances"); }}
-                          className="inline-flex items-center gap-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-200">
+                          className="inline-flex items-center gap-1 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-200">
                           <FaPiggyBank size={8} />{fmt(c.creditBalance)}
                         </button>
                       )}
@@ -1012,7 +971,7 @@ export default function CarWashCustomers() {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1">
-                    {(c.plates || []).map((p) => <span key={p} className="rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>)}
+                    {(c.plates || []).map((p) => <span key={p} className="border border-slate-200 bg-white px-1.5 py-0.5 text-[9px] font-mono font-bold text-slate-700">{p}</span>)}
                     {!hasPlates && <span className="text-[9px] italic text-slate-400">No plates</span>}
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-500">
@@ -1021,13 +980,13 @@ export default function CarWashCustomers() {
                     {card && <StampBar card={card} program={loyaltyProgram} />}
                     {acc && (
                       <button type="button" onClick={(e) => { e.stopPropagation(); navigate("/carwash/customers/credit-accounts"); }}
-                        className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
+                        className={`inline-flex items-center gap-1 border px-1.5 py-0.5 text-[9px] font-semibold ${acctTypePill[acc.accountType] || "bg-slate-100 text-slate-600 border-slate-200"} hover:opacity-80`}>
                         <FaIdCard size={8} />{acc.accountType}
                       </button>
                     )}
                   </div>
                   {isExpanded && (
-                    <div className="rounded border border-slate-200 bg-slate-50 p-3 space-y-3 text-xs">
+                    <div className="border border-slate-200 bg-slate-50 p-3 space-y-3 text-xs">
                       <div className="space-y-1">
                         {[
                           { label: "Total Invoiced", val: fmt(c.totalInvoiced), cls: "text-slate-700" },
@@ -1044,10 +1003,10 @@ export default function CarWashCustomers() {
                     </div>
                   )}
                   <div className="flex items-center gap-1.5 pt-1">
-                    <ActionBtn icon={FaCar} title="View Jobs" color="green" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
-                    {canManage && <ActionBtn icon={FaEdit} title="Edit customer" color="amber" onClick={(e) => openEdit(e, c)} />}
-                    {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" color="blue" onClick={(e) => openSms(e, c)} />}
-                    {hasOutstanding && canManage && hasPlates && <ActionBtn icon={FaMoneyBillWave} title="Settle outstanding" color="red" onClick={(e) => openSettle(e, c)} />}
+                    <ActionBtn icon={FaCar} title="View Jobs" onClick={(e) => viewJobs(e, c)} disabled={!hasPlates} />
+                    {canManage && <ActionBtn icon={FaEdit} title="Edit customer" onClick={(e) => openEdit(e, c)} />}
+                    {c.phone && <ActionBtn icon={FaCommentDots} title="Send SMS" onClick={(e) => openSms(e, c)} />}
+                    {hasOutstanding && canManage && hasPlates && <ActionBtn icon={FaMoneyBillWave} title="Settle outstanding" onClick={(e) => openSettle(e, c)} />}
                   </div>
                 </div>
               );
@@ -1055,7 +1014,7 @@ export default function CarWashCustomers() {
           </div>
 
           {/* Desktop table */}
-          <div className="hidden sm:block min-w-full">
+          <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
             <MilikTable
               columns={CUSTOMER_COLUMNS}
               rows={displayed}
@@ -1077,7 +1036,6 @@ export default function CarWashCustomers() {
               renderActions={renderActions}
             />
           </div>
-        </div>
 
         {/* ── Pagination ─────────────────────────────────────────────────────── */}
         <PaginationBar
@@ -1089,6 +1047,9 @@ export default function CarWashCustomers() {
           onPageSizeChange={(n) => { setLimit(Number(n)); setPage(1); }}
           loading={loading}
           label="customers"
+          leftExtra={selectedIds.size > 0 && (
+            <span className="shrink-0 border border-[#0B3B2E] bg-[#F1F6F3] px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E]">Selected {selectedIds.size}</span>
+          )}
         />
       </div>
 
@@ -1105,14 +1066,14 @@ export default function CarWashCustomers() {
             </>
           }>
           <div className="space-y-3">
-            <div className="rounded border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
+            <div className="border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
               This will send an SMS to {selectedIds.size} selected customer{selectedIds.size !== 1 ? "s" : ""} who have a phone number. Customers without a phone are skipped automatically.
             </div>
             <div>
               <label className={labelClass}>Message</label>
               <textarea value={bulkSmsBody} onChange={(e) => setBulkSmsBody(e.target.value)} rows={4}
                 placeholder="Type your message here…"
-                className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none" />
+                className="w-full border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/20 resize-none" />
               <p className="mt-1 text-right text-[10px] text-slate-400">{bulkSmsBody.length} chars</p>
             </div>
           </div>
@@ -1137,7 +1098,7 @@ export default function CarWashCustomers() {
                 </button>
               </>
             }>
-            <div className="mb-4 flex items-start gap-3 rounded border border-slate-200 bg-slate-50 p-3">
+            <div className="mb-4 flex items-start gap-3 border border-slate-200 bg-slate-50 p-3">
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold text-slate-800">{payTarget.name || "Unknown Customer"}</p>
                 <p className="text-[10px] text-slate-400">{payTarget.phone || "No phone"}</p>
@@ -1173,12 +1134,12 @@ export default function CarWashCustomers() {
                       label: `${j.jobNumber} · ${j.plateNumber || j.itemDescription || "—"} · ${fmt(j.price)}${j.paymentStatus === "partial" ? " (partial)" : ""}`,
                     }))}
                     placeholder="— Select unpaid job —"
-                    size="md"
+                    size="sm"
                     searchable
                   />
                 </div>
                 {selectedJob && (
-                  <div className="flex flex-wrap gap-3 rounded border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px]">
+                  <div className="flex flex-wrap gap-3 border border-emerald-200 bg-emerald-50 px-3 py-2 text-[10px]">
                     <div><span className="text-slate-500">Price: </span><strong className="text-slate-700">{fmt(selectedJob.price)}</strong></div>
                     {selectedJob.discountAmount > 0 && <div><span className="text-slate-500">Discount: </span><strong className="text-slate-700">{fmt(selectedJob.discountAmount)}</strong></div>}
                     <div><span className="text-slate-500">Outstanding: </span><strong className="text-red-600">{fmt(outstanding)}</strong></div>
@@ -1209,7 +1170,7 @@ export default function CarWashCustomers() {
                       value={payForm.method}
                       onChange={(v) => setPayForm((f) => ({ ...f, method: v ?? "cash" }))}
                       options={["cash", "mpesa", "bank", "card", "other"].map((m) => ({ value: m, label: m.toUpperCase() }))}
-                      size="md"
+                      size="sm"
                     />
                   </div>
                   <div>
@@ -1220,7 +1181,7 @@ export default function CarWashCustomers() {
                       onChange={(v) => setPayForm((f) => ({ ...f, cashbookAccount: v ?? "" }))}
                       options={cashbooks.map((cb) => ({ value: cb._id, label: `${cb.code ? `${cb.code} - ` : ""}${cb.name}` }))}
                       placeholder="— Select —"
-                      size="md"
+                      size="sm"
                       searchable
                     />
                   </div>
@@ -1235,7 +1196,7 @@ export default function CarWashCustomers() {
                       <div className="mb-1 flex items-center justify-between">
                         <label className={labelClass} style={{ marginBottom: 0 }}>Customer Phone <span className="ml-1 font-normal normal-case text-emerald-700">(STK push)</span></label>
                         {payTarget?.phone && payForm.phone === payTarget.phone && (
-                          <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5">From customer</span>
+                          <span className="text-[9px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5">From customer</span>
                         )}
                       </div>
                       <div className="flex gap-2">
@@ -1287,7 +1248,7 @@ export default function CarWashCustomers() {
             {(editTarget.plates || []).length > 0 && (
               <div className="flex flex-wrap gap-1.5">
                 {editTarget.plates.map((p) => (
-                  <span key={p} className="rounded border border-slate-200 bg-[#F4F7F5] px-2.5 py-1 text-[10px] font-mono font-bold text-slate-700">{p}</span>
+                  <span key={p} className="border border-slate-200 bg-[#F4F7F5] px-2.5 py-1 text-[10px] font-mono font-bold text-slate-700">{p}</span>
                 ))}
               </div>
             )}

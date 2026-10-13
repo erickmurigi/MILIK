@@ -9,6 +9,7 @@ import {
   validateHrAccountingDefaultAccount,
   validateInvAccountingDefaultAccount,
 } from "../../services/companyAccountingDefaultsService.js";
+import { ensureSystemChartOfAccounts } from "../../services/chartOfAccountsService.js";
 import {
   DEFAULT_TAX_CODES,
   DEFAULT_TAX_SETTINGS,
@@ -290,6 +291,10 @@ export const getCompanySettings = async (req, res, next) => {
 
     if (!settings) {
       const defaults = buildDefaultTaxConfiguration();
+      // Default expense items need real category records to point at (category is an ObjectId into
+      // expenseCategories, not a fixed string, since expense categories became admin-configurable).
+      const defaultMaintenanceCategoryId = new mongoose.Types.ObjectId();
+      const defaultSuppliesCategoryId = new mongoose.Types.ObjectId();
       settings = new CompanySettings({
         company: businessId,
         utilityTypes: [
@@ -305,10 +310,14 @@ export const getCompanySettings = async (req, res, next) => {
           })
         ),
         commissions: [{ _id: new mongoose.Types.ObjectId(), name: "Default", percentage: 10, applicableTo: "rent" }],
+        expenseCategories: [
+          { _id: defaultMaintenanceCategoryId, name: "Maintenance" },
+          { _id: defaultSuppliesCategoryId, name: "Supplies" },
+        ],
         expenseItems: [
-          { _id: new mongoose.Types.ObjectId(), name: "Maintenance", category: "maintenance" },
-          { _id: new mongoose.Types.ObjectId(), name: "Cleaning", category: "supplies" },
-          { _id: new mongoose.Types.ObjectId(), name: "Repairs", category: "maintenance" },
+          { _id: new mongoose.Types.ObjectId(), name: "Maintenance", category: defaultMaintenanceCategoryId },
+          { _id: new mongoose.Types.ObjectId(), name: "Cleaning", category: defaultSuppliesCategoryId },
+          { _id: new mongoose.Types.ObjectId(), name: "Repairs", category: defaultMaintenanceCategoryId },
         ],
         depositTypes: DEFAULT_DEPOSIT_TYPES.map((item) => ({
           _id: new mongoose.Types.ObjectId(),
@@ -345,6 +354,13 @@ export const getCompanySettings = async (req, res, next) => {
     if (data.terminology instanceof Map) {
       data.terminology = Object.fromEntries(data.terminology);
     }
+    // Ensure the system chart of accounts exists ONCE, sequentially, before resolving each
+    // default field below — resolveConfiguredAccountingDefaultAccount() would otherwise call
+    // this itself per field, and firing all 8 concurrently via Promise.all raced to upsert the
+    // same accounts on a cold cache (fixed defensively in ensureSystemChartOfAccounts itself
+    // too, but avoiding the redundant concurrent calls here is the real fix).
+    await ensureSystemChartOfAccounts(businessId);
+
     // The ledger each general default resolves to, whether the company chose it or the system falls back
     const resolvedEntries = await Promise.all(
       ACCOUNTING_DEFAULT_FIELDS.map(async (field) => {
@@ -800,13 +816,123 @@ const resolvePostingAccountId = async (businessId, value, { type, label }) => {
   return account._id;
 };
 
+// ─── Expense Categories ────────────────────────────────────────────────────────
+
+export const getExpenseCategories = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const settings = await findCompanySettings(businessId);
+    const items = settings?.expenseCategories || [];
+    res.status(200).json({ expenseCategories: items });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const addExpenseCategory = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const name = normalizeText(req.body?.name);
+    const description = normalizeText(req.body?.description);
+
+    if (!name) {
+      return next(createError(400, "Expense category name is required"));
+    }
+
+    const settings = await ensureSettingsDocument(businessId);
+    ensureUniqueCollectionName({ items: settings.expenseCategories, name, label: "Expense category" });
+
+    const newCategory = {
+      _id: new mongoose.Types.ObjectId(),
+      name,
+      description,
+      isActive: true,
+    };
+
+    settings.expenseCategories.push(newCategory);
+    await settings.save();
+
+    res.status(201).json({ expenseCategory: newCategory, settings, message: "Expense category added successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const updateExpenseCategory = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { itemId } = req.params;
+    const { isActive } = req.body;
+    const name = req.body?.name === undefined ? undefined : normalizeText(req.body.name);
+    const description = req.body?.description === undefined ? undefined : normalizeText(req.body.description);
+
+    const settings = await findCompanySettings(businessId);
+    if (!settings) {
+      return next(createError(404, "Settings not found"));
+    }
+
+    const category = settings.expenseCategories.id(itemId);
+    if (!category) {
+      return next(createError(404, "Expense category not found"));
+    }
+
+    if (name !== undefined) {
+      if (!name) {
+        return next(createError(400, "Expense category name is required"));
+      }
+      ensureUniqueCollectionName({
+        items: settings.expenseCategories,
+        name,
+        excludeId: itemId,
+        label: "Expense category",
+      });
+      category.name = name;
+    }
+    if (description !== undefined) category.description = description;
+    if (isActive !== undefined) category.isActive = Boolean(isActive);
+
+    await settings.save();
+    res.status(200).json({ expenseCategory: category, settings, message: "Expense category updated successfully" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteExpenseCategory = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    const { itemId } = req.params;
+    return await archiveEmbeddedSetting({
+      req,
+      res,
+      next,
+      businessId,
+      itemId,
+      collectionKey: "expenseCategories",
+      successLabel: "Expense category",
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// A category id must either be empty (uncategorized) or match a real entry in this company's own
+// expenseCategories list — prevents an item pointing at a category from a different company, or one
+// that was mistyped/never created.
+const resolveExpenseCategoryId = (settings, categoryId) => {
+  const id = normalizeText(categoryId);
+  if (!id) return null;
+  const match = settings.expenseCategories.id(id);
+  if (!match) throw createError(400, "Expense category not found");
+  return match._id;
+};
+
 export const addExpenseItem = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);
     const name = normalizeText(req.body?.name);
     const description = normalizeText(req.body?.description);
     const code = normalizeText(req.body?.code);
-    const category = normalizeText(req.body?.category) || "other";
     const defaultAmount = toNumber(req.body?.defaultAmount, 0);
 
     if (!name) {
@@ -817,6 +943,7 @@ export const addExpenseItem = async (req, res, next) => {
     const payableAccount = await resolvePostingAccountId(businessId, req.body?.payableAccount, { type: "liability", label: "Payable account" });
     const settings = await ensureSettingsDocument(businessId);
     ensureUniqueCollectionName({ items: settings.expenseItems, name, label: "Expense item" });
+    const category = resolveExpenseCategoryId(settings, req.body?.category);
 
     const newExpenseItem = {
       _id: new mongoose.Types.ObjectId(),
@@ -868,7 +995,7 @@ export const updateExpenseItem = async (req, res, next) => {
     }
     if (req.body?.description !== undefined) expenseItem.description = normalizeText(req.body.description);
     if (req.body?.code !== undefined) expenseItem.code = normalizeText(req.body.code);
-    if (req.body?.category !== undefined) expenseItem.category = normalizeText(req.body.category) || "other";
+    if (req.body?.category !== undefined) expenseItem.category = resolveExpenseCategoryId(settings, req.body.category);
     if (req.body?.defaultAmount !== undefined) expenseItem.defaultAmount = toNumber(req.body.defaultAmount, 0);
     if (req.body?.expenseAccount !== undefined) {
       expenseItem.expenseAccount = await resolvePostingAccountId(businessId, req.body.expenseAccount, { type: "expense", label: "Expense account" });

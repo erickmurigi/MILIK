@@ -10,7 +10,6 @@ import {
 } from "react-icons/fa";
 import InventoryShell from "./InventoryShell";
 import { inventoryApi, formatMoney, todayISO } from "../../services/inventoryApi";
-import { fmtDate } from "../../utils/dates";
 import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 
 const StatCard = DashboardStatCard;

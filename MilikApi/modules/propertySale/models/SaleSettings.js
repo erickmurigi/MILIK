@@ -41,6 +41,13 @@ const commTemplateSchema = new mongoose.Schema({
   isActive:{ type: Boolean, default: true },
 });
 
+// One release step: once a deal's buyer has paid this cumulative % of the agreed price, this cumulative
+// % of the relevant commission should have been recognized. Validated (sorted, <=100) in the controller,
+// not here, so an in-progress/partial config can always be saved without a hard block.
+const releaseTierSchema = new mongoose.Schema(
+  { _id: false, thresholdPct: { type: Number, min: 0, max: 100, required: true }, releasePct: { type: Number, min: 0, max: 100, required: true } }
+);
+
 const saleSettingsSchema = new mongoose.Schema(
   {
     business:     { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, unique: true },
@@ -52,10 +59,30 @@ const saleSettingsSchema = new mongoose.Schema(
     agentVisibility: { type: String, enum: ["own", "all"], default: "own" },
     // Whether this company sells in projects/units: shows the Projects and Units pages
     useProjects: { type: Boolean, default: false },
+    // Whether this company sells on behalf of outside property/project owners: shows the Owners page
+    // and the owner-commission/statement features. Default false — byte-identical behavior for everyone else.
+    useOwners: { type: Boolean, default: false },
+    // Whether this company routes buyer payments through conveyancing advocates' trust accounts: shows
+    // the Advocates page and the advocate-trust/remittance features. Default false — no behavior change.
+    useAdvocates: { type: Boolean, default: false },
     commissionDefaults: {
       rate:           { type: Number, default: 3,           min: 0 },
       commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },
       whtRate:        { type: Number, default: 5,           min: 0, max: WHT_MAX_RATE },
+    },
+    // The company's own agency commission for selling on an owner's behalf. Only meaningful when a deal's
+    // project has an owner — independent of commissionDefaults, which is the broker/SaleAgent rate.
+    ownerCommissionDefaults: {
+      rate:           { type: Number, default: 3, min: 0 },
+      commissionType: { type: String, enum: ["percentage", "flat"], default: "percentage" },
+    },
+    // Staged/tiered release of owner commission and broker commission, keyed off the buyer's cumulative %
+    // of agreedPrice paid on a deal. enabled:false (default) = full amount released immediately on
+    // approval, today's exact behavior, for every company that doesn't touch this.
+    commissionReleaseSchedule: {
+      enabled: { type: Boolean, default: false },
+      ownerCommissionTiers:  { type: [releaseTierSchema], default: [] },
+      brokerCommissionTiers: { type: [releaseTierSchema], default: [] },
     },
   },
   { timestamps: true }

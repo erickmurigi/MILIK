@@ -189,7 +189,6 @@ const PropertySaleDashboard = () => {
               {/* Mobile cards */}
               <div className="divide-y divide-slate-100 xl:hidden">
                 {recentDeals.length ? recentDeals.slice(0, 8).map((deal) => {
-                  const { pct } = deal;
                   return (
                     <div key={deal._id} className="flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-slate-50 cursor-pointer" onClick={() => navigate("/sale/deals")}>
                       <div className="min-w-0">

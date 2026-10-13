@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import {
-  FaArrowLeft, FaCar, FaCamera, FaCoins, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaRedoAlt, FaSave,
-  FaTimesCircle, FaUser, FaExpand, FaUserCheck, FaTag,
+  FaCar, FaCamera, FaCheck, FaChevronDown, FaCoins, FaExclamationTriangle, FaGift, FaMinus, FaPlus, FaSave,
+  FaSearch, FaSpinner, FaTimes, FaTimesCircle, FaUser, FaExpand, FaTag,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, photoUrl, VEHICLE_TYPES } from "../../services/carWashApi";
@@ -14,13 +15,234 @@ import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
 import AppSelect from "../../components/common/AppSelect";
-import { inputClass, labelClass } from "../../utils/formStyles";
 
 const EMPTY_ARRAY = [];
 
+// Bolder/darker label style and compact fixed-height input style matching the
+// house Milik add/edit-form standard (see components/Landlord/AddLandlord.jsx)
+// — overridden locally rather than in the shared formStyles.js, which other
+// already-styled CarWash pages rely on for their own (looser) sizing.
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+
+const inputClass =
+  "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+
+// Compact variant for Service Lines table/card cells — same h-7 height as inputClass but
+// text-xs to match the table's denser type scale. Shared across mobile + desktop layouts
+// and both the free-text Name field and the measurement-calculator inputs.
+const tableInputClass =
+  "h-7 w-full border border-slate-300 bg-white px-2 text-xs text-slate-800 placeholder:text-slate-400 outline-none focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const tableInputRewardClass =
+  "h-7 w-full border border-amber-200 bg-amber-50 px-2 text-xs font-bold text-amber-800 outline-none";
+
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+
+const Section = ({ title, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white ${className}`}>
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
+
+// ─── Staff multi-select ────────────────────────────────────────────────────────
+// Compact dropdown-with-checkboxes picker replacing the old flat chip-toggle grid
+// for per-line attendants. Local to this page (not AppSelect — that's shared by
+// every other picker in the app and this is a one-off multi-select shape).
+// Positioning/outside-click/scroll-close mechanics are adapted from AppSelect.jsx.
+const StaffMultiSelect = ({ staff = EMPTY_ARRAY, selected = EMPTY_ARRAY, onToggle, disabled = false }) => {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [dropdownStyle, setDropdownStyle] = useState({});
+  const triggerRef = useRef(null);
+  const searchRef = useRef(null);
+  const portalId = `cw-staff-picker-${useId()}`;
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setSearch("");
+  }, []);
+
+  const openDropdown = useCallback(() => {
+    if (disabled) return;
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const vp = window.innerHeight;
+    const spaceBelow = vp - rect.bottom;
+    const spaceAbove = rect.top;
+    const dropUp = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const panelWidth = Math.max(rect.width, 190);
+    const left = Math.min(rect.left, window.innerWidth - panelWidth - 8);
+
+    setDropdownStyle({
+      position: "fixed",
+      left: Math.max(8, left),
+      width: panelWidth,
+      ...(dropUp ? { bottom: vp - rect.top + 4 } : { top: rect.bottom + 4 }),
+      zIndex: 9999,
+    });
+    setOpen(true);
+  }, [disabled]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (!triggerRef.current?.contains(e.target) && !document.getElementById(portalId)?.contains(e.target)) {
+        close();
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open, close, portalId]);
+
+  // Close on scroll/resize elsewhere (ignore scroll inside the portal's own list)
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (document.getElementById(portalId)?.contains(e.target)) return;
+      close();
+    };
+    window.addEventListener("scroll", handler, true);
+    window.addEventListener("resize", handler);
+    return () => {
+      window.removeEventListener("scroll", handler, true);
+      window.removeEventListener("resize", handler);
+    };
+  }, [open, close, portalId]);
+
+  // Close on Escape
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (e.key === "Escape") {
+        close();
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, close]);
+
+  // Focus the search box on open
+  useEffect(() => {
+    if (!open) return;
+    const t = window.setTimeout(() => searchRef.current?.focus(), 20);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return staff;
+    const term = search.trim().toLowerCase();
+    return staff.filter((s) => (s.name || "").toLowerCase().includes(term));
+  }, [staff, search]);
+
+  const selectedMembers = useMemo(
+    () => staff.filter((s) => selected.includes(s._id)),
+    [staff, selected]
+  );
+
+  const MAX_TAGS = 2;
+  const visibleTags = selectedMembers.slice(0, MAX_TAGS);
+  const overflowCount = selectedMembers.length - visibleTags.length;
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        onClick={() => (open ? close() : openDropdown())}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className={`flex h-7 w-full items-center gap-1 border px-1.5 text-left transition ${
+          disabled
+            ? "cursor-not-allowed border-slate-200 bg-slate-100"
+            : open
+              ? "cursor-pointer border-[#0B3B2E] bg-white ring-1 ring-[#0B3B2E]/20"
+              : "cursor-pointer border-slate-300 bg-white hover:border-slate-400"
+        }`}
+      >
+        <div className="flex flex-1 items-center gap-1 overflow-hidden">
+          {selectedMembers.length === 0 ? (
+            <span className="truncate text-xs text-slate-400">Select staff…</span>
+          ) : (
+            <>
+              {visibleTags.map((m) => (
+                <span key={m._id} className="shrink-0 truncate rounded-sm bg-[#0B3B2E]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E]">
+                  {m.name.split(" ")[0]}
+                </span>
+              ))}
+              {overflowCount > 0 && (
+                <span className="shrink-0 rounded-sm bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-600">
+                  +{overflowCount}
+                </span>
+              )}
+            </>
+          )}
+        </div>
+        <FaChevronDown size={9} className={`shrink-0 text-slate-400 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open && createPortal(
+        <div id={portalId} style={dropdownStyle} className="border border-slate-300 bg-white shadow-lg">
+          <div className="flex items-center gap-1.5 border-b border-slate-100 px-2 py-1">
+            <FaSearch size={9} className="shrink-0 text-slate-400" />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search staff…"
+              className="flex-1 bg-transparent text-[11px] text-slate-800 placeholder:text-slate-400 focus:outline-none"
+            />
+            <button type="button" onClick={close} className="shrink-0 text-slate-400 hover:text-slate-700" aria-label="Close">
+              <FaTimes size={9} />
+            </button>
+          </div>
+          <ul role="listbox" aria-multiselectable="true" className="max-h-48 overflow-auto py-0.5">
+            {filtered.length === 0 ? (
+              <li className="px-2 py-3 text-center text-[10px] text-slate-400">No staff found</li>
+            ) : (
+              filtered.map((s) => {
+                const isSelected = selected.includes(s._id);
+                return (
+                  <li
+                    key={s._id}
+                    role="option"
+                    aria-selected={isSelected}
+                    onClick={() => onToggle(s._id)}
+                    className={`flex items-center gap-1.5 px-2 py-1 text-[11px] transition-colors cursor-pointer ${
+                      isSelected ? "bg-emerald-50" : "hover:bg-slate-50"
+                    }`}
+                  >
+                    <span
+                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center border ${
+                        isSelected ? "border-[#0B3B2E] bg-[#0B3B2E]" : "border-slate-300 bg-white"
+                      }`}
+                    >
+                      {isSelected && <FaCheck size={7} className="text-white" />}
+                    </span>
+                    <span className={`truncate ${isSelected ? "font-bold text-[#0B3B2E]" : "text-slate-800"}`}>{s.name}</span>
+                    {s.role && <span className="ml-auto shrink-0 pl-1 text-[9px] text-slate-400">{s.role}</span>}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 // ─── Plate lookup ─────────────────────────────────────────────────────────────
-const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCleared, onRewardData, readOnly }) => {
-  const [lookupResult, setLookupResult] = useState(null);
+// Input only — the lookup result banner is a separate component (PlateLookupRow)
+// so the parent can place the input in a dense 3-up grid row while the banner
+// still renders full-width below that row.
+const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCleared, onRewardData, onLookupResult, readOnly }) => {
   const [looking, setLooking] = useState(false);
   const timerRef = useRef(null);
 
@@ -29,7 +251,7 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCl
   const lookup = useCallback(async (value) => {
     const p = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
     if (p.length < 3) {
-      setLookupResult(null);
+      onLookupResult?.(null);
       onRewardData?.(null);
       onCustomerCleared?.();
       return;
@@ -37,21 +259,21 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCl
     setLooking(true);
     try {
       const result = await carWashApi.lookupPlate(p);
-      setLookupResult(result);
+      onLookupResult?.(result);
       if (result?.customer) {
         onCustomerFound({ name: result.customer.name, phone: result.customer.phone });
       } else {
         onCustomerCleared?.();
       }
       onRewardData?.(result?.loyaltyCard || null);
-    } catch (_) {
-      setLookupResult(null);
+    } catch {
+      onLookupResult?.(null);
       onRewardData?.(null);
       onCustomerCleared?.();
     } finally {
       setLooking(false);
     }
-  }, [onCustomerFound, onCustomerCleared, onRewardData]);
+  }, [onCustomerFound, onCustomerCleared, onRewardData, onLookupResult]);
 
   const handleChange = (e) => {
     if (readOnly) return;
@@ -61,15 +283,9 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCl
     timerRef.current = setTimeout(() => lookup(val), 600);
   };
 
-  const card = lookupResult?.loyaltyCard;
-  const customer = lookupResult?.customer;
-  const program = card?.program;
-  const pendingRewards = card?.pendingRewards ?? 0;
-  const creditBalance = Number(lookupResult?.creditBalance || 0);
-
   return (
     <div>
-      <label className={labelClass}>Plate Number *</label>
+      <label className={labelClass}>Plate Number<Required /></label>
       <div className="relative">
         <input
           className={`${inputClass} ${readOnly ? "bg-slate-50 text-slate-500" : ""}`}
@@ -82,57 +298,63 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCl
         />
         {looking && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 animate-pulse">looking up…</span>}
       </div>
-      {lookupResult && (
-        <div className={`mt-1.5 border px-3 py-2 text-[11px] ${customer ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-slate-50"}`}>
-          {customer ? (
-            <div className="flex items-start gap-2">
-              <FaUser className="mt-0.5 shrink-0 text-emerald-600" />
-              <div className="flex-1">
-                <div className="font-black text-slate-800">{customer.name} <span className="font-normal text-slate-500">· {customer.phone}</span></div>
-                {card && program ? (
-                  <div className="mt-1 flex items-center gap-3">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex gap-0.5">
-                        {Array.from({ length: program.stampsRequired }).map((_, i) => (
-                          <div key={i} className={`h-2 w-2 rounded-full ${i < card.currentStamps ? "bg-emerald-500" : "bg-slate-200"}`} />
-                        ))}
-                      </div>
-                      <span className="text-slate-500">{card.currentStamps}/{program.stampsRequired} stamps</span>
-                    </div>
-                    {pendingRewards > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 font-black text-amber-700">
-                        <FaGift className="text-[8px]" /> {pendingRewards} reward{pendingRewards !== 1 ? "s" : ""} ready!
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="mt-0.5 text-slate-500">No loyalty card yet</div>
-                )}
-                {creditBalance > 0 && (
-                  <div className="mt-1.5 flex items-center gap-1.5 border border-amber-300 bg-amber-50 px-2 py-1">
-                    <FaCoins className="shrink-0 text-amber-500" />
-                    <span className="font-black text-amber-800">
-                      KES {formatMoney(creditBalance)} credit on account
-                    </span>
-                    <span className="text-amber-700">— remind supervisor to apply before charging</span>
-                  </div>
-                )}
-              </div>
-            </div>
+    </div>
+  );
+};
+
+// ─── Plate lookup result banner — rendered separately, full width ────────────
+// Row content only — no border/margin of its own. Rendered inside the single shared
+// status panel below (with CreditAccountRow / the reward row) so three related pieces
+// of plate/customer info read as one connected panel, not three stacked alert boxes.
+const PlateLookupRow = ({ lookupResult }) => {
+  if (!lookupResult) return null;
+  const card = lookupResult?.loyaltyCard;
+  const customer = lookupResult?.customer;
+  const program = card?.program;
+  const creditBalance = Number(lookupResult?.creditBalance || 0);
+
+  if (!customer) {
+    return (
+      <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-500">
+        <FaCar className="text-[10px]" />
+        <span>Plate not registered — customer info won't auto-fill.</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2 bg-emerald-50 px-2.5 py-1.5 text-[11px]">
+      <FaUser className="mt-0.5 shrink-0 text-emerald-600" size={10} />
+      <div className="flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-black text-slate-800">{customer.name} <span className="font-normal text-slate-500">· {customer.phone}</span></span>
+          {card && program ? (
+            <span className="flex items-center gap-1 text-slate-500">
+              <span className="flex gap-0.5">
+                {Array.from({ length: program.stampsRequired }).map((_, i) => (
+                  <span key={i} className={`h-1.5 w-1.5 rounded-full ${i < card.currentStamps ? "bg-emerald-500" : "bg-slate-200"}`} />
+                ))}
+              </span>
+              {card.currentStamps}/{program.stampsRequired} stamps
+            </span>
           ) : (
-            <div className="flex items-center gap-1.5 text-slate-500">
-              <FaCar className="text-[10px]" />
-              <span>Plate not registered — customer info won't auto-fill.</span>
-            </div>
+            <span className="text-slate-500">No loyalty card yet</span>
           )}
         </div>
-      )}
+        {creditBalance > 0 && (
+          <div className="mt-0.5 flex items-center gap-1.5 text-amber-800">
+            <FaCoins className="shrink-0 text-amber-500" size={10} />
+            <span className="font-black">KES {formatMoney(creditBalance)} credit on account</span>
+            <span className="font-normal text-amber-700">— will be auto-applied to this job's balance</span>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
 
 // ─── Credit account banner ─────────────────────────────────────────────────────
-const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
+const CreditAccountRow = ({ plate, jobTotal, onAccountDetected }) => {
   const [account, setAccount] = useState(null);
   const prevPlate = useRef("");
 
@@ -156,6 +378,7 @@ const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
   const accountCredit = !isPrepaid ? Number(account.accountCredit || 0) : 0;
   const overLimit = account.overLimit;
   const sufficient = isPrepaid ? walletBalance >= (jobTotal || 0) : true;
+  const needsWarningIcon = (!sufficient && isPrepaid) || overLimit || (!isPrepaid && outstandingDebt > 0);
 
   const typeBadge = isPrepaid
     ? "bg-teal-100 text-teal-700"
@@ -163,24 +386,26 @@ const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
       ? "bg-violet-100 text-violet-700"
       : "bg-blue-100 text-blue-700";
 
-  const borderBg = isPrepaid
+  // One status fragment instead of a separate line — collapses what used to be up to
+  // 3 stacked lines into a single wrapping row.
+  const [statusMsg, statusClass, bg] = isPrepaid
     ? sufficient
-      ? "border-teal-300 bg-teal-50 text-teal-800"
-      : "border-amber-300 bg-amber-50 text-amber-800"
+      ? [`${formatMoney(jobTotal || 0)} auto-deducted from wallet on save`, "text-teal-700", "bg-teal-50 text-teal-800"]
+      : [`insufficient balance — collect ${formatMoney(Math.max(0, (jobTotal || 0) - walletBalance))} from customer`, "font-bold text-amber-700", "bg-amber-50 text-amber-800"]
     : overLimit
-      ? "border-red-300 bg-red-50 text-red-800"
+      ? ["credit limit exceeded — collect payment or proceed with caution", "font-bold text-red-700", "bg-red-50 text-red-800"]
       : outstandingDebt > 0
-        ? "border-amber-300 bg-amber-50 text-amber-800"
-        : "border-emerald-300 bg-emerald-50 text-emerald-800";
+        ? ["has an outstanding balance — job will be added to account", "font-bold text-amber-700", "bg-amber-50 text-amber-800"]
+        : ["charged to credit account", "text-emerald-700", "bg-emerald-50 text-emerald-800"];
 
   return (
-    <div className={`mt-1.5 flex items-start gap-2 border px-3 py-2 text-xs ${borderBg}`}>
-      {((!sufficient && isPrepaid) || overLimit || (!isPrepaid && outstandingDebt > 0)) && (
-        <FaExclamationTriangle className={`mt-0.5 flex-shrink-0 ${overLimit ? "text-red-500" : "text-amber-500"}`} />
+    <div className={`flex items-start gap-2 px-2.5 py-1.5 text-[11px] ${bg}`}>
+      {needsWarningIcon && (
+        <FaExclamationTriangle className={`mt-0.5 flex-shrink-0 ${overLimit ? "text-red-500" : "text-amber-500"}`} size={11} />
       )}
-      <div>
-        <div className="font-black">{account.accountNumber} · {account.customer?.name}</div>
-        <div className="mt-0.5">
+      <div className="flex flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <span className="font-black">{[account.accountNumber, account.customer?.name].filter(Boolean).join(" · ")}</span>
+        <span>
           {isPrepaid ? (
             <>Wallet: <strong>{formatMoney(walletBalance)}</strong></>
           ) : (
@@ -189,28 +414,15 @@ const CreditAccountBanner = ({ plate, jobTotal, onAccountDetected }) => {
               {account.creditLimit > 0 && <> / Limit: <strong>{formatMoney(account.creditLimit)}</strong></>}
             </>
           )}
-          <span className={`ml-2 rounded px-1.5 py-0 text-[10px] font-black uppercase ${typeBadge}`}>
+          <span className={`ml-2 px-1.5 py-0 text-[10px] font-black uppercase ${typeBadge}`}>
             {account.accountType}
           </span>
-        </div>
-        {isPrepaid ? (
-          sufficient
-            ? <div className="mt-0.5 text-teal-700">{formatMoney(jobTotal || 0)} will be auto-deducted from wallet on save.</div>
-            : <div className="mt-0.5 font-bold text-amber-700">
-                Insufficient wallet balance — collect {formatMoney(Math.max(0, (jobTotal || 0) - walletBalance))} from customer.
-              </div>
-        ) : overLimit ? (
-          <div className="mt-0.5 font-bold text-red-700">Credit limit exceeded — collect payment or proceed with caution</div>
-        ) : outstandingDebt > 0 ? (
-          <div className="mt-0.5 font-bold text-amber-700">Customer has an outstanding balance — job will be added to account</div>
-        ) : (
-          <div className="mt-0.5 text-emerald-700">This job will be charged to the credit account.</div>
-        )}
+        </span>
+        <span className={statusClass}>— {statusMsg}</span>
         {accountCredit > 0 && (
-          <div className="mt-1 flex items-center gap-1.5 text-[10px] font-bold text-teal-700">
-            <FaCoins className="shrink-0" />
-            {formatMoney(accountCredit)} account credit available — apply before charging
-          </div>
+          <span className="flex items-center gap-1 font-bold text-teal-700">
+            <FaCoins size={9} /> {formatMoney(accountCredit)} credit available
+          </span>
         )}
       </div>
     </div>
@@ -424,6 +636,7 @@ const CarWashAddJob = () => {
 
   const [jobType, setJobType] = useState("vehicle");
   const [plateNumber, setPlateNumber] = useState("");
+  const [plateLookupResult, setPlateLookupResult] = useState(null);
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [itemDescription, setItemDescription] = useState("");
@@ -436,7 +649,6 @@ const CarWashAddJob = () => {
   const [discountEnabled, setDiscountEnabled] = useState(false);
   const [discountSettings, setDiscountSettings] = useState({ minPrice: 0, maxPct: 0 });
   const [notes, setNotes] = useState("");
-  const [jobNumber, setJobNumber] = useState("");
   const [photos, setPhotos] = useState([]);
   // When redirected from new-carpet-job save, open photos immediately
   const openPhotosOnLoad = Boolean(location.state?.openPhotos);
@@ -639,7 +851,6 @@ const CarWashAddJob = () => {
         setCustomerName(job.customerName || "");
         setPhone(job.phone || "");
         setNotes(job.notes || "");
-        setJobNumber(job.jobNumber || "");
         setDiscountAmount(job.discountAmount > 0 ? String(job.discountAmount) : "");
         setDiscountEnabled(job.discountAmount > 0);
         setPhotos(Array.isArray(job.photos) ? job.photos : []);
@@ -797,6 +1008,11 @@ const CarWashAddJob = () => {
     clearDraft();
   }, [clearDraft]);
 
+  const handleCancel = () => {
+    clearDraft();
+    navigate("/carwash/jobs");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (isAllBranches && !isEditMode && !selectedBranchId) {
@@ -842,7 +1058,7 @@ const CarWashAddJob = () => {
           setDupWarning(match);
           return; // pause — render warning modal below
         }
-      } catch (_) {
+      } catch {
         // non-blocking — if check fails, proceed normally
       }
     }
@@ -879,14 +1095,9 @@ const CarWashAddJob = () => {
       } else {
         const result = await carWashApi.createJob(payload);
         const newId = result?._id || result?.job?._id;
-
-        if (applyReward && newId && loyaltyCard?.pendingRewards > 0) {
-          try {
-            await carWashApi.redeemLoyaltyReward(newId);
-          } catch (_) {
-            toast.warn("Job created but reward could not be applied — check loyalty card.");
-          }
-        }
+        // Reward redemption now happens atomically on the backend as part of job creation
+        // itself (resolveServiceLines validates availability, createJob consumes it) — no
+        // separate client-side redemption call needed or possible to race against.
 
         clearDraft();
         toast.success(
@@ -913,143 +1124,122 @@ const CarWashAddJob = () => {
 
   if (loadingJob) {
     return (
-      <CarWashShell title="Edit Job">
+      <CarWashShell showToolbar={false}>
         <div className="flex h-40 items-center justify-center text-sm text-slate-400">Loading job…</div>
       </CarWashShell>
     );
   }
 
   return (
-    <CarWashShell
-      title={isEditMode ? `Edit Job${jobNumber ? ` — ${jobNumber}` : ""}` : "New Job"}
-      action={
-        <button
-          type="button"
-          onClick={() => { clearDraft(); navigate("/carwash/jobs"); }}
-          className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-        >
-          <FaArrowLeft /> Back to Jobs
-        </button>
-      }
-    >
-      <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto">
-        <div className="grid gap-3 p-3 lg:grid-cols-[1fr_320px]">
+    <CarWashShell showToolbar={false}>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        {/* Scrollable content */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <form id="carwash-job-form" onSubmit={handleSubmit}>
+            <div className="grid gap-2.5 lg:grid-cols-[1fr_320px]">
 
-          {/* ── Left column ─────────────────────────────────────────────────── */}
-          <div className="space-y-3">
+              {/* ── Left column ─────────────────────────────────────────────────── */}
+              <div className="space-y-2.5">
 
             {/* Branch picker — only shown when logged in as All Branches */}
             {isAllBranches && !isEditMode && (
-              <div className={`border p-3 shadow-sm ${selectedBranchId ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
-                <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-wide text-amber-800">
-                  Branch <span className="text-red-500">*</span> — you are in All Branches view
-                </label>
+              <Section title={<>Branch<Required /></>}>
                 <AppSelect
                   value={selectedBranchId}
                   onChange={(v) => setSelectedBranchId(v ?? "")}
                   options={branches.map((b) => ({ value: b._id, label: b.name }))}
                   placeholder="— Select branch for this job —"
-                  size="md"
+                  size="sm"
                   searchable
                 />
-                {!selectedBranchId && (
-                  <p className="mt-1 text-[10px] text-amber-700">This job will not be branch-stamped until you select one.</p>
-                )}
-              </div>
+              </Section>
             )}
 
-            {/* Job type toggle — hidden when branch is locked to one type */}
-            {(isEditMode || branchType === "both") && (
-              <div className="border border-slate-200 bg-white p-3 shadow-sm">
-                <p className={labelClass}>Job Type</p>
-                {isEditMode ? (
-                  <div className="flex items-center gap-2">
-                    <span className="inline-flex border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-700 capitalize">
-                      {jobType === "vehicle" ? "Vehicle Wash" : "Carpet / Textile"}
+            {/* Vehicle / item details — the Job Type toggle lives in this Section's own
+                header bar instead of spending a whole separate Section on two buttons */}
+            <Section
+              title={
+                isEditMode ? (
+                  <span className="inline-flex items-center gap-2 normal-case">
+                    <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">
+                      {jobType === "vehicle" ? "Vehicle Details" : "Item Details"}
                     </span>
-                    <span className="text-[10px] text-slate-400">Job type cannot be changed after creation</span>
-                  </div>
-                ) : (
-                  <div className="flex overflow-hidden border border-slate-300">
+                    <span className="border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-bold capitalize text-slate-600">
+                      {jobType === "vehicle" ? "Vehicle Wash" : "Carpet / Textile"} · locked
+                    </span>
+                  </span>
+                ) : branchType === "both" ? (
+                  <span className="inline-flex overflow-hidden border border-slate-300 normal-case">
                     <button
                       type="button"
                       onClick={() => setJobType("vehicle")}
-                      className={`flex-1 py-2 text-xs font-bold ${jobType === "vehicle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                      className={`px-2.5 py-1 text-[10px] font-bold ${jobType === "vehicle" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
                     >
                       Vehicle Wash
                     </button>
                     <button
                       type="button"
                       onClick={() => { setJobType("carpet"); setIsVoucherJob(false); setVoucherAccount(null); }}
-                      className={`flex-1 border-l border-slate-300 py-2 text-xs font-bold ${jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
+                      className={`border-l border-slate-300 px-2.5 py-1 text-[10px] font-bold ${jobType === "carpet" ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-700 hover:bg-slate-50"}`}
                     >
                       Carpet / Textile
                     </button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Vehicle / item details */}
-            <div className="border border-slate-200 bg-white p-4 shadow-sm">
-              <p className={`${labelClass} mb-3`}>
-                {jobType === "vehicle" ? "Vehicle Details" : "Item Details"}
-              </p>
-              {jobType === "vehicle" ? (
-                <>
-                  {/* Voucher Job toggle — new jobs, or existing unpaid jobs */}
-                  {(!isEditMode || jobPaymentStatus !== "paid") && (
-                    <div className="mb-3">
-                      <label className={labelClass}>Voucher Job</label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          id="voucher-chk"
-                          type="checkbox"
-                          className="h-4 w-4 accent-[#0B3B2E]"
-                          checked={isVoucherJob}
-                          onChange={(e) => {
-                            setIsVoucherJob(e.target.checked);
-                            if (!e.target.checked) setVoucherAccount(null);
-                          }}
-                        />
-                        <label htmlFor="voucher-chk" className="cursor-pointer text-xs font-bold text-slate-700">
-                          This job is covered by a company voucher
-                        </label>
+                  </span>
+                ) : (
+                  jobType === "vehicle" ? "Vehicle Details" : "Item Details"
+                )
+              }
+            >
+              {/* Voucher Company picker — shown once "Voucher Job" is toggled in the Job Summary sidebar */}
+              {jobType === "vehicle" && isVoucherJob && (!isEditMode || jobPaymentStatus !== "paid") && (
+                <div className="mb-2">
+                  <label className={labelClass}>Voucher Company<Required /></label>
+                  {voucherCompanies.length === 0 ? (
+                    <p className="text-[11px] text-amber-600 font-semibold">
+                      No active voucher companies found — add one in Credit Accounts first.
+                    </p>
+                  ) : (
+                    <AppSelect
+                      value={voucherAccount?._id || ""}
+                      onChange={(v) => {
+                        const acc = voucherCompanies.find((a) => a._id === (v ?? "")) || null;
+                        setVoucherAccount(acc);
+                      }}
+                      options={voucherCompanies.map((a) => ({ value: a._id, label: `${a.contactPerson || a.accountNumber} (${a.accountNumber})` }))}
+                      placeholder="— Select voucher company —"
+                      size="sm"
+                      searchable
+                    />
+                  )}
+                  {voucherAccount && (
+                    <div className="mt-1.5 flex items-center gap-2 border border-orange-300 bg-orange-50 px-3 py-2 text-xs">
+                      <FaTag className="shrink-0 text-orange-600" />
+                      <div>
+                        <span className="font-black text-orange-800">{voucherAccount.contactPerson || voucherAccount.accountNumber}</span>
+                        <span className="ml-2 text-orange-600">· Ref: {voucherAccount.accountNumber}</span>
+                        <div className="mt-0.5 text-orange-700">No payment collected — company billed via statement.</div>
                       </div>
-                      {isVoucherJob && (
-                        <div className="mt-2">
-                          <label className={labelClass}>Voucher Company <span className="text-red-500">*</span></label>
-                          {voucherCompanies.length === 0 ? (
-                            <p className="text-[11px] text-amber-600 font-semibold">
-                              No active voucher companies found — add one in Credit Accounts first.
-                            </p>
-                          ) : (
-                            <AppSelect
-                              value={voucherAccount?._id || ""}
-                              onChange={(v) => {
-                                const acc = voucherCompanies.find((a) => a._id === (v ?? "")) || null;
-                                setVoucherAccount(acc);
-                              }}
-                              options={voucherCompanies.map((a) => ({ value: a._id, label: `${a.contactPerson || a.accountNumber} (${a.accountNumber})` }))}
-                              placeholder="— Select voucher company —"
-                              size="md"
-                              searchable
-                            />
-                          )}
-                          {voucherAccount && (
-                            <div className="mt-1.5 flex items-center gap-2 border border-violet-300 bg-violet-50 px-3 py-2 text-xs">
-                              <FaTag className="shrink-0 text-violet-600" />
-                              <div>
-                                <span className="font-black text-violet-800">{voucherAccount.contactPerson || voucherAccount.accountNumber}</span>
-                                <span className="ml-2 text-violet-600">· Ref: {voucherAccount.accountNumber}</span>
-                                <div className="mt-0.5 text-violet-700">No payment collected — company billed via statement.</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   )}
+                </div>
+              )}
+              {/* Item description — carpet jobs only */}
+              {jobType === "carpet" && (
+                <div className="mb-2">
+                  <label className={labelClass}>Item Description<Required /></label>
+                  <textarea
+                    className="min-h-[60px] w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
+                    value={itemDescription}
+                    onChange={(e) => setItemDescription(e.target.value)}
+                    placeholder="e.g. 2 bedroom carpets, sofa set, car mat…"
+                    required
+                  />
+                </div>
+              )}
+
+              {/* Plate / Expected Ready Date + Customer Name + Phone — one dense row */}
+              <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-3">
+                {jobType === "vehicle" ? (
                   <PlateLookupWidget
                     plate={plateNumber}
                     onPlateChange={setPlateNumber}
@@ -1072,13 +1262,56 @@ const CarWashAddJob = () => {
                       setLoyaltyCard(card);
                       setApplyReward(false);
                     }}
+                    onLookupResult={setPlateLookupResult}
                     readOnly={isEditMode && jobPaymentStatus === "paid"}
                   />
-                  {isEditMode && jobPaymentStatus !== "paid" && (
-                    <p className="mt-1 text-[10px] text-amber-600">Plate can be edited — payment not yet completed</p>
+                ) : (
+                  <div>
+                    <label className={labelClass}>Expected Ready Date</label>
+                    <input
+                      className={inputClass}
+                      type="date"
+                      value={expectedReadyAt}
+                      onChange={(e) => setExpectedReadyAt(e.target.value)}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className={labelClass}>Customer Name</label>
+                  <input className={inputClass} value={customerName} onChange={(e) => { setCustomerName(e.target.value); autoFilledCustomerRef.current = false; }} placeholder="Customer name" />
+                </div>
+                <div>
+                  <label className={labelClass}>
+                    {isVoucherJob ? (
+                      <>Customer Phone<Required /></>
+                    ) : (
+                      <>Phone <span className="ml-1 font-normal normal-case text-slate-400">(optional)</span></>
+                    )}
+                  </label>
+                  <input
+                    className={`${inputClass} ${isVoucherJob ? "border-orange-400 focus:border-[#FF8C00] focus:ring-orange-400/20" : ""}`}
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder={isVoucherJob ? "Customer's phone — SMS sent here" : "Captured from M-Pesa on payment"}
+                    required={isVoucherJob}
+                  />
+                  {isVoucherJob && (
+                    <p className="mt-1 text-[10px] font-semibold text-orange-700">
+                      Payment confirmation &amp; loyalty SMS go to this number, not the car wash cashier.
+                    </p>
                   )}
+                </div>
+              </div>
+
+              {/* Vehicle-only: one unified status panel (plate/customer, credit account, reward)
+                  instead of three separately-bordered stacked boxes — each piece below renders
+                  flush row content only (no own border/margin) so they read as one connected
+                  panel with color-coded rows. */}
+              {jobType === "vehicle" && plateLookupResult && (
+                <div className="mt-1 divide-y divide-slate-200 border border-slate-200">
+                  <PlateLookupRow lookupResult={plateLookupResult} />
                   {!isVoucherJob && (
-                    <CreditAccountBanner
+                    <CreditAccountRow
                       plate={plateNumber}
                       jobTotal={totalPrice}
                       onAccountDetected={(acc) => setCreditAccount(acc || null)}
@@ -1095,116 +1328,55 @@ const CarWashAddJob = () => {
                       : `KES ${prog.rewardValue} off`;
                     const canApply = !isFreeService || Boolean(rewardSvc);
                     return (
-                      <div className={`mt-1.5 border px-3 py-2.5 text-xs ${applyReward ? "border-amber-400 bg-amber-50" : "border-amber-200 bg-amber-50"}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <FaGift className="shrink-0 text-amber-600" />
-                            <div>
-                              <div className="font-black text-amber-800">
-                                {loyaltyCard.pendingRewards} loyalty reward{loyaltyCard.pendingRewards !== 1 ? "s" : ""} available
-                              </div>
-                              <div className="mt-0.5 text-amber-700">
-                                {rewardLabel}
-                                {!isFreeService && totalPrice > 0 && applyReward && (
-                                  <span className="ml-1.5 font-black text-emerald-700">→ saves {formatMoney(rewardPreviewDiscount)}</span>
-                                )}
-                                {isFreeService && applyReward && (
-                                  <span className="ml-1.5 font-black text-emerald-700">✓ Added as free line</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            disabled={!canApply}
-                            onClick={() => {
-                              if (isFreeService && rewardSvc) {
-                                if (!applyReward) {
-                                  setServiceLines((prev) => [
-                                    { service: String(rewardSvc._id), serviceName: rewardSvc.name, vehicleType: "", price: 0, lineStaff: [], isRewardLine: true },
-                                    ...prev.filter((l) => !l.isRewardLine),
-                                  ]);
-                                } else {
-                                  setServiceLines((prev) => prev.filter((l) => !l.isRewardLine));
-                                }
-                              }
-                              setApplyReward((v) => !v);
-                            }}
-                            className={`shrink-0 rounded px-3 py-1.5 text-[11px] font-black uppercase tracking-wide transition-colors disabled:opacity-40 ${applyReward ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-white border border-amber-400 text-amber-700 hover:bg-amber-100"}`}
-                          >
-                            {applyReward ? "✓ Applying" : "Apply Reward"}
-                          </button>
+                      <div className={`flex items-center justify-between gap-3 px-2.5 py-1.5 text-[11px] ${applyReward ? "bg-amber-100" : "bg-amber-50"}`}>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="flex items-center gap-1.5 font-black text-amber-800">
+                            <FaGift className="shrink-0 text-amber-600" size={10} />
+                            {loyaltyCard.pendingRewards} reward{loyaltyCard.pendingRewards !== 1 ? "s" : ""} available
+                          </span>
+                          <span className="text-amber-700">
+                            {rewardLabel}
+                            {!isFreeService && totalPrice > 0 && applyReward && (
+                              <span className="ml-1.5 font-black text-emerald-700">→ saves {formatMoney(rewardPreviewDiscount)}</span>
+                            )}
+                            {isFreeService && applyReward && (
+                              <span className="ml-1.5 font-black text-emerald-700">✓ Added as free line</span>
+                            )}
+                          </span>
                         </div>
+                        <button
+                          type="button"
+                          disabled={!canApply}
+                          onClick={() => {
+                            if (isFreeService && rewardSvc) {
+                              if (!applyReward) {
+                                setServiceLines((prev) => [
+                                  { service: String(rewardSvc._id), serviceName: rewardSvc.name, vehicleType: "", price: 0, lineStaff: [], isRewardLine: true },
+                                  ...prev.filter((l) => !l.isRewardLine),
+                                ]);
+                              } else {
+                                setServiceLines((prev) => prev.filter((l) => !l.isRewardLine));
+                              }
+                            }
+                            setApplyReward((v) => !v);
+                          }}
+                          className={`shrink-0 px-2.5 py-1 text-[10px] font-black uppercase tracking-wide transition-colors disabled:opacity-40 ${applyReward ? "bg-amber-500 text-white hover:bg-amber-600" : "bg-white border border-amber-400 text-amber-700 hover:bg-amber-100"}`}
+                        >
+                          {applyReward ? "✓ Applying" : "Apply Reward"}
+                        </button>
                       </div>
                     );
                   })()}
-                </>
-              ) : (
-                <>
-                  <div className="mb-3">
-                    <label className={labelClass}>Item Description *</label>
-                    <textarea
-                      className="min-h-[60px] w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
-                      value={itemDescription}
-                      onChange={(e) => setItemDescription(e.target.value)}
-                      placeholder="e.g. 2 bedroom carpets, sofa set, car mat…"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Expected Ready Date</label>
-                    <input
-                      className={inputClass}
-                      type="date"
-                      value={expectedReadyAt}
-                      onChange={(e) => setExpectedReadyAt(e.target.value)}
-                    />
-                  </div>
-                </>
+                </div>
               )}
-
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className={labelClass}>Customer Name</label>
-                  <input className={inputClass} value={customerName} onChange={(e) => { setCustomerName(e.target.value); autoFilledCustomerRef.current = false; }} placeholder="Customer name" />
-                </div>
-                <div>
-                  <label className={labelClass}>
-                    {isVoucherJob ? (
-                      <>Customer Phone <span className="text-red-500">*</span></>
-                    ) : (
-                      <>Phone <span className="ml-1 font-normal normal-case text-slate-400">(optional)</span></>
-                    )}
-                  </label>
-                  <input
-                    className={`${inputClass} ${isVoucherJob ? "border-violet-400 focus:border-violet-600" : ""}`}
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    placeholder={isVoucherJob ? "Customer's phone — SMS sent here" : "Captured from M-Pesa on payment"}
-                    required={isVoucherJob}
-                  />
-                  {isVoucherJob && (
-                    <p className="mt-1 text-[10px] font-semibold text-violet-700">
-                      Payment confirmation &amp; loyalty SMS go to this number, not the car wash cashier.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+              {jobType === "vehicle" && isEditMode && jobPaymentStatus !== "paid" && (
+                <p className="mt-1 text-[10px] text-amber-600">Plate can be edited — payment not yet completed</p>
+              )}
+            </Section>
 
             {/* Service lines */}
-            <div className="border border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-slate-200 bg-[#EDF5F1] px-4 py-2">
-                <p className="text-[11px] font-extrabold uppercase tracking-wide text-[#0B3B2E]">Service Lines</p>
-                <button
-                  type="button"
-                  onClick={addLine}
-                  className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                >
-                  <FaPlus className="text-[9px]" /> Add Line
-                </button>
-              </div>
-
+            <Section title="Service Lines">
+              <div className="border border-slate-200">
               {/* Mobile stacked layout */}
               <div className="sm:hidden divide-y divide-slate-200">
                 {serviceLines.map((line, index) => {
@@ -1213,7 +1385,7 @@ const CarWashAddJob = () => {
                   const isPerSqft = svc?.pricingType === "per_sqft";
                   const isReward = Boolean(line.isRewardLine);
                   return (
-                    <div key={index} className={`p-3 space-y-2 ${isReward ? "bg-amber-50" : ""}`}>
+                    <div key={index} className={`p-2.5 space-y-1.5 ${isReward ? "bg-amber-50" : ""}`}>
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-400">Line {index + 1}</span>
@@ -1229,7 +1401,7 @@ const CarWashAddJob = () => {
                           onChange={(v) => handleLineServiceChange(index, v ?? "")}
                           options={serviceOptionsMobile}
                           placeholder="— Select service —"
-                          size="md"
+                          size="sm"
                           searchable
                         />
                         {svc?.isCombo && svc?.comboDescription && (
@@ -1241,7 +1413,7 @@ const CarWashAddJob = () => {
                       </div>
                       <div>
                         <label className={labelClass}>Name *</label>
-                        <input readOnly={isReward} className={`h-9 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 font-bold text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`} value={line.serviceName} onChange={(e) => updateLine(index, "serviceName", e.target.value)} placeholder="Service name" required />
+                        <input readOnly={isReward} className={isReward ? tableInputRewardClass : tableInputClass} value={line.serviceName} onChange={(e) => updateLine(index, "serviceName", e.target.value)} placeholder="Service name" required />
                       </div>
                       {jobType === "vehicle" && (
                         <div>
@@ -1252,7 +1424,7 @@ const CarWashAddJob = () => {
                               onChange={(v) => handleLineVehicleTypeChange(index, v ?? "")}
                               options={svc.pricingTiers.map((t) => ({ value: t.vehicleType, label: t.vehicleType }))}
                               placeholder="— Select vehicle type —"
-                              size="md"
+                              size="sm"
                             />
                           ) : (
                             <AppSelect
@@ -1260,7 +1432,7 @@ const CarWashAddJob = () => {
                               onChange={(v) => updateLine(index, "vehicleType", v ?? "")}
                               options={VEHICLE_TYPES.map((vt) => ({ value: vt, label: vt }))}
                               placeholder="— Vehicle type (optional) —"
-                              size="md"
+                              size="sm"
                             />
                           )}
                         </div>
@@ -1268,9 +1440,9 @@ const CarWashAddJob = () => {
                       <div>
                         <label className={labelClass}>Price (KES)</label>
                         {isReward ? (
-                          <div className="flex h-9 items-center border border-amber-200 bg-amber-50 px-2 text-xs font-black text-amber-700">FREE (KES 0)</div>
+                          <div className="flex h-7 items-center border border-amber-200 bg-amber-50 px-2 text-xs font-black text-amber-700">FREE (KES 0)</div>
                         ) : (
-                          <div className="flex h-9 items-center justify-end border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 select-none">
+                          <div className="flex h-7 items-center justify-end border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 select-none">
                             {line.price !== "" && line.price !== undefined ? Number(line.price).toLocaleString() : <span className="text-slate-400">—</span>}
                           </div>
                         )}
@@ -1278,17 +1450,12 @@ const CarWashAddJob = () => {
                       </div>
                       <div>
                         <label className={labelClass}>Attendants {isReward && <span className="ml-1 font-normal normal-case text-amber-600">(no commission on free line)</span>}</label>
-                        <div className="flex flex-wrap gap-1">
-                          {staff.map((s) => {
-                            const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
-                            return (
-                              <button key={s._id} type="button" onClick={() => toggleLineStaff(index, s._id)} className={`inline-flex items-center gap-1 border px-2.5 py-1.5 text-xs font-bold transition-all ${selected ? "bg-[#0B3B2E] text-white border-[#0B3B2E]" : "bg-white text-slate-500 border-slate-200"}`}>
-                                {selected && <span className="text-[8px]">✓</span>}
-                                {s.name.split(" ")[0]}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        <StaffMultiSelect
+                          staff={staff}
+                          selected={Array.isArray(line.lineStaff) ? line.lineStaff : EMPTY_ARRAY}
+                          onToggle={(staffId) => toggleLineStaff(index, staffId)}
+                          disabled={isReward}
+                        />
                         {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && !isReward && (
                           <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
                         )}
@@ -1308,11 +1475,11 @@ const CarWashAddJob = () => {
                             </div>
                             {m.shape === "rect" ? (
                               <div className="grid grid-cols-2 gap-2">
-                                <input type="number" min="0" step="0.1" value={m.length} onChange={(e) => updateMeasurement(index, "length", e.target.value)} placeholder="Length (ft)" className="h-9 w-full border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-                                <input type="number" min="0" step="0.1" value={m.width} onChange={(e) => updateMeasurement(index, "width", e.target.value)} placeholder="Width (ft)" className="h-9 w-full border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                                <input type="number" min="0" step="0.1" value={m.length} onChange={(e) => updateMeasurement(index, "length", e.target.value)} placeholder="Length (ft)" className={tableInputClass} />
+                                <input type="number" min="0" step="0.1" value={m.width} onChange={(e) => updateMeasurement(index, "width", e.target.value)} placeholder="Width (ft)" className={tableInputClass} />
                               </div>
                             ) : (
-                              <input type="number" min="0" step="0.1" value={m.diameter} onChange={(e) => updateMeasurement(index, "diameter", e.target.value)} placeholder="Diameter (ft)" className="h-9 w-full border border-slate-300 px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+                              <input type="number" min="0" step="0.1" value={m.diameter} onChange={(e) => updateMeasurement(index, "diameter", e.target.value)} placeholder="Diameter (ft)" className={tableInputClass} />
                             )}
                             {area > 0 && <p className="text-[11px] font-semibold text-[#0B3B2E]">{area.toFixed(2)} sqft × KES {rate}/sqft = <strong>KES {calcPrice?.toLocaleString()}</strong></p>}
                           </div>
@@ -1321,6 +1488,15 @@ const CarWashAddJob = () => {
                     </div>
                   );
                 })}
+                <div className="border-t border-slate-200 px-3 py-1.5">
+                  <button
+                    type="button"
+                    onClick={addLine}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline"
+                  >
+                    <FaPlus className="text-[9px]" /> Add Line
+                  </button>
+                </div>
                 {totalTaxAmount > 0 && (
                   <div className="border-t border-slate-200 bg-blue-50 px-4 py-1.5 flex items-center justify-between">
                     <span className="text-[10px] font-extrabold uppercase tracking-wide text-blue-700">VAT Included</span>
@@ -1356,7 +1532,7 @@ const CarWashAddJob = () => {
                       <tr className={`border-b border-slate-100 ${isReward ? "bg-amber-50/60" : ""}`}>
                         <td className="px-3 py-1.5">
                           {isReward ? (
-                            <div className="flex h-8 items-center gap-1.5 px-1">
+                            <div className="flex h-7 items-center gap-1.5 px-1">
                               <FaGift className="text-amber-500" size={10} />
                               <span className="text-[10px] font-black text-amber-700">{line.serviceName}</span>
                               <span className="ml-auto rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-black text-amber-600">FREE</span>
@@ -1370,7 +1546,7 @@ const CarWashAddJob = () => {
                                     onChange={(v) => handleLineServiceChange(index, v ?? "")}
                                     options={serviceOptionsDesktop}
                                     placeholder="— Select service —"
-                                    size="md"
+                                    size="sm"
                                     searchable
                                   />
                                   {selSvc?.isCombo && selSvc?.comboDescription && (
@@ -1386,7 +1562,7 @@ const CarWashAddJob = () => {
                         <td className="px-3 py-1.5">
                           <input
                             readOnly={isReward}
-                            className={`h-8 w-full border px-2 text-xs focus:outline-none ${isReward ? "border-amber-200 bg-amber-50 font-bold text-amber-800" : "border-slate-300 text-slate-800 focus:border-[#0B3B2E]"}`}
+                            className={isReward ? tableInputRewardClass : tableInputClass}
                             value={line.serviceName}
                             onChange={(e) => updateLine(index, "serviceName", e.target.value)}
                             placeholder="Service name"
@@ -1404,7 +1580,7 @@ const CarWashAddJob = () => {
                                   onChange={(v) => handleLineVehicleTypeChange(index, v ?? "")}
                                   options={svc.pricingTiers.map((t) => ({ value: t.vehicleType, label: t.vehicleType }))}
                                   placeholder="— Select vehicle type —"
-                                  size="md"
+                                  size="sm"
                                 />
                               ) : (
                                 <AppSelect
@@ -1412,7 +1588,7 @@ const CarWashAddJob = () => {
                                   onChange={(v) => updateLine(index, "vehicleType", v ?? "")}
                                   options={VEHICLE_TYPES.map((vt) => ({ value: vt, label: vt }))}
                                   placeholder="— Vehicle type (optional) —"
-                                  size="md"
+                                  size="sm"
                                 />
                               );
                             })()}
@@ -1420,43 +1596,27 @@ const CarWashAddJob = () => {
                         )}
                         <td className="px-3 py-1.5">
                           {isReward ? (
-                            <div className="flex h-8 items-center justify-end px-2 text-xs font-black text-amber-700">FREE</div>
+                            <div className="flex h-7 items-center justify-end px-2 text-xs font-black text-amber-700">FREE</div>
                           ) : (
-                            <div className="flex h-8 items-center justify-end border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 select-none" title="Price is set in Services Setup">
+                            <div className="flex h-7 items-center justify-end border border-slate-200 bg-slate-50 px-2 text-xs font-bold text-slate-700 select-none" title="Price is set in Services Setup">
                               {line.price !== "" && line.price !== undefined ? Number(line.price).toLocaleString() : <span className="text-slate-400">—</span>}
                             </div>
                           )}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-1.5">
                           {isReward ? (
                             <p className="text-[10px] font-semibold text-amber-600">No commission on free reward line</p>
                           ) : (
-                            <>
-                              <div className="flex flex-wrap gap-1">
-                                {staff.map((s) => {
-                                  const selected = Array.isArray(line.lineStaff) && line.lineStaff.includes(s._id);
-                                  return (
-                                    <button
-                                      key={s._id}
-                                      type="button"
-                                      onClick={() => toggleLineStaff(index, s._id)}
-                                      title={s.role || s.name}
-                                      className={`inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold border transition-all ${
-                                        selected
-                                          ? "bg-[#0B3B2E] text-white border-[#0B3B2E] shadow-sm"
-                                          : "bg-white text-slate-500 border-slate-200 hover:border-[#0B3B2E] hover:text-[#0B3B2E]"
-                                      }`}
-                                    >
-                                      {selected && <span className="text-[8px]">✓</span>}
-                                      {s.name.split(" ")[0]}
-                                    </button>
-                                  );
-                                })}
-                              </div>
+                            <div className="max-w-[220px]">
+                              <StaffMultiSelect
+                                staff={staff}
+                                selected={Array.isArray(line.lineStaff) ? line.lineStaff : EMPTY_ARRAY}
+                                onToggle={(staffId) => toggleLineStaff(index, staffId)}
+                              />
                               {(!Array.isArray(line.lineStaff) || line.lineStaff.length === 0) && (
                                 <p className="mt-1 text-[10px] text-amber-600 font-semibold">No attendant — no commission</p>
                               )}
-                            </>
+                            </div>
                           )}
                         </td>
                         <td className="px-2 py-1.5 text-center">
@@ -1491,7 +1651,7 @@ const CarWashAddJob = () => {
                         const colSpan   = jobType === "vehicle" ? 6 : 5;
                         return (
                           <tr className="border-b border-slate-100 bg-violet-50">
-                            <td colSpan={colSpan} className="px-4 py-2.5">
+                            <td colSpan={colSpan} className="px-4 py-1.5">
                               <div className="flex flex-wrap items-center gap-3">
                                 {/* Shape toggle */}
                                 <div className="flex overflow-hidden border border-slate-300">
@@ -1547,6 +1707,17 @@ const CarWashAddJob = () => {
                       </React.Fragment>
                     );
                     })}
+                    <tr>
+                      <td colSpan={jobType === "vehicle" ? 6 : 5} className="border-t border-slate-200 px-3 py-1.5">
+                        <button
+                          type="button"
+                          onClick={addLine}
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline"
+                        >
+                          <FaPlus className="text-[9px]" /> Add Line
+                        </button>
+                      </td>
+                    </tr>
                   </tbody>
                   <tfoot>
                     {totalTaxAmount > 0 && (
@@ -1572,62 +1743,55 @@ const CarWashAddJob = () => {
                   </tfoot>
                 </table>
               </div>
-            </div>
+              </div>
+            </Section>
 
             {/* Notes */}
-            <div className="border border-slate-200 bg-white p-4 shadow-sm">
-              <label className={labelClass}>Notes</label>
+            <Section title="Notes">
               <textarea
                 className="min-h-[64px] w-full border border-slate-300 px-2 py-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Optional notes for this job"
               />
-            </div>
+            </Section>
           </div>
 
           {/* ── Right column ────────────────────────────────────────────────── */}
-          <div className="space-y-3">
+          <div className="space-y-2.5">
 
             {/* Attendants summary */}
-            <div className="border border-slate-200 bg-white shadow-sm">
-              <div className="flex items-center gap-2 border-b border-slate-200 bg-[#EDF5F1] px-4 py-2.5">
-                <FaUserCheck className="text-[#0B3B2E] text-[13px]" />
-                <span className="text-xs font-black uppercase tracking-wide text-[#0B3B2E]">Attendants</span>
-              </div>
-              <div className="p-3">
+            <Section title="Attendants">
                 {staffSummary.length === 0 ? (
                   <p className="text-[11px] text-amber-600 font-semibold">
                     No attendants assigned — select staff in the service lines above.
                   </p>
                 ) : (
-                  <div className="space-y-2">
+                  <ul className="divide-y divide-slate-100">
                     {staffSummary.map(({ name, role, services }) => (
-                      <div key={name} className="flex items-start gap-2.5 rounded border border-emerald-200 bg-emerald-50 px-3 py-2">
-                        <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0B3B2E] text-[9px] font-black text-white">
+                      <li key={name} className="flex items-center gap-1.5 py-1">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[#0B3B2E] text-[8px] font-black text-white">
                           {name.charAt(0)}
+                        </span>
+                        <span className="shrink-0 truncate text-[11px] font-bold text-slate-900" title={name}>
+                          {name}
+                          {role && <span className="ml-1 font-normal text-slate-400">· {role}</span>}
+                        </span>
+                        <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1">
+                          {services.map((svc, i) => (
+                            <span key={i} className="shrink-0 rounded-sm bg-[#0B3B2E]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#0B3B2E]">
+                              {svc}
+                            </span>
+                          ))}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-bold text-slate-900">{name}</p>
-                          {role && <p className="text-[10px] text-slate-500">{role}</p>}
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {services.map((svc, i) => (
-                              <span key={i} className="rounded-sm bg-[#0B3B2E]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#0B3B2E]">
-                                {svc}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
-              </div>
-            </div>
+            </Section>
 
             {/* Job summary */}
-            <div className="border border-slate-200 bg-white p-4 shadow-sm">
-              <p className={`${labelClass} mb-3`}>Job Summary</p>
+            <Section title="Job Summary">
               <div className="space-y-2 text-xs text-slate-600">
                 <div className="flex justify-between">
                   <span className="font-semibold text-slate-500 uppercase tracking-wide">Type</span>
@@ -1650,7 +1814,7 @@ const CarWashAddJob = () => {
                 {isVoucherJob && voucherAccount && (
                   <div className="flex justify-between">
                     <span className="font-semibold text-slate-500 uppercase tracking-wide">Voucher</span>
-                    <span className="font-bold text-violet-700">
+                    <span className="font-bold text-orange-700">
                       <FaTag className="mr-1 inline" size={9} />
                       {voucherAccount.contactPerson || voucherAccount.accountNumber}
                     </span>
@@ -1668,6 +1832,24 @@ const CarWashAddJob = () => {
                     {formatMoney(totalPrice)}
                   </span>
                 </div>
+                {jobType === "vehicle" && (!isEditMode || jobPaymentStatus !== "paid") && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="voucher-chk"
+                      type="checkbox"
+                      className="h-3.5 w-3.5 accent-[#FF8C00]"
+                      checked={isVoucherJob}
+                      onChange={(e) => {
+                        setIsVoucherJob(e.target.checked);
+                        if (!e.target.checked) setVoucherAccount(null);
+                      }}
+                    />
+                    <label htmlFor="voucher-chk" className="text-[10px] font-bold uppercase tracking-wide text-orange-700 select-none cursor-pointer">
+                      Voucher Job
+                      <span className="ml-1 font-normal normal-case text-slate-400">(billed to company)</span>
+                    </label>
+                  </div>
+                )}
                 {applyReward && (rewardPreviewDiscount > 0 || loyaltyCard?.program?.rewardType === "free_service") ? (
                   <div className="flex items-center justify-between rounded bg-amber-50 px-2 py-1.5 text-xs">
                     <span className="flex items-center gap-1 font-bold text-amber-700"><FaGift size={9} /> Loyalty reward</span>
@@ -1736,36 +1918,7 @@ const CarWashAddJob = () => {
                   <p className="text-center text-[10px] font-black uppercase tracking-wide text-emerald-600">FREE — fully covered by reward</p>
                 )}
               </div>
-            </div>
-
-            {/* Reset button — new job only */}
-            {!isEditMode && (
-              <button
-                type="button"
-                onClick={handleReset}
-                disabled={saving}
-                className="flex w-full items-center justify-center gap-2 py-2 text-xs font-bold uppercase tracking-wide text-slate-500 border border-slate-200 bg-white hover:bg-slate-50 hover:text-slate-700 disabled:opacity-50"
-              >
-                <FaRedoAlt size={10} /> Reset Fields
-              </button>
-            )}
-
-            {/* Save button */}
-            {(isEditMode ? canUpdate : canCreate) && (
-              <button
-                id="cw-job-form-submit"
-                type="submit"
-                disabled={saving}
-                className="flex w-full items-center justify-center gap-2 py-3 text-sm font-extrabold uppercase tracking-wide text-white bg-[#0B3B2E] hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <FaSave />
-                {saving ? "Saving…"
-                  : isEditMode ? "Save Changes"
-                  : applyReward ? "Save Job + Apply Reward"
-                  : jobType === "carpet" ? "Save & Add Photos →"
-                  : "Save Job"}
-              </button>
-            )}
+            </Section>
 
             {/* Carpet photos panel — edit mode only */}
             {jobType === "carpet" && isEditMode && (
@@ -1782,9 +1935,51 @@ const CarWashAddJob = () => {
                 )}
               </div>
             )}
+              </div>
+            </div>
+          </form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={saving}
+              className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            {!isEditMode && (
+              <button
+                type="button"
+                onClick={handleReset}
+                disabled={saving}
+                className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Reset
+              </button>
+            )}
+            {(isEditMode ? canUpdate : canCreate) && (
+              <button
+                id="cw-job-form-submit"
+                type="submit"
+                form="carwash-job-form"
+                disabled={saving}
+                className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {saving ? <FaSpinner className="animate-spin" size={11} /> : <FaSave size={11} />}
+                {saving ? "Saving…"
+                  : isEditMode ? "Save Changes"
+                  : applyReward ? "Save Job + Apply Reward"
+                  : jobType === "carpet" ? "Save & Add Photos →"
+                  : "Save Job"}
+              </button>
+            )}
           </div>
         </div>
-      </form>
+      </div>
 
       {/* Duplicate plate warning modal */}
       {dupWarning && (

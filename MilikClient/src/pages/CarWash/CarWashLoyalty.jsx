@@ -543,7 +543,6 @@ const CarWashLoyalty = () => {
   const [page, setPage]           = useTabState("/carwash/loyalty:page", 1);
   const [pageSize, setPageSize]   = useTabState("/carwash/loyalty:pageSize", 25);
   const [dormantDays, setDormantDays] = useTabState("/carwash/loyalty:dormantDays", 0);
-  const [expandedId, setExpandedId]   = useState(null);
 
   // ── Selection for bulk SMS ────────────────────────────────────────────────
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -630,7 +629,6 @@ const CarWashLoyalty = () => {
   });
 
   // ── Callbacks ─────────────────────────────────────────────────────────────
-  const handleExpand  = useCallback(id => setExpandedId(prev => prev === id ? null : id), []);
   const handleSelect  = useCallback(id => setSelectedIds(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);

@@ -33,7 +33,7 @@ export const getNotifications = async (dispatch, business, recipient = null, isR
 
     const res = await adminRequests.get(url);
     dispatch(getNotificationsSuccess(extractList(res.data)));
-  } catch (err) {
+  } catch {
     dispatch(getNotificationsFailure());
   }
 };
@@ -44,7 +44,7 @@ export const getNotification = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/notifications/${id}`);
     dispatch(getNotificationsSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getNotificationsFailure());
   }
 };
@@ -116,10 +116,6 @@ export const markAllNotificationsAsRead = async (dispatch) => {
 
 // Get notification stats
 export const getNotificationStats = async (recipient) => {
-  try {
-    const res = await adminRequests.get(`/notifications/get/stats?recipient=${recipient}`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/notifications/get/stats?recipient=${recipient}`);
+  return res.data;
 };

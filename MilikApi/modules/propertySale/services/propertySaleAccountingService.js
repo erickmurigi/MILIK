@@ -10,8 +10,16 @@
  *   4410 — Property Sale Revenue             (income)   credit side for non-deposit payments; recognised from 2150 at close
  *   4420 — Forfeited Deposit Income          (income)   Cr when a non-refundable deposit is retained on deal cancel
  *   5220 — Stamp Duty / Transfer Costs       (expense)  Dr when stamp duty is paid at deal close
- *   5320 — Property Sale Commission Expense  (expense)  debit side for commission accrual
+ *   5320 — Property Sale Commission Expense  (expense)  debit side for commission accrual (no owner on the deal)
  *   5321 — Agent Commission Disbursements    (liability) fallback Cr when no cashbook provided at payout
+ *   2185 — Owner Clearing / Payable          (liability) owner-linked deals: replaces 5320 as the debit side for
+ *          both broker commission accrual and the company's own commission recognition
+ *   4430 — Commission Income — Agency Fees   (income)   Cr for the company's own commission (owner-linked deals only)
+ *   1312 — Broker Commission Clawback Receivable (asset) Dr when a deal cancels after a tier was already paid out
+ *   1313 — Owner Expense Recoverable         (asset)    Dr for costs the company pays on an owner's behalf
+ *   1314 — Advocate Trust Receivable         (asset)    Dr side for a payment collected into an advocate's own
+ *          trust account instead of the company's cash (collectionMethod "advocate_trust"); cleared (Cr) when
+ *          the advocate actually remits the money (SaleAdvocateRemittance / postSaleAdvocateRemittance)
  */
 
 import mongoose from "mongoose";
@@ -30,6 +38,11 @@ const PS_ACCOUNT_TEMPLATES = {
   "5220": { name: "Stamp Duty / Transfer Costs",      type: "expense",   group: "expenses",    subGroup: "Sale Costs" },
   "5320": { name: "Property Sale Commission Expense", type: "expense",   group: "expenses",    subGroup: "Sales Commissions" },
   "5321": { name: "Agent Commission Disbursements",   type: "liability", group: "liabilities", subGroup: "Agent Payables" },
+  "2185": { name: "Owner Clearing / Payable",          type: "liability", group: "liabilities", subGroup: "Owner Payables" },
+  "4430": { name: "Commission Income — Agency Fees",   type: "income",    group: "income",      subGroup: "Property Sales" },
+  "1312": { name: "Broker Commission Clawback Receivable", type: "asset", group: "assets",       subGroup: "Current Assets" },
+  "1313": { name: "Owner Expense Recoverable",         type: "asset",     group: "assets",       subGroup: "Current Assets" },
+  "1314": { name: "Advocate Trust Receivable",         type: "asset",     group: "assets",       subGroup: "Current Assets" },
 };
 
 
@@ -52,7 +65,10 @@ const dayRange = (value = new Date()) => {
 
 const accountIdCache = new Map(); // `${businessId}:${code}` -> ObjectId
 
-const resolvePSAccount = async (businessId, code) => {
+// Exported so other modules (e.g. the PMS PaymentVoucher controller's `sale_owner_expense`
+// category, which debits 1313 Owner Expense Recoverable) can self-register against the same
+// fixed system accounts without duplicating the upsert-and-cache pattern.
+export const resolvePSAccount = async (businessId, code) => {
   const cacheKey = `${businessId}:${code}`;
   const cachedId = accountIdCache.get(cacheKey);
   if (cachedId) return { _id: cachedId };
@@ -102,13 +118,18 @@ export const postPropertySalePaymentLedger = async ({ businessId, payment, userI
   if (existing > 0) return;
 
   const isDeposit = payment.paymentType === "deposit";
+  const isAdvocateTrust = payment.collectionMethod === "advocate_trust";
   const { start, end } = dayRange(payment.paymentDate || payment.createdAt);
   const journalGroupId = new mongoose.Types.ObjectId();
 
+  // Money collected into an advocate's own trust account never touches the company's cashbook until
+  // remitted — the debit side is the 1314 receivable, regardless of whatever cashbook was chosen.
   const [debitAcc, creditAcc] = await Promise.all([
-    cashbookAccountId
-      ? ChartOfAccount.findById(cashbookAccountId).lean()
-      : resolvePSAccount(businessId, "1311"),
+    isAdvocateTrust
+      ? resolvePSAccount(businessId, "1314")
+      : cashbookAccountId
+        ? ChartOfAccount.findById(cashbookAccountId).lean()
+        : resolvePSAccount(businessId, "1311"),
     resolvePSAccount(businessId, isDeposit ? "2150" : "4410"),
   ]);
 
@@ -309,7 +330,7 @@ export const postStampDutyEntry = async ({ businessId, dealId, amount, cashbookA
   ]);
 };
 
-// ─── Commission accrual — Dr Commission Expense / Cr Commission Payable ───────
+// ─── Commission accrual — Dr Commission Expense (or Owner Clearing, if the deal has an owner) / Cr Commission Payable ───
 
 export const postPropertySaleCommissionAccrual = async ({ businessId, commission, userId }) => {
   const amount = round2(Number(commission.commissionAmount || 0));
@@ -327,8 +348,9 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
   const { start, end } = dayRange(commission.createdAt);
   const journalGroupId = new mongoose.Types.ObjectId();
 
+  const hasOwner = Boolean(commission.owner);
   const [expenseAcc, payableAcc] = await Promise.all([
-    resolvePSAccount(businessId, "5320"),
+    resolvePSAccount(businessId, hasOwner ? "2185" : "5320"),
     resolvePSAccount(businessId, "2180"),
   ]);
 
@@ -443,3 +465,206 @@ export const reversePropertySaleCommissionPayout = async ({ businessId, commissi
   const msg = reason || `Commission payout reversed — ${commission.commissionNumber || commission._id}`;
   await Promise.all(payoutEntries.map((entry) => postReversal({ entryId: entry._id, reason: msg, userId })));
 };
+
+// ─── Staged/tiered commission release ─────────────────────────────────────────
+//
+// Used only when a commission's own `releaseSchedule` is non-empty (SaleSettings.commissionReleaseSchedule
+// .enabled was on at the time the commission was created). Each tier is its own idempotent posting, keyed
+// by `${commission._id}:tier:${tierRelease._id}` so partial accruals on one commission never collide.
+
+const reverseEntriesFor = async ({ businessId, sourceTransactionType, sourceTransactionId, userId, reason }) => {
+  const entries = await FinancialLedgerEntry.find({
+    business: businessId,
+    sourceTransactionType,
+    sourceTransactionId,
+    status: { $nin: ["reversed", "void"] },
+  }).lean();
+  if (!entries.length) return;
+  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+};
+
+// Broker commission tier — Dr Commission Expense (or Owner Clearing) / Cr Commission Payable
+export const postPropertySaleCommissionTierRelease = async ({ businessId, commission, tierRelease, userId }) => {
+  const amount = round2(Number(tierRelease.amount || 0));
+  if (amount <= 0) return;
+
+  const sourceTransactionType = "property_sale_commission_tier";
+  const sourceTransactionId = `${commission._id}:tier:${tierRelease._id}`;
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(tierRelease.accruedAt);
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const hasOwner = Boolean(commission.owner);
+  const [expenseAcc, payableAcc] = await Promise.all([
+    resolvePSAccount(businessId, hasOwner ? "2185" : "5320"),
+    resolvePSAccount(businessId, "2180"),
+  ]);
+  const ref = commission.commissionNumber || String(commission._id);
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: tierRelease.accruedAt || new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_COMMISSION_TIER_RELEASE", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: expenseAcc._id, direction: "debit",  amount, notes: `Agent commission tier released (${tierRelease.thresholdPct}% paid) — ${ref}` },
+    { ...base, accountId: payableAcc._id, direction: "credit", amount, notes: `Agent commission payable — ${ref}` },
+  ]);
+};
+
+export const reversePropertySaleCommissionTierRelease = async ({ businessId, commission, tierRelease, userId, reason }) =>
+  reverseEntriesFor({
+    businessId,
+    sourceTransactionType: "property_sale_commission_tier",
+    sourceTransactionId: `${commission._id}:tier:${tierRelease._id}`,
+    userId,
+    reason: reason || `Commission tier reversed — ${commission.commissionNumber || commission._id}`,
+  });
+
+// Company's own commission tier — Dr Owner Clearing / Cr Commission Income. No payout counterpart: this
+// is recognized revenue, never disbursed to a third party.
+export const postPropertySaleOwnerCommissionTierRelease = async ({ businessId, ownerCommission, tierRelease, userId }) => {
+  const amount = round2(Number(tierRelease.amount || 0));
+  if (amount <= 0) return;
+
+  const sourceTransactionType = "property_sale_owner_commission_tier";
+  const sourceTransactionId = `${ownerCommission._id}:tier:${tierRelease._id}`;
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(tierRelease.accruedAt);
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const [clearingAcc, incomeAcc] = await Promise.all([
+    resolvePSAccount(businessId, "2185"),
+    resolvePSAccount(businessId, "4430"),
+  ]);
+  const ref = ownerCommission.commissionNumber || String(ownerCommission._id);
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: tierRelease.accruedAt || new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_OWNER_COMMISSION_TIER_RELEASE", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: clearingAcc._id, direction: "debit",  amount, notes: `Owner commission tier recognized (${tierRelease.thresholdPct}% paid) — ${ref}` },
+    { ...base, accountId: incomeAcc._id,   direction: "credit", amount, notes: `Commission income — ${ref}` },
+  ]);
+};
+
+export const reversePropertySaleOwnerCommissionTierRelease = async ({ businessId, ownerCommission, tierRelease, userId, reason }) =>
+  reverseEntriesFor({
+    businessId,
+    sourceTransactionType: "property_sale_owner_commission_tier",
+    sourceTransactionId: `${ownerCommission._id}:tier:${tierRelease._id}`,
+    userId,
+    reason: reason || `Owner commission tier reversed — ${ownerCommission.commissionNumber || ownerCommission._id}`,
+  });
+
+// ─── Clawback on cancellation — a tier already paid out in cash can't be un-sent ─────────────────────
+//
+// Dr Broker Commission Clawback Receivable (1312) / Cr Commission Expense or Owner Clearing (whichever the
+// original accrual debited). Zeroes out the expense/clearing impact of a commission that should not have
+// been earned, and stands up a receivable asset to recover from the broker later — it deliberately does
+// NOT touch the original payout's cash leg (that cash really left).
+
+export const postPropertySaleCommissionClawbackReceivable = async ({ businessId, commission, tierRelease, userId, reason }) => {
+  const amount = round2(Number(tierRelease.amount || 0));
+  if (amount <= 0) return;
+
+  const sourceTransactionType = "property_sale_commission_clawback";
+  const sourceTransactionId = `${commission._id}:tier:${tierRelease._id}`;
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(new Date());
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const hasOwner = Boolean(commission.owner);
+  const [receivableAcc, expenseAcc] = await Promise.all([
+    resolvePSAccount(businessId, "1312"),
+    resolvePSAccount(businessId, hasOwner ? "2185" : "5320"),
+  ]);
+  const ref = commission.commissionNumber || String(commission._id);
+  const msg = reason || `Commission tier clawed back — deal cancelled after payout — ${ref}`;
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_COMMISSION_CLAWBACK", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: receivableAcc._id, direction: "debit",  amount, notes: msg },
+    { ...base, accountId: expenseAcc._id,    direction: "credit", amount, notes: msg },
+  ]);
+};
+
+// ─── Advocate trust remittance — clears 1314 Advocate Trust Receivable ───────────────────────────────
+//
+// Called when an advocate actually hands over money they collected into their own trust account.
+//   Dr [cashbook]  / Cr 1314 Advocate Trust Receivable
+
+export const postSaleAdvocateRemittance = async ({ businessId, remittance, userId, cashbookAccountId }) => {
+  const amount = round2(Number(remittance.amount || 0));
+  if (amount <= 0) return;
+
+  const sourceTransactionType = "property_sale_advocate_remittance";
+  const sourceTransactionId = String(remittance._id);
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(remittance.date || remittance.createdAt);
+  const journalGroupId = new mongoose.Types.ObjectId();
+
+  const [debitAcc, trustAcc] = await Promise.all([
+    cashbookAccountId
+      ? ChartOfAccount.findById(cashbookAccountId).lean()
+      : resolvePSAccount(businessId, "1311"),
+    resolvePSAccount(businessId, "1314"),
+  ]);
+  if (!debitAcc) throw new Error("Cashbook account not found — GL posting aborted");
+
+  const ref = remittance.remittanceNumber || String(remittance._id);
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: remittance.date || remittance.createdAt || new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_ADVOCATE_REMITTANCE", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: debitAcc._id, direction: "debit",  amount, notes: `Advocate trust remittance received — ${ref}` },
+    { ...base, accountId: trustAcc._id, direction: "credit", amount, notes: `Advocate trust receivable cleared — ${ref}` },
+  ]);
+};
+
+export const reverseSaleAdvocateRemittance = async ({ businessId, remittance, userId, reason }) =>
+  reverseEntriesFor({
+    businessId,
+    sourceTransactionType: "property_sale_advocate_remittance",
+    sourceTransactionId: String(remittance._id),
+    userId,
+    reason: reason || `Advocate remittance reversed — ${remittance.remittanceNumber || remittance._id}`,
+  });

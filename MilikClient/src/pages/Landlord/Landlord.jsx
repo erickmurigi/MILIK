@@ -333,7 +333,6 @@ const Landlords = () => {
         setConfirmDialog((prev) => ({ ...prev, isOpen: false }));
         setSelectedLandlords([]);
         setSelectAll(false);
-        const count = selectedArchivableLandlords.length;
         const archResults = await Promise.allSettled(
           selectedArchivableLandlords.map((l) => dispatch(updateLandlord(l._id, { status: "Archived" })))
         );

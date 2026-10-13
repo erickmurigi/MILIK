@@ -5,7 +5,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
-import { FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaFilePdf, FaMobileAlt, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaUndoAlt } from "react-icons/fa";
+import { FaBell, FaCamera, FaChevronDown, FaChevronRight, FaEdit, FaExpand, FaFilePdf, FaMobileAlt, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTimesCircle, FaTrashAlt, FaTv, FaUndoAlt } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, photoUrl, todayISO } from "../../services/carWashApi";
 import CarpetCameraModal from "../../components/common/CarpetCameraModal";
@@ -15,10 +15,11 @@ import CwSmsModal from "./CwSmsModal";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from "../../components/PaginationBar";
+import ListToolbar from "../../components/common/ListToolbar";
+import MilikTable from "../../components/common/MilikTable";
 import AppSelect from "../../components/common/AppSelect";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { fmtDateTime } from "../../utils/dates";
-import EmptyTableRow from "../../components/common/EmptyTableRow";
 
 const Lightbox = ({ src, onClose }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 p-4" onClick={onClose}>
@@ -42,9 +43,8 @@ const emptyPaymentForm = {
 
 const defaultFilters = {
   search: "",
-  customer: "",
   service: "",
-  staff: "",
+  branch: "",
   status: "",
   paymentStatus: "",
   jobType: "",
@@ -92,7 +92,7 @@ const getMonthBounds = () => {
 
 const statuses = ["waiting", "washing", "drying", "ready", "done", "paid", "cancelled"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
 const EMPTY_ARRAY = [];
 
 // Static filter-bar option literals — hoisted to module scope since they never change.
@@ -100,6 +100,9 @@ const PAYMENT_STATUS_FILTER_OPTIONS = [
   { value: "unpaid", label: "Unpaid" },
   { value: "partial", label: "Partial" },
   { value: "paid", label: "Paid" },
+  // Same dropdown also filters by HOW a job was paid — prefixed so it's a distinct
+  // axis from the status values above, parsed back out in loadJobs() below.
+  ...paymentMethods.map((method) => ({ value: `method:${method}`, label: `Via ${method.toUpperCase()}` })),
 ];
 const JOB_TYPE_FILTER_OPTIONS = [
   { value: "vehicle", label: "Vehicle" },
@@ -200,7 +203,7 @@ const MobileJobCard = React.memo(({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="font-extrabold text-slate-900">{job.jobNumber}</span>
-            {job.jobType === "carpet" && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>}
+            {job.jobType === "carpet" && <span className="border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>}
             <span className={`inline-flex border px-1.5 py-0.5 text-[10px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>{job.paymentStatus || "unpaid"}</span>
           </div>
           <div className="mt-0.5 text-sm font-extrabold uppercase text-slate-900">
@@ -229,7 +232,7 @@ const MobileJobCard = React.memo(({
           <button
             type="button"
             onClick={() => onUpdateStatus(job, "washing")}
-            className="h-7 whitespace-nowrap border border-blue-300 bg-blue-50 px-2.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"
+            className="whitespace-nowrap border border-blue-200 bg-blue-50 px-2 py-1 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100"
           >
             → Wash
           </button>
@@ -238,7 +241,7 @@ const MobileJobCard = React.memo(({
           <button
             type="button"
             onClick={() => onUpdateStatus(job, "drying")}
-            className="h-7 whitespace-nowrap border border-purple-300 bg-purple-50 px-2.5 text-[11px] font-bold text-purple-700 hover:bg-purple-100"
+            className="whitespace-nowrap border border-purple-200 bg-purple-50 px-2 py-1 text-[10px] font-bold uppercase text-purple-700 hover:bg-purple-100"
           >
             → Dry
           </button>
@@ -247,7 +250,7 @@ const MobileJobCard = React.memo(({
           <button
             type="button"
             onClick={() => onUpdateStatus(job, "ready")}
-            className="h-7 whitespace-nowrap border border-emerald-300 bg-emerald-50 px-2.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+            className="whitespace-nowrap border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-bold uppercase text-emerald-700 hover:bg-emerald-100"
           >
             → Ready
           </button>
@@ -256,7 +259,7 @@ const MobileJobCard = React.memo(({
           <button
             type="button"
             onClick={() => onUpdateStatus(job, "done")}
-            className="h-7 whitespace-nowrap border border-teal-300 bg-teal-50 px-2.5 text-[11px] font-bold text-teal-700 hover:bg-teal-100"
+            className="whitespace-nowrap border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-bold uppercase text-teal-700 hover:bg-teal-100"
           >
             → Done
           </button>
@@ -284,7 +287,7 @@ const MobileJobCard = React.memo(({
         <button type="button" onClick={() => onPrint(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaPrint className="text-[9px]" /> Print
         </button>
-        <button type="button" onClick={() => onDownloadPdf(job)} className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-700 hover:bg-red-100">
+        <button type="button" onClick={() => onDownloadPdf(job)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 py-1 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
           <FaFilePdf className="text-[9px]" /> PDF
         </button>
         <button type="button" onClick={() => onToggleExpand(job._id)} className="ml-auto inline-flex items-center gap-1 border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-500">
@@ -320,309 +323,6 @@ const MobileJobCard = React.memo(({
   );
 });
 
-const DesktopJobRow = React.memo(({
-  job, expanded, selected, jobPaymentsEntry, jobPhotosList, isCameraOpen,
-  isConsolidated, canUpdateJob, canRecordPayment,
-  onToggleExpand, onToggleSelect, onUpdateStatus, onOpenPayment, onOpenSms, onReversePayment, onNavigateEdit,
-  onSetPhotos, onSetCameraJobId, onSetLightboxSrc, onPrint, onDownloadPdf,
-}) => {
-  const canDelete = job.paymentStatus === "unpaid" && job.status !== "paid";
-  return (
-    <React.Fragment>
-      <tr className="border-b border-slate-200 hover:bg-slate-50">
-        <td className="px-2 py-1">
-          <input
-            type="checkbox"
-            checked={selected}
-            onChange={() => onToggleSelect(job._id)}
-            disabled={!canDelete}
-            title={canDelete ? "Select job" : "Only unpaid jobs with no payments can be deleted"}
-          />
-        </td>
-        <td className="px-2 py-1">
-          <button type="button" onClick={() => onToggleExpand(job._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]" title={expanded ? "Hide details" : "Show details"}>
-            {expanded ? <FaChevronDown /> : <FaChevronRight />}
-          </button>
-        </td>
-        <td className="px-2 py-1 font-extrabold text-slate-900">
-          {job.jobNumber}
-          {job.jobType === "carpet" && (
-            <span className="ml-1.5 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>
-          )}
-        </td>
-        <td className="px-2 py-1 font-extrabold uppercase text-slate-900">
-          {job.jobType === "carpet"
-            ? <span className="font-semibold normal-case text-slate-700">{job.itemDescription || "-"}</span>
-            : job.plateNumber || "-"}
-        </td>
-        <td className="px-2 py-1 font-semibold text-slate-800">{job.customerName || "-"}</td>
-        <td className="px-2 py-1 text-slate-700">{getServiceDisplay(job)}</td>
-        <td className="px-2 py-1 text-slate-700">{getStaffDisplay(job)}</td>
-        {isConsolidated && <td className="px-2 py-1 text-slate-600">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
-        <td className="px-2 py-1">
-          <div className="flex items-center gap-1">
-            <AppSelect
-              value={job.status}
-              onChange={(v) => onUpdateStatus(job, v ?? "")}
-              options={statuses
-                .filter((status) => job.status === "paid" ? status === "paid" : status !== "paid" || job.paymentStatus === "paid")
-                .map((status) => ({ value: status, label: getJobStatusLabel(status, job.jobType) }))}
-              size="sm"
-            />
-            {job.status === "waiting" && (
-              <button
-                type="button"
-                title="Move to Washing"
-                onClick={() => onUpdateStatus(job, "washing")}
-                className="h-6 whitespace-nowrap border border-blue-300 bg-blue-50 px-2 text-[10px] font-bold text-blue-700 hover:bg-blue-100"
-              >
-                → Wash
-              </button>
-            )}
-            {job.status === "washing" && (
-              <button
-                type="button"
-                title="Move to Drying/Detailing"
-                onClick={() => onUpdateStatus(job, "drying")}
-                className="h-6 whitespace-nowrap border border-purple-300 bg-purple-50 px-2 text-[10px] font-bold text-purple-700 hover:bg-purple-100"
-              >
-                → Dry
-              </button>
-            )}
-            {job.status === "drying" && (
-              <button
-                type="button"
-                title="Mark as Ready"
-                onClick={() => onUpdateStatus(job, "ready")}
-                className="h-6 whitespace-nowrap border border-emerald-300 bg-emerald-50 px-2 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100"
-              >
-                → Ready
-              </button>
-            )}
-            {job.status === "ready" && (
-              <button
-                type="button"
-                title="Mark as Done (Collected)"
-                onClick={() => onUpdateStatus(job, "done")}
-                className="h-6 whitespace-nowrap border border-teal-300 bg-teal-50 px-2 text-[10px] font-bold text-teal-700 hover:bg-teal-100"
-              >
-                → Done
-              </button>
-            )}
-          </div>
-        </td>
-        <td className="px-2 py-1">
-          <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>
-            {job.paymentStatus || "unpaid"}
-          </span>
-        </td>
-        <td className="px-2 py-1 text-right font-extrabold text-slate-900">
-          {Number(job.discountAmount) > 0 ? (
-            <span className="flex flex-col items-end gap-0.5">
-              <span className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</span>
-              <span>{formatMoney(Math.max(0, job.price - job.discountAmount))}</span>
-            </span>
-          ) : formatMoney(job.price)}
-        </td>
-        <td className="px-2 py-1 text-right">
-          <div className="inline-flex items-center gap-1">
-            {canUpdateJob && (
-              <button
-                type="button"
-                onClick={() => onNavigateEdit(job._id)}
-                disabled={job.status === "cancelled"}
-                className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-40"
-                title="Edit job"
-              >
-                <FaEdit className="text-[9px]" /> Edit
-              </button>
-            )}
-            {canRecordPayment && (
-              <button
-                type="button"
-                onClick={() => onOpenPayment(job)}
-                disabled={job.paymentStatus === "paid"}
-                className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Pay
-              </button>
-            )}
-            {(job.phone || job.maskedMsisdn) && job.status === "ready" && job.paymentStatus !== "paid" && (
-              <button
-                type="button"
-                onClick={() => onOpenSms(job, "ready")}
-                className="inline-flex items-center gap-1 border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
-                title="Notify customer — job ready for collection"
-              >
-                <FaSms /> Ready
-              </button>
-            )}
-            {(job.phone || job.maskedMsisdn) && (
-              <button
-                type="button"
-                onClick={() => onOpenSms(job)}
-                className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-                title={job.phone ? `Send SMS to ${job.phone}` : "Send SMS via M-Pesa masked number"}
-              >
-                <FaSms /> SMS
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => onPrint(job)}
-              className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-              title="Print receipt"
-            >
-              <FaPrint className="text-[9px]" /> Print
-            </button>
-            <button
-              type="button"
-              onClick={() => onDownloadPdf(job)}
-              className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-bold text-red-700 hover:bg-red-100"
-              title="Download PDF receipt"
-            >
-              <FaFilePdf className="text-[9px]" /> PDF
-            </button>
-          </div>
-        </td>
-      </tr>
-      {expanded && (
-        <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-          <td colSpan={isConsolidated ? 12 : 11} className="px-10 py-3">
-            <div className="grid gap-3 text-[11px] text-slate-600 md:grid-cols-5">
-              <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
-              <div>
-                <span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}
-                <PhoneDisplay phone={job.phone} maskedMsisdn={job.maskedMsisdn} />
-              </div>
-              {job.jobType === "carpet" ? (
-                <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
-              ) : (
-                <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.serviceLines?.[0]?.vehicleType || job.vehicleType || "-"}</div>
-              )}
-              <div>
-                <span className="font-extrabold uppercase text-slate-500">Staff:</span>{" "}
-                {Array.isArray(job.assignedStaff) && job.assignedStaff.length
-                  ? job.assignedStaff.map((s) => s?.name || s).join(", ")
-                  : "-"}
-              </div>
-              <div><span className="font-extrabold uppercase text-slate-500">Delete:</span> {canDelete ? "Safe" : "Locked"}</div>
-              {Array.isArray(job.serviceLines) && job.serviceLines.length > 1 && (
-                <div className="md:col-span-5">
-                  <span className="font-extrabold uppercase text-slate-500">Service Lines:</span>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {job.serviceLines.map((line, li) => (
-                      <span key={li} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                        {line.serviceName} — {formatMoney(line.price)}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div className="md:col-span-5"><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
-              {job.jobType === "carpet" && (() => {
-                const photos = jobPhotosList ?? (Array.isArray(job.photos) ? job.photos : []);
-                const handleCapture = async (file) => {
-                  if (photos.length >= 5) { toast.error("Max 5 photos per job"); return; }
-                  try {
-                    const result = await carWashApi.uploadJobPhotos(job._id, [file]);
-                    onSetPhotos(job._id, result?.photos || photos);
-                    toast.success("Photo added");
-                  } catch { toast.error("Upload failed"); }
-                };
-                const handleDelete = async (url) => {
-                  try {
-                    const result = await carWashApi.deleteJobPhoto(job._id, url);
-                    onSetPhotos(job._id, result?.photos || photos.filter((p) => p !== url));
-                  } catch { toast.error("Delete failed"); }
-                };
-                return (
-                  <div className="md:col-span-5">
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <span className="font-extrabold uppercase text-slate-500">Carpet Photos:</span>
-                      {photos.length < 5 && (
-                        <button type="button" onClick={() => onSetCameraJobId(job._id)} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                          <FaCamera size={8} /> Take Photo
-                        </button>
-                      )}
-                      {isCameraOpen && (
-                        <CarpetCameraModal
-                          onCapture={handleCapture}
-                          onClose={() => onSetCameraJobId(null)}
-                        />
-                      )}
-                    </div>
-                    {photos.length === 0 ? (
-                      <span className="italic text-slate-400">No photos — click "Take Photo" to add one</span>
-                    ) : (
-                      <div className="flex flex-wrap gap-2">
-                        {photos.map((url) => (
-                          <div key={url} className="group relative h-20 w-20 overflow-hidden rounded border border-slate-200 bg-slate-100">
-                            <img src={photoUrl(url)} alt="Carpet" className="h-full w-full cursor-pointer object-cover" onClick={() => onSetLightboxSrc(photoUrl(url))} />
-                            <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
-                              <button type="button" onClick={() => onSetLightboxSrc(photoUrl(url))} className="rounded-full bg-white/80 p-1 text-slate-700"><FaExpand size={9} /></button>
-                              <button type="button" onClick={() => handleDelete(url)} className="rounded-full bg-red-500/90 p-1 text-white"><FaTimesCircle size={9} /></button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              <div className="md:col-span-5">
-                <span className="font-extrabold uppercase text-slate-500">Payments:</span>
-                {jobPaymentsEntry?.loading && (
-                  <span className="ml-2 italic text-slate-400">Loading…</span>
-                )}
-                {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length === 0 && (
-                  <span className="ml-2 italic text-slate-400">No payments recorded</span>
-                )}
-                {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length > 0 && (
-                  <div className="mt-1.5 overflow-x-auto">
-                    <table className="min-w-[520px] text-[11px]">
-                      <thead>
-                        <tr className="border-b border-slate-200 text-slate-500">
-                          <th className="pb-1 pr-4 text-left font-extrabold uppercase">Date</th>
-                          <th className="pb-1 pr-4 text-left font-extrabold uppercase">Method</th>
-                          <th className="pb-1 pr-4 text-left font-extrabold uppercase">Reference</th>
-                          <th className="pb-1 pr-4 text-right font-extrabold uppercase">Amount</th>
-                          <th className="pb-1 text-right font-extrabold uppercase">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {jobPaymentsEntry.list.map((pmt) => (
-                          <tr key={pmt._id} className="border-b border-slate-100">
-                            <td className="py-1 pr-4 text-slate-600">
-                              {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}
-                            </td>
-                            <td className="py-1 pr-4 font-bold uppercase text-slate-700">{pmt.method}</td>
-                            <td className="py-1 pr-4 text-slate-500">{pmt.reference || "—"}</td>
-                            <td className="py-1 pr-4 text-right font-extrabold text-slate-900">{formatMoney(pmt.amount)}</td>
-                            <td className="py-1 text-right">
-                              <button
-                                type="button"
-                                onClick={() => onReversePayment(pmt._id, job._id)}
-                                className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50"
-                                title="Reverse this payment"
-                              >
-                                <FaUndoAlt className="text-[8px]" /> Reverse
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          </td>
-        </tr>
-      )}
-    </React.Fragment>
-  );
-});
 
 const CarWashJobs = () => {
   const navigate = useNavigate();
@@ -641,21 +341,22 @@ const CarWashJobs = () => {
   });
   const services = servicesRaw ?? EMPTY_ARRAY;
 
-  const { data: staffRaw } = useQuery({
-    queryKey: ["cw-staff-ref"],
-    queryFn: () => carWashApi.listStaff({ active: true }),
+  const { data: branchesRaw } = useQuery({
+    queryKey: ["cw-branches-ref"],
+    queryFn: () => carWashApi.listBranches({ active: true }),
     staleTime: 5 * 60_000,
-    select: (data) => normalizeListPayload(data, "staff"),
+    select: (data) => normalizeListPayload(data, "branches"),
+    enabled: isConsolidated,
   });
-  const staff = staffRaw ?? EMPTY_ARRAY;
+  const branches = branchesRaw ?? EMPTY_ARRAY;
 
-  // Filter-bar dropdown options — derived once per services/staff change instead
-  // of being rebuilt from up to 500 services / all staff on every keystroke.
+  // Filter-bar dropdown options — derived once per services change instead
+  // of being rebuilt from up to 500 services on every keystroke.
   const serviceOptions = useMemo(
     () => services.map((s) => ({ value: s._id, label: s.category ? `${s.category} — ${s.name}` : s.name })),
     [services]
   );
-  const staffOptions = useMemo(() => staff.map((s) => ({ value: s._id, label: s.name })), [staff]);
+  const branchOptions = useMemo(() => branches.map((b) => ({ value: b._id, label: b.name })), [branches]);
 
   const { data: cashbooksRaw } = useQuery({
     queryKey: ["cw-job-cashbooks", currentCompany?._id],
@@ -716,16 +417,12 @@ const CarWashJobs = () => {
   const canUpdateJob     = useCarWashPermission("carwash-jobs", "update");
   const canRecordPayment = useCarWashPermission("carwash-payments", "record");
 
-  const { jobStats, safeVisibleJobIds } = useMemo(() => {
-    let unpaid = 0, washing = 0, done = 0;
+  const safeVisibleJobIds = useMemo(() => {
     const safeIds = [];
     for (const job of jobs) {
-      if (job.paymentStatus !== "paid") unpaid++;
       if (job.paymentStatus === "unpaid" && job.status !== "paid") safeIds.push(job._id);
-      if (job.status === "washing" || job.status === "drying") washing++;
-      if (job.status === "done") done++;
     }
-    return { jobStats: { unpaid, washing, done }, safeVisibleJobIds: safeIds };
+    return safeIds;
   }, [jobs]);
   const allPaymentJobs = useMemo(() => {
     const seen = new Set();
@@ -784,15 +481,17 @@ const CarWashJobs = () => {
   const loadJobs = useCallback(async () => {
     setLoading(true);
     try {
+      const paymentFilter = appliedFilters.paymentStatus || "";
+      const isPaymentMethodFilter = paymentFilter.startsWith("method:");
       const jobPayload = await carWashApi.listJobs({
         dateFrom: appliedFilters.dateFrom || undefined,
         dateTo: appliedFilters.dateTo || undefined,
         search: appliedFilters.search || undefined,
-        customer: appliedFilters.customer || undefined,
         service: appliedFilters.service || undefined,
-        staff: appliedFilters.staff || undefined,
+        branch: appliedFilters.branch || undefined,
         status: appliedFilters.status || undefined,
-        paymentStatus: appliedFilters.paymentStatus || undefined,
+        paymentStatus: !isPaymentMethodFilter ? paymentFilter || undefined : undefined,
+        paymentMethod: isPaymentMethodFilter ? paymentFilter.slice(7) : undefined,
         jobType: appliedFilters.jobType || undefined,
         limit: pageSize,
         page,
@@ -1001,6 +700,12 @@ const CarWashJobs = () => {
     setSelectedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   }, []);
 
+  // Only unpaid jobs with no payments can be selected for bulk delete — same rule the checkbox
+  // itself used to enforce via `disabled`. Clicking anywhere on an ineligible row is a no-op.
+  const toggleSelectedIfEligible = useCallback((job) => {
+    if (job.paymentStatus === "unpaid" && job.status !== "paid") toggleSelected(job._id);
+  }, [toggleSelected]);
+
   const loadJobPayments = useCallback(async (jobId) => {
     setJobPayments((prev) => {
       if (prev[jobId]) return prev; // already loaded
@@ -1156,6 +861,303 @@ const CarWashJobs = () => {
 
   const handleNavigateEdit = useCallback((id) => navigate(`/carwash/jobs/${id}/edit`), [navigate]);
 
+  // MilikTable's expand toggle hands back a Set-updater (same contract as setState) rather than the
+  // toggled id — diff old vs new to find it, so the "load payments on first expand" side effect still fires.
+  const handleExpandedKeysChange = useCallback((updater) => {
+    setExpandedIds((prevArr) => {
+      const prevSet = new Set(prevArr);
+      const nextSet = typeof updater === "function" ? updater(prevSet) : updater;
+      for (const id of nextSet) if (!prevSet.has(id)) loadJobPayments(id);
+      return Array.from(nextSet);
+    });
+  }, [loadJobPayments]);
+
+  const renderJobRow = useCallback((job) => (
+    <>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">
+        {job.jobNumber}
+        {job.jobType === "carpet" && (
+          <span className="ml-1.5 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-bold uppercase text-amber-700">Carpet</span>
+        )}
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">
+        {job.jobType === "carpet"
+          ? <span className="font-semibold text-slate-700">{job.itemDescription || "-"}</span>
+          : job.plateNumber || "-"}
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{job.customerName || "-"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800">{getServiceDisplay(job)}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">{getStaffDisplay(job)}</td>
+      {isConsolidated && <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-700">{job.branch?.name || <span className="text-slate-400">—</span>}</td>}
+      <td className="px-3 py-0.5 border-r border-gray-100" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1">
+          <AppSelect
+            value={job.status}
+            onChange={(v) => updateStatus(job, v ?? "")}
+            options={statuses
+              .filter((status) => job.status === "paid" ? status === "paid" : status !== "paid" || job.paymentStatus === "paid")
+              .map((status) => ({ value: status, label: getJobStatusLabel(status, job.jobType) }))}
+            compact
+            className="w-28"
+          />
+          {job.status === "waiting" && (
+            <button
+              type="button"
+              title="Move to Washing"
+              onClick={() => updateStatus(job, "washing")}
+              className="whitespace-nowrap border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-blue-700 hover:bg-blue-100"
+            >
+              → Wash
+            </button>
+          )}
+          {job.status === "washing" && (
+            <button
+              type="button"
+              title="Move to Drying/Detailing"
+              onClick={() => updateStatus(job, "drying")}
+              className="whitespace-nowrap border border-purple-200 bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-purple-700 hover:bg-purple-100"
+            >
+              → Dry
+            </button>
+          )}
+          {job.status === "drying" && (
+            <button
+              type="button"
+              title="Mark as Ready"
+              onClick={() => updateStatus(job, "ready")}
+              className="whitespace-nowrap border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-emerald-700 hover:bg-emerald-100"
+            >
+              → Ready
+            </button>
+          )}
+          {job.status === "ready" && (
+            <button
+              type="button"
+              title="Mark as Done (Collected)"
+              onClick={() => updateStatus(job, "done")}
+              className="whitespace-nowrap border border-teal-200 bg-teal-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-teal-700 hover:bg-teal-100"
+            >
+              → Done
+            </button>
+          )}
+        </div>
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100">
+        <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${paymentBadgeClass[job.paymentStatus] || paymentBadgeClass.unpaid}`}>
+          {job.paymentStatus || "unpaid"}
+        </span>
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">
+        {Number(job.discountAmount) > 0 ? (
+          <span className="inline-flex items-baseline justify-end gap-1.5">
+            <span className="text-[10px] text-slate-400 line-through">{formatMoney(job.price)}</span>
+            <span>{formatMoney(Math.max(0, job.price - job.discountAmount))}</span>
+          </span>
+        ) : formatMoney(job.price)}
+      </td>
+    </>
+  ), [isConsolidated, updateStatus]);
+
+  const renderJobActions = useCallback((job) => (
+    <div className="flex items-center justify-end gap-1">
+      {canUpdateJob && (
+        <button
+          type="button"
+          onClick={() => handleNavigateEdit(job._id)}
+          disabled={job.status === "cancelled"}
+          className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+          title="Edit job"
+        >
+          <FaEdit size={12} />
+        </button>
+      )}
+      {canRecordPayment && (
+        <button
+          type="button"
+          onClick={() => openPaymentModal(job)}
+          disabled={job.paymentStatus === "paid"}
+          className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+          title="Record payment"
+        >
+          <FaMoneyBillWave size={12} />
+        </button>
+      )}
+      {(job.phone || job.maskedMsisdn) && job.status === "ready" && job.paymentStatus !== "paid" && (
+        <button
+          type="button"
+          onClick={() => openSmsModal(job, "ready")}
+          className="p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800"
+          title="Notify customer — job ready for collection"
+        >
+          <FaBell size={12} />
+        </button>
+      )}
+      {(job.phone || job.maskedMsisdn) && (
+        <button
+          type="button"
+          onClick={() => openSmsModal(job)}
+          className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          title={job.phone ? `Send SMS to ${job.phone}` : "Send SMS via M-Pesa masked number"}
+        >
+          <FaSms size={12} />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => printJobReceipt(job)}
+        className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        title="Print receipt"
+      >
+        <FaPrint size={12} />
+      </button>
+      <button
+        type="button"
+        onClick={() => downloadJobPdf(job)}
+        className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+        title="Download PDF receipt"
+      >
+        <FaFilePdf size={12} />
+      </button>
+    </div>
+  ), [canUpdateJob, canRecordPayment, handleNavigateEdit, openPaymentModal, openSmsModal, printJobReceipt, downloadJobPdf]);
+
+  const renderJobExpanded = useCallback((job) => {
+    const jobPaymentsEntry = jobPayments[job._id];
+    const jobPhotosList = jobPhotos[job._id];
+    const isCameraOpen = cameraJobId === job._id;
+    return (
+      <div className="space-y-3 text-[11px] text-slate-600">
+        <div className="flex flex-wrap items-baseline gap-x-8 gap-y-1.5">
+          <div><span className="font-extrabold uppercase text-slate-500">Time:</span> {job.createdAt ? new Date(job.createdAt).toLocaleString("en-KE") : "-"}</div>
+          <div>
+            <span className="font-extrabold uppercase text-slate-500">Phone:</span>{" "}
+            <PhoneDisplay phone={job.phone} maskedMsisdn={job.maskedMsisdn} />
+          </div>
+          {job.jobType === "carpet" ? (
+            <div><span className="font-extrabold uppercase text-slate-500">Ready By:</span> {job.expectedReadyAt ? new Date(job.expectedReadyAt).toLocaleDateString("en-KE") : "-"}</div>
+          ) : (
+            <div><span className="font-extrabold uppercase text-slate-500">Vehicle:</span> {job.serviceLines?.[0]?.vehicleType || job.vehicleType || "-"}</div>
+          )}
+          <div>
+            <span className="font-extrabold uppercase text-slate-500">Staff:</span>{" "}
+            {Array.isArray(job.assignedStaff) && job.assignedStaff.length
+              ? job.assignedStaff.map((s) => s?.name || s).join(", ")
+              : "-"}
+          </div>
+        </div>
+        {Array.isArray(job.serviceLines) && job.serviceLines.length > 1 && (
+          <div>
+            <span className="font-extrabold uppercase text-slate-500">Service Lines:</span>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {job.serviceLines.map((line, li) => (
+                <span key={li} className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                  {line.serviceName} — {formatMoney(line.price)}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div><span className="font-extrabold uppercase text-slate-500">Notes:</span> {job.notes || "-"}</div>
+        {job.jobType === "carpet" && (() => {
+          const photos = jobPhotosList ?? (Array.isArray(job.photos) ? job.photos : []);
+          const handleCapture = async (file) => {
+            if (photos.length >= 5) { toast.error("Max 5 photos per job"); return; }
+            try {
+              const result = await carWashApi.uploadJobPhotos(job._id, [file]);
+              onSetPhotos(job._id, result?.photos || photos);
+              toast.success("Photo added");
+            } catch { toast.error("Upload failed"); }
+          };
+          const handleDelete = async (url) => {
+            try {
+              const result = await carWashApi.deleteJobPhoto(job._id, url);
+              onSetPhotos(job._id, result?.photos || photos.filter((p) => p !== url));
+            } catch { toast.error("Delete failed"); }
+          };
+          return (
+            <div>
+              <div className="mb-1.5 flex items-center gap-2">
+                <span className="font-extrabold uppercase text-slate-500">Carpet Photos:</span>
+                {photos.length < 5 && (
+                  <button type="button" onClick={() => setCameraJobId(job._id)} className="inline-flex items-center gap-1 rounded border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+                    <FaCamera size={8} /> Take Photo
+                  </button>
+                )}
+                {isCameraOpen && (
+                  <CarpetCameraModal
+                    onCapture={handleCapture}
+                    onClose={() => setCameraJobId(null)}
+                  />
+                )}
+              </div>
+              {photos.length === 0 ? (
+                <span className="italic text-slate-400">No photos — click "Take Photo" to add one</span>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {photos.map((url) => (
+                    <div key={url} className="group relative h-20 w-20 overflow-hidden rounded border border-slate-200 bg-slate-100">
+                      <img src={photoUrl(url)} alt="Carpet" className="h-full w-full cursor-pointer object-cover" onClick={() => setLightboxSrc(photoUrl(url))} />
+                      <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/0 opacity-0 transition-all group-hover:bg-black/30 group-hover:opacity-100">
+                        <button type="button" onClick={() => setLightboxSrc(photoUrl(url))} className="rounded-full bg-white/80 p-1 text-slate-700"><FaExpand size={9} /></button>
+                        <button type="button" onClick={() => handleDelete(url)} className="rounded-full bg-red-500/90 p-1 text-white"><FaTimesCircle size={9} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+        <div>
+          <span className="font-extrabold uppercase text-slate-500">Payments:</span>
+          {jobPaymentsEntry?.loading && (
+            <span className="ml-2 italic text-slate-400">Loading…</span>
+          )}
+          {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length === 0 && (
+            <span className="ml-2 italic text-slate-400">No payments recorded</span>
+          )}
+          {!jobPaymentsEntry?.loading && jobPaymentsEntry?.list?.length > 0 && (
+            <div className="mt-1.5 overflow-x-auto border border-gray-100">
+              <table className="min-w-[520px] text-[11px]">
+                <thead>
+                  <tr className="bg-[#0B3B2E] text-white">
+                    <th className="px-3 py-1 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10">Date</th>
+                    <th className="px-3 py-1 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10">Method</th>
+                    <th className="px-3 py-1 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10">Reference</th>
+                    <th className="px-3 py-1 text-right text-[10px] font-black uppercase tracking-widest border-r border-white/10">Amount</th>
+                    <th className="px-3 py-1 text-right text-[10px] font-black uppercase tracking-widest">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {jobPaymentsEntry.list.map((pmt, idx) => (
+                    <tr key={pmt._id} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`}>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
+                        {pmt.paymentDate ? new Date(pmt.paymentDate).toLocaleDateString("en-KE") : "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 font-bold uppercase text-slate-700">{pmt.method}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{pmt.reference || "—"}</td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-extrabold text-slate-900">{formatMoney(pmt.amount)}</td>
+                      <td className="px-3 py-1 text-right">
+                        <button
+                          type="button"
+                          onClick={() => reversePayment(pmt._id, job._id)}
+                          className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50"
+                          title="Reverse this payment"
+                        >
+                          <FaUndoAlt className="text-[8px]" /> Reverse
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }, [jobPayments, jobPhotos, cameraJobId, onSetPhotos, reversePayment]);
+
   const sendSms = async (phone, body) => {
     if (!smsTarget) return;
     setSmsSending(true);
@@ -1187,153 +1189,117 @@ const CarWashJobs = () => {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
+  const openQueueDisplay = () => {
+    // Use the same ID that all carwash API calls use — not currentCompany._id,
+    // which may be the super-admin's own company rather than the active client company.
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Jobs Register"
-      action={
-        <>
-          <button
-            type="button"
-            onClick={load}
-            className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          {canRecordPayment && (
-            <button
-              type="button"
-              onClick={() => openPaymentModal()}
-              className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              <FaMoneyBillWave />
-              Record Payment
-            </button>
+    <CarWashShell showToolbar={false}>
+      <form onSubmit={applyFilters}>
+        <ListToolbar className="mb-1">
+          <ListToolbar.Input
+            width="w-[160px]"
+            placeholder="Job / #Plt / Cus / phone / staff"
+            value={filters.search}
+            onChange={(e) => setFilterValue("search", e.target.value)}
+          />
+          <AppSelect
+            value={filters.service}
+            onChange={(v) => setFilterValue("service", v ?? "")}
+            options={serviceOptions}
+            placeholder="All Services"
+            searchable
+            clearable
+            compact
+          />
+          {isConsolidated && (
+            <AppSelect
+              value={filters.branch}
+              onChange={(v) => setFilterValue("branch", v ?? "")}
+              options={branchOptions}
+              placeholder="All Branches"
+              searchable
+              clearable
+              compact
+            />
           )}
+          <AppSelect
+            value={filters.status}
+            onChange={(v) => setFilterValue("status", v ?? "")}
+            options={statuses.map((s) => ({ value: s, label: getJobStatusLabel(s, filters.jobType) }))}
+            placeholder="All Statuses"
+            clearable
+            compact
+          />
+          <AppSelect
+            value={filters.paymentStatus}
+            onChange={(v) => setFilterValue("paymentStatus", v ?? "")}
+            options={PAYMENT_STATUS_FILTER_OPTIONS}
+            placeholder="All Payments"
+            clearable
+            compact
+          />
+          <AppSelect
+            value={filters.jobType}
+            onChange={(v) => setFilterValue("jobType", v ?? "")}
+            options={JOB_TYPE_FILTER_OPTIONS}
+            placeholder="All Types"
+            clearable
+            compact
+          />
+          <AppSelect
+            value={quickPickActive}
+            onChange={(v) => {
+              const { today, week, lweek, month } = dateBounds;
+              if (v === "today")    setFilters((p) => ({ ...p, dateFrom: today,      dateTo: today     }));
+              if (v === "thisWeek") setFilters((p) => ({ ...p, dateFrom: week.from,  dateTo: week.to   }));
+              if (v === "lastWeek") setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to  }));
+              if (v === "month")    setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to  }));
+            }}
+            options={QUICK_PICK_FILTER_OPTIONS}
+            placeholder="Quick pick…"
+            clearable
+            compact
+          />
+          <ListToolbar.Input type="date" title="From" width="w-[110px]" value={filters.dateFrom} onChange={(e) => setFilterValue("dateFrom", e.target.value)} />
+          <span className="shrink-0 text-[10px] text-slate-400">—</span>
+          <ListToolbar.Input type="date" title="To" width="w-[110px]" value={filters.dateTo} onChange={(e) => setFilterValue("dateTo", e.target.value)} />
+          <ListToolbar.Button type="submit" icon={FaSearch} variant="accent">Search</ListToolbar.Button>
+          <ListToolbar.Button type="button" onClick={resetFilters} icon={FaRedoAlt} variant="dark">Reset</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button type="button" onClick={load} icon={FaRedoAlt} variant="outline" iconClassName={loading ? "animate-spin" : ""}>
+            Refresh
+          </ListToolbar.Button>
+          <ListToolbar.Button type="button" onClick={openQueueDisplay} icon={FaTv} variant="outline" title="Open customer queue display screen">
+            Queue Display
+          </ListToolbar.Button>
           {canUpdateJob && (
-            <button
+            <ListToolbar.Button
               type="button"
               onClick={deleteSelectedJobs}
               disabled={!selectedIds.length}
-              className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-white px-3 text-xs font-bold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-45"
+              icon={FaTrashAlt}
+              variant="outline"
+              className="!border-red-200 !text-red-700 hover:!bg-red-50"
               title="Deletes unpaid jobs only. Paid or payment-linked jobs are locked."
             >
-              <FaTrashAlt />
               Delete Selected
-            </button>
+            </ListToolbar.Button>
           )}
+          <ListToolbar.Divider />
           {canCreateJob && (
-            <button
-              type="button"
-              onClick={() => navigate("/carwash/jobs/new")}
-              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]"
-            >
-              <FaPlus />
+            <ListToolbar.Button type="button" onClick={() => navigate("/carwash/jobs/new")} icon={FaPlus} variant="primary">
               New Job
-            </button>
+            </ListToolbar.Button>
           )}
-        </>
-      }
-    >
-      <form onSubmit={applyFilters} className="mb-1 flex-shrink-0 flex flex-wrap items-center gap-1 border border-slate-200 bg-white px-2 py-1 shadow-sm">
-        {/* Text search */}
-        <input
-          className="h-7 w-[120px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          placeholder="Job # / plate"
-          value={filters.search}
-          onChange={(e) => setFilterValue("search", e.target.value)}
-        />
-        <input
-          className="h-7 w-[130px] grow border border-slate-300 px-2 text-xs text-slate-700 placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none"
-          placeholder="Customer / phone"
-          value={filters.customer}
-          onChange={(e) => setFilterValue("customer", e.target.value)}
-        />
-        {/* Category dropdowns */}
-        <AppSelect
-          value={filters.service}
-          onChange={(v) => setFilterValue("service", v ?? "")}
-          options={serviceOptions}
-          placeholder="All Services"
-          searchable
-          clearable
-          size="sm"
-        />
-        <AppSelect
-          value={filters.staff}
-          onChange={(v) => setFilterValue("staff", v ?? "")}
-          options={staffOptions}
-          placeholder="All Staff"
-          searchable
-          clearable
-          size="sm"
-        />
-        <AppSelect
-          value={filters.status}
-          onChange={(v) => setFilterValue("status", v ?? "")}
-          options={statuses.map((s) => ({ value: s, label: getJobStatusLabel(s, filters.jobType) }))}
-          placeholder="All Statuses"
-          clearable
-          size="sm"
-        />
-        <AppSelect
-          value={filters.paymentStatus}
-          onChange={(v) => setFilterValue("paymentStatus", v ?? "")}
-          options={PAYMENT_STATUS_FILTER_OPTIONS}
-          placeholder="All Payments"
-          clearable
-          size="sm"
-        />
-        <AppSelect
-          value={filters.jobType}
-          onChange={(v) => setFilterValue("jobType", v ?? "")}
-          options={JOB_TYPE_FILTER_OPTIONS}
-          placeholder="All Types"
-          clearable
-          size="sm"
-        />
-        {/* Date preset */}
-        <AppSelect
-          value={quickPickActive}
-          onChange={(v) => {
-            const { today, week, lweek, month } = dateBounds;
-            if (v === "today")    setFilters((p) => ({ ...p, dateFrom: today,      dateTo: today     }));
-            if (v === "thisWeek") setFilters((p) => ({ ...p, dateFrom: week.from,  dateTo: week.to   }));
-            if (v === "lastWeek") setFilters((p) => ({ ...p, dateFrom: lweek.from, dateTo: lweek.to  }));
-            if (v === "month")    setFilters((p) => ({ ...p, dateFrom: month.from, dateTo: month.to  }));
-          }}
-          options={QUICK_PICK_FILTER_OPTIONS}
-          placeholder="Quick pick…"
-          clearable
-          size="sm"
-        />
-        {/* Date range */}
-        <input type="date" title="From"
-          className="h-7 w-[120px] shrink-0 border border-slate-300 px-1 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.dateFrom} onChange={(e) => setFilterValue("dateFrom", e.target.value)} />
-        <span className="shrink-0 text-[10px] text-slate-400">—</span>
-        <input type="date" title="To"
-          className="h-7 w-[120px] shrink-0 border border-slate-300 px-1 text-xs text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          value={filters.dateTo} onChange={(e) => setFilterValue("dateTo", e.target.value)} />
-        {/* Actions */}
-        <button type="submit" className="inline-flex h-7 shrink-0 items-center gap-1 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch size={9} /> Search
-        </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-7 shrink-0 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt size={9} /> Reset
-        </button>
+        </ListToolbar>
       </form>
 
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-        <div className="flex-shrink-0 flex flex-wrap items-center gap-x-4 gap-y-0.5 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-          <span>Showing <strong className="text-[#0B3B2E]">{jobs.length}</strong>/{pagination.total}</span>
-          <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong>/{pagination.pages}</span>
-          <span>Unpaid <strong className="text-[#FF8C00]">{jobStats.unpaid}</strong></span>
-          <span>Washing <strong className="text-slate-700">{jobStats.washing}</strong></span>
-          <span>Done <strong className="text-slate-700">{jobStats.done}</strong></span>
-          {selectedIds.length > 0 && <span>Selected <strong className="text-[#0B3B2E]">{selectedIds.length}</strong></span>}
-        </div>
-
         {/* ── Mobile card list ─────────────────────────────────────────── */}
         <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
           {jobs.length ? jobs.map((job) => (
@@ -1362,74 +1328,50 @@ const CarWashJobs = () => {
 
         {/* ── Desktop table ─────────────────────────────────────────────── */}
         <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
-        <div className="flex-1 overflow-y-auto overflow-x-auto">
-        <table className="w-full min-w-[1120px] text-xs">
-          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="w-8 px-2 py-1.5 text-left">
-                <input
-                  type="checkbox"
-                  checked={safeVisibleJobIds.length > 0 && safeVisibleJobIds.every((id) => selectedIds.includes(id))}
-                  onChange={toggleSelectAllVisible}
-                  disabled={!safeVisibleJobIds.length}
-                  title="Select visible unpaid jobs"
-                />
-              </th>
-              <th className="w-8 px-2 py-1.5 text-left" />
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Job</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Plate / Item</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Customer</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
-              {isConsolidated && <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>}
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Payment</th>
-              <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Price</th>
-              <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.length ? (
-              jobs.map((job) => (
-                <DesktopJobRow
-                  key={job._id}
-                  job={job}
-                  expanded={expandedIds.includes(job._id)}
-                  selected={selectedIds.includes(job._id)}
-                  jobPaymentsEntry={jobPayments[job._id]}
-                  jobPhotosList={jobPhotos[job._id]}
-                  isCameraOpen={cameraJobId === job._id}
-                  isConsolidated={isConsolidated}
-                  canUpdateJob={canUpdateJob}
-                  canRecordPayment={canRecordPayment}
-                  onToggleExpand={toggleExpanded}
-                  onToggleSelect={toggleSelected}
-                  onUpdateStatus={updateStatus}
-                  onOpenPayment={openPaymentModal}
-                  onOpenSms={openSmsModal}
-                  onReversePayment={reversePayment}
-                  onNavigateEdit={handleNavigateEdit}
-                  onSetPhotos={onSetPhotos}
-                  onSetCameraJobId={setCameraJobId}
-                  onSetLightboxSrc={setLightboxSrc}
-                  onPrint={printJobReceipt}
-                  onDownloadPdf={downloadJobPdf}
-                />
-              ))
-            ) : (
-              <EmptyTableRow colSpan={isConsolidated ? 12 : 11} message="No Car Wash jobs recorded for this date." />
-            )}
-          </tbody>
-        </table>
-        </div>{/* end scroll */}
+          <MilikTable
+            columns={[
+              { label: "Job" },
+              { label: "Plate / Item" },
+              { label: "Customer" },
+              { label: "Service" },
+              { label: "Staff" },
+              ...(isConsolidated ? [{ label: "Branch" }] : []),
+              { label: "Status" },
+              { label: "Payment" },
+              { label: "Price", align: "right" },
+            ]}
+            rows={jobs}
+            rowKey="_id"
+            minWidth="1120px"
+            empty="No Car Wash jobs recorded for this date."
+            checkboxes
+            allChecked={safeVisibleJobIds.length > 0 && safeVisibleJobIds.every((id) => selectedIds.includes(id))}
+            someChecked={selectedIds.length > 0 && !safeVisibleJobIds.every((id) => selectedIds.includes(id))}
+            onCheckAll={toggleSelectAllVisible}
+            isChecked={(job) => selectedIds.includes(job._id)}
+            isCheckDisabled={(job) => !(job.paymentStatus === "unpaid" && job.status !== "paid")}
+            onCheckRow={toggleSelectedIfEligible}
+            onRowClick={toggleSelectedIfEligible}
+            isSelected={(job) => selectedIds.includes(job._id)}
+            renderRow={renderJobRow}
+            renderActions={renderJobActions}
+            renderExpanded={renderJobExpanded}
+            expandedKeys={new Set(expandedIds)}
+            onExpandedKeysChange={handleExpandedKeysChange}
+          />
         </div>{/* end desktop table wrapper */}
         <PaginationBar
           page={pagination.page}
           pages={pagination.pages}
+          total={pagination.total}
+          label="jobs"
           pageSize={pageSize}
           onPageChange={setPage}
           onPageSizeChange={setPageSize}
           loading={loading}
+          leftExtra={selectedIds.length > 0 && (
+            <span className="shrink-0 border border-[#0B3B2E] bg-[#F1F6F3] px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E]">Selected {selectedIds.length}</span>
+          )}
         />
       </div>
 

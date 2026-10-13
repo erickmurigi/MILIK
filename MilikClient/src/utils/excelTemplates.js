@@ -932,11 +932,6 @@ const UNIT_BILLING_PERIOD_ALIASES = {
   yearly: "annual",
 };
 
-const canonicalUnitBillingPeriodKey = (value = "") => {
-  const normalized = normalizeUnitBillingPeriodKey(value);
-  return UNIT_BILLING_PERIOD_ALIASES[normalized] || normalized || "monthly";
-};
-
 // The values a units file may use come from the company's Operational Settings (Unit Types, Billing Periods), plus the
 // long-standing defaults, so a custom type or period added there can be imported just like the built-in ones.
 const LEGACY_UNIT_TYPES = ['studio', '1bed', '2bed', '3bed', '4bed', 'commercial'];
@@ -1653,7 +1648,7 @@ const normalizeTenantImportKey = (key = "") =>
     .trim()
     .toLowerCase()
     .replace(/\*/g, "")
-    .replace(/[\s_\-\/]+/g, "");
+    .replace(/[\s_/-]+/g, "");
 
 const getTenantImportValue = (row, aliases = []) => {
   const normalizedRow = {};
@@ -1702,7 +1697,7 @@ const parseImportDate = (value) => {
     return nativeParsed.toISOString();
   }
 
-  const match = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
   if (!match) return "";
 
   let [, first, second, year] = match;
@@ -2514,7 +2509,7 @@ export const downloadInvoiceNotesTemplate = () => {
 };
 
 const normalizeNoteImportKey = (key = '') =>
-  String(key).trim().toLowerCase().replace(/\*/g, '').replace(/[\s_\-\/]+/g, '');
+  String(key).trim().toLowerCase().replace(/\*/g, '').replace(/[\s_/-]+/g, '');
 
 const getNoteImportValue = (row, aliases = []) => {
   const normalizedRow = {};

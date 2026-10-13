@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { io } from 'socket.io-client';
 
 const resolveSocketUrl = () => {
@@ -16,6 +16,50 @@ const resolveSocketUrl = () => {
 
 let socketInstance = null;
 
+// The socket is a module-level singleton living outside React, shared by every component
+// that calls useSocket() — useSyncExternalStore is React's own API for exactly this shape
+// (subscribe to an external store, read a consistent snapshot). It replaces an earlier
+// ref-read-during-render (the value never updated a mounted component once the socket
+// connected) and, after that, a setState-inside-an-effect (flagged for the same reason
+// ModuleTabManager's tab state is — see the note there); useSyncExternalStore's own
+// re-render mechanism isn't a local setState call, so neither pitfall applies here.
+const listeners = new Set();
+const notifyListeners = () => { listeners.forEach((cb) => cb()); };
+const subscribe = (callback) => {
+  listeners.add(callback);
+  return () => listeners.delete(callback);
+};
+const getSnapshot = () => socketInstance;
+
+const ensureSocketConnected = () => {
+  if (socketInstance) return;
+
+  const token = localStorage.getItem('milik_token');
+  const socketUrl = resolveSocketUrl();
+
+  socketInstance = io(socketUrl, {
+    reconnection: true,
+    reconnectionDelay: 1000,
+    reconnectionDelayMax: 5000,
+    reconnectionAttempts: 5,
+    auth: token ? { token } : undefined,
+  });
+
+  socketInstance.on('connect', () => {
+    console.log('Socket connected:', socketInstance.id);
+  });
+
+  socketInstance.on('disconnect', () => {
+    console.log('Socket disconnected');
+  });
+
+  socketInstance.on('error', (error) => {
+    console.error('Socket error:', error);
+  });
+
+  notifyListeners();
+};
+
 export const disconnectSocket = () => {
   if (!socketInstance) return;
 
@@ -26,40 +70,13 @@ export const disconnectSocket = () => {
     console.warn("Failed to disconnect socket cleanly", error);
   } finally {
     socketInstance = null;
+    notifyListeners();
   }
 };
 
 const useSocket = () => {
-  const socketRef = useRef(null);
-
   useEffect(() => {
-    // Create socket connection if not already connected
-    if (!socketInstance) {
-      const token = localStorage.getItem('milik_token');
-      const socketUrl = resolveSocketUrl();
-
-      socketInstance = io(socketUrl, {
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: 5,
-        auth: token ? { token } : undefined,
-      });
-
-      socketInstance.on('connect', () => {
-        console.log('Socket connected:', socketInstance.id);
-      });
-
-      socketInstance.on('disconnect', () => {
-        console.log('Socket disconnected');
-      });
-
-      socketInstance.on('error', (error) => {
-        console.error('Socket error:', error);
-      });
-    }
-
-    socketRef.current = socketInstance;
+    ensureSocketConnected();
 
     // Cleanup on unmount - disconnect if this is the last component
     return () => {
@@ -68,7 +85,7 @@ const useSocket = () => {
     };
   }, []);
 
-  return socketRef.current;
+  return useSyncExternalStore(subscribe, getSnapshot);
 };
 
 export default useSocket;

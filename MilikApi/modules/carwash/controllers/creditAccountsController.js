@@ -46,7 +46,7 @@ const generateStatementNumber = async (business, periodStart) => {
 // Single-account variant â€” used when refreshing one account after a topup/payment.
 // `plates` must be supplied by the caller (already-loaded account doc) to avoid a
 // redundant findById re-fetch â€” every caller in this file already has the account loaded.
-const computeAccountBalance = async (business, accountId, plates = []) => {
+export const computeAccountBalance = async (business, accountId, plates = []) => {
   const platesList = Array.isArray(plates) ? plates.filter(Boolean) : [];
 
   const orConditions = [{ creditAccount: new mongoose.Types.ObjectId(String(accountId)) }];

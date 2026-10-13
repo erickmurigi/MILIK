@@ -23,7 +23,17 @@ export default defineConfig([
       },
     },
     rules: {
-      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
+      // Capitalized bindings are exempt because that's the convention for a destructured
+      // JSX component reference (e.g. `({ icon: Icon }) => <Icon />`) — varsIgnorePattern
+      // alone only covers plain variable declarations, not destructured function params,
+      // so that exact pattern was still flagged as unused despite being rendered right below.
+      'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^[A-Z_]' }],
+      // Checked every flagged instance (48, all catch{}) before adding this — all of them are
+      // the established, deliberate pattern of silently falling back on a non-critical,
+      // best-effort operation (reading/writing a draft from localStorage/sessionStorage, etc.),
+      // not accidental missing logic. This is ESLint's own documented escape hatch for exactly
+      // that case; a genuinely empty `if`/`for`/`while` block is still flagged as before.
+      'no-empty': ['error', { allowEmptyCatch: true }],
     },
   },
 ])

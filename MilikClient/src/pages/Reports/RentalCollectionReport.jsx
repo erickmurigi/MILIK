@@ -41,7 +41,7 @@ const RentalCollectionReport = () => {
   const dispatch = useDispatch();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
-  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties, landlord: termLandlord } = useTerms("tenant", "tenants", "unit", "units", "property", "properties", "landlord");
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty, landlord: termLandlord } = useTerms("tenant", "tenants", "unit", "units", "property", "properties", "landlord");
   const canExportReports = hasCompanyPermission(currentUser || {}, currentCompany, "financialReports", "export", ["accounts", "propertyManagement"]);
   const properties = useSelector(selectAllProperties);
   const tenants = useSelector(selectAllTenants);

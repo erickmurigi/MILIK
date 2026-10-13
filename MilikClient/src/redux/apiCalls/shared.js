@@ -29,7 +29,7 @@ export const getStoredUser = () => {
   try {
     const raw = localStorage.getItem("milik_user");
     return raw ? JSON.parse(raw) : null;
-  } catch (error) {
+  } catch {
     return null;
   }
 };

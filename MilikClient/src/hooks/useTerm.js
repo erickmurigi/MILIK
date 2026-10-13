@@ -62,6 +62,12 @@ const DEFAULTS = {
   saleDeals: "Deals",
   saleAgent: "Agent",
   saleAgents: "Agents",
+  saleOwner: "Owner",
+  saleOwners: "Owners",
+  saleOwnerStatement: "Owner Statement",
+  saleOwnerStatements: "Owner Statements",
+  saleAdvocate: "Advocate",
+  saleAdvocates: "Advocates",
 };
 
 // Keys owned by the Sales module. The Terminology screen applies presets per scope, so choosing a Sales preset
@@ -73,6 +79,7 @@ export const SALE_TERM_KEYS = Object.keys(DEFAULTS).filter((k) => k.startsWith("
 export const SALE_PLURAL_OF = {
   saleListings: "saleListing", saleProjects: "saleProject", saleUnits: "saleUnit", saleBuyers: "saleBuyer",
   saleLeads: "saleLead", saleOffers: "saleOffer", saleDeals: "saleDeal", saleAgents: "saleAgent",
+  saleOwners: "saleOwner", saleAdvocates: "saleAdvocate", saleOwnerStatements: "saleOwnerStatement",
 };
 
 const readTerm = (terminology, key) => (terminology instanceof Map ? terminology.get(key) : terminology?.[key]);

@@ -2,8 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   selectCurrentUser, selectCurrentCompany,
-  selectAllUnits, selectAllTenants, selectAllMaintenances,
-  selectAllProperties,
+  selectAllTenants, selectAllMaintenances,
 } from '../../redux/selectors';
 import DashboardLayout from '../../components/Layout/DashboardLayout';
 import MetricsGrid from '../../components/Dashboard/MetricsGrid';
@@ -20,13 +19,11 @@ import { getExpenseProperties, getMaintenances, getNotifications } from '../../r
 import { adminRequests } from '../../utils/requestMethods';
 import './dashboard.css';
 
-const Dashboard = ({ darkMode }) => {
+const Dashboard = () => {
   const dispatch       = useDispatch();
   const socket         = useSocket();
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser    = useSelector(selectCurrentUser);
-  const properties     = useSelector(selectAllProperties);
-  const units          = useSelector(selectAllUnits);
   const tenants        = useSelector(selectAllTenants);
   const maintenances   = useSelector(selectAllMaintenances);
 

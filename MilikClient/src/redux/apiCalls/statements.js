@@ -168,24 +168,20 @@ export const validateStatementAudit = (statementId) => async (dispatch) => {
 
 // Download statement PDF
 export const downloadStatementPdf = async (statementId) => {
-  try {
-    const res = await adminRequests.get(`/statements/${statementId}/pdf`, {
-      responseType: 'blob'
-    });
+  const res = await adminRequests.get(`/statements/${statementId}/pdf`, {
+    responseType: 'blob'
+  });
 
-    // Create blob URL and trigger download
-    const blob = new Blob([res.data], { type: 'application/pdf' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `statement-${statementId}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
+  // Create blob URL and trigger download
+  const blob = new Blob([res.data], { type: 'application/pdf' });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `statement-${statementId}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  window.URL.revokeObjectURL(url);
 
-    return true;
-  } catch (err) {
-    throw err;
-  }
+  return true;
 };

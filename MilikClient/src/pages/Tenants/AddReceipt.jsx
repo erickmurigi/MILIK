@@ -298,7 +298,7 @@ const AddReceipt = () => {
             cashbook: liveCashbooks.some((item) => item.name === prev.cashbook) ? prev.cashbook : preferred,
           }));
         }
-      } catch (error) {
+      } catch {
         setCashbookOptions([]);
         toast.error("Failed to load receipt setup data");
       }
@@ -642,12 +642,12 @@ const AddReceipt = () => {
       ? orderedOutstandingInvoices.filter((invoice) => priorityInvoiceKeys.includes(invoice.invoiceKey))
       : orderedOutstandingInvoices;
 
-    let remaining = receiptAmount;
-
-    const lines = sourceInvoices.map((invoice) => {
-      const apply = Math.min(invoice.outstanding, Math.max(0, remaining));
-      remaining -= apply;
-      return {
+    // Accumulate into the reduce's own accumulator rather than mutating a closed-over `let` —
+    // same running-balance result, but nothing outside this single computation is touched.
+    const allocation = sourceInvoices.reduce((acc, invoice) => {
+      const apply = Math.min(invoice.outstanding, Math.max(0, acc.remaining));
+      acc.remaining -= apply;
+      acc.lines.push({
         invoiceId: String(invoice.invoiceId || invoice.invoiceKey || ""),
         invoiceKey: invoice.invoiceKey,
         period: invoice.period,
@@ -658,10 +658,12 @@ const AddReceipt = () => {
         beforeOutstanding: invoice.outstanding,
         apply,
         afterOutstanding: Math.max(0, invoice.outstanding - apply),
-      };
-    });
+      });
+      return acc;
+    }, { lines: [], remaining: receiptAmount });
 
-    const unappliedAmount = Math.max(0, remaining);
+    const lines = allocation.lines;
+    const unappliedAmount = Math.max(0, allocation.remaining);
 
     if (unappliedAmount > 0) {
       lines.push({

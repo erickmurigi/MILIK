@@ -396,6 +396,10 @@ export default function CarWashCreditBalances() {
   // Clear any pending debounced search on unmount so it can't call setState after unmount
   useEffect(() => () => clearTimeout(debounceRef.current), []);
 
+  // sortBy is read directly (not via updater) so it's a real dependency; setSortDir/setSortBy/
+  // setPage are stable setters and don't need to be listed. (React Compiler's manual-memoization
+  // check flags this triple-setState callback as a mismatch regardless — a known compiler
+  // limitation, not a bug here; this build doesn't run the compiler, so it's a no-op today.)
   const handleSort = useCallback((field) => {
     setSortDir((prev) => sortBy === field ? (prev === "asc" ? "desc" : "asc") : "desc");
     setSortBy(field);
@@ -440,8 +444,15 @@ export default function CarWashCreditBalances() {
   };
   const toggleOne = (id) => setSelected((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
 
-  // Clear selection on page/filter change
-  useEffect(() => { setSelected(new Set()); }, [tab, dormantDays, debouncedSearch, page]);
+  // Clear selection on page/filter change — adjusted during render (React's documented
+  // pattern for resetting state when inputs change) instead of an effect, so the UI never
+  // paints a stale selection before a follow-up effect run clears it.
+  const selectionResetKey = `${tab}|${dormantDays}|${debouncedSearch}|${page}`;
+  const [prevSelectionResetKey, setPrevSelectionResetKey] = useState(selectionResetKey);
+  if (selectionResetKey !== prevSelectionResetKey) {
+    setPrevSelectionResetKey(selectionResetKey);
+    setSelected(new Set());
+  }
 
   const writeOffMutation = useMutation({
     mutationFn: (ids) => carWashApi.writeOffCredits(ids),

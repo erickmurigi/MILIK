@@ -431,7 +431,7 @@ const SmsManager = () => {
   const [search,         setSearch]         = useTabState("/communications/sms:search", "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [compose,        setCompose]        = useState(false);
-  const [expandedId,     setExpanded]       = useState(null);
+  const [,               setExpanded]       = useState(null);
   const [loading,        setLoading]        = useState(false);
   const [deletingId,     setDeletingId]     = useState(null);
   const [resendingId,    setResendingId]    = useState(null);
@@ -507,9 +507,6 @@ const SmsManager = () => {
 
   const { logs, pagination, counts } = data;
   const { page: currentPage, total, pages } = pagination;
-
-  const fromRow = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const toRow   = Math.min(currentPage * pageSize, total);
 
   return (
     <DashboardLayout lockContentScroll>

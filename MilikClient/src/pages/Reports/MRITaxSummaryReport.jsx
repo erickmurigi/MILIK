@@ -93,7 +93,6 @@ const MRITaxSummaryReport = () => {
 
   const summary = report.summary || {};
   const mriRatePercent = Math.round((report.mriRate || 0.075) * 100);
-  const propertyNameMap = useMemo(() => new Map(properties.map((p) => [String(p?._id), p?.propertyName || p?.name || 'Unnamed'])), [properties]);
   const printGeneratedAt = useMemo(() => new Date().toLocaleString(), [report, filters]);
 
   const handleExportCSV = () => {

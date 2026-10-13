@@ -8,14 +8,20 @@ import SaleOffer from "../models/SaleOffer.js";
 import SalePayment from "../models/SalePayment.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import SaleCommission from "../models/SaleCommission.js";
+import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
+import SaleProject from "../models/SaleProject.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import {
   postPropertySaleCommissionAccrual,
   reversePropertySaleCommissionAccrual,
+  reversePropertySaleCommissionTierRelease,
+  reversePropertySaleOwnerCommissionTierRelease,
+  postPropertySaleOwnerCommissionTierRelease,
   transferDepositToRevenue,
   forfeitDepositIncome,
   postStampDutyEntry,
 } from "../services/propertySaleAccountingService.js";
+import { sumPaidForDeal } from "../services/dealProgress.js";
 import SaleSettings from "../models/SaleSettings.js";
 import { calcWithholding, clampWhtRate } from "../../../utils/withholdingTax.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
@@ -23,6 +29,7 @@ import Company from "../../../models/Company.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
 import { agentFilter } from "../middleware/agentScope.js";
+import { advocateProjectFilter } from "../middleware/advocateScope.js";
 import { andInto, searchWords, wordsSearchFilter } from "../services/saleSearch.js";
 import { round2 } from "../../../utils/math.js";
 
@@ -36,7 +43,32 @@ const defaultWhtRate = async (business) => {
   return clampWhtRate(settings?.commissionDefaults?.whtRate, DEFAULT_COMMISSION_WHT_RATE);
 };
 
-const createCommissionForDeal = async ({ business, dealId, agent, listingId, buyerId, agreedPrice, overrides, userId }) => {
+// Owner id for a listing, resolved via its project (null for standalone listings or projects with no owner —
+// every caller treats null as "legacy/self-sold deal", zero behavior change).
+const resolveListingOwner = async (business, listing) => {
+  if (!listing?.project) return null;
+  const project = await SaleProject.findOne({ business, _id: listing.project }).select("owner").lean();
+  return project?.owner || null;
+};
+
+// Snapshot of the staged-release config at deal-creation time, so a later settings edit never retroactively
+// changes a deal already in progress. releaseMode disabled (the default) -> both tier lists come back empty,
+// meaning every caller below falls through to today's exact immediate-release behavior.
+const resolveReleaseContext = async (business) => {
+  const settings = await SaleSettings.findOne({ business }).select("commissionReleaseSchedule ownerCommissionDefaults").lean();
+  const schedule = settings?.commissionReleaseSchedule;
+  const enabled = Boolean(schedule?.enabled);
+  return {
+    brokerTiers: enabled ? (schedule?.brokerCommissionTiers ?? []) : [],
+    ownerTiers:  enabled ? (schedule?.ownerCommissionTiers  ?? []) : [],
+    ownerCommissionDefaults: settings?.ownerCommissionDefaults || { rate: 3, commissionType: "percentage" },
+  };
+};
+
+// Broker commission — only created when the deal has an agent. `ownerId`/`releaseContext` are resolved
+// once by the caller (persistNewDeal) and shared with createOwnerCommissionForDeal below, since both are
+// independent of whether there's an agent on the deal.
+const createCommissionForDeal = async ({ business, dealId, agent, listingId, buyerId, agreedPrice, overrides, userId, ownerId, releaseContext }) => {
   const saleAmount     = Number(agreedPrice);
   const commissionRate = overrides.commissionRateOverride != null ? Number(overrides.commissionRateOverride) : agent.commissionRate;
   const commissionType = overrides.commissionTypeOverride ?? agent.commissionType;
@@ -55,11 +87,46 @@ const createCommissionForDeal = async ({ business, dealId, agent, listingId, buy
   const commissionNumber = await generateSequentialNumber(SaleCommission, business, "COM");
   return SaleCommission.create({
     business, commissionNumber, deal: dealId, agent: agent._id,
-    listing: listingId, buyer: buyerId,
+    listing: listingId, buyer: buyerId, owner: ownerId,
     saleAmount, commissionRate, commissionType, commissionAmount,
     whtRate, whtAmount, netAmount,
+    releaseSchedule: releaseContext.brokerTiers,
     status: "pending", createdBy: userId,
   });
+};
+
+// The company's own agency commission for selling on the owner's behalf — independent of whether a broker
+// is involved in this deal at all. Created whenever the listing's project resolves to a non-null owner.
+// Unlike the broker's commission (which needs a manual "approve" step before its accrual posts, since it's
+// an external payable finance may want to review), the owner's commission is the company's own internal
+// revenue recognition with no external payout risk — so when there are no staged tiers configured, it's
+// recognized in full immediately rather than left to accrue with no trigger at all.
+const createOwnerCommissionForDeal = async ({ business, dealId, ownerId, listingId, buyerId, agreedPrice, userId, releaseContext }) => {
+  const saleAmount = Number(agreedPrice);
+  const rate = releaseContext.ownerCommissionDefaults.rate ?? 3;
+  const commissionType = releaseContext.ownerCommissionDefaults.commissionType ?? "percentage";
+  const commissionAmount = round2(commissionType === "percentage" ? (saleAmount * rate) / 100 : rate);
+  if (commissionAmount <= 0) return null;
+  const commissionNumber = await generateSequentialNumber(SaleOwnerCommission, business, "OWC");
+  const ownerCommission = await SaleOwnerCommission.create({
+    business, commissionNumber, deal: dealId, owner: ownerId,
+    listing: listingId, buyer: buyerId,
+    saleAmount, commissionRate: rate, commissionType, commissionAmount,
+    releaseSchedule: releaseContext.ownerTiers,
+    status: "pending", createdBy: userId,
+  });
+
+  if (!releaseContext.ownerTiers.length) {
+    const tierRelease = { thresholdPct: 0, releasePct: 100, amount: commissionAmount, accruedAt: new Date() };
+    ownerCommission.tierReleases.push(tierRelease);
+    const pushed = ownerCommission.tierReleases[ownerCommission.tierReleases.length - 1];
+    ownerCommission.releasedAmount = commissionAmount;
+    ownerCommission.status = "approved";
+    await postPropertySaleOwnerCommissionTierRelease({ businessId: business, ownerCommission, tierRelease: pushed, userId });
+    await ownerCommission.save();
+  }
+
+  return ownerCommission;
 };
 
 const sanitizeDealBody = (body) => {
@@ -81,12 +148,17 @@ const populateDeal = (query) =>
     .populate("agent", "fullName agentNumber phone commissionRate commissionType")
     .populate("offer", "offerNumber offerAmount");
 
-const computeTotals = async (business, dealId) => {
-  const result = await SalePayment.aggregate([
-    { $match: { business: new mongoose.Types.ObjectId(String(business)), deal: new mongoose.Types.ObjectId(String(dealId)), status: "paid" } },
-    { $group: { _id: "$deal", totalPaid: { $sum: "$amount" } } },
-  ]);
-  return result[0]?.totalPaid || 0;
+const computeTotals = (business, dealId) => sumPaidForDeal(business, dealId);
+
+// An advocate-linked user must never see commission rates/amounts — strip them from the populated
+// agent before the response goes out (the deal document itself never stores commission figures, only
+// the agent's rate/type, populated above for everyone else's benefit).
+const hideCommissionFields = (deal) => {
+  if (deal?.agent && typeof deal.agent === "object") {
+    const { commissionRate: _cr, commissionType: _ct, ...safeAgent } = deal.agent;
+    return { ...deal, agent: safeAgent };
+  }
+  return deal;
 };
 
 const TERMINAL_OFFER_STATUSES = ["rejected", "expired", "withdrawn"];
@@ -111,10 +183,17 @@ const persistNewDeal = async ({ business, userId, dealDoc, listing, agent, offer
   ).select("status").lean();
   if (!prevListing) throw createError(400, "This listing is already sold or has an active deal");
 
+  // Resolved once and shared: owner-commission creation is independent of whether this deal has an agent.
+  const [ownerId, releaseContext] = await Promise.all([
+    resolveListingOwner(business, listing),
+    resolveReleaseContext(business),
+  ]);
+
   let offerFlipped = false;
   try {
     await dealDoc.save();
-    if (agent) await createCommissionForDeal({ ...commissionArgs, business, dealId: dealDoc._id, agent, userId });
+    if (agent) await createCommissionForDeal({ ...commissionArgs, business, dealId: dealDoc._id, agent, userId, ownerId, releaseContext });
+    if (ownerId) await createOwnerCommissionForDeal({ ...commissionArgs, business, dealId: dealDoc._id, ownerId, userId, releaseContext });
     if (offer && offer.status !== "accepted") {
       await SaleOffer.updateOne({ _id: offer._id, business }, { status: "accepted", updatedBy: userId });
       offerFlipped = true;
@@ -122,6 +201,7 @@ const persistNewDeal = async ({ business, userId, dealDoc, listing, agent, offer
   } catch (err) {
     const undo = await Promise.allSettled([
       SaleCommission.deleteMany({ business, deal: dealDoc._id }),
+      SaleOwnerCommission.deleteMany({ business, deal: dealDoc._id }),
       SaleDeal.deleteOne({ _id: dealDoc._id, business }),
       SaleListing.updateOne({ _id: listing._id, business, status: "under_contract" }, { status: prevListing.status }),
       offerFlipped ? SaleOffer.updateOne({ _id: offer._id, business, status: "accepted" }, { status: offer.status }) : null,
@@ -149,6 +229,8 @@ export const listDeals = async (req, res, next) => {
     else if (agentId)    filter.agent = agentId;
     if (buyerId)   filter.buyer   = buyerId;
     if (listingId) filter.listing = listingId;
+    // advocate-scoped user (mandatory, ungated) can only see deals under their own assigned project(s)
+    if (req.saleAdvocateId) andInto(filter, await advocateProjectFilter(req, business, "listing"));
     if (dateFrom || dateTo) {
       filter.dealDate = {};
       if (dateFrom) filter.dealDate.$gte = new Date(dateFrom);
@@ -182,7 +264,8 @@ export const listDeals = async (req, res, next) => {
     const totalsMap = Object.fromEntries(paymentTotals.map((p) => [String(p._id), p.totalPaid]));
     const data = deals.map((d) => {
       const totalPaid = totalsMap[String(d._id)] || 0;
-      return { ...d, totalPaid, balance: d.agreedPrice - totalPaid };
+      const row = { ...d, totalPaid, balance: d.agreedPrice - totalPaid };
+      return req.saleAdvocateId ? hideCommissionFields(row) : row;
     });
     res.status(200).json({ data, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {
@@ -193,10 +276,12 @@ export const listDeals = async (req, res, next) => {
 export const getDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await populateDeal(SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) })).lean();
+    const advocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await populateDeal(SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...advocateScope })).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     const totalPaid = await computeTotals(business, deal._id);
-    res.status(200).json({ ...deal, totalPaid, balance: deal.agreedPrice - totalPaid });
+    const row = { ...deal, totalPaid, balance: deal.agreedPrice - totalPaid };
+    res.status(200).json(req.saleAdvocateId ? hideCommissionFields(row) : row);
   } catch (err) {
     next(err);
   }
@@ -467,19 +552,42 @@ export const cancelDeal = async (req, res, next) => {
     deal.updatedBy = userId;
     await deal.save();
 
-    const [, approvedCommissions] = await Promise.all([
+    // Widened to include "pending": tier accrual is payment-driven and never advances commission.status
+    // past "pending" (see commissionReleaseService.applyTierCrossings), so a staged commission with
+    // already-accrued tiers would otherwise be invisible here.
+    const [, brokerCommissions, ownerCommissions] = await Promise.all([
       SaleListing.findByIdAndUpdate(deal.listing, { status: "available" }),
-      SaleCommission.find({ business, deal: deal._id, status: "approved" }).lean(),
+      SaleCommission.find({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }).lean(),
+      SaleOwnerCommission.find({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }).lean(),
     ]);
 
-    // Reverse GL accrual for approved commissions — roll back deal if any reversal fails
+    // Reverse GL for anything accrued — legacy whole-amount accrual (approved, empty release schedule) or
+    // per-tier staged accruals (pending/approved, non-empty release schedule) for both the broker's
+    // commission and the company's own owner commission. Roll back deal if any reversal fails.
     const cancellationReason = req.body.cancellationReason ? `Deal cancelled: ${req.body.cancellationReason}` : "Deal cancelled";
     try {
-      await Promise.all(
-        approvedCommissions.map((commission) =>
-          reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason })
-        )
-      );
+      await Promise.all([
+        ...brokerCommissions.flatMap((commission) => {
+          if (commission.releaseSchedule?.length) {
+            return commission.tierReleases.map((tierRelease) =>
+              reversePropertySaleCommissionTierRelease({ businessId: business, commission, tierRelease, userId, reason: cancellationReason })
+            );
+          }
+          if (commission.status === "approved") {
+            return [reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason: cancellationReason })];
+          }
+          return []; // legacy "pending" commission never accrued — nothing to reverse
+        }),
+        // Reverse whatever is actually in tierReleases — not gated on releaseSchedule.length, since an
+        // owner commission created with no staged schedule still gets one synthetic 100% tier posted
+        // immediately (see createOwnerCommissionForDeal); this way both the genuinely-staged and the
+        // immediate-release case are covered the same way.
+        ...ownerCommissions.flatMap((ownerCommission) =>
+          (ownerCommission.tierReleases || []).map((tierRelease) =>
+            reversePropertySaleOwnerCommissionTierRelease({ businessId: business, ownerCommission, tierRelease, userId, reason: cancellationReason })
+          )
+        ),
+      ]);
     } catch (glErr) {
       deal.status = "active";
       deal.updatedBy = userId;
@@ -487,7 +595,10 @@ export const cancelDeal = async (req, res, next) => {
       await SaleListing.findByIdAndUpdate(deal.listing, { status: "under_contract" });
       return next(createError(422, `GL reversal failed during deal cancellation: ${glErr.message}. Deal has been rolled back to active.`));
     }
-    await SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" });
+    await Promise.all([
+      SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" }),
+      SaleOwnerCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" }),
+    ]);
 
     // Forfeit deposit payments to income if requested
     if (depositPayments.length > 0 && depositAction === "forfeit") {

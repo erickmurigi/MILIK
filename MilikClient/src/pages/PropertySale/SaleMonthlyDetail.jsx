@@ -147,7 +147,7 @@ const SaleMonthlyDetail = () => {
       action={
         <button
           onClick={printReport}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+          className="flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
         >
           <FaPrint /> Print
         </button>

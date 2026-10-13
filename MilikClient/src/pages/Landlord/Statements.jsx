@@ -1412,11 +1412,16 @@ const Statements = () => {
       toast.error(error?.response?.data?.message || "Failed to load landlord statement workspace");
       setDraftStatement(null);
     } finally {
-      if (controller.signal.aborted) return;
-      if (inFlightSelectionRef.current === requestedSelectionKey) {
-        inFlightSelectionRef.current = "";
+      // Was this request superseded/cancelled? Skip cleanup so a newer in-flight
+      // request's state doesn't get stomped on by this stale one finishing late.
+      // (No `return` here — that would silently swallow whatever the try/catch
+      // above produced, which is exactly what no-unsafe-finally warns about.)
+      if (!controller.signal.aborted) {
+        if (inFlightSelectionRef.current === requestedSelectionKey) {
+          inFlightSelectionRef.current = "";
+        }
+        setLoadingDraft(false);
       }
-      setLoadingDraft(false);
     }
   };
 

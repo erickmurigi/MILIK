@@ -17,7 +17,7 @@ export const getPrinters = async (dispatch, businessId) => {
   try {
     const res = await adminRequests.get(`/printers?businessId=${businessId}`);
     dispatch(getPrintersSuccess(res.data));
-  } catch (err) {
+  } catch {
     dispatch(getPrintersFailure());
   }
 };
@@ -28,7 +28,7 @@ export const createPrinter = async (printerData, dispatch) => {
   try {
     const res = await adminRequests.post("/printers", printerData);
     dispatch(createPrinterSuccess(res.data));
-  } catch (err) {
+  } catch {
     dispatch(createPrinterFailure());
   }
 };
@@ -39,7 +39,7 @@ export const deletePrinter = async (id, dispatch) => {
   try {
     await adminRequests.delete(`/printers/${id}`);
     dispatch(deletePrinterSuccess(id));
-  } catch (err) {
+  } catch {
     dispatch(deletePrinterFailure());
   }
 };

@@ -7,10 +7,11 @@ import {
 } from "../controllers/dealsController.js";
 import { dealDocumentUpload } from "../middleware/dealDocumentUpload.js";
 import { attachAgentScope } from "../middleware/agentScope.js";
+import { attachAdvocateScope } from "../middleware/advocateScope.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope, attachAdvocateScope);
 router.get("/", requireCompanyPermission("sale-deals", "view", "propertySale"), listDeals);
 router.get("/:id", requireCompanyPermission("sale-deals", "view", "propertySale"), getDeal);
 router.post("/", requireCompanyPermission("sale-deals", "create", "propertySale"), createDeal);

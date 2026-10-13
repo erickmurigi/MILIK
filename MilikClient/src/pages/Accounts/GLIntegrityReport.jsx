@@ -33,7 +33,7 @@ const fmtTs = (d) =>
 const fmtNum = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const sourceNavUrl = (sourceType, sourceId, sourceRef) => {
+const sourceNavUrl = (sourceType, sourceId) => {
   if (!sourceType || !sourceId) return null;
   const t = String(sourceType).toLowerCase();
   // Use ?receipt=<id> so the Receipts page auto-opens by _id, not as a tenant filter
@@ -346,7 +346,6 @@ function AbnormalBalanceModal({ row, accounts, businessId, healthRunId, onClose,
 
   if (!row) return null;
 
-  const isDebitNormal = ["asset", "expense"].includes(row.type);
   // netBalance > 0 means debit balance; for credit-normal accounts that's abnormal
   const balanceSign  = row.netBalance > 0 ? "Debit" : "Credit";
   const corrDir      = row.netBalance > 0 ? "Credit" : "Debit";

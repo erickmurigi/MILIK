@@ -33,6 +33,9 @@ const RecentActivity = ({ darkMode }) => {
     const date = parseDate(value);
     if (!date) return 'just now';
 
+    // Intentionally live wall-clock time (no React Compiler in this build) — freezing it
+    // would leave "x min/hours ago" labels stuck at whatever time the sidebar first mounted.
+    // eslint-disable-next-line react-hooks/purity
     const diffMs = Date.now() - date.getTime();
     const minutes = Math.floor(diffMs / 60000);
     const hours = Math.floor(minutes / 60);
@@ -55,6 +58,9 @@ const RecentActivity = ({ darkMode }) => {
   };
 
   const activities = useMemo(() => {
+    // Intentionally live wall-clock time (no React Compiler in this build) — used to compute
+    // "days until expiry" below, which must reflect the actual current date, not mount time.
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     const tenantNameById = new Map(
       tenants.map((tenant) => [tenant?._id?.toString(), tenant?.name || 'Tenant'])

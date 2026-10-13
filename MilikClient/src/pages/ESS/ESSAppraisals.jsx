@@ -102,7 +102,7 @@ function AppraisalModal({ appraisal, onClose }) {
 
 export default function ESSAppraisals() {
   const [appraisals, setAppraisals] = useState([]);
-  const [total,      setTotal]      = useState(0);
+  const [,           setTotal]      = useState(0);
   const [page,       setPage]       = useTabState("/ess/appraisals:page", 1);
   const [totalPages, setTotalPages] = useState(1);
   const [loading,    setLoading]    = useState(true);

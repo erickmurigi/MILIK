@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
-  FaBan, FaBuilding, FaCalendarAlt, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaHandshake, FaLink, FaMoneyBillWave,
+  FaBan, FaBuilding, FaCalendarAlt, FaCheck, FaEdit, FaEnvelope, FaFileAlt, FaLink, FaMoneyBillWave,
   FaPlus, FaPrint, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTrash, FaUpload, FaUser,
 } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
@@ -528,7 +528,6 @@ const SaleDeals = () => {
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
-  const currentUser    = useSelector((s) => s.auth?.currentUser);
 
   const [saving,         setSaving]         = useState(false);
   const [actionKey,      setActionKey]      = useState("");
@@ -618,7 +617,7 @@ const SaleDeals = () => {
     staleTime: 30_000,
   });
 
-  const { data: dealDetail, refetch: refetchDealDetail } = useQuery({
+  const { data: dealDetail } = useQuery({
     queryKey: ["deal-detail-docs", selected?._id],
     queryFn:  () => saleApi.getDeal(selected._id, { business: biz }),
     enabled:  !!selected?._id,
@@ -709,7 +708,7 @@ const SaleDeals = () => {
       await saleApi.deleteDealDocument(selected._id, docId);
       queryClient.invalidateQueries({ queryKey: ["deal-detail-docs", selected._id] });
       toast.success("Document removed");
-    } catch (err) {
+    } catch {
       toast.error("Delete failed");
     }
   };
@@ -930,36 +929,24 @@ const SaleDeals = () => {
     <PropertySaleShell>
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
 
-      {/* ── Page header ──────────────────────────────────────────────────── */}
-      <div className="flex-shrink-0 flex items-center justify-between bg-[#0B3B2E] px-4 py-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <FaHandshake size={13} className="text-[#B7C9C0]" />
-            <span className="font-black text-sm text-white tracking-tight">{prefixedTerm("Sale", T.saleDeals, "saleDeals")}</span>
-          </div>
-          <div className="text-[10px] text-[#B7C9C0] mt-0.5 font-mono">{total} {(total !== 1 ? T.saleDeals : T.saleDeal).toLowerCase()}</div>
-        </div>
-        <button
-          type="button"
-          onClick={openCreate}
-          className="inline-flex items-center gap-1.5 border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-black text-white hover:bg-white/20"
-        >
-          <FaPlus size={9} /> New {T.saleDeal}
-        </button>
-      </div>
-
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
       <SaleFilterBar
+        leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total !== 1 ? T.saleDeals : T.saleDeal).toLowerCase()}</span>}
         onSubmit={applySearch}
         onReset={resetFilters}
         activeCount={[appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo].filter(Boolean).length}
         trailing={
-          <ListToolbar.Button
-            variant="outline"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
-          >
-            <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </ListToolbar.Button>
+          <>
+            <ListToolbar.Button
+              variant="outline"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
+            >
+              <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
+              New {T.saleDeal}
+            </ListToolbar.Button>
+          </>
         }
       >
         <FilterSearch
@@ -967,7 +954,7 @@ const SaleDeals = () => {
           onChange={(e) => setSearch(e.target.value)}
           placeholder={`${T.saleDeal} no. / property / ${T.saleBuyer.toLowerCase()}`}
         />
-        <ListToolbar.Button icon={FaSearch} type="submit" className="!bg-[#C8511A] hover:!bg-[#a84115]">
+        <ListToolbar.Button icon={FaSearch} type="submit" variant="outline">
           Search
         </ListToolbar.Button>
         <AppSelect value={statusFilter} onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }} options={DEAL_STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
@@ -1151,7 +1138,6 @@ const SaleDeals = () => {
             ) : (
               <div className="px-4 pb-3 space-y-1.5">
                 {dealSchedule.map((item) => {
-                  const paidPmts = dealPmts.filter((p) => p._id === (item.linkedPayment?._id || item.linkedPayment));
                   return (
                     <div key={item._id} className={`border px-3 py-2 text-xs ${
                       item.status === "paid"    ? "border-emerald-200 bg-emerald-50"

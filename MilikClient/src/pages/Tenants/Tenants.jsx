@@ -1532,19 +1532,6 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     }
   };
 
-  const handleCheckboxClick = (e) => {
-    e.stopPropagation();
-  };
-
-  // ===== EXPAND/COLLAPSE =====
-  const toggleTenantExpand = (tenantId) => {
-    setExpandedTenants((prev) =>
-      prev.includes(tenantId)
-        ? prev.filter((id) => id !== tenantId)
-        : [...prev, tenantId]
-    );
-  };
-
   // ===== ACTION MENU HANDLERS =====
   const handleViewStatement = () => {
     if (!canViewTenants) {

@@ -127,6 +127,13 @@ export const updateCommissionStatus = async (req, res, next) => {
       return next(createError(400, `Cannot transition commission from "${oldCommission.status}" to "${status}"`));
     }
 
+    // A staged commission may only be marked paid once every tier has released — the existing payout
+    // function always disburses the full commissionAmount in one lump sum, and paying out before all
+    // tiers have accrued would disburse more than has actually been recognized to the payable account.
+    if (status === "paid" && oldCommission.releaseSchedule?.length && oldCommission.releasedAmount < oldCommission.commissionAmount - 0.01) {
+      return next(createError(400, `Not all commission tiers have released yet — ${oldCommission.releasedAmount} of ${oldCommission.commissionAmount} recognized so far`));
+    }
+
     const update = { status, updatedBy: userId };
     if (status === "paid") {
       if (!payoutDate)   return next(createError(400, "Payout date is required when marking a commission as paid"));

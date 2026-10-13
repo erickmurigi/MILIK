@@ -41,6 +41,7 @@ import {
   updatePaymentVoucherStatus,
 } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
+import { saleApi } from "../../services/propertySaleApi";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
@@ -54,8 +55,8 @@ const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
 const VOUCHER_LABEL = "mb-1 block text-xs font-bold text-slate-900";
 const VOUCHER_INPUT = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 const whtFor = (gross, rate) => Math.round(Number(gross || 0) * Number(rate || 0)) / 100;
-// Landlord-side vouchers post to a property control account, so their lines have no payable or expense account of their own
-const LANDLORD_CONTROL_CATEGORY_VALUES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund"]);
+// Landlord-side vouchers (and sale_owner_expense) post to a control account, so their lines have no payable or expense account of their own
+const LANDLORD_CONTROL_CATEGORY_VALUES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund", "sale_owner_expense"]);
 const formatKes = (value) => `KES ${Number(value || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -94,6 +95,9 @@ const BASE_CATEGORIES = [
   { value: "company_operational", label: "Operating Expense (Company)", landlordLabel: "Operating Expense (Company)", propertyRequired: false, explicitDebitAccount: true },
   { value: "petty_cash_float",    label: "Petty Cash Float Top-up",    landlordLabel: "Petty Cash Float Top-up",    propertyRequired: false, explicitDebitAccount: true },
   { value: "petty_cash_expense",  label: "Petty Cash Expense",         landlordLabel: "Petty Cash Expense",         propertyRequired: false, explicitDebitAccount: true },
+  // Owner Expense Recoverable (1313): costs the company pays on a property-sale owner's behalf — same
+  // "control account" shape as the landlord categories above, but billed to a SaleOwner, not a Property.
+  { value: "sale_owner_expense",  label: "Owner Expense Recoverable",  landlordLabel: "Owner Expense Recoverable",  propertyRequired: false, explicitDebitAccount: false, saleOwnerRequired: true, propertySaleOnly: true },
 ];
 
 const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
@@ -129,6 +133,8 @@ const withVoucherLines = (form) => (form.lines?.length
 const blankForm = {
   category: "company_operational",
   propertyId: "",
+  saleOwnerId: "",
+  saleProjectId: "",
   debitAccountId: "",
   settlementAccountId: "",
   lines: [newVoucherLine()],
@@ -155,15 +161,16 @@ const PaymentVouchers = () => {
   const properties = useSelector(selectAllProperties);
   const { propertiesLoaded } = useEntityCache(currentCompany?._id);
   const hasPMS = Boolean(currentCompany?.modules?.propertyManagement);
+  const hasPropertySale = Boolean(currentCompany?.modules?.propertySale);
   const isLandlordWorkspace = useMemo(
     () => isSelfManagingLandlordCompany(currentCompany || currentUser?.company || null),
     [currentCompany, currentUser?.company]
   );
   const categories = useMemo(
     () => BASE_CATEGORIES
-      .filter((c) => hasPMS || !c.pmsOnly)
+      .filter((c) => (hasPMS || !c.pmsOnly) && (hasPropertySale || !c.propertySaleOnly))
       .map((c) => ({ ...c, label: isLandlordWorkspace ? c.landlordLabel : c.label })),
-    [hasPMS, isLandlordWorkspace]
+    [hasPMS, hasPropertySale, isLandlordWorkspace]
   );
   const canCreateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "create", "accounts");
   const canUpdateVoucher = hasCompanyPermission(currentUser || {}, currentCompany, "paymentVouchers", "update", "accounts");
@@ -191,6 +198,8 @@ const PaymentVouchers = () => {
   const [debitAccounts, setDebitAccounts] = useState([]);
   const [settlementAccounts, setSettlementAccounts] = useState([]);
   const [serviceProvidersList, setServiceProvidersList] = useState([]);
+  const [saleOwnersList, setSaleOwnersList] = useState([]);
+  const [saleProjectsList, setSaleProjectsList] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
   const [pageSize, setPageSize] = useTabState("/accounts/payment-vouchers:pageSize", DEFAULT_PAGE_SIZE);
   const [currentPage, setCurrentPage] = useTabState("/accounts/payment-vouchers:currentPage", 1);
@@ -214,10 +223,28 @@ const PaymentVouchers = () => {
   const selectedServiceProvider = useMemo(() => serviceProvidersList.find((sp) => String(sp._id) === form.serviceProviderId), [serviceProvidersList, form.serviceProviderId]);
   const companySettings = useSelector(selectCompanySettings);
   const expenseItems = useMemo(() => companySettings?.expenseItems || [], [companySettings]);
-  const expenseItemOptions = useMemo(
-    () => expenseItems.filter((item) => item?.isActive !== false).map((item) => ({ value: String(item._id), label: item.name })),
-    [expenseItems]
+  const expenseCategoryNameById = useMemo(
+    () => new Map((companySettings?.expenseCategories || []).map((c) => [String(c._id), c.name])),
+    [companySettings]
   );
+  // AppSelect has no native option-grouping, so items are sorted by category and the category name
+  // is prefixed onto the label instead — gives the same "grouped" navigation benefit without touching
+  // the shared component. Uncategorized items sort last.
+  const expenseItemOptions = useMemo(() => {
+    const active = expenseItems.filter((item) => item?.isActive !== false);
+    const categoryOf = (item) => expenseCategoryNameById.get(String(item?.category)) || "";
+    const sorted = [...active].sort((a, b) => {
+      const ca = categoryOf(a), cb = categoryOf(b);
+      if (!ca && cb) return 1;
+      if (ca && !cb) return -1;
+      if (ca !== cb) return ca.localeCompare(cb);
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return sorted.map((item) => {
+      const category = categoryOf(item);
+      return { value: String(item._id), label: category ? `[${category}] ${item.name}` : item.name };
+    });
+  }, [expenseItems, expenseCategoryNameById]);
   const lineTotals = useMemo(() => {
     const amount = form.lines.reduce((sum, line) => sum + (Number(line.amount) || 0), 0);
     const wht = form.lines.reduce((sum, line) => sum + whtFor(line.amount, line.whtRate), 0);
@@ -306,11 +333,11 @@ const PaymentVouchers = () => {
 
   // Fills the payee bank from the chosen service provider, or from the landlord of the chosen property.
   // The server resolves the record, so the form and a saved voucher always agree.
-  const fillPayeeBank = async ({ serviceProvider = "", property = "" }) => {
+  const fillPayeeBank = async ({ serviceProvider = "", property = "", saleOwner = "" }) => {
     if (!currentCompany?._id) return;
     try {
       const res = await adminRequests.get("/payment-vouchers/payee-bank", {
-        params: { business: currentCompany._id, serviceProvider, property, category: form.category },
+        params: { business: currentCompany._id, serviceProvider, property, saleOwner, category: form.category },
       });
       const bank = res?.data?.payeeBank;
       if (bank) setForm((prev) => ({ ...prev, payeeBank: { ...blankForm.payeeBank, ...bank } }));
@@ -326,6 +353,10 @@ const PaymentVouchers = () => {
     propertyId: voucher?.property?._id || voucher?.property || voucher?.propertyId || "",
     propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName || (["company_operational", "petty_cash_float", "petty_cash_expense"].includes(String(voucher?.category || "")) ? "Company / Internal" : "N/A"),
     landlordName: voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName || "N/A",
+    saleOwnerId: voucher?.saleOwner?._id || voucher?.saleOwner || voucher?.saleOwnerId || "",
+    saleOwnerName: voucher?.saleOwner?.fullName || voucher?.saleOwnerName || "",
+    saleProjectId: voucher?.saleProject?._id || voucher?.saleProject || voucher?.saleProjectId || "",
+    saleProjectName: voucher?.saleProject?.name || voucher?.saleProjectName || "",
     liabilityAccountId: voucher?.liabilityAccount?._id || voucher?.liabilityAccount || voucher?.liabilityAccountId || "",
     liabilityAccountName: voucher?.liabilityAccount?.name || voucher?.liabilityAccountName || "N/A",
     debitAccountId: voucher?.debitAccount?._id || voucher?.debitAccount || voucher?.debitAccountId || "",
@@ -356,6 +387,24 @@ const PaymentVouchers = () => {
     if (!currentCompany?._id || !hasPMS) return;
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
   }, [currentCompany?._id, hasPMS]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Sale owners/projects for the sale_owner_expense category's pickers — same lists the
+  // Property Sale module itself uses (saleApi.listOwners/listProjects).
+  useEffect(() => {
+    if (!currentCompany?._id || !hasPropertySale) return;
+    (async () => {
+      try {
+        const [owners, projects] = await Promise.all([
+          saleApi.listOwners({ business: currentCompany._id, status: "active", limit: 500 }),
+          saleApi.listProjects({ business: currentCompany._id, limit: 500 }),
+        ]);
+        setSaleOwnersList(Array.isArray(owners?.data) ? owners.data : []);
+        setSaleProjectsList(Array.isArray(projects?.data) ? projects.data : []);
+      } catch (error) {
+        console.warn("Failed to load sale owners/projects", error?.message);
+      }
+    })();
+  }, [currentCompany?._id, hasPropertySale]);
 
   useEffect(() => {
     if (currentCompany?._id) dispatch(fetchCompanySettings(currentCompany._id));
@@ -439,6 +488,15 @@ const PaymentVouchers = () => {
   const propertyOptions = useMemo(
     () => properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Property" })),
     [properties]
+  );
+
+  const saleOwnerOptions = useMemo(
+    () => saleOwnersList.map((o) => ({ value: o._id, label: `${o.fullName}${o.ownerNumber ? ` (${o.ownerNumber})` : ""}` })),
+    [saleOwnersList]
+  );
+  const saleProjectOptions = useMemo(
+    () => saleProjectsList.map((p) => ({ value: p._id, label: `${p.name}${p.projectNumber ? ` (${p.projectNumber})` : ""}` })),
+    [saleProjectsList]
   );
 
   const categoryOptions = useMemo(
@@ -605,6 +663,8 @@ const PaymentVouchers = () => {
     setForm({
       category: voucher.category || "landlord_maintenance",
       propertyId: voucher.propertyId || "",
+      saleOwnerId: voucher.saleOwnerId || "",
+      saleProjectId: voucher.saleProjectId || "",
       debitAccountId: voucher.debitAccountId || "",
       settlementAccountId: voucher.settlementAccountId || "",
       lines: voucher.lines?.length
@@ -635,6 +695,7 @@ const PaymentVouchers = () => {
 
   const validateForm = () => {
     if (selectedCategoryMeta?.propertyRequired && !form.propertyId) return "Property is required for this voucher category";
+    if (selectedCategoryMeta?.saleOwnerRequired && !form.saleOwnerId) return "Sale owner is required for this voucher category";
     if (form.lines.some((line) => !(Number(line.amount) > 0))) return "Every line needs an amount greater than zero";
     if (form.category === "petty_cash_float" && !form.debitAccountId) return "Choose the petty cash account that receives the float";
     if (selectedCategoryMeta?.explicitDebitAccount && form.category !== "petty_cash_float" && form.lines.some((line) => !line.expenseAccountId)) {
@@ -657,6 +718,8 @@ const PaymentVouchers = () => {
       company: currentCompany?._id,
       category: form.category,
       property: form.propertyId || undefined,
+      saleOwner: form.saleOwnerId || undefined,
+      saleProject: form.saleProjectId || undefined,
       debitAccount: form.debitAccountId || undefined,
       settlementAccount: form.settlementAccountId || undefined,
       lines: form.lines.map((line) => ({
@@ -1035,6 +1098,36 @@ const PaymentVouchers = () => {
                           clearable
                         />
                       </div>
+                    )}
+                    {hasPropertySale && selectedCategoryMeta?.saleOwnerRequired && (
+                      <>
+                        <div>
+                          <AppSelect
+                            label="Sale owner *"
+                            value={form.saleOwnerId}
+                            onChange={(val) => {
+                              setForm((prev) => ({ ...prev, saleOwnerId: val ?? "" }));
+                              if (val && !form.serviceProviderId) fillPayeeBank({ saleOwner: val });
+                            }}
+                            options={saleOwnerOptions}
+                            placeholder={saleOwnerOptions.length ? "Select owner…" : "No sale owners yet"}
+                            searchable
+                            clearable
+                            disabled={saleOwnerOptions.length === 0}
+                          />
+                        </div>
+                        <div>
+                          <AppSelect
+                            label="Sale project (optional)"
+                            value={form.saleProjectId}
+                            onChange={(val) => setForm((prev) => ({ ...prev, saleProjectId: val ?? "" }))}
+                            options={saleProjectOptions}
+                            placeholder="No specific project"
+                            searchable
+                            clearable
+                          />
+                        </div>
+                      </>
                     )}
                   </div>
 

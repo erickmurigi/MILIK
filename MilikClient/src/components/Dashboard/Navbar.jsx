@@ -69,7 +69,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
   const handleLogout = async () => {
     try {
       await dispatch(logoutUser());
-    } catch (_error) {
+    } catch {
       clearClientSessionStorage();
       dispatch(clearAuth());
       dispatch(clearCompanyState());
@@ -77,7 +77,7 @@ const Navbar = React.memo(({ setSidebarOpen, darkMode, setDarkMode }) => {
 
     try {
       sessionStorage.setItem(POST_LOGOUT_LANDING_KEY, "dashboard");
-    } catch (_error) {
+    } catch {
       // Ignore storage write failures and continue redirect.
     }
 

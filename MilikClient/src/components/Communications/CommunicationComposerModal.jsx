@@ -37,6 +37,8 @@ const channelMeta = {
 
 const countSmsInfo = (text = '') => {
   if (!text) return { chars: 0, segments: 0, remaining: 160, encoding: 'GSM-7' };
+  // \x00-\x7F is the full ASCII range, deliberately — anything outside it needs Unicode SMS encoding.
+  // eslint-disable-next-line no-control-regex
   const isUnicode = /[^\x00-\x7F]/.test(text);
   const maxSingle = isUnicode ? 70 : 160;
   const maxMulti  = isUnicode ? 67 : 153;
@@ -291,7 +293,6 @@ const CommunicationComposerModal = ({
   const sendableCount  = Number(preview?.summary?.sendableCount  || 0);
   const blockedCount   = Number(preview?.summary?.blockedCount   || 0);
   const sentCount      = preview?.summary?.sentCount;
-  const failedCount    = preview?.summary?.failedCount;
   const hasSendResults = sentCount !== undefined;
   const previews       = preview?.previews || [];
   const chMeta         = channelMeta[activeChannel] || channelMeta.sms;

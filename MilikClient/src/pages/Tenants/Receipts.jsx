@@ -224,10 +224,6 @@ const getPropertyName = (payment, tenants) => {
   );
 };
 
-const getLedgerType = (payment) => {
-  return payment?.ledgerType === "receipts" ? "receipts" : "unknown";
-};
-
 const getReceiptDisplayType = (payment) => {
   if (payment?.paidDirectToLandlord) return "Landlord Receipt";
   switch (String(payment?.paymentType || "").toLowerCase()) {
@@ -335,9 +331,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
     canUpdateReceipt: hasCompanyPermission(currentUser || {}, currentCompany, "receipts", "update", "propertyManagement"),
   }), [currentUser, currentCompany]);
   const isLandlordReceiptView = viewMode === "landlord";
-  const isDefaultTenantView = !isLandlordReceiptView;
-  const backPath = isLandlordReceiptView ? "/landlords" : "/tenants";
-  const pageLabel = isLandlordReceiptView ? "Landlord Receipts" : "Rental Receipts";
   const pageCreateLabel = isLandlordReceiptView ? "New Landlord Receipt" : "New Receipt";
   const rawTenants = useSelector(selectAllTenants);
   const properties = useSelector(selectAllProperties);
@@ -513,8 +506,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
   const currentPageReceipts = receipts;
   const totalPages = Math.max(1, recPagination.totalPages);
   const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = recPagination.totalItems === 0 ? 0 : (safeCurrentPage - 1) * pageSize;
-  const endIndex = startIndex + pageSize;
 
   const visibleReceiptIds = useMemo(
     () => currentPageReceipts.map((receipt) => receipt._id),
@@ -999,11 +990,6 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (preset === "thisYear") return { from: toInputDate(new Date(today.getFullYear(), 0, 1)), to: toInputDate(new Date(today.getFullYear(), 11, 31)) };
     if (preset === "lastYear") return { from: toInputDate(new Date(today.getFullYear() - 1, 0, 1)), to: toInputDate(new Date(today.getFullYear() - 1, 11, 31)) };
     return { from: "", to: "" };
-  };
-
-  const applyDatePreset = (preset) => {
-    const { from, to } = computeDateRange(preset);
-    setDraftFilters((prev) => ({ ...prev, from, to }));
   };
 
   const applyDatePresetAndSearch = (preset) => {
@@ -1867,7 +1853,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
               {formData.tenantId && (
                 <div className="mb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                   {(() => {
-                    const { totalOwed, totalPaid, balance } = calculateTenantBalance(formData.tenantId);
+                    const { totalOwed, balance } = calculateTenantBalance(formData.tenantId);
                     const receiptAmount = Number(formData.amount) || 0;
                     const newBalance = balance - receiptAmount;
 

@@ -33,10 +33,9 @@ const CommissionsList = () => {
 
   const [searchTerm, setSearchTerm] = useTabState('/properties/commissions-list:searchTerm', '');
   const [filterMode, setFilterMode] = useTabState('/properties/commissions-list:filterMode', 'all');
-  const [loading, setLoading] = useState(false);
+  const [, setLoading] = useState(false);
   const [currentPage, setCurrentPage] = useTabState('/properties/commissions-list:currentPage', 1);
   const [pageSize, setPageSize] = useState(50);
-  const [expandedPropertyId, setExpandedPropertyId] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editFormData, setEditFormData] = useState(null);
 
@@ -118,7 +117,7 @@ const CommissionsList = () => {
       toast.success('Commission updated successfully');
       setEditingId(null);
       setEditFormData(null);
-    } catch (error) {
+    } catch {
       toast.error('Failed to update commission');
     }
   };
@@ -138,7 +137,7 @@ const CommissionsList = () => {
       })).unwrap();
       
       toast.success('Commission removed');
-    } catch (error) {
+    } catch {
       toast.error('Failed to remove commission');
     }
   };

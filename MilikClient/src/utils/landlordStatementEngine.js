@@ -44,7 +44,6 @@ const getPaymentCollector = (payment, property) => {
 };
 
 export const buildLandlordStatementFromEvents = ({
-  landlord,
   property,
   periodStart,
   periodEnd,

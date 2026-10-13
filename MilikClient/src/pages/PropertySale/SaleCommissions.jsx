@@ -2,9 +2,9 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaSearch, FaUndo } from "react-icons/fa";
+import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import { FilterDateRange } from "./SaleFilterBar";
+import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
@@ -349,44 +349,43 @@ const SaleCommissions = () => {
     <PropertySaleShell>
       <div className="flex h-full flex-col gap-1.5">
 
-        {/* Single unified bar: stats + filters + refresh */}
-        <div
-          className="filter-bar flex shrink-0 items-center gap-1.5 overflow-x-auto border border-slate-200 bg-white px-2 py-1"
-          style={{ borderLeft: "3px solid #0B3B2E" }}
+        {/* Filter bar */}
+        <SaleFilterBar
+          leading={
+            <>
+              {[
+                { key: "pending",   label: "Pending",   tone: "text-amber-700"   },
+                { key: "approved",  label: "Approved",  tone: "text-blue-700"    },
+                { key: "paid",      label: "Paid",      tone: "text-emerald-700" },
+                { key: "cancelled", label: "Cancelled", tone: "text-slate-500"   },
+              ].map(({ key, label, tone }, i) => (
+                <React.Fragment key={key}>
+                  {i > 0 && <span className="shrink-0 text-slate-200 select-none">|</span>}
+                  <div className="flex shrink-0 items-baseline gap-1">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+                    <span className={`font-mono text-[10px] font-black tabular-nums ${tone}`}>{fmtKES(commStats?.[key]?.amount ?? 0)}</span>
+                    <span className="text-[9px] text-slate-400">({commStats?.[key]?.count ?? 0})</span>
+                  </div>
+                </React.Fragment>
+              ))}
+            </>
+          }
+          onReset={resetFilters}
+          activeCount={activeFilterCount}
+          trailing={
+            <>
+              <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+              <ListToolbar.Button variant="outline" onClick={invalidate}>
+                <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+              </ListToolbar.Button>
+            </>
+          }
         >
-          {/* Stats */}
-          {[
-            { key: "pending",   label: "Pending",   tone: "text-amber-700"   },
-            { key: "approved",  label: "Approved",  tone: "text-blue-700"    },
-            { key: "paid",      label: "Paid",      tone: "text-emerald-700" },
-            { key: "cancelled", label: "Cancelled", tone: "text-slate-500"   },
-          ].map(({ key, label, tone }, i) => (
-            <React.Fragment key={key}>
-              {i > 0 && <span className="shrink-0 text-slate-200 select-none">|</span>}
-              <div className="flex shrink-0 items-baseline gap-1">
-                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">{label}</span>
-                <span className={`font-mono text-[10px] font-black tabular-nums ${tone}`}>{fmtKES(commStats?.[key]?.amount ?? 0)}</span>
-                <span className="text-[9px] text-slate-400">({commStats?.[key]?.count ?? 0})</span>
-              </div>
-            </React.Fragment>
-          ))}
-
-          {/* Divider */}
-          <span className="shrink-0 text-slate-200 select-none mx-1">·</span>
-
-          {/* Search */}
-          <div className="relative shrink-0" style={{ width: 160 }}>
-            <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
-            <ListToolbar.Input
-              value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              placeholder={`${T.saleAgent}, ${T.saleDeal.toLowerCase()}, comm. no.`}
-              className="w-full pl-5"
-              width=""
-            />
-          </div>
-
-          {/* Dropdowns */}
+          <FilterSearch
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            placeholder={`${T.saleAgent}, ${T.saleDeal.toLowerCase()}, comm. no.`}
+          />
           <AppSelect
             value={statusFilter}
             onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }}
@@ -405,35 +404,12 @@ const SaleCommissions = () => {
             options={dealFilterOptions}
             placeholder={`All ${T.saleDeals}`} clearable compact searchable
           />
-
-          {/* Date range */}
           <FilterDateRange
             from={dateFrom} to={dateTo}
             onFromChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
             onToChange={(e) => { setDateTo(e.target.value); setPage(1); }}
           />
-
-          {/* Reset */}
-          <ListToolbar.Button
-            icon={FaRedoAlt}
-            variant={activeFilterCount > 0 ? "primary" : "outline"}
-            onClick={resetFilters}
-          >
-            Reset
-            {activeFilterCount > 0 && (
-              <span className="flex h-3.5 min-w-[14px] items-center justify-center bg-white/25 px-1 text-[8px] font-black">
-                {activeFilterCount}
-              </span>
-            )}
-          </ListToolbar.Button>
-
-          <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
-
-          {/* Refresh */}
-          <ListToolbar.Button variant="outline" onClick={invalidate}>
-            <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </ListToolbar.Button>
-        </div>
+        </SaleFilterBar>
 
         {/* Table */}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">

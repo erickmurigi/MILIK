@@ -3,6 +3,10 @@ import mongoose from "mongoose";
 const PAYMENT_TYPES = ["deposit", "installment", "final_payment", "other"];
 const PAYMENT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
 const PAYMENT_STATUSES = ["pending", "paid", "cancelled"];
+// "direct" (default) = the company receives the money itself, exactly like before this field existed.
+// "advocate_trust" = the advocate physically collected the money into their own trust account —
+// the GL debit side goes to 1314 Advocate Trust Receivable instead of the cashbook until remitted.
+const COLLECTION_METHODS = ["direct", "advocate_trust"];
 
 const salePaymentSchema = new mongoose.Schema(
   {
@@ -16,6 +20,10 @@ const salePaymentSchema = new mongoose.Schema(
     paymentDate: { type: Date, default: Date.now },
     paymentMethod: { type: String, enum: PAYMENT_METHODS, default: "bank_transfer" },
     cashbook: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+    // The advocate who physically collected this payment (only meaningful when collectionMethod is
+    // "advocate_trust", but stored regardless so a deal's advocate history stays visible either way).
+    advocate: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAdvocate", default: null },
+    collectionMethod: { type: String, enum: COLLECTION_METHODS, default: "direct" },
     reference: { type: String, trim: true, default: "" },
     status: { type: String, enum: PAYMENT_STATUSES, default: "paid" },
     notes: { type: String, trim: true, default: "" },

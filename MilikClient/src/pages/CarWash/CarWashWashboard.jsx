@@ -45,7 +45,7 @@ const ADVANCE_CLS   = {
   ready:   "border-green-500  bg-green-50  text-green-700  hover:bg-green-100",
 };
 
-const JobCard = React.memo(({ job, onAdvance, onPayLater, payingLaterRef }) => {
+const JobCard = React.memo(({ job, onAdvance, onPayLater }) => {
   const cfg       = STATUS_CONFIG[job.status] ?? STATUS_CONFIG.waiting;
   const advanceTo = ADVANCE_MAP[job.status] ?? null;
   const elapsedIso = job.status === "waiting" ? job.createdAt : job.updatedAt;
@@ -109,6 +109,9 @@ const ColHeader = ({ status, count }) => {
 
 const OutstandingCard = React.memo(({ job, onNavigate }) => {
   const payStatus = job.paymentStatus || "unpaid";
+  // Intentionally live wall-clock time (no React Compiler in this build) — freezing it would
+  // leave "X days ago" stuck at whatever time this card first mounted.
+  // eslint-disable-next-line react-hooks/purity
   const daysAgo = Math.floor((Date.now() - new Date(job.payLaterAt || job.updatedAt).getTime()) / 86_400_000);
   const timeLabel = daysAgo === 0 ? "Today" : daysAgo === 1 ? "Yesterday" : `${daysAgo} days ago`;
   const isOld = daysAgo >= 3;

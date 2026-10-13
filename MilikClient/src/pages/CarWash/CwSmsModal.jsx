@@ -65,7 +65,7 @@ const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", on
     setPhoneError("");
   }, [target?._id]); // eslint-disable-line
 
-  const { units, remaining, chars } = calcSmsUnits(body);
+  const { units, chars } = calcSmsUnits(body);
   const overLimit = chars > MAX_CHARS;
 
   const validatePhone = (val) => {

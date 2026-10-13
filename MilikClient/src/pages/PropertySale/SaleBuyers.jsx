@@ -17,6 +17,7 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
+import MilikTable from "../../components/common/MilikTable";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
 
@@ -50,36 +51,24 @@ const KYC_FILTER_OPTIONS    = KYC_STATUSES.map((s) => ({ value: s, label: s.char
 const SOURCE_FILTER_OPTIONS = SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const SOURCE_FORM_OPTIONS   = SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 const KYC_FORM_OPTIONS      = KYC_STATUSES.map((s) => ({ value: s, label: s }));
-const buyerHeaders          = (T) => [`${T.saleBuyer} No.`, "Name", "Phone", "Email", "Source", "KYC", "Actions"];
+const buyerColumns          = (T) => [{ label: `${T.saleBuyer} No.` }, { label: "Name" }, { label: "Phone" }, { label: "Email" }, { label: "Source" }, { label: "KYC" }];
 
-// One table row — memoised so unrelated page state (search text, panel tab, modal open/close, ...) doesn't re-render every row.
-const BuyerRow = React.memo(function BuyerRow({ row, isSelected, onSelect, onPrint, onEdit, onDelete }) {
-  return (
-    <tr
-      onClick={() => onSelect(row)}
-      className={`border-b border-slate-100 cursor-pointer ${isSelected ? "bg-[#F1F6F3]" : "hover:bg-slate-50"}`}
-    >
-      <td className="px-3 py-2 font-mono font-black text-[#0B3B2E]">{row.buyerNumber}</td>
-      <td className="px-3 py-2">
-        <div className="font-bold text-slate-900">{row.fullName}</div>
-        {row.idNumber && <div className="text-[10px] text-slate-400">ID: {row.idNumber}</div>}
-      </td>
-      <td className="px-3 py-2 text-slate-600">{row.phone || "—"}</td>
-      <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
-      <td className="px-3 py-2 capitalize text-slate-600">{String(row.source || "").replace(/_/g, " ")}</td>
-      <td className="px-3 py-2">
-        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${kycBadge(row.kycStatus)}`}>{row.kycStatus}</span>
-      </td>
-      <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-        <div className="inline-flex gap-1">
-          <button type="button" onClick={() => onPrint(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaPrint className="text-[9px]" /></button>
-          <button type="button" onClick={() => onEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaEdit className="text-[9px]" /></button>
-          <button type="button" onClick={() => onDelete(row)} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100"><FaTrash className="text-[9px]" /></button>
-        </div>
-      </td>
-    </tr>
-  );
-});
+// Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
+const renderBuyerRow = (row) => (
+  <>
+    <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#0B3B2E]">{row.buyerNumber}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100">
+      <div className="font-bold text-slate-900">{row.fullName}</div>
+      {row.idNumber && <div className="text-[10px] text-slate-400">ID: {row.idNumber}</div>}
+    </td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.phone || "—"}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.email || "—"}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(row.source || "").replace(/_/g, " ")}</td>
+    <td className="px-3 py-1.5">
+      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${kycBadge(row.kycStatus)}`}>{row.kycStatus}</span>
+    </td>
+  </>
+);
 
 // Modals / inputs below own their own text state so keystrokes never re-render the page, rows or detail panel.
 
@@ -260,7 +249,7 @@ const SaleBuyers = () => {
   const [panelTab,      setPanelTab]      = useState("profile");
 
   const biz = currentCompany?._id;
-  const BUYER_HEADERS = useMemo(() => buyerHeaders(T), [T]);
+  const BUYER_COLUMNS = useMemo(() => buyerColumns(T), [T]);
 
   const { data: buyersData, isLoading: loading, isFetching, error } = useQuery({
     queryKey: ["sale-buyers", biz, debouncedSearch, kycFilter, sourceFilter, page, pageSize],
@@ -444,6 +433,15 @@ const SaleBuyers = () => {
   }, [currentCompany, T.saleBuyer]);
 
   const handleSelectRow = useCallback((row) => setSelected((prev) => (prev?._id === row._id ? null : row)), [setSelected]);
+  const isRowSelected = useCallback((row) => selectedId === row._id, [selectedId]);
+
+  const renderBuyerActions = useCallback((row) => (
+    <div className="inline-flex gap-1">
+      <button type="button" onClick={() => printBuyer(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaPrint className="text-[9px]" /></button>
+      <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaEdit className="text-[9px]" /></button>
+      <button type="button" onClick={() => handleDelete(row)} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50"><FaTrash className="text-[9px]" /></button>
+    </div>
+  ), [printBuyer, openEdit, handleDelete]);
 
   return (
     <PropertySaleShell>
@@ -473,26 +471,17 @@ const SaleBuyers = () => {
       {/* Table + KYC detail panel */}
       <div className="relative flex flex-col flex-1 min-h-0 overflow-hidden">
         <div className={`flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm transition-[margin] duration-200 ${selected ? "mr-[380px]" : ""}`}>
-          <div className="flex-1 min-h-0 overflow-auto">
-            <table className="w-full min-w-[640px] text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#0B3B2E]">
-                  {BUYER_HEADERS.map((h) => (
-                    <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${h === "Actions" ? "text-right" : "text-left"}`}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">Loading {T.saleBuyers.toLowerCase()}…</td></tr>
-                ) : buyers.length === 0 ? (
-                  <tr><td colSpan={7} className="px-3 py-10 text-center text-xs text-slate-400">No {T.saleBuyers.toLowerCase()} found.</td></tr>
-                ) : buyers.map((row) => (
-                  <BuyerRow key={row._id} row={row} isSelected={selectedId === row._id} onSelect={handleSelectRow} onPrint={printBuyer} onEdit={openEdit} onDelete={handleDelete} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <MilikTable
+            columns={BUYER_COLUMNS}
+            rows={buyers}
+            loading={loading}
+            empty={`No ${T.saleBuyers.toLowerCase()} found.`}
+            minWidth={640}
+            onRowClick={handleSelectRow}
+            isSelected={isRowSelected}
+            renderRow={renderBuyerRow}
+            renderActions={renderBuyerActions}
+          />
 
           <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
         </div>

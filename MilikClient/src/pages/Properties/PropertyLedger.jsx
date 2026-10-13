@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { fmtDate } from "../../utils/dates";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
@@ -33,16 +33,6 @@ const firstOfMonth = () =>
 const isPropertyGL = (p) => {
   const v = String(p?.accountLedgerType || "").toLowerCase().trim();
   return v.startsWith("off") || v === "property-gl";
-};
-
-const businessIdFromState = (currentCompany, currentUser) => {
-  const activeId   = localStorage.getItem("milik_active_company_id");
-  const storedUser = (() => { try { return JSON.parse(localStorage.getItem("milik_user") || "null"); } catch { return null; } })();
-  return (
-    currentCompany?._id || currentUser?.company?._id || currentUser?.company ||
-    currentUser?.businessId || activeId || storedUser?.company?._id ||
-    storedUser?.company || storedUser?.businessId || ""
-  );
 };
 
 const StatCard = DashboardStatCard;
@@ -457,8 +447,6 @@ const PropertyLedger = () => {
   const dispatch    = useDispatch();
   const navigate    = useNavigate();
   const location    = useLocation();
-  const currentUser    = useSelector((s) => s.auth?.currentUser);
-  const currentCompany = useSelector((s) => s.company?.currentCompany);
   const { currentProperty, loading: propLoading } = useSelector((s) => s.property);
 
   const [activeTab, setActiveTab] = useTabState(`${location.pathname}:activeTab`, "overview");

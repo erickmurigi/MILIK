@@ -75,6 +75,14 @@ const TAB_CONFIG = {
       "Maintain reusable billing cycle defaults for future schedules and operational setup. Historical postings stay untouched.",
     requiredModules: ["propertyManagement"],
   },
+  expenseCategories: {
+    label: "Expense Categories",
+    icon: FaReceipt,
+    endpoint: "expense-categories",
+    empty: "No expense categories configured yet.",
+    subtitle: "Group expense items for easier lookup on vouchers and for reporting. Delete an unused category any time; items keep working if it's removed.",
+    // No requiredModules — visible to all companies
+  },
   expenses: {
     label: "Expense Items",
     icon: FaReceipt,
@@ -164,6 +172,26 @@ const TAB_CONFIG = {
     icon: FaCog,
     requiredModules: ["propertySale"],
   },
+  saleOwnerMode: {
+    label: "Property Owners",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  saleAdvocateMode: {
+    label: "Conveyancing Advocates",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  saleOwnerCommDefaults: {
+    label: "Owner Commission",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
+  saleReleaseSchedule: {
+    label: "Commission Release",
+    icon: FaCog,
+    requiredModules: ["propertySale"],
+  },
   invPOSSettings: {
     label: "POS & Receipt",
     icon: FaReceipt,
@@ -189,9 +217,9 @@ const TAB_CONFIG = {
 const SIDEBAR_GROUPS = [
   { label: "Property Setup",           items: ["unitTypes", "deposits", "periods"] },
   { label: "Utilities & Maintenance",  items: ["utilities", "maintenanceCategories"] },
-  { label: "Financial & Accounting",   items: ["tax", "accounting", "incomeRules", "expenses"] },
+  { label: "Financial & Accounting",   items: ["tax", "accounting", "incomeRules", "expenseCategories", "expenses"] },
   { label: "Billing Rules",            items: ["penaltyRules", "autoInvoicing"] },
-  { label: "Property Sales",           items: ["saleStages", "saleSources", "salePropertyTypes", "saleCommDefaults", "saleAgentVisibility", "saleSellingMode"] },
+  { label: "Property Sales",           items: ["saleStages", "saleSources", "salePropertyTypes", "saleCommDefaults", "saleAgentVisibility", "saleSellingMode", "saleOwnerMode", "saleAdvocateMode", "saleOwnerCommDefaults", "saleReleaseSchedule"] },
   { label: "Inventory & POS",          items: ["invPOSSettings"] },
   { label: "Car Wash",                 items: ["cwOperations", "cwSMS"] },
   { label: "System",                   items: ["terminology"] },
@@ -200,7 +228,8 @@ const SIDEBAR_GROUPS = [
 const emptyForms = {
   utilities: { name: "", description: "", category: "utility", isActive: true },
   periods: { name: "", durationInMonths: 1, durationInDays: 30, isActive: true },
-  expenses: { name: "", description: "", code: "", category: "other", defaultAmount: 0, expenseAccount: "", payableAccount: "", isActive: true },
+  expenseCategories: { name: "", description: "", isActive: true },
+  expenses: { name: "", description: "", code: "", category: "", defaultAmount: 0, expenseAccount: "", payableAccount: "", isActive: true },
   deposits: { name: "", description: "", code: "", defaultAmount: 0, refundable: true, isActive: true },
   unitTypes: { name: "", description: "", category: "residential", isActive: true },
   maintenanceCategories: { name: "", description: "", priority: "medium", isActive: true },
@@ -509,6 +538,7 @@ const INV_POS_DEFAULTS = {
 const COLLECTION_COLUMNS = {
   utilities: ["Name", "Category", "Description", "Status", "Actions"],
   periods: ["Name", "Months", "Days", "Status", "Actions"],
+  expenseCategories: ["Name", "Description", "Status", "Actions"],
   expenses: ["Name", "Code", "Category", "Default Amount", "Status", "Actions"],
   deposits: ["Name", "Code", "Default Amount", "Refundable", "Description", "Status", "Actions"],
   unitTypes: ["Name", "Category", "Description", "Status", "Actions"],
@@ -1134,6 +1164,10 @@ const CompanySettings = () => {
   const [saleSettings, setSaleSettings] = useState(null);
   const [saleCommForm, setSaleCommForm] = useState({ rate: 3, commissionType: "percentage", whtRate: 5 });
   const [savingSaleComm, setSavingSaleComm] = useState(false);
+  const [saleOwnerCommForm, setSaleOwnerCommForm] = useState({ rate: 3, commissionType: "percentage" });
+  const [savingSaleOwnerComm, setSavingSaleOwnerComm] = useState(false);
+  const [releaseScheduleForm, setReleaseScheduleForm] = useState({ enabled: false, ownerCommissionTiers: [], brokerCommissionTiers: [] });
+  const [savingReleaseSchedule, setSavingReleaseSchedule] = useState(false);
   const [savingSaleSwitch, setSavingSaleSwitch] = useState(false);
   const queryClient = useQueryClient();
 
@@ -1300,6 +1334,19 @@ const CompanySettings = () => {
           whtRate:        s.commissionDefaults.whtRate        ?? 5,
         });
       }
+      if (s?.ownerCommissionDefaults) {
+        setSaleOwnerCommForm({
+          rate:           s.ownerCommissionDefaults.rate           ?? 3,
+          commissionType: s.ownerCommissionDefaults.commissionType ?? "percentage",
+        });
+      }
+      if (s?.commissionReleaseSchedule) {
+        setReleaseScheduleForm({
+          enabled:               Boolean(s.commissionReleaseSchedule.enabled),
+          ownerCommissionTiers:  s.commissionReleaseSchedule.ownerCommissionTiers  ?? [],
+          brokerCommissionTiers: s.commissionReleaseSchedule.brokerCommissionTiers ?? [],
+        });
+      }
     } catch { /* noop */ }
   }, [hasSale, currentCompany?._id]);
 
@@ -1427,6 +1474,7 @@ const CompanySettings = () => {
     () => ({
       utilities: (settings?.utilityTypes || []).filter((item) => item?.isActive !== false).length,
       periods: (settings?.billingPeriods || []).filter((item) => item?.isActive !== false).length,
+      expenseCategories: (settings?.expenseCategories || []).filter((item) => item?.isActive !== false).length,
       expenses: (settings?.expenseItems || []).filter((item) => item?.isActive !== false).length,
       deposits: (settings?.depositTypes || []).filter((item) => item?.isActive !== false).length,
       unitTypes: (settings?.unitTypes || []).filter((item) => item?.isActive !== false).length,
@@ -1509,6 +1557,7 @@ const CompanySettings = () => {
   const collectionMap = useMemo(() => ({
     utilities: settings?.utilityTypes || [],
     periods: settings?.billingPeriods || [],
+    expenseCategories: settings?.expenseCategories || [],
     expenses: settings?.expenseItems || [],
     deposits: settings?.depositTypes || [],
     unitTypes: settings?.unitTypes || [],
@@ -1517,6 +1566,11 @@ const CompanySettings = () => {
     saleSources:       saleSettings?.leadSources    || [],
     salePropertyTypes: saleSettings?.propertyTypes  || [],
   }), [settings, saleSettings]);
+
+  const expenseCategoryNameById = useMemo(
+    () => new Map((settings?.expenseCategories || []).map((c) => [String(c._id), c.name])),
+    [settings]
+  );
 
   const visibleItems = useMemo(() => {
     const items = collectionMap[activeTab] || [];
@@ -1789,50 +1843,6 @@ const CompanySettings = () => {
     }
   };
 
-  const renderMeta = (tabKey, item) => {
-    if (tabKey === "utilities") {
-      return [item?.description, item?.category ? `Category: ${String(item.category).replace(/_/g, " ")}` : null]
-        .filter(Boolean)
-        .join(" • ");
-    }
-
-    if (tabKey === "periods") {
-      return `Duration: ${Number(item?.durationInMonths || 0)} month(s) • ${Number(item?.durationInDays || 0)} day(s)`;
-    }
-
-    if (tabKey === "expenses") {
-      return [
-        item?.code ? `Code: ${item.code}` : null,
-        `Category: ${String(item?.category || "other").replace(/_/g, " ")}`,
-        `Default amount: ${Number(item?.defaultAmount || 0).toLocaleString()}`,
-        item?.description,
-      ]
-        .filter(Boolean)
-        .join(" • ");
-    }
-
-    if (tabKey === "deposits") {
-      return [
-        item?.code ? `Code: ${item.code}` : null,
-        `Default amount: ${Number(item?.defaultAmount || 0).toLocaleString()}`,
-        item?.refundable === false ? "Non-refundable" : "Refundable",
-        item?.description,
-      ]
-        .filter(Boolean)
-        .join(" - ");
-    }
-
-    if (tabKey === "unitTypes") {
-      return [item?.description, item?.category ? `Category: ${String(item.category).replace(/_/g, " ")}` : null].filter(Boolean).join(" • ");
-    }
-
-    if (tabKey === "maintenanceCategories") {
-      return [item?.description, `Priority: ${item?.priority || "medium"}`].filter(Boolean).join(" • ");
-    }
-
-    return "";
-  };
-
   const renderCollectionRow = (tabKey, item, idx = 0) => {
     const isActive = item?.isActive !== false;
     return (
@@ -1859,10 +1869,13 @@ const CompanySettings = () => {
             <td className="px-3 py-1.5 border-r border-gray-100 text-center text-slate-600">{item.durationInDays ?? "—"}</td>
           </>
         )}
+        {tabKey === "expenseCategories" && (
+          <td className="max-w-[260px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || "—"}</td>
+        )}
         {tabKey === "expenses" && (
           <>
             <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.code || "—"}</td>
-            <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(item.category || "").replace(/_/g, " ") || "—"}</td>
+            <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{expenseCategoryNameById.get(String(item.category)) || "—"}</td>
             <td className="px-3 py-1.5 border-r border-gray-100 text-right text-slate-600">{Number(item.defaultAmount || 0).toLocaleString()}</td>
           </>
         )}
@@ -2791,6 +2804,165 @@ const CompanySettings = () => {
     </div>
   );
 
+  const SALE_OWNER_MODE_OPTIONS = [
+    { value: false, title: "Not using owners", body: "Projects/listings have no owner. Nothing changes from today's behavior." },
+    { value: true, title: "Selling on behalf of owners", body: "You sell property on behalf of outside owners and need to track the company's own agency commission, recharge expenses to them, and produce an owner statement. Adds the Owners page." },
+  ];
+  const renderSaleOwnerModeTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Property Owners"
+        subtitle="Choose whether this company sells on behalf of outside owners. You can switch at any time: turning it off only hides the page, no data is removed."
+      >
+        {renderSaleChoiceCards(
+          SALE_OWNER_MODE_OPTIONS,
+          Boolean(saleSettings?.useOwners),
+          (enabled) => saveSaleSwitch("/sale/settings/use-owners", { enabled }, enabled ? "Property owners enabled." : "Property owners hidden."),
+        )}
+      </Card>
+    </div>
+  );
+
+  const SALE_ADVOCATE_MODE_OPTIONS = [
+    { value: false, title: "Not using advocates", body: "Buyer payments are received directly by the company. Nothing changes from today's behavior." },
+    { value: true, title: "Routing payments through advocates", body: "Your conveyancing advocates physically collect buyer payments into their own trust account before remitting to the company. Tracks the trust receivable until it's remitted and scopes advocate-linked users to their own assigned project(s). Adds the Advocates page." },
+  ];
+  const renderSaleAdvocateModeTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Conveyancing Advocates"
+        subtitle="Choose whether your advocates collect buyer payments into their own trust account before remitting to the company. You can switch at any time: turning it off only hides the page, no data is removed."
+      >
+        {renderSaleChoiceCards(
+          SALE_ADVOCATE_MODE_OPTIONS,
+          Boolean(saleSettings?.useAdvocates),
+          (enabled) => saveSaleSwitch("/sale/settings/use-advocates", { enabled }, enabled ? "Conveyancing advocates enabled." : "Conveyancing advocates hidden."),
+        )}
+      </Card>
+    </div>
+  );
+
+  const renderSaleOwnerCommDefaultsTab = () => (
+    <div className="space-y-4">
+      <Card
+        title="Owner Commission Defaults"
+        subtitle="The company's own agency commission for selling on an owner's behalf — independent of the broker commission rate. Only meaningful once a project has an owner assigned."
+        action={
+          <ActionButton variant="primary" onClick={async () => {
+            setSavingSaleOwnerComm(true);
+            try {
+              await adminRequests.put("/sale/settings/owner-commission-defaults", saleOwnerCommForm);
+              toast.success("Owner commission defaults saved.");
+              await loadSaleSettings();
+            } catch (err) { toast.error(extractErrorMessage(err)); }
+            finally { setSavingSaleOwnerComm(false); }
+          }} disabled={savingSaleOwnerComm}>
+            {savingSaleOwnerComm ? <Spinner size="sm" /> : <FaSave />} Save Defaults
+          </ActionButton>
+        }
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Commission Rate (%)</label>
+            <Input type="number" min="0" step="0.1" value={saleOwnerCommForm.rate}
+              onChange={(e) => setSaleOwnerCommForm((p) => ({ ...p, rate: Number(e.target.value || 0) }))} />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Commission Type</label>
+            <AppSelect value={saleOwnerCommForm.commissionType}
+              onChange={(v) => setSaleOwnerCommForm((p) => ({ ...p, commissionType: v ?? "percentage" }))}
+              options={SALE_COMMISSION_TYPE_OPTIONS}
+              size="md" />
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+
+  // Shared editor for one payee's tier list (owner or broker) — add/remove rows, no save button of its own
+  // (the parent tab saves both lists together).
+  const renderTierListEditor = (tiers, setTiers, label) => (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-xs font-bold text-slate-700">{label}</span>
+        <button type="button" onClick={() => setTiers((rows) => [...rows, { thresholdPct: 0, releasePct: 0 }])}
+          className="border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
+          + Add Tier
+        </button>
+      </div>
+      {tiers.length === 0 ? (
+        <p className="text-[11px] text-slate-400">No tiers — nothing releases until at least one is added (while the schedule is enabled).</p>
+      ) : (
+        <div className="space-y-2">
+          {tiers.map((tier, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <div className="flex-1">
+                <label className="mb-0.5 block text-[10px] text-slate-400">% of price paid</label>
+                <Input type="number" min="0" max="100" step="1" value={tier.thresholdPct}
+                  onChange={(e) => setTiers((rows) => rows.map((r, idx) => idx === i ? { ...r, thresholdPct: Number(e.target.value || 0) } : r))} />
+              </div>
+              <div className="flex-1">
+                <label className="mb-0.5 block text-[10px] text-slate-400">% of commission released</label>
+                <Input type="number" min="0" max="100" step="1" value={tier.releasePct}
+                  onChange={(e) => setTiers((rows) => rows.map((r, idx) => idx === i ? { ...r, releasePct: Number(e.target.value || 0) } : r))} />
+              </div>
+              <button type="button" onClick={() => setTiers((rows) => rows.filter((_, idx) => idx !== i))}
+                className="mt-4 border border-red-200 bg-white px-2 py-1.5 text-[10px] font-bold text-red-600 hover:bg-red-50">
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const RELEASE_MODE_OPTIONS = [
+    { value: false, title: "Immediate", body: "Commission releases in full as soon as it's approved — today's behavior." },
+    { value: true, title: "Staged by payment progress", body: "Commission releases in tiers, as the buyer pays off the deal. Configure the tiers below." },
+  ];
+  const renderSaleReleaseScheduleTab = () => (
+    <div className="space-y-4">
+      <Card title="Release Mode" subtitle="How commission is recognized as a deal's buyer pays.">
+        {renderSaleChoiceCards(
+          RELEASE_MODE_OPTIONS,
+          releaseScheduleForm.enabled,
+          (enabled) => setReleaseScheduleForm((p) => ({ ...p, enabled })),
+        )}
+      </Card>
+      <Card
+        title="Tiers"
+        subtitle="Each tier fires once a deal's cumulative payment progress crosses its threshold. Thresholds must be ascending; a payee's release percentages can't add up to more than 100%."
+        action={
+          <ActionButton variant="primary" onClick={async () => {
+            setSavingReleaseSchedule(true);
+            try {
+              await adminRequests.put("/sale/settings/commission-release-schedule", releaseScheduleForm);
+              toast.success("Commission release schedule saved.");
+              await loadSaleSettings();
+            } catch (err) { toast.error(extractErrorMessage(err)); }
+            finally { setSavingReleaseSchedule(false); }
+          }} disabled={savingReleaseSchedule}>
+            {savingReleaseSchedule ? <Spinner size="sm" /> : <FaSave />} Save Tiers
+          </ActionButton>
+        }
+      >
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+          {renderTierListEditor(
+            releaseScheduleForm.ownerCommissionTiers,
+            (updater) => setReleaseScheduleForm((p) => ({ ...p, ownerCommissionTiers: typeof updater === "function" ? updater(p.ownerCommissionTiers) : updater })),
+            "Company (owner) commission tiers",
+          )}
+          {renderTierListEditor(
+            releaseScheduleForm.brokerCommissionTiers,
+            (updater) => setReleaseScheduleForm((p) => ({ ...p, brokerCommissionTiers: typeof updater === "function" ? updater(p.brokerCommissionTiers) : updater })),
+            "Broker (agent) commission tiers",
+          )}
+        </div>
+      </Card>
+    </div>
+  );
+
   const setInvPOS = (key) => (val) => { setInvPOSForm((f) => ({ ...f, [key]: val })); setDirtyInvPOS(true); };
   const setInvPOSVal = (key) => (e) => setInvPOS(key)(e.target.type === "checkbox" ? e.target.checked : e.target.value);
 
@@ -2890,8 +3062,6 @@ const CompanySettings = () => {
       )}
     </div>
   );
-
-  const setCwField = (setter) => (val) => { setter(val); setDirtyCW(true); };
 
   const renderCWOperationsTab = () => (
     <div className="space-y-4">
@@ -3353,6 +3523,21 @@ const CompanySettings = () => {
       return <SalePropertyTypeEditor formData={formData} setFormData={setFormData} />;
     }
 
+    if (tabKey === "expenseCategories") {
+      return (
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Category Name *</label>
+            <Input value={formData.name || ""} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder="e.g. Marketing" />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold text-slate-700">Description</label>
+            <Input value={formData.description || ""} onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))} placeholder="Optional guidance" />
+          </div>
+        </div>
+      );
+    }
+
     // expenses and any other future tabs
     return (
       <div className="space-y-4">
@@ -3367,16 +3552,14 @@ const CompanySettings = () => {
           </div>
           <AppSelect
             label="Category"
-            value={formData.category || "other"}
-            onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "other" }))}
-            options={[
-              { value: "maintenance", label: "Maintenance" },
-              { value: "utilities", label: "Utilities" },
-              { value: "staffing", label: "Staffing" },
-              { value: "supplies", label: "Supplies" },
-              { value: "other", label: "Other" },
-            ]}
+            value={formData.category || ""}
+            onChange={(v) => setFormData((prev) => ({ ...prev, category: v ?? "" }))}
+            options={(collectionMap.expenseCategories || []).filter((c) => c.isActive !== false).map((c) => ({ value: String(c._id), label: c.name }))}
+            placeholder="Uncategorized"
+            searchable
+            clearable
             size="md"
+            hint={!(collectionMap.expenseCategories || []).length ? "No expense categories yet — add one in the Expense Categories tab." : undefined}
           />
         </div>
         <AppSelect
@@ -3462,7 +3645,7 @@ const CompanySettings = () => {
                         >
                           <Icon size={10} className="shrink-0" />
                           <span className="flex-1 truncate">{tab.label}</span>
-                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules", "saleCommDefaults", "saleAgentVisibility", "saleSellingMode", "invPOSSettings", "cwOperations", "cwSMS"].includes(key) && (
+                          {!["tax", "accounting", "autoInvoicing", "incomeRules", "penaltyRules", "saleCommDefaults", "saleAgentVisibility", "saleSellingMode", "saleOwnerMode", "saleAdvocateMode", "saleOwnerCommDefaults", "saleReleaseSchedule", "invPOSSettings", "cwOperations", "cwSMS"].includes(key) && (
                             <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-bold ${isActive ? "bg-white/20 text-white" : "bg-slate-200 text-slate-500"}`}>
                               {activeCounts[key] ?? 0}
                             </span>
@@ -3502,6 +3685,14 @@ const CompanySettings = () => {
                 <div className="flex-1 overflow-auto px-4 py-4">{renderSaleAgentVisibilityTab()}</div>
               ) : activeTab === "saleSellingMode" ? (
                 <div className="flex-1 overflow-auto px-4 py-4">{renderSaleSellingModeTab()}</div>
+              ) : activeTab === "saleOwnerMode" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleOwnerModeTab()}</div>
+              ) : activeTab === "saleAdvocateMode" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleAdvocateModeTab()}</div>
+              ) : activeTab === "saleOwnerCommDefaults" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleOwnerCommDefaultsTab()}</div>
+              ) : activeTab === "saleReleaseSchedule" ? (
+                <div className="flex-1 overflow-auto px-4 py-4">{renderSaleReleaseScheduleTab()}</div>
               ) : activeTab === "invPOSSettings" ? (
                 <div className="flex-1 overflow-auto px-4 py-4">{renderInvPOSTab()}</div>
               ) : activeTab === "cwOperations" ? (

@@ -39,7 +39,7 @@ export const getUnits = async (dispatch, business, property = null, status = nul
 
     const res = await adminRequests.get(url);
     dispatch(getUnitsSuccess(extractList(res.data)));
-  } catch (err) {
+  } catch {
     dispatch(getUnitsFailure());
   }
 };
@@ -50,7 +50,7 @@ export const getUnit = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/units/${id}`);
     dispatch(getUnitsSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getUnitsFailure());
   }
 };
@@ -109,24 +109,16 @@ export const updateUnitStatus = async (dispatch, id, statusData) => {
 
 // Get available units
 export const getAvailableUnits = async (business, property = null) => {
-  try {
-    let url = `/units/find/available?business=${business}`;
-    if (property) url += `&property=${property}`;
+  let url = `/units/find/available?business=${business}`;
+  if (property) url += `&property=${property}`;
 
-    const res = await adminRequests.get(url);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(url);
+  return res.data;
 };
 
 export const getUnitUtilities = async (unitId) => {
-  try {
-    const res = await adminRequests.get(`/units/${unitId}/utilities`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/units/${unitId}/utilities`);
+  return res.data;
 };
 
 export const addUtilityToUnit = async (dispatch, unitId, utilityData) => {

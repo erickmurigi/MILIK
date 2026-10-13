@@ -24,15 +24,6 @@ import MilikTable from "../../components/common/MilikTable";
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
 
-const ensureArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.rows)) return value.rows;
-  if (Array.isArray(value?.properties)) return value.properties;
-  return [];
-};
-
 
 
 
@@ -61,7 +52,7 @@ const TenantPrepayments = () => {
   const [pageSize, setPageSize] = useState(50);
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
   const currentCompany = useSelector(selectCurrentCompany);
   const properties = useSelector(selectAllProperties);
 
@@ -182,7 +173,7 @@ const TenantPrepayments = () => {
           totalAllocated: Number(summary?.totalAllocated || 0),
           confirmedRows: Number(summary?.confirmedRows || nextRows.filter((row) => row.isConfirmed).length || 0),
         });
-      } catch (error) {
+      } catch {
         if (!isMounted) return;
         setRows([]);
         setPagination({
@@ -227,8 +218,6 @@ const TenantPrepayments = () => {
 
   const totalPages = Math.max(1, Number(pagination?.totalPages || 1));
   const safeCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
-  const showingStart = rows.length === 0 ? 0 : (safeCurrentPage - 1) * pageSize + 1;
-  const showingEnd = rows.length === 0 ? 0 : showingStart + rows.length - 1;
 
   return (
     <DashboardLayout lockContentScroll>

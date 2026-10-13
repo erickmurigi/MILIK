@@ -44,6 +44,7 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
   onCheckAll,
   isChecked,        // (row) => boolean
   onCheckRow,       // (row) => void
+  isCheckDisabled,  // (row) => boolean — greys out that row's checkbox and makes it a no-op
 
   sortKey,          // active sort column key
   sortDir = "asc",
@@ -121,6 +122,7 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
       const key      = row[rowKey] ?? i;
       const sel      = isSelected?.(row) ?? false;
       const checked  = isChecked?.(row)  ?? false;
+      const checkDisabled = isCheckDisabled?.(row) ?? false;
       const expanded = expandedKeys.has(key);
       const zebra    = i % 2 === 0 ? "bg-white" : "bg-slate-50/50";
       const extra    = rowClassName?.(row, i) ?? "";
@@ -129,23 +131,25 @@ const MilikTable = React.memo(React.forwardRef(function MilikTable({
         <React.Fragment key={key}>
           <tr
             className={`border-b border-gray-100 text-[11px] uppercase transition-colors
-              ${onRowClick ? "cursor-pointer" : ""}
+              ${onRowClick && !checkDisabled ? "cursor-pointer" : ""}
               ${sel
                 ? "bg-[#C8E6D4] shadow-[inset_4px_0_0_0_#0B3B2E] font-medium"
                 : `${zebra} hover:bg-[#EBF5EF]`}
               ${extra}`}
-            onClick={onRowClick ? () => onRowClick(row) : undefined}
+            onClick={onRowClick ? () => { if (!checkDisabled) onRowClick(row); } : undefined}
           >
             {checkboxes && (
               <td
                 className="w-9 px-2 py-1.5 text-center border-r border-gray-100 shrink-0"
-                onClick={(e) => { e.stopPropagation(); onCheckRow?.(row); }}
+                onClick={(e) => { e.stopPropagation(); if (!checkDisabled) onCheckRow?.(row); }}
+                title={checkDisabled ? "Not selectable" : undefined}
               >
                 <input
                   type="checkbox"
                   checked={checked}
+                  disabled={checkDisabled}
                   onChange={() => {}}
-                  className="cursor-pointer accent-[#0B3B2E]"
+                  className={checkDisabled ? "cursor-not-allowed opacity-30" : "cursor-pointer accent-[#0B3B2E]"}
                 />
               </td>
             )}

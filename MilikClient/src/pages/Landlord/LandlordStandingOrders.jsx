@@ -83,13 +83,6 @@ const blankForm = {
   status: "draft",
 };
 
-const statusPills = {
-  draft: "bg-slate-100 text-slate-700",
-  active: "bg-emerald-100 text-emerald-700",
-  paused: "bg-amber-100 text-amber-700",
-  stopped: "bg-rose-100 text-rose-700",
-};
-
 const paymentMethodOptions = [
   { value: "bank_transfer", label: "Bank Transfer" },
   { value: "mpesa", label: "M-Pesa" },
@@ -120,9 +113,6 @@ const frequencyLabel = (value) =>
     .replace(/\b\w/g, (match) => match.toUpperCase());
 const getLandlordLabel = (landlord) =>
   landlord?.landlordName || `${landlord?.firstName || ""} ${landlord?.lastName || ""}`.trim() || "Landlord";
-const getCashbookLabel = (cashbook) =>
-  cashbook?.name || cashbook?.accountName || cashbook?.code || cashbook?.accountCode || "Auto-resolve";
-
 const getPaymentDestinationSummary = (row) => {
   const destination = row?.destination || {};
   const paymentMethod = normalizePaymentMethod(row?.paymentMethod);
@@ -232,7 +222,6 @@ const LandlordStandingOrders = () => {
   }, [_lsoDraftKey, form, showModal, editingId]);
 
   const [runModal, setRunModal] = useState({ open: false, row: null, periodKey: "", amount: "", note: "" });
-  const [expandedId, setExpandedId] = useState("");
   const [selectedIds, setSelectedIds] = useState([]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const [bulkRunning, setBulkRunning] = useState(false);
@@ -793,7 +782,6 @@ const LandlordStandingOrders = () => {
                 if (runnable) toggleRowSelection(row._id);
               }}
               renderRow={(row) => {
-                const runnable = row.status === "active" && (row.eligiblePeriods || []).length > 0;
                 return (
                   <>
                     <td className="px-3 py-1.5 border-r border-gray-100 overflow-hidden">

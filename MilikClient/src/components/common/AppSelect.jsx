@@ -119,7 +119,7 @@ const AppSelect = ({
     setHighlightedIndex(
       options.findIndex((o) => String(o.value ?? "") === String(value ?? ""))
     );
-  }, [disabled, options, value]);
+  }, [disabled, options, value, compact]);
 
   // Close on outside click
   useEffect(() => {

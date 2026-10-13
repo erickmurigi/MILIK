@@ -295,7 +295,6 @@ const PropertyExpenses = () => {
 
   const businessId = currentCompany?._id || currentUser?.company?._id || currentUser?.company || '';
   const { propertiesLoaded, unitsLoaded } = useEntityCache(businessId);
-  const currency   = currentCompany?.baseCurrency || 'KES';
 
   const { canCreateExpense, canUpdateExpense, canDeleteExpense } = useMemo(() => ({
     canCreateExpense: hasCompanyPermission(currentUser || {}, currentCompany, 'propertyExpenses', 'create', 'propertyManagement'),

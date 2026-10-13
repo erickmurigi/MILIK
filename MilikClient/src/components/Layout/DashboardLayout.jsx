@@ -30,7 +30,8 @@ import {
   getWorkspaceFromRoute,
   getWorkspaceLabel,
 } from "../../utils/workspaceRoutes";
-import { GL_ACCESS_MODULES, hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { hasCompanyModule, isSelfManagingLandlordCompany } from "../../utils/companyModules";
+import { isModuleVisibleToUser } from "../../utils/moduleVisibility";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTerm, useTerms } from "../../hooks/useTerm";
 import { useQuery } from "@tanstack/react-query";
@@ -173,6 +174,10 @@ const MENU_PERMISSION_MAP = {
   "sale-units":           { resource: "sale-listings",        action: "view", moduleKey: "propertySale" },
   "sale-buyers":          { resource: "sale-buyers",          action: "view", moduleKey: "propertySale" },
   "sale-agents":          { resource: "sale-agents",          action: "view", moduleKey: "propertySale" },
+  "sale-owners":          { resource: "sale-owners",          action: "view", moduleKey: "propertySale" },
+  "sale-owner-statements": { resource: "sale-owner-statements", action: "view", moduleKey: "propertySale" },
+  "sale-advocates":       { resource: "sale-advocates",       action: "view", moduleKey: "propertySale" },
+  "sale-advocate-remittances": { resource: "sale-advocates",  action: "view", moduleKey: "propertySale" },
   "sale-offers":          { resource: "sale-offers",          action: "view", moduleKey: "propertySale" },
   "sale-deals":           { resource: "sale-deals",           action: "view", moduleKey: "propertySale" },
   "sale-payments":        { resource: "sale-payments",        action: "view", moduleKey: "propertySale" },
@@ -456,54 +461,7 @@ const HelpMegaPanel = ({ darkMode, onClose, navigate, activeCompany }) => {
   );
 };
 
-const MENU_COLOR_MAP = {
-  properties: { color: "#3B82F6", label: "Properties", icon: FaHome },
-  landlord: { color: "#F59E0B", label: "Landlords", icon: FaUser },
-  units: { color: "#8B5CF6", label: "Units & Spaces", icon: FaSquare },
-  tenants: { color: "#EC4899", label: "Tenants", icon: FaUsers },
-  reports: { color: "#10B981", label: "Reports & Analytics", icon: FaChartBar },
-  tools: { color: "#06B6D4", label: "Tools & Settings", icon: FaToolbox },
-  help: { color: "#8B5CF6", label: "Help & Support", icon: FaInfoCircle },
-  "rental-invoicing": { color: "#4F46E5", label: "Rental Invoicing", icon: FaFileInvoice },
-  "rental-receipting": { color: "#10B981", label: "Rental Receipting", icon: FaReceipt },
-  "landlord-payments": { color: "#8B5CF6", label: "Landlord Payments", icon: FaHandHolding },
-  "carwash-operations":         { color: "#0B3B2E", label: "Operations",  icon: FaCar },
-  "carwash-finance":            { color: "#0B3B2E", label: "Finance",     icon: FaMoneyBillWave },
-  "carwash-commissions-group":  { color: "#0B3B2E", label: "Commissions", icon: FaHandshake },
-  "carwash-reporting":          { color: "#0B3B2E", label: "Reports",     icon: FaChartBar },
-  "carwash-setup":              { color: "#0B3B2E", label: "Setup",       icon: FaCog },
-  "sale-listings-grp": { color: "#0B3B2E", label: "Listings",  icon: FaBuilding },
-  "sale-crm":          { color: "#0B3B2E", label: "CRM",       icon: FaUserClock },
-  "sale-clients":      { color: "#0B3B2E", label: "Buyers",    icon: FaUsers },
-  "sale-pipeline":     { color: "#0B3B2E", label: "Deals",     icon: FaHandshake },
-  "sale-finance":      { color: "#0B3B2E", label: "Finance",   icon: FaMoneyBillWave },
-  "sale-reporting":    { color: "#0B3B2E", label: "Reports",   icon: FaFileAlt },
-  "sale-agents-grp":   { color: "#0B3B2E", label: "Agents",    icon: FaUser },
-  "sale-setup":        { color: "#0B3B2E", label: "Setup",     icon: FaCog },
-  "clients-main":            { color: "#0B3B2E", label: "Clients",   icon: FaUsers },
-  "clients-contracts-group": { color: "#0B3B2E", label: "Contracts", icon: FaHandshake },
-  "clients-billing":         { color: "#0B3B2E", label: "Billing",   icon: FaFileInvoice },
-  "hr-people":      { color: "#0B3B2E", label: "Employees",  icon: FaUsers },
-  "hr-leave":       { color: "#0891b2", label: "Leave",       icon: FaCalendarAlt },
-  "hr-payroll":     { color: "#7c3aed", label: "Payroll",     icon: FaMoneyBillWave },
-  "hr-reports":     { color: "#059669", label: "Reports",     icon: FaChartBar },
-  "hr-appraisals":  { color: "#b45309", label: "Appraisals",  icon: FaChartLine },
-  "hr-attendance":  { color: "#0891b2", label: "Attendance",  icon: FaUserClock },
-  "hr-config":      { color: "#FF8C00", label: "Setup",       icon: FaCog },
-  "inv-pos":            { color: "#0B3B2E", label: "Point of Sale",    icon: FaCashRegister },
-  "inv-catalog":        { color: "#1a5c3a", label: "Products",          icon: FaBoxes },
-  "inv-stock-ops":      { color: "#0B3B2E", label: "Stock",             icon: FaExchangeAlt },
-  "inv-purchasing":     { color: "#374151", label: "Purchasing",        icon: FaFileInvoice },
-  "inv-tills-sessions": { color: "#0B3B2E", label: "Tills & Sessions",  icon: FaCashRegister },
-  "inv-setup":          { color: "#4B5563", label: "Setup",             icon: FaCog },
-  "acc-ledger":     { color: "#0B3B2E", label: "General Ledger",        icon: FaBook },
-  "acc-payables":   { color: "#b45309", label: "Payables & Expenses",   icon: FaCreditCard },
-  "acc-statements": { color: "#0f766e", label: "Financial Reports",     icon: FaFileAlt },
-  "comm-sms":       { color: "#0d9488", label: "SMS Messaging",         icon: FaSms },
-  "comm-email":     { color: "#1d4ed8", label: "Email Messaging",       icon: FaEnvelope },
-};
-
-const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick, menuColorMap = MENU_COLOR_MAP }) => {
+const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick }) => {
   return (
     <div
       className={`absolute left-full top-0 w-56 shadow-lg z-[120] overflow-visible border pointer-events-auto ${
@@ -550,7 +508,7 @@ const ProfessionalDropdown = ({ menuId, items, darkMode, onMenuEnter, onMenuLeav
   );
 };
 
-const FinancialDropdown = ({ categoryId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick, menuColorMap = MENU_COLOR_MAP }) => {
+const FinancialDropdown = ({ categoryId, items, darkMode, onMenuEnter, onMenuLeave, onItemClick }) => {
   return (
     <div
       className={`absolute left-full top-0 w-56 shadow-lg z-[120] overflow-visible border pointer-events-auto ${
@@ -643,30 +601,22 @@ const TopToolbar = ({
   const termRent       = useTerm("rent");
   const termLease      = useTerm("lease");
   // Sales workspace words (one subscription; stable while the values are unchanged)
-  const saleT = useTerms("saleListings", "saleProjects", "saleUnits", "saleLeads", "saleBuyers", "saleOffers", "saleDeals", "saleAgent", "saleAgents");
+  const saleT = useTerms("saleListings", "saleProjects", "saleUnits", "saleLeads", "saleBuyers", "saleOffers", "saleDeals", "saleAgent", "saleAgents", "saleOwners", "saleOwnerStatements", "saleAdvocates");
 
-  // Dynamic color map that reflects company terminology in dropdown headers
-  const dynamicMenuColorMap = useMemo(() => ({
-    ...MENU_COLOR_MAP,
-    properties:        { ...MENU_COLOR_MAP.properties,        label: termProperties                   },
-    landlord:          { ...MENU_COLOR_MAP.landlord,          label: termLandlords                    },
-    tenants:           { ...MENU_COLOR_MAP.tenants,           label: termTenants                      },
-    units:             { ...MENU_COLOR_MAP.units,             label: `${termUnits} & Spaces`          },
-    "landlord-payments": { ...MENU_COLOR_MAP["landlord-payments"], label: `${termLandlord} Payments`  },
-  }), [termProperties, termLandlords, termTenants, termUnits, termLandlord]);
-
-  // For neutral pages (e.g. /my-account), derive menu from the company's enabled modules
-  // so a Car Wash-only company doesn't see the PMS navbar.
+  // For neutral pages (e.g. /my-account), derive menu from what this user can actually open
+  // — not just what the company has enabled — so a user denied Car Wash doesn't land on the
+  // Car Wash navbar by default. (The 'humanResource' key below was also dead: company module
+  // flags are keyed 'hr', so this branch could never match — fixed alongside the user check.)
   const effectiveMenuWorkspace = useMemo(() => {
     if (currentWorkspace !== WORKSPACE_IDS.NEUTRAL) return currentWorkspace;
-    if (hasCompanyModule(activeCompanyContext, 'carwash'))            return WORKSPACE_IDS.CARWASH;
-    if (hasCompanyModule(activeCompanyContext, 'propertyManagement')) return WORKSPACE_IDS.PROPERTY;
-    if (hasCompanyModule(activeCompanyContext, 'inventory'))          return WORKSPACE_IDS.INVENTORY;
-    if (hasCompanyModule(activeCompanyContext, 'propertySale'))       return WORKSPACE_IDS.PROPERTY_SALE;
-    if (hasCompanyModule(activeCompanyContext, 'humanResource'))      return WORKSPACE_IDS.HUMAN_RESOURCE;
-    if (hasCompanyModule(activeCompanyContext, 'accounts'))           return WORKSPACE_IDS.ACCOUNTS;
+    if (isModuleVisibleToUser(currentUser, activeCompanyContext, 'carwash'))            return WORKSPACE_IDS.CARWASH;
+    if (isModuleVisibleToUser(currentUser, activeCompanyContext, 'propertyManagement')) return WORKSPACE_IDS.PROPERTY;
+    if (isModuleVisibleToUser(currentUser, activeCompanyContext, 'inventory'))          return WORKSPACE_IDS.INVENTORY;
+    if (isModuleVisibleToUser(currentUser, activeCompanyContext, 'propertySale'))       return WORKSPACE_IDS.PROPERTY_SALE;
+    if (isModuleVisibleToUser(currentUser, activeCompanyContext, 'hr'))                 return WORKSPACE_IDS.HUMAN_RESOURCE;
+    if (isModuleVisibleToUser(currentUser, activeCompanyContext, 'accounts'))           return WORKSPACE_IDS.ACCOUNTS;
     return WORKSPACE_IDS.PROPERTY;
-  }, [currentWorkspace, activeCompanyContext]);
+  }, [currentWorkspace, currentUser, activeCompanyContext]);
 
   const isAccountsWorkspace       = effectiveMenuWorkspace === WORKSPACE_IDS.ACCOUNTS;
   const isCarWashWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CARWASH;
@@ -680,6 +630,8 @@ const TopToolbar = ({
     staleTime: 10 * 60_000,
   });
   const saleUsesProjects = Boolean(saleSettings?.useProjects);
+  const saleUsesOwners = Boolean(saleSettings?.useOwners);
+  const saleUsesAdvocates = Boolean(saleSettings?.useAdvocates);
   const isHumanResourceWorkspace  = effectiveMenuWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
   const isCommunicationsWorkspace = effectiveMenuWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
   const isClientsWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CLIENTS;
@@ -778,6 +730,10 @@ const TopToolbar = ({
         "sale-units":          "/sale/units",
         "sale-buyers":         "/sale/buyers",
         "sale-agents":         "/sale/agents",
+        "sale-owners":         "/sale/owners",
+        "sale-owner-statements": "/sale/owner-statements",
+        "sale-advocates":      "/sale/advocates",
+        "sale-advocate-remittances": "/sale/advocate-remittances",
         "sale-offers":         "/sale/offers",
         "sale-deals":          "/sale/deals",
         "sale-payments":       "/sale/payments",
@@ -1083,6 +1039,24 @@ const TopToolbar = ({
             { id: "sale-agents", label: saleT.saleAgents, icon: FaUser },
           ],
         },
+        ...(saleUsesOwners ? [{
+          id: "sale-owners-grp",
+          label: saleT.saleOwners,
+          icon: FaUsers,
+          submenu: [
+            { id: "sale-owners", label: saleT.saleOwners, icon: FaUsers },
+            { id: "sale-owner-statements", label: saleT.saleOwnerStatements, icon: FaFileAlt },
+          ],
+        }] : []),
+        ...(saleUsesAdvocates ? [{
+          id: "sale-advocates-grp",
+          label: saleT.saleAdvocates,
+          icon: FaUsers,
+          submenu: [
+            { id: "sale-advocates", label: saleT.saleAdvocates, icon: FaUsers },
+            { id: "sale-advocate-remittances", label: "Trust Remittances", icon: FaFileAlt },
+          ],
+        }] : []),
         {
           id: "sale-setup",
           label: "Setup",
@@ -1668,7 +1642,7 @@ const TopToolbar = ({
       });
 
     return filterMenuByPermissions(items, currentUser, activeCompanyContext);
-  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease, saleT, saleUsesProjects]);
+  }, [activeCompanyContext, currentUser, isAccountsWorkspace, isCarWashWorkspace, isClientsWorkspace, isCommunicationsWorkspace, isCompanySetupWorkspace, isHumanResourceWorkspace, isLandlordMode, isPropertySaleWorkspace, isSystemAdminWorkspace, termTenant, termTenants, termUnit, termUnits, termProperty, termProperties, termLandlord, termLandlords, termRent, termLease, saleT, saleUsesProjects, saleUsesOwners, saleUsesAdvocates]);
 
   const nestedSubmenus = useMemo(() => {
     if (isSystemAdminWorkspace || isCompanySetupWorkspace || isAccountsWorkspace || isCarWashWorkspace || isClientsWorkspace || isPropertySaleWorkspace || isHumanResourceWorkspace || isCommunicationsWorkspace) {
@@ -1816,7 +1790,6 @@ const TopToolbar = ({
                 onMenuEnter={openHoveredFinancialItem}
                 onMenuLeave={closeHoveredFinancialItem}
                 onItemClick={handleMenuItemClick}
-                menuColorMap={dynamicMenuColorMap}
               />
             ) : (
               <ProfessionalDropdown
@@ -1826,7 +1799,6 @@ const TopToolbar = ({
                 onMenuEnter={openHoveredFinancialItem}
                 onMenuLeave={closeHoveredFinancialItem}
                 onItemClick={handleMenuItemClick}
-                menuColorMap={dynamicMenuColorMap}
               />
             )
           )}

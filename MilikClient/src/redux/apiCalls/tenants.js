@@ -28,7 +28,7 @@ export const getTenants = async (dispatch, business, status = null, unit = null)
 
     const res = await adminRequests.get(url);
     dispatch(getTenantsSuccess(res.data));
-  } catch (err) {
+  } catch {
     dispatch(getTenantsFailure());
   }
 };
@@ -39,7 +39,7 @@ export const getTenant = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/tenants/${id}`);
     dispatch(getTenantsSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getTenantsFailure());
   }
 };
@@ -98,31 +98,19 @@ export const updateTenantStatus = async (dispatch, id, statusData) => {
 
 // Get tenant payments
 export const getTenantPayments = async (id) => {
-  try {
-    const res = await adminRequests.get(`/tenants/payments/${id}`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/tenants/payments/${id}`);
+  return res.data;
 };
 
 // Get tenant balance
 export const getTenantBalance = async (id) => {
-  try {
-    const res = await adminRequests.get(`/tenants/balance/${id}`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/tenants/balance/${id}`);
+  return res.data;
 };
 
 export const getTenantTotalDue = async (tenantId) => {
-  try {
-    const res = await adminRequests.get(`/tenants/${tenantId}/total-due`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/tenants/${tenantId}/total-due`);
+  return res.data;
 };
 
 export const getTenantStatementBundle = async (tenantId) => {

@@ -19,7 +19,6 @@ import { useConfirm } from "../../context/ConfirmContext";
 
 const GRN = "#0B3B2E";
 const fmt  = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const localDate = (d) => { const dt = new Date(d); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`; };
 
 const VIEW = { LIST: "list", DETAIL: "detail" };
 
@@ -47,7 +46,6 @@ const BudgetVsActual = () => {
   const confirm     = useConfirm();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const businessId  = currentCompany?._id;
-  const companyName = String(currentCompany?.companyName || currentCompany?.name || "").trim();
   const { pathname } = useLocation();
   const isAnalysisRoute = pathname === "/accounts/budget/analysis";
 

@@ -29,12 +29,6 @@ const NOTIF_MAP = {
   tenant_move_in: 'tenant', tenant_move_out: 'tenant', lease_expiry: 'lease', system: 'notification',
 };
 
-const ensureArr = (v, ...keys) => {
-  if (Array.isArray(v)) return v;
-  for (const k of keys) if (Array.isArray(v?.[k])) return v[k];
-  return [];
-};
-
 const fmtRel = (v) => {
   const d = parseDate(v);
   if (!d) return '';

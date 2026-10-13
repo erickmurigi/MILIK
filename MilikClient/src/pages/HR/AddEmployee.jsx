@@ -490,7 +490,7 @@ export default function AddEmployee() {
             <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-1.5 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex gap-1">
-                  {TABS.map((t, i) => (
+                  {TABS.map((t) => (
                     <button key={t.key} type="button" onClick={() => setTab(t.key)}
                       className={`h-1.5 w-6 rounded-full transition-colors ${tab === t.key ? 'bg-emerald-600' : 'bg-slate-200'}`}
                     />

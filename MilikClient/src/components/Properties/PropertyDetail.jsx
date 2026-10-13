@@ -10,7 +10,7 @@ import {
   FaMapMarkerAlt, FaBuilding, FaHome, FaCity, FaCalendar,
   FaFileInvoice, FaChartLine, FaMoneyBillWave
 } from 'react-icons/fa';
-import { getPropertyById, deleteProperty } from '../../redux/propertyRedux';
+import { getPropertyById } from '../../redux/propertyRedux';
 
 const PropertyDetail = () => {
   const { id } = useParams();

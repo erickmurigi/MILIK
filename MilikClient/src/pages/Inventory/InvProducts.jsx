@@ -60,14 +60,17 @@ const StockCardModal = ({ product, onClose }) => {
 
   const { rows, totalIn, totalOut, closingBalance } = useMemo(() => {
     const asc = [...rawMovements].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-    let running = 0, totalIn = 0, totalOut = 0;
-    const enriched = asc.map((e) => {
-      running += Number(e.qty);
-      if (Number(e.qty) > 0) totalIn += Number(e.qty);
-      else totalOut += Math.abs(Number(e.qty));
-      return { ...e, runningBalance: running };
-    });
-    return { rows: enriched.reverse(), totalIn, totalOut, closingBalance: running };
+    // Accumulate into the reduce's own accumulator rather than mutating a closed-over `let` —
+    // same running-balance result, but nothing outside this single computation is touched.
+    const totals = asc.reduce((acc, e) => {
+      const qty = Number(e.qty);
+      acc.running += qty;
+      if (qty > 0) acc.totalIn += qty;
+      else acc.totalOut += Math.abs(qty);
+      acc.enriched.push({ ...e, runningBalance: acc.running });
+      return acc;
+    }, { enriched: [], totalIn: 0, totalOut: 0, running: 0 });
+    return { rows: totals.enriched.reverse(), totalIn: totals.totalIn, totalOut: totals.totalOut, closingBalance: totals.running };
   }, [rawMovements]);
 
   return (

@@ -19,12 +19,12 @@ export const useTabContext = () => {
 };
 
 export const TabProvider = ({ children }) => {
-  const [tabs, setTabs] = useState([
-    { 
-      id: 'dashboard', 
-      title: 'Dashboard', 
-      route: '/dashboard', 
-      closable: false, 
+  const [tabs, setTabs] = useState(() => [
+    {
+      id: 'dashboard',
+      title: 'Dashboard',
+      route: '/dashboard',
+      closable: false,
       timestamp: Date.now()
     }
   ]);

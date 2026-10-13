@@ -55,6 +55,31 @@ export const saleApi = {
   updateAgent: async (id, payload) => unwrap(await adminRequests.put(`/sale/agents/${id}`, payload)),
   deleteAgent: async (id) => unwrap(await adminRequests.delete(`/sale/agents/${id}`)),
 
+  // Owners
+  listOwners: async (params = {}) => unwrapPage(await adminRequests.get("/sale/owners", { params })),
+  getOwner: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/owners/${id}`, { params })),
+  createOwner: async (payload) => unwrap(await adminRequests.post("/sale/owners", payload)),
+  updateOwner: async (id, payload) => unwrap(await adminRequests.put(`/sale/owners/${id}`, payload)),
+  deleteOwner: async (id) => unwrap(await adminRequests.delete(`/sale/owners/${id}`)),
+
+  // Owner Statements
+  listOwnerStatements: async (params = {}) => unwrapPage(await adminRequests.get("/sale/owner-statements", { params })),
+  getOwnerStatement: async (id) => unwrap(await adminRequests.get(`/sale/owner-statements/${id}`)),
+  createOwnerStatementDraft: async (payload) => unwrap(await adminRequests.post("/sale/owner-statements/draft", payload)),
+  approveOwnerStatement: async (id) => unwrap(await adminRequests.post(`/sale/owner-statements/${id}/approve`)),
+
+  // Advocates (conveyancing advocates who collect buyer payments into their own trust account)
+  listAdvocates: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocates", { params })),
+  getAdvocate: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/advocates/${id}`, { params })),
+  createAdvocate: async (payload) => unwrap(await adminRequests.post("/sale/advocates", payload)),
+  updateAdvocate: async (id, payload) => unwrap(await adminRequests.put(`/sale/advocates/${id}`, payload)),
+  deleteAdvocate: async (id) => unwrap(await adminRequests.delete(`/sale/advocates/${id}`)),
+
+  // Advocate Trust Remittances
+  listAdvocateRemittances: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocate-remittances", { params })),
+  createAdvocateRemittance: async (payload) => unwrap(await adminRequests.post("/sale/advocate-remittances", payload)),
+  getAdvocateTrustBalance: async (advocateId) => unwrap(await adminRequests.get(`/sale/advocate-remittances/balance/${advocateId}`)),
+
   // Offers
   listOffers: async (params = {}) => unwrapPage(await adminRequests.get("/sale/offers", { params })),
   getOffer: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/offers/${id}`, { params })),

@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef } from "react";
+import React, { useState, useRef } from "react";
 import { useSelector } from "react-redux";
 import { selectCurrentUser, selectCurrentCompany } from "../../redux/selectors";
 import { useTerms } from "../../hooks/useTerm";
@@ -142,25 +142,20 @@ const StatementDetailView = ({
     if (onDownloadPdf) onDownloadPdf(statement);
   };
 
-  const getCategoryAmount = (category) => {
-    const record = statement?.totalsByCategory?.[category];
-    if (!record) return 0;
-    if (typeof record.totalAmount === "number") return Math.abs(Number(record.totalAmount || 0));
-    return Math.abs(Number(record.totalCredit || 0) - Number(record.totalDebit || 0));
-  };
-
   // Merge tenant list with statement lines to ensure all tenants are shown
   const tenants = window.__MILIK_TENANTS_FOR_STATEMENT || [];
   const rowsMap = new Map();
 
-  lines.forEach((line) => {
+  lines.forEach((line, lineIndex) => {
     const metadata = line?.metadata || {};
     const tenantObj = line?.tenant;
     const unitObj = line?.unit;
 
+    // Math.random() here would reassign a different fallback id to the same line on every
+    // re-render, breaking the stable key this id feeds into — the loop index is stable instead.
     const tenantId =
       String(tenantObj?._id || line?.tenant || metadata?.tenantId || metadata?.tenant || "") ||
-      `line-${line?._id || Math.random()}`;
+      `line-${line?._id || lineIndex}`;
     const tenantName = tenantObj?.name || metadata?.tenantName || `Unassigned ${termTenant}`;
     const unitLabel = unitObj?.unitNumber || unitObj?.name || metadata?.unit || "-";
     const paymentMethod = tenantObj?.paymentMethod || metadata?.paymentMethod || "-";

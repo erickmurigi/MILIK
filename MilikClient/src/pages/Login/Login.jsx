@@ -44,7 +44,7 @@ const consumePostLogoutLanding = () => {
       sessionStorage.removeItem(POST_LOGOUT_LANDING_KEY);
       return target;
     }
-  } catch (_error) {
+  } catch {
     // Ignore storage issues and continue with default routing.
   }
   return '';

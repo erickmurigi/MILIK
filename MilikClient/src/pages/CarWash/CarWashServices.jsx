@@ -15,7 +15,6 @@ import Modal from "../../components/common/Modal";
 
 const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "", isCombo: false, comboDescription: "" };
 const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [], isTaxable: Boolean(f?.isTaxable), taxRate: f?.taxRate !== undefined ? String(f.taxRate) : "", isCombo: Boolean(f?.isCombo), comboDescription: String(f?.comboDescription || "") });
-const selectClass = "h-9 w-full border border-slate-300 bg-white px-2 text-sm text-slate-800 focus:border-[#0B3B2E] focus:outline-none";
 const DEFAULT_PAGE_SIZE = 25;
 const NEW_CATEGORY_SENTINEL = "__new__";
 

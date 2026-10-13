@@ -16,7 +16,7 @@ const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs
 
 const blankForm = () => ({
   name: "", description: "", location: "", town: "", county: "", country: "Kenya",
-  launchDate: "", targetUnits: "", targetValue: "", notes: "", assignedAgent: "",
+  launchDate: "", targetUnits: "", targetValue: "", notes: "", assignedAgent: "", owner: "",
 });
 
 const formFromProject = (p) => ({
@@ -25,13 +25,14 @@ const formFromProject = (p) => ({
   launchDate: p.launchDate ? new Date(p.launchDate).toISOString().split("T")[0] : "",
   targetUnits: p.targetUnits ?? "", targetValue: p.targetValue ?? "", notes: p.notes || "",
   assignedAgent: p.assignedAgent?._id || p.assignedAgent || "",
+  owner: p.owner?._id || p.owner || "",
 });
 
 // Create / edit a project. Owns its form state so typing never re-renders the page behind it.
 export default function SaleProjectFormModal({ project = null, onSaved, onClose }) {
-  const T = useTerms("saleProject", "saleUnits", "saleAgent");
+  const T = useTerms("saleProject", "saleUnits", "saleAgent", "saleOwner");
   const biz = useSelector((s) => s.company?.currentCompany?._id);
-  const { agentFormOptions } = useSaleFormOptions(biz);
+  const { agentFormOptions, ownerFormOptions, saleSettings } = useSaleFormOptions(biz);
   const [form, setForm] = useState(() => (project ? formFromProject(project) : blankForm()));
   const [saving, setSaving] = useState(false);
 
@@ -61,6 +62,7 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         targetValue: form.targetValue === "" ? null : Number(form.targetValue),
         launchDate: form.launchDate || null,
         assignedAgent: form.assignedAgent || null,
+        owner: form.owner || null,
       };
       const saved = project ? await saleApi.updateProject(project._id, payload) : await saleApi.createProject(payload);
       if (!project) await photos.uploadStaged(saved?._id);
@@ -132,6 +134,23 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
             Every {T.saleUnits.toLowerCase()} without its own {T.saleAgent.toLowerCase()} follows this one. Set an {T.saleAgent.toLowerCase()} on a single {T.saleUnits.toLowerCase()} to override it.
           </p>
         </div>
+        {saleSettings?.useOwners && (
+          <div className="md:col-span-2">
+            <AppSelect
+              label={T.saleOwner}
+              value={form.owner}
+              onChange={(v) => setForm((p) => ({ ...p, owner: v ?? "" }))}
+              options={ownerFormOptions}
+              placeholder="None"
+              size="md"
+              searchable
+              clearable
+            />
+            <p className="mt-1 text-[10px] text-slate-400">
+              The property/project {T.saleOwner.toLowerCase()} this is sold on behalf of. Leave empty if the company sells this one for itself.
+            </p>
+          </div>
+        )}
         <div>
           <label className={labelClass}>Target {T.saleUnits}</label>
           <input type="number" min="0" value={form.targetUnits} onChange={set("targetUnits")} className={inputClass} placeholder="Optional" />

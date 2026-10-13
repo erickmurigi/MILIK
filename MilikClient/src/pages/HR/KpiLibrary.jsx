@@ -104,8 +104,6 @@ export default function KpiLibrary() {
   const totalPages = useMemo(() => Math.max(1, Math.ceil(kpis.length / pageSize)), [kpis.length, pageSize]);
   const pageKpis   = useMemo(() => kpis.slice((page - 1) * pageSize, page * pageSize), [kpis, page, pageSize]);
   const nActive    = useMemo(() => kpis.filter((k) => k.isActive).length, [kpis]);
-  const from       = useMemo(() => (kpis.length ? (page - 1) * pageSize + 1 : 0), [kpis.length, page, pageSize]);
-  const to         = useMemo(() => Math.min(page * pageSize, kpis.length), [kpis.length, page, pageSize]);
 
   return (
     <DashboardLayout lockContentScroll>

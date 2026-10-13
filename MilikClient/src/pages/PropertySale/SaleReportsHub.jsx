@@ -27,7 +27,7 @@ const SaleProjects = lazy(() => import("./SaleProjects"));
 const n2 = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const dt = (v) => (v ? new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const inputCls = "h-7 rounded border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E]";
+const inputCls = "h-7 border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E]";
 
 const AGING = [
   { key: "notDue", label: "Not yet due", bar: "bg-emerald-500", text: "text-emerald-700" },
@@ -139,11 +139,11 @@ const ReportFrame = ({ toolbar, summary, columns, exportColumns, paged, exportNa
       <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
         {toolbar}
         <div className="ml-auto flex items-center gap-2">
-          <button type="button" onClick={() => query.refetch()} disabled={query.isFetching} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+          <button type="button" onClick={() => query.refetch()} disabled={query.isFetching} className="inline-flex h-7 items-center gap-1.5 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
             <FaSyncAlt size={10} className={query.isFetching ? "animate-spin" : ""} /> Refresh
           </button>
           <SalePrintButton onClick={runPrint} busy={printing} disabled={!rows.length} />
-          <button type="button" onClick={runExport} disabled={exporting || !rows.length} className="inline-flex h-7 items-center gap-1.5 rounded bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-50">
+          <button type="button" onClick={runExport} disabled={exporting || !rows.length} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-50">
             <FaFileExcel size={11} /> {exporting ? "Preparing…" : "Excel"}
           </button>
         </div>
@@ -243,8 +243,8 @@ const OverdueView = ({ filters, T, filterText }) => {
         const text = `Dear ${r.buyerName}, a friendly reminder that instalment ${r.installmentNumber} of ${fmtKES(r.amount)} for ${r.unit || "your purchase"} was due on ${dt(r.dueDate)}. Kindly settle it at your earliest convenience. Thank you.`;
         return (
           <div className="flex gap-1.5">
-            {r.buyerPhone && <a href={`tel:${r.buyerPhone}`} title="Call" className="rounded border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100"><FaPhoneAlt size={10} /></a>}
-            {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" title="WhatsApp reminder" className="rounded border border-emerald-200 p-1.5 text-emerald-600 hover:bg-emerald-50"><FaWhatsapp size={11} /></a>}
+            {r.buyerPhone && <a href={`tel:${r.buyerPhone}`} title="Call" className="border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100"><FaPhoneAlt size={10} /></a>}
+            {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" title="WhatsApp reminder" className="border border-emerald-200 p-1.5 text-emerald-600 hover:bg-emerald-50"><FaWhatsapp size={11} /></a>}
           </div>
         );
       },
@@ -279,7 +279,7 @@ const OverdueView = ({ filters, T, filterText }) => {
       toolbar={
         <div className="flex items-center gap-1">
           {[[0, "All"], [30, "30+ days"], [60, "60+ days"], [90, "90+ days"]].map(([d, label]) => (
-            <button key={d} type="button" onClick={() => setMinDays(d)} className={`h-7 rounded-full border px-3 text-[11px] font-bold ${minDays === d ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{label}</button>
+            <button key={d} type="button" onClick={() => setMinDays(d)} className={`h-7 border px-3 text-[11px] font-bold ${minDays === d ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{label}</button>
           ))}
         </div>
       }
@@ -483,7 +483,7 @@ export default function SaleReportsHub() {
                 </span>
               )}
               {active.to && (
-                <button type="button" onClick={() => navigate(active.to)} className="ml-auto inline-flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Open this report on its own page">
+                <button type="button" onClick={() => navigate(active.to)} className="ml-auto inline-flex h-7 items-center gap-1.5 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Open this report on its own page">
                   <FaExternalLinkAlt size={10} /> Own page
                 </button>
               )}

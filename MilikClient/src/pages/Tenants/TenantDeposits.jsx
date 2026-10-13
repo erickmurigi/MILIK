@@ -39,7 +39,6 @@ import { getTenants } from "../../redux/tenantsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
 import { createTenantInvoice, createTenantInvoicesBatch, deleteTenantInvoice, getTenantInvoices } from "../../redux/invoiceApi";
-import { adminRequests } from "../../utils/requestMethods";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -76,15 +75,6 @@ const emptyFilters = {
 };
 
 const todayInput = () => new Date().toISOString().slice(0, 10);
-
-const ensureArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.tenants)) return value.tenants;
-  if (Array.isArray(value?.units)) return value.units;
-  if (Array.isArray(value?.properties)) return value.properties;
-  return [];
-};
 
 
 const normalizeDepositHolder = (value = "") => {
@@ -225,7 +215,7 @@ const TenantDeposits = () => {
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
   const { propertiesLoaded, unitsLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
-  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
+  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
 
   const isLandlordWorkspace = useMemo(() => isSelfManagingLandlordCompany(currentCompany || null), [currentCompany]);
   const holderColumnLabel = isLandlordWorkspace ? "Owner / Landlord" : "Deposit Holder";

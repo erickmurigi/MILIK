@@ -123,7 +123,7 @@ const PropertyCommissionSettings = () => {
           taxCodes: Array.isArray(response?.data?.taxCodes) ? response.data.taxCodes : [],
           utilityTypes: Array.isArray(response?.data?.utilityTypes) ? response.data.utilityTypes : [],
         });
-      } catch (error) {
+      } catch {
         if (!cancelled) {
           setTaxConfig({
             taxSettings: { enabled: false, defaultVatRate: 16 },

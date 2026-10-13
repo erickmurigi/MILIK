@@ -32,7 +32,6 @@ const fmtDay = (v) => v ? new Date(v).toLocaleDateString("en-KE", { weekday: "lo
 const fmtShort = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short" }) : "";
 const LIMIT  = 50;
 
-const selectCls = "h-7 border border-slate-200 bg-white px-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none";
 const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
 
 function groupByDay(activities) {
@@ -137,7 +136,7 @@ export default function SaleActivities() {
       await saleApi.deleteActivity(act._id);
       invalidate();
       toast.success("Activity removed");
-    } catch (err) { toast.error("Delete failed"); }
+    } catch { toast.error("Delete failed"); }
   };
 
   const entityLabel = (act) => {
@@ -147,8 +146,6 @@ export default function SaleActivities() {
     if (act.relatedListing) return `${T.saleListing}: ${act.relatedListing.title || act.relatedListing.listingNumber}`;
     return null;
   };
-
-  const hasFilters = !!(search || typeFilter || outcomeFilter || leadFilter || buyerFilter || from || to);
 
   return (
     <PropertySaleShell>
@@ -210,7 +207,7 @@ export default function SaleActivities() {
                             </div>
                             <div className="flex flex-shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                               <button onClick={() => openEdit(act)} className="border border-[#B7C9C0] bg-white p-1 text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaEdit size={9} /></button>
-                              <button onClick={() => handleDelete(act)} className="border border-rose-200 bg-rose-50 p-1 text-rose-600 hover:bg-rose-100"><FaTrash size={9} /></button>
+                              <button onClick={() => handleDelete(act)} className="border border-red-200 bg-white p-1 text-red-600 hover:bg-red-50"><FaTrash size={9} /></button>
                             </div>
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-400">

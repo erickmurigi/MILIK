@@ -37,7 +37,7 @@ const MetricsGrid = ({ summaryData = {}, loading = false }) => {
   const currentCompany    = useSelector(selectCurrentCompany);
   const currentUser       = useSelector(selectCurrentUser);
 
-  const { property: termProperty, properties: termProperties, units: termUnits, landlords: termLandlords } = useTerms("property", "properties", "units", "landlords");
+  const { properties: termProperties, units: termUnits, landlords: termLandlords } = useTerms("property", "properties", "units", "landlords");
 
   const ctx           = currentCompany || currentUser?.company || null;
   const isLandlord    = isSelfManagingLandlordCompany(ctx);
@@ -45,7 +45,7 @@ const MetricsGrid = ({ summaryData = {}, loading = false }) => {
 
   const totalProperties = properties.length;
 
-  const { totalUnits, occupiedUnits, occupancyRate } = useMemo(() => {
+  const { totalUnits, occupancyRate } = useMemo(() => {
     const NON_MARKET = new Set(['off_market', 'inactive', 'archived', 'disabled']);
     const OCCUPIED   = new Set(['occupied', 'notice_given', 'reserved']);
     let total = 0, occ = 0;

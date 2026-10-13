@@ -13,6 +13,8 @@ import { FaChevronLeft, FaChevronRight } from 'react-icons/fa';
  *   loading          — disables all controls while fetching
  *   pageSizes        — options array (default: [25, 50, 100, 200, 500, 1000])
  *   label            — noun after count, e.g. "tenants" (default: "records")
+ *   leftExtra        — optional ReactNode rendered after the count, e.g. a "Selected N" chip —
+ *                       the Milik standard spot for bulk-selection status, not the toolbar
  */
 
 export const PAGE_SIZES = [25, 50, 100, 200, 500, 1000];
@@ -43,6 +45,7 @@ const PaginationBar = ({
   loading = false,
   pageSizes = PAGE_SIZES,
   label = 'records',
+  leftExtra = null,
 }) => {
   const safe = Math.min(Math.max(page, 1), pages || 1);
   const from = total > 0 ? (safe - 1) * pageSize + 1 : 0;
@@ -52,11 +55,12 @@ const PaginationBar = ({
   return (
     <div className="flex-shrink-0 sticky bottom-0 z-20 bg-white border-t border-gray-200 px-3 py-1 flex items-center justify-between min-h-9 gap-2">
 
-      {/* Left — record count */}
-      <div className="text-xs font-bold text-gray-600 whitespace-nowrap">
+      {/* Left — record count (+ optional extra, e.g. a "Selected N" chip) */}
+      <div className="flex items-center gap-2 text-xs font-bold text-gray-600 whitespace-nowrap">
         {total != null
           ? `Showing ${from} to ${to} of ${Number(total).toLocaleString()} ${label}`
           : null}
+        {leftExtra}
       </div>
 
       {/* Right — per-page selector + page nav */}

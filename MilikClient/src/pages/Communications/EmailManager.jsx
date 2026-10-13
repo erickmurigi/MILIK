@@ -257,7 +257,7 @@ const EmailManager = () => {
   const [search, setSearch]                   = useTabState("/communications/email:search", "");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [compose, setCompose]                 = useState(false);
-  const [expandedId, setExpanded]             = useState(null);
+  const [, setExpanded]                       = useState(null);
   const [loading, setLoading]                 = useState(false);
   const [deletingId, setDeletingId]           = useState(null);
   const [pageSize, setPageSize]               = useTabState("/communications/email:pageSize", DEFAULT_PAGE_SIZE);
@@ -317,9 +317,6 @@ const EmailManager = () => {
 
   const { logs, pagination, counts } = data;
   const { page: currentPage, total, pages } = pagination;
-
-  const fromRow = total === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const toRow   = Math.min(currentPage * pageSize, total);
 
   return (
     <DashboardLayout lockContentScroll>

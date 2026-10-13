@@ -94,7 +94,7 @@ const parseTakeOnPreselection = (location) => {
         ? state.preselectedUnitSnapshot
         : null,
     };
-  } catch (error) {
+  } catch {
     return null;
   }
 };
@@ -279,7 +279,6 @@ const AddTenant = () => {
     invoice: termInvoice,
     invoices: termInvoices,
     utilities: termUtilities,
-    receipts: termReceipts,
   } = useTerms("tenant", "tenants", "property", "unit", "units", "landlord", "rent", "lease", "invoice", "invoices", "utility", "utilities", "receipts");
 
   const generateNextTenantCode = () => "";

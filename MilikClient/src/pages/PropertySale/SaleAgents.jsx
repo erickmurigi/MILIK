@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FaChartLine, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTimes, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -14,13 +14,16 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
+import MilikTable from "../../components/common/MilikTable";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms, TERM_DEFAULTS } from "../../hooks/useTerm";
+import { getUsers } from "../../redux/apiCalls";
+import { selectAllUsers } from "../../redux/selectors";
 
 const PAGE_SIZE = 50;
 
 const blankForm = {
-  fullName: "", phone: "", email: "", idNumber: "",
+  fullName: "", phone: "", email: "", idNumber: "", userId: "",
   commissionRate: 3, commissionType: "percentage", status: "active", notes: "",
 };
 
@@ -28,45 +31,43 @@ const blankForm = {
 const STATUS_OPTIONS         = [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }];
 const COMM_TYPE_FILTER_OPTIONS = [{ value: "percentage", label: "Percentage" }, { value: "flat", label: "Flat" }];
 const COMM_TYPE_FORM_OPTIONS = [{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }];
-const agentHeaders = (T) => [`${T.saleAgent} No.`, "Name", "Phone", "Email", "Commission", T.saleDeals, "Status", "Actions"];
+const agentColumns = (T) => [{ label: `${T.saleAgent} No.` }, { label: "Name" }, { label: "Phone" }, { label: "Email" }, { label: "Commission" }, { label: T.saleDeals, align: "right" }, { label: "Status" }];
 // The stock word keeps its "Sales" prefix ("Sales Agent"); a renamed word stands on its own.
 const salesAgentLabel = (agent) => (agent === TERM_DEFAULTS.saleAgent ? `Sales ${agent}` : agent);
 
-// One table row — memoised so unrelated page state (search text, modal open/close, ...) doesn't re-render every row.
-const AgentRow = React.memo(function AgentRow({ row, onPerformance, onPrint, onEdit, onDelete }) {
-  return (
-    <tr className="border-b border-slate-100 hover:bg-slate-50">
-      <td className="px-3 py-2 font-mono font-black text-[#0B3B2E]">{row.agentNumber}</td>
-      <td className="px-3 py-2 font-bold text-slate-900">{row.fullName}</td>
-      <td className="px-3 py-2 text-slate-600">{row.phone || "—"}</td>
-      <td className="px-3 py-2 text-slate-600">{row.email || "—"}</td>
-      <td className="px-3 py-2 font-black text-[#0B3B2E]">
-        {row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate)}
-        <span className="ml-1 text-[10px] font-normal text-slate-400">({row.commissionType})</span>
-      </td>
-      <td className="px-3 py-2 text-right font-black text-slate-700">{row.dealCount ?? 0}</td>
-      <td className="px-3 py-2">
-        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${row.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-          {row.status}
-        </span>
-      </td>
-      <td className="px-3 py-2 text-right">
-        <div className="inline-flex gap-1">
-          <button type="button" onClick={() => onPerformance(row._id)} title="Performance" className="border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700 hover:bg-violet-100"><FaChartLine className="text-[9px]" /></button>
-          <button type="button" onClick={() => onPrint(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaPrint className="text-[9px]" /></button>
-          <button type="button" onClick={() => onEdit(row)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"><FaEdit className="text-[9px]" /></button>
-          <button type="button" onClick={() => onDelete(row)} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100"><FaTrash className="text-[9px]" /></button>
-        </div>
-      </td>
-    </tr>
-  );
-});
+// Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
+const renderAgentRow = (row) => (
+  <>
+    <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#0B3B2E]">{row.agentNumber}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900">{row.fullName}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.phone || "—"}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.email || "—"}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 font-black text-[#0B3B2E]">
+      {row.commissionType === "percentage" ? `${row.commissionRate}%` : fmtKES(row.commissionRate)}
+      <span className="ml-1 text-[10px] font-normal text-slate-400">({row.commissionType})</span>
+    </td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-black text-slate-700 tabular-nums">{row.dealCount ?? 0}</td>
+    <td className="px-3 py-1.5">
+      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${row.status === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+        {row.status}
+      </span>
+    </td>
+  </>
+);
 
 // Modal owns its form state so keystrokes never re-render the page or its rows.
-function AgentFormModal({ editingId, initial, saving, onClose, onSubmit }) {
+function AgentFormModal({ editingId, initial, saving, onClose, onSubmit, companyId }) {
   const T = useTerms("saleAgent");
+  const dispatch = useDispatch();
+  const users = useSelector(selectAllUsers);
   const [form, setForm] = useState(initial);
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
+
+  useEffect(() => { if (companyId) dispatch(getUsers(companyId)); }, [companyId, dispatch]);
+  const userOptions = useMemo(
+    () => (Array.isArray(users) ? users : []).map((u) => ({ value: u._id, label: `${u.otherNames || ""} ${u.surname || ""}`.trim() || u.email || u._id })),
+    [users]
+  );
   return (
     <Modal
       title={editingId ? `Edit ${T.saleAgent}` : `New ${salesAgentLabel(T.saleAgent)}`}
@@ -108,6 +109,10 @@ function AgentFormModal({ editingId, initial, saving, onClose, onSubmit }) {
           <input type="number" value={form.commissionRate} onChange={f("commissionRate")} className={inputClass} />
         </div>
         <div className="md:col-span-2">
+          <AppSelect label="Link to user account" value={form.userId} onChange={(v) => setForm((p) => ({ ...p, userId: v ?? "" }))} options={userOptions} size="md" clearable placeholder="Not linked" />
+          <p className="mt-1 text-[10px] text-slate-400">Optional — link this record to a user's login so they can sign in and see only their own assigned work.</p>
+        </div>
+        <div className="md:col-span-2">
           <label className={labelClass}>Notes</label>
           <textarea rows={2} value={form.notes} onChange={f("notes")} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
         </div>
@@ -132,7 +137,7 @@ const SaleAgents = () => {
   const [pageSize,     setPageSize]     = useTabState("/sale/agents:pageSize", PAGE_SIZE);
 
   const biz = currentCompany?._id;
-  const AGENT_HEADERS = useMemo(() => agentHeaders(T), [T]);
+  const AGENT_COLUMNS = useMemo(() => agentColumns(T), [T]);
 
   const { data: agentsData, isLoading: loading, isFetching, error } = useQuery({
     queryKey: ["sale-agents", biz, debouncedSearch, statusFilter, commTypeFilt, page, pageSize],
@@ -173,6 +178,7 @@ const SaleAgents = () => {
         fullName: row.fullName || "", phone: row.phone || "", email: row.email || "",
         idNumber: row.idNumber || "", commissionRate: row.commissionRate ?? 3,
         commissionType: row.commissionType || "percentage", status: row.status || "active", notes: row.notes || "",
+        userId: row.userId || row.user?._id || "",
       },
     });
   }, []);
@@ -222,6 +228,15 @@ const SaleAgents = () => {
 
   const handlePerformance = useCallback((id) => navigate(`/sale/agents/${id}/performance`), [navigate]);
 
+  const renderAgentActions = useCallback((row) => (
+    <div className="inline-flex gap-1">
+      <button type="button" onClick={() => handlePerformance(row._id)} title="Performance" className="border border-violet-200 bg-violet-50 px-2 py-0.5 text-[11px] font-bold text-violet-700 hover:bg-violet-100"><FaChartLine className="text-[9px]" /></button>
+      <button type="button" onClick={() => printAgent(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaPrint className="text-[9px]" /></button>
+      <button type="button" onClick={() => openEdit(row)} className="border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100"><FaEdit className="text-[9px]" /></button>
+      <button type="button" onClick={() => handleDelete(row)} className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50"><FaTrash className="text-[9px]" /></button>
+    </div>
+  ), [handlePerformance, printAgent, openEdit, handleDelete]);
+
   return (
     <PropertySaleShell>
       <SaleFilterBar
@@ -246,33 +261,23 @@ const SaleAgents = () => {
 
       {/* Table */}
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-        <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full min-w-[640px] text-xs border-collapse">
-            <thead>
-              <tr className="bg-[#0B3B2E]">
-                {AGENT_HEADERS.map((h, i) => (
-                  <th key={h} className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white ${i === 5 || i === 7 ? "text-right" : "text-left"}`}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">Loading {T.saleAgents.toLowerCase()}…</td></tr>
-              ) : agents.length === 0 ? (
-                <tr><td colSpan={8} className="px-3 py-10 text-center text-xs text-slate-400">No {T.saleAgents.toLowerCase()} found.</td></tr>
-              ) : agents.map((row) => (
-                <AgentRow key={row._id} row={row} onPerformance={handlePerformance} onPrint={printAgent} onEdit={openEdit} onDelete={handleDelete} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <MilikTable
+          columns={AGENT_COLUMNS}
+          rows={agents}
+          rowKey="_id"
+          loading={loading}
+          empty={`No ${T.saleAgents.toLowerCase()} found.`}
+          minWidth={640}
+          renderRow={renderAgentRow}
+          renderActions={renderAgentActions}
+        />
 
         <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
       </div>
 
       {/* New / Edit Agent Modal */}
       {agentModal && (
-        <AgentFormModal editingId={agentModal.editingId} initial={agentModal.initial} saving={saving} onClose={() => setAgentModal(null)} onSubmit={handleSave} />
+        <AgentFormModal editingId={agentModal.editingId} initial={agentModal.initial} saving={saving} onClose={() => setAgentModal(null)} onSubmit={handleSave} companyId={biz} />
       )}
     </PropertySaleShell>
   );

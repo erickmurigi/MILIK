@@ -205,7 +205,6 @@ const LedgerAccountActivity = () => {
 
   // ── Reverse/delete source ──
   const handleReverseOrDelete = async (entry) => {
-    const type     = String(entry?.sourceTransactionType || "").toLowerCase();
     const sourceId = entry?.sourceTransactionId;
     if (!sourceId) { toast.info("No linked source document."); return; }
     setReverseModal({ open: true, entry, reason: `Correction from ledger ${account?.code || ""}`, loading: false });

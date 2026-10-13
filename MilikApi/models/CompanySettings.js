@@ -62,6 +62,21 @@ const billingPeriodSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// Admin-configurable grouping for expense items (replaces the old fixed 5-value enum — see
+// scripts/migrateExpenseItemCategories.js for the one-time backfill of existing string values into
+// real category records). A bare ObjectId pointing into this same document's `expenseCategories`
+// array, same "no `ref`, resolved manually" convention PaymentVoucher.lines[].expenseItem already uses.
+const expenseCategorySchema = new mongoose.Schema(
+  {
+    _id: mongoose.Schema.Types.ObjectId,
+    name: { type: String, required: true, trim: true },
+    description: { type: String, default: "", trim: true },
+    isActive: { type: Boolean, default: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { _id: false }
+);
+
 const expenseItemSchema = new mongoose.Schema(
   {
     _id: mongoose.Schema.Types.ObjectId,
@@ -71,11 +86,8 @@ const expenseItemSchema = new mongoose.Schema(
     // a top-level compound index (e.g. { company: 1, "expenseItems.code": 1 }).
     // Uniqueness of expense item codes is enforced in the controller layer instead.
     code: { type: String, default: "" },
-    category: {
-      type: String,
-      enum: ["maintenance", "utilities", "staffing", "supplies", "other"],
-      default: "other",
-    },
+    // Points into this company's expenseCategories list (see above). null = uncategorized.
+    category: { type: mongoose.Schema.Types.ObjectId, default: null },
     defaultAmount: { type: Number, default: 0 },
     // Expense ledger account a voucher line posts to when it picks this item
     expenseAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
@@ -319,6 +331,10 @@ const CompanySettingsSchema = new mongoose.Schema(
       type: [billingPeriodSchema],
       default: [],
     },
+    expenseCategories: {
+      type: [expenseCategorySchema],
+      default: [],
+    },
     expenseItems: {
       type: [expenseItemSchema],
       default: [],
@@ -394,6 +410,7 @@ CompanySettingsSchema.index({ "unitTypes.isActive": 1 });
 CompanySettingsSchema.index({ "maintenanceCategories.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.isActive": 1 });
 CompanySettingsSchema.index({ "billingPeriods.key": 1 });
+CompanySettingsSchema.index({ "expenseCategories.isActive": 1 });
 CompanySettingsSchema.index({ "expenseItems.isActive": 1 });
 CompanySettingsSchema.index({ "depositTypes.isActive": 1 });
 CompanySettingsSchema.index({ "taxCodes.key": 1 });

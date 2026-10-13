@@ -12,10 +12,6 @@ import { printTabularList } from '../../utils/printKit';
 
 const currentYear = new Date().getFullYear();
 
-function isoDate(d) {
-  return d ? new Date(d).toISOString().slice(0, 10) : '';
-}
-
 export default function HRReportLeave() {
   const [leaveTypes, setLeaveTypes] = useState([]);
   const [filters, setFilters] = useTabState('/hr/reports/leave:filters', { startDate: `${currentYear}-01-01`, endDate: `${currentYear}-12-31`, leaveTypeId: '' });

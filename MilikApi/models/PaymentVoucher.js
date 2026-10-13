@@ -30,6 +30,7 @@ const PaymentVoucherSchema = new mongoose.Schema(
         "company_operational",
         "petty_cash_float",
         "petty_cash_expense",
+        "sale_owner_expense",
       ],
       required: true,
     },
@@ -40,6 +41,10 @@ const PaymentVoucherSchema = new mongoose.Schema(
     },
     property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", default: null },
     landlord: { type: mongoose.Schema.Types.ObjectId, ref: "Landlord", default: null },
+    // Property-sale owner recharge vouchers (category "sale_owner_expense") — an unrelated pair of
+    // models to the PMS Property/Landlord above, so kept as their own fields rather than overloaded.
+    saleProject: { type: mongoose.Schema.Types.ObjectId, ref: "SaleProject", default: null, index: true },
+    saleOwner:   { type: mongoose.Schema.Types.ObjectId, ref: "SaleOwner",   default: null, index: true },
     amount: { type: Number, required: true, min: 0 },
     whtAmount:    { type: Number, min: 0, default: 0 },
     whtNetAmount: { type: Number, min: 0, default: 0 },
@@ -142,6 +147,7 @@ PaymentVoucherSchema.index({ business: 1, status: 1 });
 PaymentVoucherSchema.index({ business: 1, category: 1 });
 PaymentVoucherSchema.index({ business: 1, property: 1, status: 1 });
 PaymentVoucherSchema.index({ landlord: 1 });
+PaymentVoucherSchema.index({ business: 1, saleOwner: 1, status: 1 });
 PaymentVoucherSchema.index({ liabilityAccount: 1 });
 PaymentVoucherSchema.index({ business: 1, sourceRequisition: 1 });
 PaymentVoucherSchema.index({ business: 1, status: 1, whtAmount: 1, paidDate: -1 });

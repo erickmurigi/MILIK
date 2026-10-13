@@ -39,7 +39,7 @@ import ListToolbar from "../../components/common/ListToolbar";
 const MILIK_GREEN = "bg-[#0B3B2E]";
 
 
-const LandlordPayments = ({ mode = "payments" }) => {
+const LandlordPayments = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -81,13 +81,17 @@ const LandlordPayments = ({ mode = "payments" }) => {
     landlordPaymentsCache.set(companyId, { payments, loadedAt: Date.now() });
   };
 
-  // Load data
+  // Load data — intentionally keyed only on company/propertiesLoaded, not on landlords.length
+  // or loadLandlordPayments identity (a plain, unmemoized function): this should run once per
+  // company switch, not re-fire every time landlords finishes loading or on every render.
+  // setLandlordPayments here synchronizes with the backend/cache, the documented effect use case.
   useEffect(() => {
     if (!currentCompany?._id) return;
     if (!landlords?.length) dispatch(getLandlords({ business: currentCompany._id }));
     if (!propertiesLoaded) dispatch(getProperties({ business: currentCompany._id }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
     loadLandlordPayments(currentCompany._id);
-  }, [dispatch, currentCompany?._id, propertiesLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dispatch, currentCompany?._id, propertiesLoaded]);
 
   // Calculate landlord financial data
   const tenantsByPropertyId = useMemo(() => {

@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { FaHome, FaTimes, FaCog, FaBuilding, FaCar, FaHandshake, FaUsers, FaBook, FaBoxes, FaSms } from 'react-icons/fa';
-import { selectCurrentCompany } from '../../redux/selectors';
+import { selectCurrentCompany, selectCurrentUser } from '../../redux/selectors';
 import {
   WORKSPACE_IDS,
   getWorkspaceDefaultRoute,
   getWorkspaceFromRoute,
 } from '../../utils/workspaceRoutes';
-import { hasCompanyModule } from '../../utils/companyModules';
+import { isModuleVisibleToUser } from '../../utils/moduleVisibility';
 import { clearAllTabCache } from '../../hooks/useTabState';
 import { useTerm } from '../../hooks/useTerm';
 
@@ -91,35 +91,39 @@ const getModulesStorageKey = (companyKey) => `${MODULES_STORAGE_KEY_PREFIX}-${co
 const getActiveModuleStorageKey = (companyKey) =>
   `${ACTIVE_MODULE_STORAGE_KEY_PREFIX}-${companyKey}`;
 
-const isCompanyWorkspaceAllowed = (company, workspaceId) => {
+// Gates both the company's subscription to this workspace's module AND the current user's
+// own moduleAccess level for it (see utils/moduleVisibility.js) — a user with "Not allowed"
+// set must not be able to restore, open or switch into a tab for it, same as the route
+// itself would block them.
+const isCompanyWorkspaceAllowed = (user, company, workspaceId) => {
   const moduleKey = MODULES[workspaceId]?.moduleKey;
   if (!moduleKey) return true;
   if (!company?._id) return workspaceId === WORKSPACE_IDS.PROPERTY;
-  return hasCompanyModule(company, moduleKey);
+  return isModuleVisibleToUser(user, company, moduleKey);
 };
 
-const sanitizeOpenModules = (modules = [], company) =>
+const sanitizeOpenModules = (modules = [], user, company) =>
   (Array.isArray(modules) ? modules : []).filter(
     (workspaceId, index, list) =>
       MODULES[workspaceId] &&
       list.indexOf(workspaceId) === index &&
-      isCompanyWorkspaceAllowed(company, workspaceId)
+      isCompanyWorkspaceAllowed(user, company, workspaceId)
   );
 
-const readOpenModules = (companyKey, company) => {
+const readOpenModules = (companyKey, user, company) => {
   const saved = localStorage.getItem(getModulesStorageKey(companyKey));
   if (!saved) return [];
 
   try {
-    return sanitizeOpenModules(JSON.parse(saved), company);
+    return sanitizeOpenModules(JSON.parse(saved), user, company);
   } catch {
     return [];
   }
 };
 
-const readActiveModule = (companyKey, company, openModules = []) => {
+const readActiveModule = (companyKey, user, company, openModules = []) => {
   const saved = localStorage.getItem(getActiveModuleStorageKey(companyKey));
-  if (saved && openModules.includes(saved) && isCompanyWorkspaceAllowed(company, saved)) return saved;
+  if (saved && openModules.includes(saved) && isCompanyWorkspaceAllowed(user, company, saved)) return saved;
   return openModules[0] || null;
 };
 
@@ -128,6 +132,7 @@ const ModuleTabManager = ({ darkMode }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const currentCompany = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
   const currentCompanyKey = String(currentCompany?._id || 'default-company');
   const previousCompanyKeyRef = useRef(currentCompanyKey);
 
@@ -136,9 +141,9 @@ const ModuleTabManager = ({ darkMode }) => {
   const pendingRouteRef = useRef(null);
   const [isNavigating, setIsNavigating] = useState(false);
 
-  const [openModules, setOpenModules] = useState(() => readOpenModules(currentCompanyKey, currentCompany));
+  const [openModules, setOpenModules] = useState(() => readOpenModules(currentCompanyKey, currentUser, currentCompany));
   const [activeModule, setActiveModule] = useState(() =>
-    readActiveModule(currentCompanyKey, currentCompany, readOpenModules(currentCompanyKey, currentCompany))
+    readActiveModule(currentCompanyKey, currentUser, currentCompany, readOpenModules(currentCompanyKey, currentUser, currentCompany))
   );
 
   useEffect(() => {
@@ -167,19 +172,19 @@ const ModuleTabManager = ({ darkMode }) => {
 
   useEffect(() => {
     if (!currentModule) return;
-    if (!isCompanyWorkspaceAllowed(currentCompany, currentModule)) return;
+    if (!isCompanyWorkspaceAllowed(currentUser, currentCompany, currentModule)) return;
 
     setOpenModules((prev) => {
-      const clean = sanitizeOpenModules(prev, currentCompany);
+      const clean = sanitizeOpenModules(prev, currentUser, currentCompany);
       return clean.includes(currentModule) ? clean : [...clean, currentModule];
     });
     setActiveModule(currentModule);
-  }, [currentCompany, currentModule, location.pathname, navigate]);
+  }, [currentUser, currentCompany, currentModule, location.pathname, navigate]);
 
   const switchModule = (moduleId) => {
     const config = MODULES[moduleId];
     if (!config) return;
-    if (!isCompanyWorkspaceAllowed(currentCompany, moduleId)) return;
+    if (!isCompanyWorkspaceAllowed(currentUser, currentCompany, moduleId)) return;
 
     const route = config.route || getWorkspaceDefaultRoute(moduleId);
     if (route !== location.pathname) {
@@ -208,8 +213,8 @@ const ModuleTabManager = ({ darkMode }) => {
   };
 
   const visibleModules = useMemo(
-    () => sanitizeOpenModules(openModules, currentCompany).map((id) => MODULES[id]).filter(Boolean),
-    [currentCompany, openModules]
+    () => sanitizeOpenModules(openModules, currentUser, currentCompany).map((id) => MODULES[id]).filter(Boolean),
+    [currentUser, currentCompany, openModules]
   );
 
   if (visibleModules.length === 0) return null;

@@ -294,7 +294,7 @@ export default function HRLetters() {
       setLetters(res.data.letters || []);
       setTotal(res.data.total || 0);
       setTotalPages(res.data.pages || 1);
-    } catch (e) {
+    } catch {
       toast.error('Failed to load letters');
     } finally {
       setLoading(false);
@@ -318,7 +318,7 @@ export default function HRLetters() {
     try {
       const res = await adminRequests.get(`/hr/letters/${id}`);
       setSelected(res.data);
-    } catch (e) {
+    } catch {
       toast.error('Failed to load letter');
     }
   };

@@ -379,48 +379,11 @@ const Units = () => {
   // ---------------------------
   // GROUP + PAGINATION (server already filters — we just group visible rows)
   // ---------------------------
-  const propertiesGrouped = useMemo(() => {
-    const map = new Map();
-
-    transformedUnits.forEach((u) => {
-      const key = String(u.propertyId || u.property || "");
-      if (!map.has(key)) {
-        map.set(key, {
-          propertyId: u.propertyId || key,
-          propertyName: u.propertyName,
-          propertyCode: u.propertyCode,
-          units: [],
-        });
-      }
-      map.get(key).units.push(u);
-    });
-
-    const arr = Array.from(map.values()).map((p) => {
-      const occupied = p.units.filter((x) => x.status === "occupied").length;
-      const vacant = p.units.filter((x) => x.status === "vacant").length;
-      const maintenance = p.units.filter((x) => x.status === "maintenance").length;
-
-      return {
-        ...p,
-        totals: { total: p.units.length, occupied, vacant, maintenance },
-      };
-    });
-
-    arr.sort((a, b) => String(a.propertyName).localeCompare(String(b.propertyName)));
-    return arr;
-  }, [transformedUnits]);
-
   // Pagination driven by server response
   const totalPages = Math.max(1, unitPagination.pages || 1);
   const safeCurrentPage = Math.min(currentPage, totalPages);
   // Server returns exactly the current page — no client slicing needed
   const currentUnits = transformedUnits;
-
-  const propertyUnitCounts = useMemo(() => {
-    const map = {};
-    for (const u of currentUnits) map[u.propertyName] = (map[u.propertyName] || 0) + 1;
-    return map;
-  }, [currentUnits]);
 
   const handlePageChange = useCallback((page) => {
     const target = Math.max(1, Math.min(totalPages, page));
@@ -467,13 +430,6 @@ const Units = () => {
     () => currentUnits.length > 0 && currentUnits.every((unit) => expandedUnits.has(unit.id)),
     [currentUnits, expandedUnits]
   );
-
-  // Row click now selects the unit (not expands)
-  const handleRowClick = (unitId, e) => {
-    if (e.target.type === "checkbox" || e.target.closest(".action-buttons")) return;
-    // Select the unit
-    handleSelectUnit(unitId);
-  };
 
   const selectedCount = selectedUnits.length;
   const canEdit = selectedCount === 1 && canUpdateUnit;
@@ -727,19 +683,6 @@ const Units = () => {
 
     document.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseup", handleMouseUp);
-  };
-
-  const getStatusPill = (status) => {
-    if (status === "Occupied") return "bg-green-100 text-green-800 border border-green-300";
-    if (status === "Vacant") return "bg-red-100 text-red-800 border border-red-300";
-    return "bg-yellow-100 text-yellow-800 border border-yellow-300";
-  };
-
-  const getUnitTypePill = (type) => {
-    if (type === "Residential") return "bg-blue-100 text-blue-800 border border-blue-300";
-    if (type === "Commercial") return "bg-purple-100 text-purple-800 border border-purple-300";
-    if (type === "Utility") return "bg-gray-100 text-gray-800 border border-gray-300";
-    return "bg-yellow-100 text-yellow-800 border border-yellow-300";
   };
 
   // ---------------------------

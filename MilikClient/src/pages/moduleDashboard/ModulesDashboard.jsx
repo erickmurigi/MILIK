@@ -16,9 +16,9 @@ import {
 } from "react-icons/fa";
 import {
   getCompanyOperatingModeLabel,
-  hasCompanyModule,
   isSelfManagingLandlordCompany,
 } from "../../utils/companyModules";
+import { isModuleVisibleToUser } from "../../utils/moduleVisibility";
 import StartMenu from "../../components/StartMenu/StartMenu";
 import { useTermPresetLabel, useTerm } from "../../hooks/useTerm";
 
@@ -114,9 +114,9 @@ const ModulesDashboard = () => {
           subtitle: isLandlordMode ? `${termLandlord} Workspace` : m.subtitle,
         };
       })
-      .filter((m) => hasCompanyModule(activeCompanyContext, m.moduleKey))
+      .filter((m) => isModuleVisibleToUser(currentUser, activeCompanyContext, m.moduleKey))
       .sort((a, b) => Number(a.id === SHARED_MODULE_ID) - Number(b.id === SHARED_MODULE_ID));
-  }, [activeCompanyContext, isLandlordMode, termLandlord, saleModuleName]);
+  }, [activeCompanyContext, isLandlordMode, termLandlord, saleModuleName, currentUser]);
 
   const handleOpen = useCallback((m) => {
     const recent = JSON.parse(localStorage.getItem("recentModules") || "[]");
@@ -130,7 +130,7 @@ const ModulesDashboard = () => {
         <div className="flex items-center gap-3">
           <StartMenu variant="corner" />
           <img
-            src={activeCompanyContext?.logo || "/MIIK CUBES.png"}
+            src={activeCompanyContext?.logo || "/milik-icon.png"}
             alt={activeCompanyContext?.companyName || "Milik"}
             className="h-8 w-8 flex-shrink-0 bg-white object-contain p-0.5"
           />

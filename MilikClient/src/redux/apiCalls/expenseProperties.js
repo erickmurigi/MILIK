@@ -29,7 +29,7 @@ export const getExpenseProperties = async (dispatch, business, category = null, 
 
     const res = await adminRequests.get(url);
     dispatch(getExpensePropertiesSuccess(extractList(res.data)));
-  } catch (err) {
+  } catch {
     dispatch(getExpensePropertiesFailure());
   }
 };
@@ -40,7 +40,7 @@ export const getExpenseProperty = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/propertyexpenses/${id}`);
     dispatch(getExpensePropertiesSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getExpensePropertiesFailure());
   }
 };
@@ -86,34 +86,26 @@ export const deleteExpenseProperty = async (dispatch, id) => {
 
 // Get expense summary
 export const getExpenseSummary = async (business, startDate = null, endDate = null) => {
-  try {
-    let url = `/propertyexpenses/get/summary?business=${business}`;
-    if (startDate) url += `&startDate=${startDate}`;
-    if (endDate) url += `&endDate=${endDate}`;
+  let url = `/propertyexpenses/get/summary?business=${business}`;
+  if (startDate) url += `&startDate=${startDate}`;
+  if (endDate) url += `&endDate=${endDate}`;
 
-    const res = await adminRequests.get(url);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(url);
+  return res.data;
 };
 
 // Get property expenses
 export const getPropertyExpenses = async (propertyId, business = null, startDate = null, endDate = null) => {
-  try {
-    let url = `/propertyexpenses/property/${propertyId}`;
-    const params = new URLSearchParams();
+  let url = `/propertyexpenses/property/${propertyId}`;
+  const params = new URLSearchParams();
 
-    if (business) params.append("business", business);
-    if (startDate) params.append("startDate", startDate);
-    if (endDate) params.append("endDate", endDate);
+  if (business) params.append("business", business);
+  if (startDate) params.append("startDate", startDate);
+  if (endDate) params.append("endDate", endDate);
 
-    const query = params.toString();
-    if (query) url += `?${query}`;
+  const query = params.toString();
+  if (query) url += `?${query}`;
 
-    const res = await adminRequests.get(url);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(url);
+  return res.data;
 };

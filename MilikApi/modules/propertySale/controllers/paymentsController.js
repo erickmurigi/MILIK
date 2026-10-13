@@ -3,18 +3,46 @@ import { createError } from "../../../utils/error.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleDeal from "../models/SaleDeal.js";
+import SaleListing from "../models/SaleListing.js";
+import SaleProject from "../models/SaleProject.js";
+import SaleAdvocate from "../models/SaleAdvocate.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { agentFilter, ownDealIds } from "../middleware/agentScope.js";
+import { ownAdvocateDealIds, advocateProjectFilter } from "../middleware/advocateScope.js";
 import {
   postPropertySalePaymentLedger,
   reversePropertySalePaymentLedger,
 } from "../services/propertySaleAccountingService.js";
+import { sumPaidForDeal, percentPaid } from "../services/dealProgress.js";
+import { applyTierCrossings } from "../services/commissionReleaseService.js";
 
-// Agent-scoped users only see payments on their own deals (query fragment; empty for everyone else)
+// Agent-scoped or advocate-scoped users only see payments on their own deals (query fragment; empty for
+// everyone else). The two scopes are mutually exclusive in practice (a user is linked to at most one of
+// SaleAgent/SaleAdvocate), so whichever lookup returns a restriction (non-null) wins.
 const dealScope = async (req, business) => {
-  const ids = await ownDealIds(req, business);
-  return ids ? { deal: { $in: ids } } : {};
+  const agentIds = await ownDealIds(req, business);
+  if (agentIds) return { deal: { $in: agentIds } };
+  const advocateIds = await ownAdvocateDealIds(req, business);
+  if (advocateIds) return { deal: { $in: advocateIds } };
+  return {};
+};
+
+// Advocate id for a deal's listing's project (null for standalone listings or projects with no advocate).
+// Mirrors dealsController.js's resolveListingOwner for the owner-commission feature, but starts from the
+// listing id (the deal object loaded here isn't populated) rather than a full listing document.
+const resolveListingAdvocate = async (business, listingId) => {
+  if (!listingId) return null;
+  const listing = await SaleListing.findOne({ business, _id: listingId }).select("project").lean();
+  if (!listing?.project) return null;
+  const project = await SaleProject.findOne({ business, _id: listing.project }).select("assignedAdvocate").lean();
+  return project?.assignedAdvocate || null;
+};
+
+// An advocate must belong to this business and be active
+const resolveAdvocate = async (businessId, advocateId) => {
+  if (!advocateId || !mongoose.isValidObjectId(String(advocateId))) return null;
+  return SaleAdvocate.findOne({ _id: advocateId, business: businessId, status: "active" }).select("_id").lean();
 };
 
 // Deep-populate: deal includes nested listing + buyer so receipt/table fields work
@@ -32,6 +60,8 @@ const sanitizePaymentBody = (body) => {
   const out = { ...body };
   if ("amount" in out)      out.amount      = out.amount      !== "" && out.amount      != null ? Number(out.amount)      : 0;
   if ("paymentDate" in out) out.paymentDate = out.paymentDate || null;
+  // Normalize so an empty/omitted value lands on the documented default rather than tripping enum validation
+  if ("collectionMethod" in out) out.collectionMethod = out.collectionMethod === "advocate_trust" ? "advocate_trust" : "direct";
   return out;
 };
 
@@ -48,17 +78,6 @@ const resolveCashbook = async (businessId, cashbookId) => {
 
 const OVERPAY_TOLERANCE = 0.01;
 const LOCKED_DEAL_STATUSES = ["closed", "cancelled"];
-
-// Sum of a deal's confirmed ("paid") payments, optionally excluding one payment
-const sumPaidForDeal = async (business, dealId, excludePaymentId = null) => {
-  const match = { business: new mongoose.Types.ObjectId(String(business)), deal: dealId, status: "paid" };
-  if (excludePaymentId) match._id = { $ne: excludePaymentId };
-  const [agg] = await SalePayment.aggregate([
-    { $match: match },
-    { $group: { _id: null, total: { $sum: "$amount" } } },
-  ]);
-  return agg?.total || 0;
-};
 
 const overpaymentError = (amount, remaining) =>
   createError(400, `Payment of ${Number(amount).toLocaleString()} exceeds remaining balance of ${remaining.toLocaleString("en-KE", { minimumFractionDigits: 2 })}`);
@@ -130,11 +149,16 @@ export const createPayment = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const deal = await SaleDeal.findOne({ _id: req.body.deal, business, ...agentFilter(req) }).lean();
+    // Advocate-scoped users can only record payments against deals under their own assigned project(s)
+    const advocateScopeFilter = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.body.deal, business, ...agentFilter(req), ...advocateScopeFilter }).lean();
     if (!deal) return next(createError(400, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, "Payments can only be recorded for active deals"));
 
-    // Resolve cashbook in parallel with the deal's paid-to-date total — independent lookups
+    // Resolve cashbook in parallel with the deal's paid-to-date total — independent lookups.
+    // cashbook is still validated/stored even for an advocate_trust payment (kept for consistency with the
+    // existing field and in case the record is later corrected to "direct") — the accounting service simply
+    // ignores it for the debit side while collectionMethod stays "advocate_trust".
     const [totalPaid, cashbookAcc] = await Promise.all([
       sumPaidForDeal(business, deal._id),
       resolveCashbook(business, req.body.cashbook),
@@ -148,12 +172,26 @@ export const createPayment = async (req, res, next) => {
       return next(createError(400, "Selected cashbook account not found"));
     }
 
+    // Advocate: explicit body value (validated) > the scoped advocate's own id > auto-filled from the
+    // deal's listing's project.assignedAdvocate (mirrors dealsController.js's resolveListingOwner pattern).
+    let advocateId = null;
+    if (req.body.advocate) {
+      const advocateAcc = await resolveAdvocate(business, req.body.advocate);
+      if (!advocateAcc) return next(createError(400, "Selected advocate not found or inactive"));
+      advocateId = advocateAcc._id;
+    } else if (req.saleAdvocateId) {
+      advocateId = req.saleAdvocateId;
+    } else {
+      advocateId = await resolveListingAdvocate(business, deal.listing);
+    }
+
     const paymentNumber = await generateSequentialNumber(SalePayment, business, "PMT");
     const payment = await SalePayment.create({
       ...sanitizePaymentBody(req.body),
       business,
       paymentNumber,
       cashbook: cashbookAcc?._id || null,
+      advocate: advocateId || null,
       listing:  deal.listing,
       buyer:    deal.buyer,
       status:   "paid",
@@ -181,6 +219,19 @@ export const createPayment = async (req, res, next) => {
       // GL failed — delete the payment so DB and ledger stay in sync
       await SalePayment.deleteOne({ _id: payment._id });
       return next(createError(422, `Payment saved but GL posting failed: ${glErr.message}. Payment has been rolled back.`));
+    }
+
+    try {
+      await applyTierCrossings({
+        businessId: business, dealId: deal._id, userId,
+        previousPctPaid: percentPaid(totalPaid, deal.agreedPrice),
+        newPctPaid: percentPaid(totalAfter, deal.agreedPrice),
+      });
+    } catch (tierErr) {
+      // Never leave a payment recorded with an un-posted tier — unwind the payment and its GL together.
+      await reversePropertySalePaymentLedger({ businessId: business, payment, userId }).catch(() => {});
+      await SalePayment.deleteOne({ _id: payment._id });
+      return next(createError(422, `Payment saved but commission tier posting failed: ${tierErr.message}. Payment has been rolled back.`));
     }
 
     const populated = await populatePayment(SalePayment.findById(payment._id)).lean();
@@ -214,10 +265,19 @@ export const updatePayment = async (req, res, next) => {
     if (newCashbookId && !cashbookAcc) return next(createError(400, "Selected cashbook account not found"));
     updates.cashbook = cashbookAcc?._id || null;
 
+    // Resolve new advocate if changed (same validation as createPayment)
+    const newAdvocateId = updates.advocate !== undefined ? updates.advocate : String(old.advocate || "");
+    const advocateAcc   = newAdvocateId ? await resolveAdvocate(business, newAdvocateId) : null;
+    if (newAdvocateId && !advocateAcc) return next(createError(400, "Selected advocate not found or inactive"));
+    updates.advocate = advocateAcc?._id || null;
+
     const amountChanged = updates.amount    !== undefined && Number(updates.amount)   !== Number(old.amount);
     const dateChanged   = updates.paymentDate !== undefined && new Date(updates.paymentDate).toDateString() !== new Date(old.paymentDate).toDateString();
     const cashbookChanged = String(updates.cashbook || "") !== String(old.cashbook || "");
-    const glCorrectionNeeded = amountChanged || dateChanged || cashbookChanged;
+    // The debit side depends on collectionMethod (1314 vs cashbook/1311), so a method change needs the
+    // same reverse-and-repost as an amount/date/cashbook change even if nothing else moved.
+    const collectionMethodChanged = updates.collectionMethod !== undefined && updates.collectionMethod !== (old.collectionMethod || "direct");
+    const glCorrectionNeeded = amountChanged || dateChanged || cashbookChanged || collectionMethodChanged;
 
     // Only edits that rewrite GL (amount/date/cashbook) are unsafe on a closed/cancelled deal;
     // descriptive fields (reference, notes) stay editable.
@@ -225,12 +285,16 @@ export const updatePayment = async (req, res, next) => {
     if (updateLockErr) return next(updateLockErr);
 
     // Amount edits must keep the deal's total paid within the agreed price (same rule as createPayment)
+    let previousPctPaid = null, newPctPaid = null;
     if (amountChanged && dealForUpdate && old.status === "paid") {
       const otherPaid = await sumPaidForDeal(business, old.deal, old._id);
       const remaining = round2(dealForUpdate.agreedPrice - otherPaid);
       if (Number(updates.amount) > remaining + OVERPAY_TOLERANCE) {
         return next(overpaymentError(updates.amount, remaining));
       }
+      // Tiers key off cumulative %paid — an amount edit can cross a threshold forward or backward.
+      previousPctPaid = percentPaid(otherPaid + Number(old.amount), dealForUpdate.agreedPrice);
+      newPctPaid       = percentPaid(otherPaid + Number(updates.amount), dealForUpdate.agreedPrice);
     }
 
     if (glCorrectionNeeded) {
@@ -271,6 +335,14 @@ export const updatePayment = async (req, res, next) => {
       }
     }
 
+    if (previousPctPaid != null && newPctPaid > previousPctPaid) {
+      try {
+        await applyTierCrossings({ businessId: business, dealId: old.deal, userId, previousPctPaid, newPctPaid });
+      } catch (tierErr) {
+        return next(createError(422, `Payment updated but commission tier posting failed: ${tierErr.message}. Review commission tiers manually for this deal.`));
+      }
+    }
+
     res.status(200).json(payment);
   } catch (err) {
     next(err);
@@ -303,6 +375,10 @@ export const voidPayment = async (req, res, next) => {
       await payment.save();
       return next(createError(422, `GL reversal failed: ${glErr.message}. Payment void has been rolled back.`));
     }
+
+    // No tier-crossing check here, deliberately: voiding a payment only ever decreases %paid, and tier
+    // release is a one-way ratchet (applyTierCrossings no-ops whenever newPctPaid <= previousPctPaid) —
+    // only an explicit deal cancellation claws back an already-released tier.
 
     const populated = await populatePayment(SalePayment.findById(payment._id)).lean();
     res.status(200).json(populated);

@@ -1119,7 +1119,6 @@ const CreateInvoiceModal = ({ clientId, contracts, onClose, onCreated }) => {
 };
 
 const InvoicesTab = ({ clientId, contracts, onSummaryChange }) => {
-  const navigate = useNavigate();
   const confirm  = useConfirm();
   const [invoices, setInvoices]     = useState([]);
   const [pagination, setPagination] = useState({ total: 0, page: 1, pages: 1 });
@@ -1767,7 +1766,7 @@ const ClientDetail = () => {
     try {
       const { data } = await clientsApi.getSummary(id);
       setSummary(data?.summary || data);
-    } catch (_err) {
+    } catch {
       // Non-fatal — the stat row just keeps its last known values.
     }
   }, [id]);

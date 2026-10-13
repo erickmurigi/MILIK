@@ -1106,8 +1106,6 @@ const visibleInvoiceKeys = useMemo(
 
   const {
     activeInvoiceSource,
-    activeInvoiceMetadata,
-    activeInvoiceTaxSnapshot,
     activeInvoiceUtilityBreakdown,
     activeInvoiceNetAmount,
     activeInvoiceTaxAmount,
@@ -1779,9 +1777,6 @@ const createInvoiceForTenant = async (
 
     if (value === "single") {
       setShowSingleBooking(true);
-      if (tenantId) {
-        setSingleBookingForm((prev) => ({ ...prev, tenantId }));
-      }
     }
 
     if (value === "batch") {

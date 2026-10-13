@@ -61,7 +61,7 @@ const extractActor = (text) => {
 };
 
 // ─── Allocate Modal — memoized row ───────────────────────────────────────────
-const JobAllocRow = React.memo(({ job, value, available, onSet, onFill }) => (
+const JobAllocRow = React.memo(({ job, value, onSet, onFill }) => (
   <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-2.5 hover:bg-slate-50">
     <div className="min-w-0 flex-1">
       <div className="flex items-center gap-2">
@@ -870,7 +870,6 @@ export default function CarWashMpesaNotifications() {
   const canRecord = useCarWashPermission("carwash-payments", "record");
   const canEdit   = useCarWashPermission("carwash-payments", "edit");
 
-  const [expanded, setExpanded]         = useState(null);
   const [assignTarget, setAssignTarget] = useState(null);
   const [allocateTarget, setAllocateTarget] = useState(null);
   const [showUpload, setShowUpload]         = useState(false);

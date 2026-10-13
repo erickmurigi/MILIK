@@ -3,14 +3,12 @@ import { useNavigate } from 'react-router-dom';
 import { essRequests } from '../../utils/essRequests';
 import { useESS } from '../../context/ESSContext';
 import './ESS.css';
-import { fmtDate } from '../../utils/dates';
 const fmtTime = (d) => d ? new Date(d).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' }) : '—';
 
 export default function ESSDashboard() {
   const navigate = useNavigate();
   const { employee } = useESS();
 
-  const [stats,     setStats]     = useState(null);
   const [balances,  setBalances]  = useState([]);
   const [payslip,   setPayslip]   = useState(null);
   const [today,     setToday]     = useState(null);

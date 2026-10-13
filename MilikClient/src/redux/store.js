@@ -149,7 +149,7 @@ export const store = configureStore({
       serializableCheck: {
         ignoredActions: [FLUSH, REHYDRATE, PAUSE, PERSIST, PURGE, REGISTER],
       },
-      immutableCheck: process.env.NODE_ENV === "development",
+      immutableCheck: import.meta.env.DEV,
     }),
 });
 

@@ -101,7 +101,7 @@ const TaxReports = () => {
           ? statementRes.data
           : [];
         setProcessedStatements(statements);
-      } catch (error) {
+      } catch {
         if (!cancelled) {
           toast.error('Failed to load tax report data');
           setInvoices([]);

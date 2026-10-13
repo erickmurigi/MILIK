@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
 import { useTabState } from "../../hooks/useTabState";
 import {
   FaPlus, FaRedoAlt, FaFilter, FaSearch, FaCheck, FaTimes, FaBan,
@@ -133,7 +132,6 @@ function ApplyLeaveModal({ employees = [], leaveTypes = [], onClose, onSaved }) 
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function LeaveApplications() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [page, setPage]         = useTabState('/hr/leave:page', 1);
   const [pageSize, setPageSize] = useState(25);

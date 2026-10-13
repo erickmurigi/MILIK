@@ -76,7 +76,7 @@ export const getLease = async (dispatch, id) => {
   try {
     const res = await adminRequests.get(`/leases/${id}`);
     dispatch(getLeasesSuccess([res.data]));
-  } catch (err) {
+  } catch {
     dispatch(getLeasesFailure());
   }
 };
@@ -145,12 +145,8 @@ export const signLease = async (dispatch, id, signData) => {
 
 // Get expiring leases
 export const getExpiringLeases = async (business, days = 30) => {
-  try {
-    const res = await adminRequests.get(`/leases/find/expiring?business=${business}&days=${days}`);
-    return res.data;
-  } catch (err) {
-    throw err;
-  }
+  const res = await adminRequests.get(`/leases/find/expiring?business=${business}&days=${days}`);
+  return res.data;
 };
 
 // Renew lease

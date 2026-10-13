@@ -188,14 +188,16 @@ const StatementPrintView = ({ statement, lines = [], company = null, summary = {
 
     const rowsMap = new Map();
 
-    lines.forEach((line) => {
+    lines.forEach((line, lineIndex) => {
       const metadata = line?.metadata || {};
       const tenantObj = line?.tenant;
       const unitObj = line?.unit;
 
+      // Math.random() here would reassign a different fallback id to the same line on every
+      // re-render, breaking the stable key this id feeds into — the loop index is stable instead.
       const tenantId =
         String(tenantObj?._id || line?.tenant || metadata?.tenantId || metadata?.tenant || "") ||
-        `line-${line?._id || Math.random()}`;
+        `line-${line?._id || lineIndex}`;
       const tenantName = tenantObj?.name || metadata?.tenantName || "Unassigned Tenant";
       const unitLabel = unitObj?.unitNumber || unitObj?.name || metadata?.unit || "-";
       const perMonth = unitObj?.rent || metadata?.rent || 0;

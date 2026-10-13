@@ -703,6 +703,14 @@ export const MODULE_ROLE_PRESETS = {
           { resource: 'saleReports',   action: 'view'   },
         ],
       },
+      advocate: {
+        label: 'Advocate',
+        description: 'View-only access to their own assigned deals and payments — scoping to their own project is enforced automatically by the backend, this just grants the view permission',
+        grants: [
+          { resource: 'saleDeals',    action: 'view' },
+          { resource: 'salePayments', action: 'view' },
+        ],
+      },
       salesManager: {
         label: 'Sales Manager',
         description: 'Agent + manage listings, agents, approve offers, close deals, pay commissions',

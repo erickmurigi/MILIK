@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 const safeJsonParse = (value, fallback) => {
   try {
     return value ? JSON.parse(value) : fallback;
-  } catch (error) {
+  } catch {
     return fallback;
   }
 };
@@ -23,13 +23,19 @@ export const buildScopedDraftKey = ({ page, companyId, userId = "user", extra = 
 
 export default function useScopedSessionDraft(key, initialValue, options = {}) {
   const { enabled = true } = options;
-  const initialRef = useRef(initialValue);
   const [hydrated, setHydrated] = useState(false);
-  const [state, setState] = useState(() => resolveInitialValue(initialRef.current));
+  // Only the mount-time initialValue is ever used — useState's lazy initializer already
+  // runs exactly once, so capturing it in a ref first (then reading ref.current during
+  // render) added nothing but an unsafe ref-read-during-render.
+  const [state, setState] = useState(() => resolveInitialValue(initialValue));
 
   useEffect(() => {
-    const fallback = resolveInitialValue(initialRef.current);
+    // Synchronizing with sessionStorage (an external system) is exactly the documented
+    // exception to this rule — the read can't happen during render, and 6 consumer pages
+    // rely on the hydrated flag flipping only after it resolves.
+    const fallback = resolveInitialValue(initialValue);
     if (!enabled || !key || !canUseSessionStorage()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setState(fallback);
       setHydrated(true);
       return;
@@ -44,7 +50,7 @@ export default function useScopedSessionDraft(key, initialValue, options = {}) {
     if (!enabled || !key || !hydrated || !canUseSessionStorage()) return;
     try {
       window.sessionStorage.setItem(key, JSON.stringify(state));
-    } catch (error) {
+    } catch {
       // Ignore quota/security errors so production forms do not crash.
     }
   }, [enabled, hydrated, key, state]);
@@ -53,7 +59,7 @@ export default function useScopedSessionDraft(key, initialValue, options = {}) {
     if (!key || !canUseSessionStorage()) return;
     try {
       window.sessionStorage.removeItem(key);
-    } catch (error) {
+    } catch {
       // Ignore storage errors.
     }
   }, [key]);

@@ -36,7 +36,6 @@ import {
 import { getChartOfAccounts, getCompany, getSmsLogs, updateCompany } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import PaginationBar from "../../components/PaginationBar";
-import { carWashApi } from "../../services/carWashApi";
 import { COMPANY_OPERATING_MODES, MODULE_LABELS, hasCompanyModule, normalizeCompanyModules, normalizeCompanyOperatingMode } from "../../utils/companyModules";
 import { isCashbookAccount } from "../../utils/cashbookUtils";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -782,6 +781,8 @@ const defaultSmsTemplates = [
 
 const countSmsInfo = (text = "") => {
   if (!text) return { chars: 0, segments: 0, remaining: 160, encoding: "GSM-7" };
+  // \x00-\x7F is the full ASCII range, deliberately — anything outside it needs Unicode SMS encoding.
+  // eslint-disable-next-line no-control-regex
   const isUnicode = /[^\x00-\x7F]/.test(text);
   const maxSingle = isUnicode ? 70 : 160;
   const maxMulti = isUnicode ? 67 : 153;
@@ -1090,7 +1091,7 @@ export default function CompanySetupPage() {
         if (!cancelled) {
           setTaxConfig(normalizeTaxConfiguration(response?.data || {}));
         }
-      } catch (error) {
+      } catch {
         if (!cancelled) {
           setTaxConfig(normalizeTaxConfiguration());
         }
@@ -1255,18 +1256,6 @@ export default function CompanySetupPage() {
     const configured = paymentConfigs.filter((config) => ["configured", "active"].includes(buildPaymentStatus(config).code)).length;
     return { total, active, enabled, configured };
   }, [paymentConfigs]);
-
-  const cashbookLabel = useMemo(() => {
-    if (!paymentForm.defaultCashbookAccountId) {
-      return paymentForm.defaultCashbookAccountName || "Not selected";
-    }
-
-    const selected = cashbookOptions.find(
-      (account) => String(account._id) === String(paymentForm.defaultCashbookAccountId)
-    );
-
-    return selected?.name || paymentForm.defaultCashbookAccountName || "Not selected";
-  }, [cashbookOptions, paymentForm.defaultCashbookAccountId, paymentForm.defaultCashbookAccountName]);
 
   const switchTab = (tabKey) => {
     const nextParams = new URLSearchParams(searchParams);

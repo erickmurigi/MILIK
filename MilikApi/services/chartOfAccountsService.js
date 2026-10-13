@@ -208,7 +208,19 @@ export const ensureSystemChartOfAccounts = async (businessId, options = {}) => {
   }));
 
   if (ops.length > 0) {
-    await ChartOfAccount.bulkWrite(ops, { ordered: false });
+    try {
+      await ChartOfAccount.bulkWrite(ops, { ordered: false });
+    } catch (err) {
+      // Concurrent callers for the same business (e.g. getCompanySettings firing this once per
+      // accounting-default field via Promise.all) can race to upsert the same system accounts.
+      // `ordered:false` lets every independent op still apply, but a genuine duplicate-key clash
+      // on one op still surfaces here as a BulkWriteError — the end state is correct either way
+      // (the "losing" request's account already exists from the winner), so only re-throw if
+      // something other than a benign E11000 race is in the mix.
+      const writeErrors = err?.writeErrors || err?.result?.result?.writeErrors || [];
+      const onlyDuplicateKeyErrors = writeErrors.length > 0 && writeErrors.every((e) => e.code === 11000 || e.err?.code === 11000);
+      if (!(err?.code === 11000 || onlyDuplicateKeyErrors)) throw err;
+    }
   }
 
   ensureCache.set(cacheKey, Date.now());

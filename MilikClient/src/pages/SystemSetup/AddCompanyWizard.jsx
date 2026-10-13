@@ -24,7 +24,7 @@ import {
 import Spinner from "../../components/common/Spinner";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
-import { inputClass, selectClass } from "../../utils/formStyles";
+import { inputClass } from "../../utils/formStyles";
 import { createCompany, getCompany, updateCompany } from "../../redux/apiCalls";
 import {
   applyCompanyModeBaseModules,

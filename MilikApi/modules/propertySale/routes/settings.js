@@ -6,8 +6,12 @@ import {
   addLeadSource,    updateLeadSource,    archiveLeadSource,
   addPropertyType,  updatePropertyType,  archivePropertyType,
   updateCommissionDefaults,
+  updateOwnerCommissionDefaults,
+  updateCommissionReleaseSchedule,
   updateAgentVisibility,
   updateUseProjects,
+  updateUseOwners,
+  updateUseAdvocates,
   loadDefaults,
   addCommTemplate, updateCommTemplate, deleteCommTemplate,
 } from "../controllers/settingsController.js";
@@ -30,8 +34,12 @@ router.put("/property-types/:itemId",     updatePropertyType);
 router.delete("/property-types/:itemId",  archivePropertyType);
 
 router.put("/commission-defaults",        updateCommissionDefaults);
+router.put("/owner-commission-defaults",  updateOwnerCommissionDefaults);
+router.put("/commission-release-schedule", updateCommissionReleaseSchedule);
 router.put("/agent-visibility",           updateAgentVisibility);
 router.put("/use-projects",               updateUseProjects);
+router.put("/use-owners",                 updateUseOwners);
+router.put("/use-advocates",              updateUseAdvocates);
 
 router.post("/load-defaults/:collection", loadDefaults);
 

@@ -511,7 +511,7 @@ const TakeOnBalances = () => {
   const currentCompany = useSelector(selectCurrentCompany);
   const { propertiesLoaded, tenantsLoaded } = useEntityCache(currentCompany?._id);
   const tenantState = useSelector(selectAllTenants);
-  const { tenant: termTenant, tenants: termTenants, unit: termUnit, units: termUnits, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "units", "property", "properties");
   const propertyState = useSelector(selectAllProperties);
   const tenants = useMemo(
     () => Array.isArray(tenantState) ? tenantState : Array.isArray(tenantState?.data) ? tenantState.data : [],
@@ -535,7 +535,6 @@ const TakeOnBalances = () => {
   const [rowToDelete, setRowToDelete] = useState(null);
   const [currentPage, setCurrentPage] = useTabState("/tenants/take-on-balances:currentPage", 1);
   const [pageSize, setPageSize] = useState(50);
-  const [expandedBalanceId, setExpandedBalanceId] = useState(null);
   const [chartAccounts, setChartAccounts] = useState([]);
   const [showImportModal, setShowImportModal] = useState(false);
   const [utilityTypeOptions, setUtilityTypeOptions] = useState([]);
@@ -564,11 +563,6 @@ const TakeOnBalances = () => {
       getPropertyDisplay(a).localeCompare(getPropertyDisplay(b))
     );
   }, [properties, tenants]);
-
-  const tenantSelectOptions = useMemo(
-    () => tenants.filter((tenant) => !draftFilters.propertyId || getTenantPropertyId(tenant) === draftFilters.propertyId).map((tenant) => (<option key={tenant._id} value={tenant._id}>{getTenantDisplayName(tenant)}</option>)),
-    [tenants, draftFilters.propertyId]
-  );
 
   const propertyLookup = useMemo(() => {
     const map = new Map();

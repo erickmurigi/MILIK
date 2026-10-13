@@ -25,7 +25,7 @@ import { getLandlords, createLandlord } from "../../redux/apiCalls";
 import BankDetailsFields from "../common/BankDetailsFields";
 import { INITIAL_LANDLORD_FORM, buildLandlordPayload, formatMobile, toKenyanMobile, validateLandlordForm } from "../../utils/landlordForm";
 import { useTerms } from "../../hooks/useTerm";
-import { selectCurrentCompany, selectCurrentUser, selectActiveLandlords, selectAllProperties, selectPropertyLoading, selectPropertyError, selectCurrentProperty } from "../../redux/selectors";
+import { selectCurrentCompany, selectCurrentUser, selectActiveLandlords, selectPropertyLoading, selectPropertyError, selectCurrentProperty } from "../../redux/selectors";
 import { adminRequests } from "../../utils/requestMethods";
 import { toast } from "react-toastify";
 import MilikConfirmDialog from "../Modals/MilikConfirmDialog";
@@ -135,7 +135,6 @@ const AddProperty = () => {
     "";
 
   const landlordsFromStore = useSelector(selectActiveLandlords);
-  const propertiesFromStore = useSelector(selectAllProperties);
 
   const [zones, setZones] = useState([]);
   const [activeTab, setActiveTab] = useState("general");
@@ -338,13 +337,6 @@ const AddProperty = () => {
     setFormData((prev) => ({
       ...prev,
       listingContact: { ...prev.listingContact, [field]: value },
-    }));
-  };
-
-  const handleCoordinateChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      coordinates: { ...prev.coordinates, [field]: value },
     }));
   };
 

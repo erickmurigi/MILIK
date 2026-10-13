@@ -31,7 +31,7 @@ const resetPersistedWorkspaceCache = () => {
     "active-tab",
   ];
   transientKeys.forEach((key) => {
-    try { localStorage.removeItem(key); } catch (_e) {}
+    try { localStorage.removeItem(key); } catch {}
   });
 };
 
@@ -45,7 +45,7 @@ const clearPreLoginSessionArtifacts = () => {
   ].forEach((key) => {
     try {
       localStorage.removeItem(key);
-    } catch (_error) {
+    } catch {
       // no-op
     }
   });
@@ -102,7 +102,7 @@ export const switchCompany = (companyId) => async (dispatch) => {
         if (resolvedCompany?._id) {
           dispatch(getCompanySuccess(resolvedCompany));
         }
-      } catch (_companyErr) {
+      } catch {
         // Keep token/user switch successful even if company re-fetch fails.
       }
     }
@@ -234,13 +234,9 @@ export const getCurrentUser = () => async (dispatch) => {
   }
 };
 
-export const registerUser = (userData) => async (dispatch) => {
-  try {
-    const res = await adminRequests.post('/auth', userData);
-    return res.data.user;
-  } catch (err) {
-    throw err;
-  }
+export const registerUser = (userData) => async () => {
+  const res = await adminRequests.post('/auth', userData);
+  return res.data.user;
 };
 
 export const createSuperAdmin = (adminData) => async (dispatch) => {

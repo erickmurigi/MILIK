@@ -72,16 +72,6 @@ const normalizeList = (payload) => {
   return [];
 };
 
-const getTenantDisplayName = (tenant) => {
-  if (!tenant) return "";
-  return (
-    tenant.name ||
-    tenant.tenantName ||
-    [tenant.firstName, tenant.lastName].filter(Boolean).join(" ") ||
-    "Unnamed Tenant"
-  );
-};
-
 const formatCurrency = (value) =>
   new Intl.NumberFormat("en-KE", {
     style: "currency",
@@ -103,13 +93,6 @@ const tenantMatchesScope = (tenant, scope = "active") => {
   if (scope === "all") return true;
   if (scope === "terminated") return TERMINATED_TENANT_STATUSES.has(normalized);
   return ACTIVE_TENANT_STATUSES.has(normalized);
-};
-
-const getTenantStatusLabel = (tenant) => {
-  const normalized = normalizeTenantStatus(tenant);
-  if (TERMINATED_TENANT_STATUSES.has(normalized)) return "Terminated";
-  if (normalized === "overdue") return "Overdue";
-  return "Active";
 };
 
 const resolvePropertyId = (record) =>
@@ -174,38 +157,11 @@ const getNotePaymentLabel = (note = {}) => {
   return "Unpaid";
 };
 
-const normalizeInvoiceItemKey = (invoice) => {
-  const metadata = invoice?.metadata || {};
-  const category = String(invoice?.category || "").toUpperCase();
-  const billItemKey = String(metadata?.billItemKey || "").trim();
-  const utilityType = String(
-    metadata?.utilityType || metadata?.meterUtilityType || metadata?.statementUtilityType || metadata?.utilityName || metadata?.utility || ""
-  )
-    .trim()
-    .toLowerCase();
-
-  return [category, billItemKey || utilityType].filter(Boolean).join("::");
-};
-
 const humanizeCategory = (value = "") =>
   String(value || "")
     .toLowerCase()
     .replace(/_/g, " ")
     .replace(/\b\w/g, (char) => char.toUpperCase());
-
-const getInvoiceItemLabel = (invoice) => {
-  const metadata = invoice?.metadata || {};
-  return (
-    metadata?.billItemLabel ||
-    metadata?.billItemKey ||
-    metadata?.utilityType ||
-    metadata?.meterUtilityType ||
-    metadata?.statementUtilityType ||
-    metadata?.utilityName ||
-    metadata?.utility ||
-    humanizeCategory(invoice?.category || "Charge Item")
-  );
-};
 
 const monthKey = (date) => {
   const dt = new Date(date);
@@ -328,7 +284,6 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
   const setFilters = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, filters: typeof value === "function" ? value(prev.filters || filters) : value }));
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const showAddModal = Boolean(invoiceNotesDraft.showAddModal);
-  const setShowAddModal = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, showAddModal: typeof value === "function" ? value(Boolean(prev.showAddModal)) : Boolean(value) }));
   const propertyId = invoiceNotesDraft.propertyId || "";
   const setPropertyId = (value) => setInvoiceNotesDraft((prev) => ({ ...prev, propertyId: typeof value === "function" ? value(prev.propertyId || "") : value }));
   const tenantId = invoiceNotesDraft.tenantId || "";
@@ -361,7 +316,6 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
   const [busyNoteId, setBusyNoteId] = useState("");
   const [selectedNotes, setSelectedNotes] = useState([]);
   const selectedNotesSet = useMemo(() => new Set(selectedNotes), [selectedNotes]);
-  const [expandedNotes, setExpandedNotes] = useState(new Set());
   const [communicationModal, setCommunicationModal] = useState(null);
   const [reverseNoteModal, setReverseNoteModal] = useState({ open: false, note: null, reason: "", loading: false });
   const [showImportModal, setShowImportModal] = useState(false);
@@ -757,15 +711,6 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
     const allSelected = allIds.length > 0 && allIds.every((id) => selectedNotesSet.has(id));
     setSelectedNotes(allSelected ? [] : allIds);
   };
-  const toggleNoteExpand = (id) => {
-    setExpandedNotes((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
   const summaryCards = useMemo(() => {
     const activeNotes = filteredNotes.filter(isActiveNote);
     const reversedNotes = filteredNotes.filter(
@@ -1017,8 +962,6 @@ const InvoiceNotes = ({ lockedBillItemKey = "", newNotePage = false } = {}) => {
   };
 
   const canReverseNote = (note) => isActiveNote(note);
-
-  const noteCountLabel = `${filteredNotes.length} note${filteredNotes.length === 1 ? "" : "s"}`;
 
   const resetWorkspaceFilters = () => {
     setFilters({

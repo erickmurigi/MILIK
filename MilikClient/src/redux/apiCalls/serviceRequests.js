@@ -17,7 +17,7 @@ export const deleteRequest = async (id,dispatch) => {
   try{
     await adminRequests.delete(`/requests/${id}`)
     dispatch(deleteRequestSuccess(id))
-  }catch(err){
+  }catch{
     dispatch(deleteRequestFailure())
   }
 }
@@ -41,7 +41,7 @@ export const getRequests = async (dispatch) => {
   try{
     const res = await adminRequests.get("/requests/")
     dispatch(getRequestsSuccess(res.data))
-  }catch(err){
+  }catch{
     dispatch(getRequestsFailure())
   }
 }

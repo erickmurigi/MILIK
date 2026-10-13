@@ -511,47 +511,6 @@ const Vacants = () => {
       });
   }, [appliedFilters, availabilityRows]);
 
-  const groupedRows = useMemo(() => {
-    const map = new Map();
-
-    filteredRows.forEach((row) => {
-      const key = row.propertyId || row.propertyName;
-      if (!map.has(key)) {
-        map.set(key, {
-          propertyId: row.propertyId,
-          propertyName: row.propertyName,
-          propertyCode: row.propertyCode,
-          rows: [],
-        });
-      }
-      map.get(key).rows.push(row);
-    });
-
-    return Array.from(map.values())
-      .map((group) => {
-        const counts = group.rows.reduce(
-          (acc, row) => {
-            acc.total += 1;
-            if (row.status === "occupied") acc.occupied += 1;
-            if (row.status === "vacant") acc.vacant += 1;
-            if (row.status === "notice_given") acc.notice += 1;
-            if (row.status === "reserved") acc.reserved += 1;
-            if (row.status === "under_maintenance") acc.maintenance += 1;
-            if (row.status === "off_market") acc.offMarket += 1;
-            if (row.status === "owner_occupied") acc.ownerOccupied += 1;
-            return acc;
-          },
-          { total: 0, occupied: 0, vacant: 0, notice: 0, reserved: 0, maintenance: 0, offMarket: 0, ownerOccupied: 0 }
-        );
-
-        return {
-          ...group,
-          counts,
-        };
-      })
-      .sort((a, b) => String(a.propertyName).localeCompare(String(b.propertyName)));
-  }, [filteredRows]);
-
   const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
   const safeCurrentPage = Math.min(currentPage, totalPages);
   const startIndex = (safeCurrentPage - 1) * pageSize;
@@ -596,10 +555,6 @@ const Vacants = () => {
     setAppliedFilters(emptyFilters);
     setExpandedRows([]);
     setSelectedRowId(null);
-  };
-
-  const toggleRow = (rowId) => {
-    setExpandedRows((prev) => (prev.includes(rowId) ? prev.filter((item) => item !== rowId) : [...prev, rowId]));
   };
 
   const expandAll = () => {
@@ -805,20 +760,6 @@ const Vacants = () => {
     window.URL.revokeObjectURL(url);
     toast.success("Availability status exported successfully.");
   };
-
-  const renderPropertySummary = (group) => (
-    <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold uppercase tracking-[0.12em]">
-      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-800">Occupied {group.counts.occupied}</span>
-      <span className="rounded-full bg-orange-100 px-2.5 py-1 text-orange-800">Vacant {group.counts.vacant}</span>
-      <span className="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">Notice {group.counts.notice}</span>
-      <span className="rounded-full bg-violet-100 px-2.5 py-1 text-violet-800">Reserved {group.counts.reserved}</span>
-      <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">Maintenance {group.counts.maintenance}</span>
-      <span className="rounded-full bg-slate-200 px-2.5 py-1 text-slate-700">Off Market {group.counts.offMarket}</span>
-      {group.counts.ownerOccupied > 0 && (
-        <span className="rounded-full bg-pink-100 px-2.5 py-1 text-pink-800">Owner Occ. {group.counts.ownerOccupied}</span>
-      )}
-    </div>
-  );
 
   return (
     <DashboardLayout lockContentScroll>

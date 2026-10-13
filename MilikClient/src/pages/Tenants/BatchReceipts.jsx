@@ -62,7 +62,7 @@ const BatchReceipts = () => {
   const navigate      = useNavigate();
   const company       = useSelector((s) => s.company?.currentCompany);
   const allTenants    = useSelector(selectAllTenants);
-  const { tenant: termTenant, tenants: termTenants, unit: termUnit, property: termProperty, properties: termProperties } = useTerms("tenant", "tenants", "unit", "property", "properties");
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "property", "properties");
   const allProperties = useSelector(selectAllProperties);
   const businessId    = company?._id;
 
