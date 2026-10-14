@@ -9,6 +9,7 @@ import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import { inputClass, labelClass } from "../../utils/formStyles";
 
 const METHOD_LABELS = { cash: "Cash", mpesa: "M-Pesa (manual)", bank: "Bank Transfer", card: "Card / POS", other: "Other" };
@@ -121,24 +122,30 @@ export default function CarWashSettings() {
     }
   };
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Operational Settings"
-      action={
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={loadData} disabled={loading}
-            className="inline-flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition">
-            <FaRedoAlt size={10} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          {canManage && (
-            <button type="button" onClick={save} disabled={saving || !dirty}
-              className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:opacity-50 transition">
-              <FaCheckCircle size={10} /> {saving ? "Saving…" : "Save Changes"}
-            </button>
-          )}
-        </div>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button variant="outline" onClick={loadData} disabled={loading}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canManage && (
+          <ListToolbar.Button icon={FaCheckCircle} variant="accent" onClick={save} disabled={saving || !dirty}>
+            {saving ? "Saving…" : "Save Changes"}
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
       {/* Root: flex column, fills shell exactly */}
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
 

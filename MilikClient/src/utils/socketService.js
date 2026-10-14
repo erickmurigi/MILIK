@@ -34,7 +34,6 @@ const getSnapshot = () => socketInstance;
 const ensureSocketConnected = () => {
   if (socketInstance) return;
 
-  const token = localStorage.getItem('milik_token');
   const socketUrl = resolveSocketUrl();
 
   socketInstance = io(socketUrl, {
@@ -42,7 +41,13 @@ const ensureSocketConnected = () => {
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
     reconnectionAttempts: 5,
-    auth: token ? { token } : undefined,
+    // A callback, not a static object: socket.io-client re-invokes this on every (re)connection
+    // attempt, so a reconnect always carries whatever token is CURRENTLY in localStorage. The old
+    // static `{ token }` snapshot was read once at construction time and then reused unchanged on
+    // every subsequent reconnection attempt for the lifetime of this socket instance — if the token
+    // was ever rotated/refreshed after the socket connected, every later reconnect kept sending the
+    // original, now-stale token and would be rejected by the server's auth middleware forever.
+    auth: (cb) => cb({ token: localStorage.getItem('milik_token') || undefined }),
   });
 
   socketInstance.on('connect', () => {

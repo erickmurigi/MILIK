@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  FaArrowLeft, FaBalanceScale, FaCheckCircle, FaPlus, FaSave, FaTrash, FaUser,
+  FaArrowLeft, FaBalanceScale, FaCheckCircle, FaPlus, FaSave, FaTrash, FaTv, FaUser,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import { fmtDate } from "../../utils/dates";
 
 const fmt = formatMoney;
@@ -53,7 +54,7 @@ const SavedBalancesList = React.memo(function SavedBalancesList({ saved, loading
               <p className={`text-xs font-black ${job.paymentStatus === "paid" ? "text-emerald-600" : "text-red-600"}`}>
                 {fmt(job.price)}
               </p>
-              <span className={`inline-block rounded px-1.5 py-0 text-[9px] font-bold uppercase ${job.paymentStatus === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+              <span className={`inline-block px-1.5 py-0 text-[9px] font-bold uppercase ${job.paymentStatus === "paid" ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
                 {job.paymentStatus}
               </span>
             </div>
@@ -167,19 +168,24 @@ export default function CarWashOpeningBalances() {
     [saved]
   );
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Opening Balances"
-      action={
-        <button
-          type="button"
-          onClick={() => navigate("/carwash/customers")}
-          className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-        >
-          <FaArrowLeft size={9} /> Customers
-        </button>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate("/carwash/customers")}>
+          Customers
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+      </ListToolbar>
       <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
 
         {/* Info banner */}

@@ -3,11 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import {
   FaChevronDown, FaChevronRight, FaEdit, FaPiggyBank, FaPlus,
-  FaRedoAlt, FaSearch, FaWallet,
+  FaRedoAlt, FaSearch, FaTv, FaWallet,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
@@ -19,7 +20,7 @@ import Modal from "../../components/common/Modal";
 
 const GRN = "#0B3B2E";
 const emptyForm = { name: "", phone: "", role: "", startDate: "", active: true, branch: "" };
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
 const fmt = formatMoney;
 
 // ─── Stat tile ────────────────────────────────────────────────────────────────
@@ -33,7 +34,7 @@ const StatTile = ({ label, value, sub, color = "slate" }) => {
     amber:   "border-amber-200  bg-amber-50   text-amber-700",
   };
   return (
-    <div className={`rounded border px-3 py-2 ${colors[color] || colors.slate}`}>
+    <div className={`border px-3 py-2 ${colors[color] || colors.slate}`}>
       <p className="text-[9px] font-black uppercase tracking-widest opacity-70">{label}</p>
       <p className="mt-0.5 text-sm font-black tabular-nums">{value}</p>
       {sub && <p className="mt-0.5 text-[10px] opacity-60">{sub}</p>}
@@ -82,7 +83,7 @@ const SavingsPayoutModal = ({ staff, balance, cashbooks, onClose, onSuccess }) =
       }
     >
       <form id="savings-payout-form" onSubmit={submit} className="space-y-4">
-        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
           Available savings balance: <strong>{fmt(balance)}</strong>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -148,8 +149,8 @@ const WalletDrawer = ({ row, cashbooks, onPayoutSuccess }) => {
   const recentSavings = wallet?.recentSavings || [];
 
   const typeTag = (type) => type === "disbursement"
-    ? <span className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">Paid Out</span>
-    : <span className="rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Saved</span>;
+    ? <span className="border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-700">Paid Out</span>
+    : <span className="border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-700">Saved</span>;
 
   return (
     <>
@@ -197,7 +198,7 @@ const WalletDrawer = ({ row, cashbooks, onPayoutSuccess }) => {
             {recentSavings.length > 0 && (
               <div>
                 <p className="mb-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">Recent Savings Transactions</p>
-                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 rounded border border-slate-200 bg-white">
+                <div className="max-h-36 overflow-y-auto divide-y divide-slate-100 border border-slate-200 bg-white">
                   {recentSavings.map((rec) => (
                     <div key={rec._id} className="flex items-center justify-between px-3 py-1.5 text-[11px]">
                       <div className="flex items-center gap-2">
@@ -326,22 +327,30 @@ const CarWashStaff = () => {
   const resetFilters = () => { setFilters({ search: "", status: "" }); setPage(1); setAppliedFilters({ search: "", status: "" }); };
   const toggleExpanded = (id) => setExpandedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Staff Register"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          {canManage && (
-            <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-              <FaPlus /> New Staff
-            </button>
-          )}
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button variant="outline" onClick={() => refetch()}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canManage && (
+          <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openCreate}>
+            New Staff
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
       <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input
           className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
@@ -390,8 +399,8 @@ const CarWashStaff = () => {
               </div>
               {row.phone && <p className="text-xs text-slate-600">{row.phone}</p>}
               {canManage && (
-                <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                  <FaEdit /> Edit
+                <button type="button" onClick={() => openEdit(row)} title="Edit staff" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                  <FaEdit size={12} />
                 </button>
               )}
             </div>
@@ -446,8 +455,8 @@ const CarWashStaff = () => {
                     </td>
                     <td className="px-2 py-1 text-right">
                       {canManage && (
-                        <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                          <FaEdit /> Edit
+                        <button type="button" onClick={() => openEdit(row)} title="Edit staff" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                          <FaEdit size={12} />
                         </button>
                       )}
                     </td>

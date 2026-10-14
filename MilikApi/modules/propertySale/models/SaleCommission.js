@@ -23,6 +23,10 @@ const saleCommissionSchema = new mongoose.Schema(
     payoutDate: { type: Date, default: null },
     payoutMethod: { type: String, enum: PAYOUT_METHODS, default: null },
     payoutReference: { type: String, trim: true, default: "" },
+    // Where the broker's commission was physically paid from: the company's own cash ("company_cashbook",
+    // default — today's exact behavior) or an advocate's trust account ("advocate_trust", when the deal
+    // collects via collectionMethod "advocate_trust" and the advocate settles the broker directly).
+    payoutSource: { type: String, enum: ["company_cashbook", "advocate_trust"], default: "company_cashbook" },
     whtRate:   { type: Number, default: 5, min: 0, max: WHT_MAX_RATE },
     whtAmount: { type: Number, default: 0, min: 0 },
     netAmount: { type: Number, default: 0, min: 0 },

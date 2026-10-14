@@ -125,7 +125,11 @@ const TAB_CONFIG = {
   accounting: {
     label: "Accounting Defaults",
     icon: FaCheck,
-    requiredModules: ["propertyManagement", "hr", "inventory"],
+    // accountsPayableAccount here is the generic fallback payable used by ANY voucher line with no
+    // payable of its own (paymentVoucher.js's resolveHeaderPayable) — not a propertyManagement-only
+    // concept. A company running only propertySale/accounts had no way to reach this tab at all,
+    // meaning no way to set that default; added so they can.
+    requiredModules: ["propertyManagement", "hr", "inventory", "propertySale", "accounts"],
   },
   autoInvoicing: {
     label: "Auto Invoicing",
@@ -520,10 +524,20 @@ const ACCOUNTING_DEFAULT_FIELDS = [
     description: "Default income account used when charging one-time tenant onboarding or lease/agreement fees.",
     type: "income",
   },
+];
+
+// Not property-management-specific like the array above — paymentVoucher.js's resolveHeaderPayable
+// falls back to this for ANY module's draft/approved voucher whose lines carry no payable of their
+// own (a paid-on-the-spot voucher never needs one at all, regardless of module). Kept as its own
+// small array and its own always-visible card (see renderAccountingTab) so a company running only
+// Property Sales / Financial Accounting — with no Property Management, HR or Inventory module — can
+// still reach and set it; it used to be bundled inside the Property-Management-only card above, which
+// such a company could never see.
+const GENERAL_ACCOUNTING_DEFAULT_FIELDS = [
   {
     key: "accountsPayableAccount",
     label: "Accounts Payable (supplier vouchers)",
-    description: "Liability credited when a supplier or one-off payment is approved. Used by any expense line whose expense item has no payable of its own.",
+    description: "Liability credited when a draft or approved supplier/one-off voucher is accrued but not yet paid. Used by any voucher line whose expense item has no payable of its own. A voucher paid on the spot never needs this.",
     type: "liability",
   },
 ];
@@ -2583,6 +2597,28 @@ const CompanySettings = () => {
 
   const renderAccountingTab = () => (
     <div className="space-y-6">
+      <Card
+        title="General Accounting Defaults"
+        subtitle="Fallback posting accounts used across every module, not just one. Leaving a field blank keeps the built-in MILIK fallback behavior. Historical entries remain untouched."
+        action={
+          <ActionButton variant="primary" onClick={saveAccountingDefaults} disabled={savingAccounting || loadingAccounts}>
+            {savingAccounting ? <Spinner size="sm" /> : <FaSave />} Save General Defaults
+          </ActionButton>
+        }
+      >
+        <div className="border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
+          Choose real Chart of Accounts rows. These defaults only guide future posting where no more specific account has been selected.
+        </div>
+
+        {loadingAccounts ? (
+          <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+            <Spinner size="sm" /> Loading Chart of Accounts...
+          </div>
+        ) : (
+          renderAccountingDefaultsGrid(GENERAL_ACCOUNTING_DEFAULT_FIELDS, accountingDefaults, setAccountingDefaultField)
+        )}
+      </Card>
+
       {hasPM && (
         <Card
           title="Property Management Accounting Defaults"
@@ -2655,11 +2691,6 @@ const CompanySettings = () => {
         </Card>
       )}
 
-      {!hasPM && !hasHR && !hasInv && (
-        <div className="flex h-40 items-center justify-center border border-slate-200 bg-white text-[12px] text-slate-400">
-          No accounting defaults are configured for your active modules.
-        </div>
-      )}
     </div>
   );
 

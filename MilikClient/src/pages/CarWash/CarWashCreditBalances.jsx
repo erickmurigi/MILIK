@@ -7,7 +7,7 @@ import {
   FaExclamationTriangle, FaInfoCircle, FaTrash, FaTimes,
   FaSearch, FaSort, FaSortUp, FaSortDown,
   FaDownload, FaLayerGroup, FaCheck, FaMoneyBillWave,
-  FaCarSide, FaChevronDown, FaChevronRight,
+  FaCarSide, FaChevronDown, FaChevronRight, FaTv,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
@@ -522,8 +522,16 @@ export default function CarWashCreditBalances() {
     if (await confirm("Reverse write-off? The credit will become active again.")) undoCreditWriteOff(id);
   }, [undoCreditWriteOff, confirm]);
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own header.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell title="Credit Balances">
+    <CarWashShell showToolbar={false}>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
         {/* ── Header ── */}
@@ -586,6 +594,15 @@ export default function CarWashCreditBalances() {
                 className="flex h-7 items-center gap-1 border border-slate-300 bg-white px-2 text-[10px] text-slate-600 hover:bg-slate-50 disabled:opacity-50"
               >
                 <FaRedoAlt size={9} className={isLoading ? "animate-spin" : ""} />
+              </button>
+
+              <button
+                type="button"
+                onClick={openQueueDisplay}
+                title="Open customer queue display screen"
+                className="flex h-7 items-center gap-1 border border-slate-300 bg-white px-2 text-[10px] font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                <FaTv size={9} /> Queue Display
               </button>
             </div>
           </div>

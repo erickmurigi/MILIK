@@ -29,8 +29,26 @@ const STATUS_BADGE = {
 };
 
 const PAYOUT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
-const EMPTY_PAYOUT   = { payoutMethod: "bank_transfer", payoutReference: "", payoutDate: todayISO(), cashbook: "" };
+const EMPTY_PAYOUT   = { payoutMethod: "bank_transfer", payoutReference: "", payoutDate: todayISO(), cashbook: "", source: "company_cashbook" };
 const PAGE_SIZE      = 50;
+const PAYOUT_SOURCE_OPTIONS = [
+  { value: "company_cashbook", label: "Company Cashbook" },
+  { value: "advocate_trust",   label: "Advocate (Trust Account)" },
+];
+
+// null for a legacy/one-shot commission (releaseSchedule empty) — tiers accrue automatically as the
+// buyer pays, independent of Approve/Pay, so a staged commission needs its own progress readout instead
+// of a bare status pill that looks identical to a simple one.
+const tierProgress = (c) => {
+  if (!c.releaseSchedule?.length) return null;
+  const totalTiers = c.releaseSchedule.length;
+  const releasedCount = c.tierReleases?.length || 0;
+  const commissionAmount = Number(c.commissionAmount || 0);
+  const releasedAmount = Number(c.releasedAmount || 0);
+  const pct = commissionAmount > 0 ? Math.round((releasedAmount / commissionAmount) * 100) : 0;
+  const fullyReleased = commissionAmount > 0 && releasedAmount >= commissionAmount - 0.01;
+  return { totalTiers, releasedCount, pct, fullyReleased };
+};
 
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -63,7 +81,7 @@ const renderCommissionRow = (c) => (
       )}
     </td>
     <td className="px-3 py-1.5 font-mono font-black text-slate-700 border-r border-gray-100">{c.deal?.dealNumber || "—"}</td>
-    <td className="max-w-[140px] truncate px-3 py-1.5 text-slate-500 border-r border-gray-100">{c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—"}</td>
+    <td className="max-w-[140px] truncate px-3 py-1.5 text-slate-500 border-r border-gray-100">{c.listing?.title || c.listing?.listingNumber || "—"}</td>
     <td className="px-3 py-1.5 font-black text-[#0B3B2E] border-r border-gray-100">
       {c.commissionRate}{c.commissionType === "percentage" ? "%" : " KES"}
     </td>
@@ -77,9 +95,61 @@ const renderCommissionRow = (c) => (
       <span className={`inline-block border px-1.5 py-0.5 text-[9px] font-black uppercase ${STATUS_BADGE[c.status] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
         {c.status}
       </span>
+      {(() => {
+        const tp = tierProgress(c);
+        if (!tp) return null;
+        return (
+          <div className="mt-0.5 text-[8px] font-bold text-slate-400">
+            {tp.releasedCount}/{tp.totalTiers} tiers · {tp.pct}% released
+          </div>
+        );
+      })()}
+      {c.status === "paid" && c.payoutSource === "advocate_trust" && (
+        <div className="mt-0.5 text-[8px] font-bold text-teal-600">via advocate trust</div>
+      )}
     </td>
   </>
 );
+
+// Module scope, same reason as renderCommissionRow — a stable identity for MilikTable's memo.
+const renderCommissionExpanded = (c) => {
+  if (!c.releaseSchedule?.length) {
+    return <div className="text-[10px] text-slate-400">Single release — this commission has no staged tiers.</div>;
+  }
+  return (
+    <table className="w-full max-w-xl text-[10px]">
+      <thead>
+        <tr className="text-left text-slate-400">
+          <th className="pb-1 pr-4 font-black uppercase">Threshold</th>
+          <th className="pb-1 pr-4 font-black uppercase">Release %</th>
+          <th className="pb-1 pr-4 text-right font-black uppercase">Amount</th>
+          <th className="pb-1 pr-4 font-black uppercase">Status</th>
+          <th className="pb-1 font-black uppercase">Released</th>
+        </tr>
+      </thead>
+      <tbody>
+        {c.releaseSchedule.map((tier, i) => {
+          const released = (c.tierReleases || []).find((tr) => tr.thresholdPct === tier.thresholdPct);
+          return (
+            <tr key={i} className="border-t border-slate-200">
+              <td className="py-1 pr-4 font-bold text-slate-700">{tier.thresholdPct}% paid</td>
+              <td className="py-1 pr-4 text-slate-600">{tier.releasePct}%</td>
+              <td className="py-1 pr-4 text-right font-mono font-bold text-slate-700">{released ? fmtKES(released.amount) : "—"}</td>
+              <td className="py-1 pr-4">
+                {released ? (
+                  <span className="border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black text-emerald-700">RELEASED</span>
+                ) : (
+                  <span className="border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-black text-slate-400">PENDING</span>
+                )}
+              </td>
+              <td className="py-1 text-slate-500">{released?.accruedAt ? fmtDate(released.accruedAt) : "—"}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+};
 
 // Payout modal — owns its form state so typing no longer re-renders the page or its table.
 function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit }) {
@@ -122,16 +192,32 @@ function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit })
         </div>
         <div className="col-span-2">
           <AppSelect
-            label="Bank / Cashbook Account (GL Credit)"
-            value={payoutForm.cashbook}
-            onChange={(v) => setPayoutForm((f) => ({ ...f, cashbook: v ?? "" }))}
-            options={cashbookOptions}
-            placeholder="— Fallback account if blank —"
-            clearable
-            searchable
+            label="Paid By"
+            value={payoutForm.source}
+            onChange={(v) => setPayoutForm((f) => ({ ...f, source: v ?? "company_cashbook" }))}
+            options={PAYOUT_SOURCE_OPTIONS}
             size="md"
           />
+          {payoutForm.source === "advocate_trust" && (
+            <p className="mt-1 text-[10px] text-slate-500">
+              The advocate who collected this deal's trust funds will be resolved automatically, along with their WHT-handling preference. No company cashbook moves.
+            </p>
+          )}
         </div>
+        {payoutForm.source !== "advocate_trust" && (
+          <div className="col-span-2">
+            <AppSelect
+              label="Bank / Cashbook Account (GL Credit)"
+              value={payoutForm.cashbook}
+              onChange={(v) => setPayoutForm((f) => ({ ...f, cashbook: v ?? "" }))}
+              options={cashbookOptions}
+              placeholder="— Fallback account if blank —"
+              clearable
+              searchable
+              size="md"
+            />
+          </div>
+        )}
         <div className="col-span-2">
           <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Reference / Transaction ID</label>
           <input
@@ -294,7 +380,7 @@ const SaleCommissions = () => {
           { label: "Comm. No.", value: (c) => c.commissionNumber },
           { label: T.saleAgent, value: (c) => `${c.agent?.fullName || "—"}${c.splits?.length ? ` (+${c.splits.length} split)` : ""}` },
           { label: T.saleDeal, value: (c) => c.deal?.dealNumber || "—" },
-          { label: "Property", value: (c) => c.deal?.listing?.title || c.deal?.listing?.listingNumber || "—" },
+          { label: "Property", value: (c) => c.listing?.title || c.listing?.listingNumber || "—" },
           { label: "Rate", value: (c) => `${c.commissionRate}${c.commissionType === "percentage" ? "%" : " KES"}` },
           { label: "Gross (KES)", align: "right", value: (c) => money(c.commissionAmount) },
           { label: "WHT (KES)", align: "right", value: (c) => (c.whtAmount > 0 ? money(c.whtAmount) : "—") },
@@ -319,12 +405,27 @@ const SaleCommissions = () => {
     printSaleDocument((win) => printCommissionStatementById(id, { company: currentCompany, T, win }));
   }, [currentCompany, T]);
 
-  const renderCommissionActions = useCallback((c) => (
+  const renderCommissionActions = useCallback((c) => {
+    const tp = tierProgress(c);
+    // A staged commission accrues its own GL entries tier-by-tier, automatically, as the buyer pays —
+    // Approve has no accrual effect on one (see commissionsController.js) and stays disabled until every
+    // tier has actually released, so finance never signs off on something still partly in flight.
+    const approveBlocked = tp && !tp.fullyReleased;
+    return (
     <div className="inline-flex items-center gap-1">
       {c.status === "pending" && (
-        <button type="button" onClick={() => handleApprove(c)} disabled={!!actionKey} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
-          <FaCheck className="mr-0.5 inline text-[8px]" /> Approve
-        </button>
+        approveBlocked ? (
+          <span
+            title={`Accrues automatically as the buyer pays — ${tp.releasedCount}/${tp.totalTiers} tiers released so far (${tp.pct}%). Approve unlocks once fully released.`}
+            className="cursor-help border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-400"
+          >
+            Accruing {tp.pct}%
+          </span>
+        ) : (
+          <button type="button" onClick={() => handleApprove(c)} disabled={!!actionKey} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40">
+            <FaCheck className="mr-0.5 inline text-[8px]" /> Approve
+          </button>
+        )
       )}
       {c.status === "approved" && (
         <button type="button" onClick={() => setShowPayout(c)} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">
@@ -343,7 +444,8 @@ const SaleCommissions = () => {
         <FaPrint className="text-[8px]" />
       </button>
     </div>
-  ), [handleApprove, handleReverse, handlePrintStatement, actionKey]);
+    );
+  }, [handleApprove, handleReverse, handlePrintStatement, actionKey]);
 
   return (
     <PropertySaleShell>
@@ -421,6 +523,7 @@ const SaleCommissions = () => {
             minWidth={760}
             renderRow={renderCommissionRow}
             renderActions={renderCommissionActions}
+            renderExpanded={renderCommissionExpanded}
           />
 
           <PaginationBar

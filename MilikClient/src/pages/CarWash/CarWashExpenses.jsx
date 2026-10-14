@@ -5,10 +5,11 @@ import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
-import { FaChevronDown, FaChevronRight, FaCog, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrashAlt } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaCog, FaEdit, FaPlus, FaRedoAlt, FaSearch, FaTimes, FaTrashAlt, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
 import { fmtDate } from "../../utils/dates";
@@ -244,7 +245,7 @@ const CarWashExpenses = () => {
   const [applied,      setApplied]      = useTabState("/carwash/expenses:applied", defaultFilters);
   const [expandedIds,  setExpandedIds]  = useState([]);
   const [page,         setPage]         = useTabState("/carwash/expenses:page", 1);
-  const [pageSize,     setPageSize]     = useTabState("/carwash/expenses:pageSize", 25);
+  const [pageSize,     setPageSize]     = useTabState("/carwash/expenses:pageSize", 50);
 
   // Modal state — editingRow=null means "create", otherwise "edit"
   const [showModal,    setShowModal]    = useState(false);
@@ -435,27 +436,35 @@ const CarWashExpenses = () => {
   const toggleExpanded = (id) => setExpandedIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
   const colSpan = isConsolidated ? 10 : 9;
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Expenses Register"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          {canUpdate && (
-            <button type="button" onClick={openCatModal} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-              <FaCog /> Categories
-            </button>
-          )}
-          {canCreate && (
-            <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-              <FaPlus /> New Expense
-            </button>
-          )}
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button variant="outline" onClick={() => refetch()}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        {canUpdate && (
+          <ListToolbar.Button icon={FaCog} variant="outline" onClick={openCatModal}>
+            Categories
+          </ListToolbar.Button>
+        )}
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canCreate && (
+          <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openCreate}>
+            New Expense
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
       {/* Filters */}
       <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[160px_150px_200px_150px_220px_1fr_auto_auto]">
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"

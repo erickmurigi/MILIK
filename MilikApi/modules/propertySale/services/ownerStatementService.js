@@ -5,6 +5,7 @@ import SaleDeal from "../models/SaleDeal.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
+import SaleOwnerPayout from "../models/SaleOwnerPayout.js";
 import PaymentVoucher from "../../../models/PaymentVoucher.js";
 import { round2 } from "../../../utils/math.js";
 
@@ -40,18 +41,38 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     const listing = deal && listingById.get(String(deal.listing));
     return listing?.project || null;
   };
+  // A human label for which plot/unit a line belongs to — an owner with several plots under one
+  // project can't tell "DL-00007" apart from "DL-00009" on sight, so every proceeds/commission
+  // description below leads with this instead of (or alongside) the internal deal number.
+  const listingLabelForDeal = (dealId) => {
+    const deal = dealById.get(String(dealId));
+    const listing = deal && listingById.get(String(deal.listing));
+    if (listing?.title) return listing.title;
+    if (listing?.unitNumber) return `Unit ${listing.unitNumber}`;
+    return deal?.dealNumber || "Deal";
+  };
 
-  const [payments, ownerCommissions, brokerCommissions, vouchers] = await Promise.all([
+  const [payments, ownerCommissions, brokerCommissions, vouchers, ownerPayouts] = await Promise.all([
     SalePayment.find({
       business: businessId, deal: { $in: dealIds }, status: "paid",
       paymentDate: { $gte: start, $lte: end },
     }).select("amount paymentDate deal paymentNumber").lean(),
     SaleOwnerCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber deal").lean(),
     SaleCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionAmount releaseSchedule status updatedAt deal").lean(),
+    // saleProject is optional on the voucher (an owner-level recharge — e.g. a legal fee covering the
+    // relationship generally, not one plot — has no project at all) — when the statement isn't scoped
+    // to one specific project, a project-less voucher must still show up here. `$in` with `null` in the
+    // list matches both an explicit null and a missing field, so this doesn't silently drop them the
+    // way a bare `saleProject: {$in: projectIds}` (no null) used to. When the statement IS scoped to one
+    // project, a project-less (owner-general) recharge deliberately stays out of it — it isn't that
+    // project's cost to show.
     PaymentVoucher.find({
       business: businessId, saleOwner: ownerId, category: "sale_owner_expense",
-      status: { $in: ["approved", "paid"] }, ...(projectId ? { saleProject: projectId } : { saleProject: { $in: projectIds } }),
+      status: { $in: ["approved", "paid"] }, ...(projectId ? { saleProject: projectId } : { saleProject: { $in: [...projectIds, null] } }),
     }).select("amount narration payeeName dueDate paidDate voucherNo saleProject").lean(),
+    // Money actually paid out to the owner (company cashbook or advocate trust) — so a statement run
+    // after a payout reflects what's really still outstanding, not the full gross balance forever.
+    SaleOwnerPayout.find({ business: businessId, owner: ownerId }).select("amount cgtAmount date payoutNumber deal").lean(),
   ]);
 
   const rawLines = [];
@@ -60,7 +81,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     const deal = dealById.get(String(payment.deal));
     rawLines.push({
       transactionDate: payment.paymentDate, category: "proceeds", direction: "credit", amount: round2(payment.amount),
-      description: `Payment ${payment.paymentNumber || ""} — ${deal?.dealNumber || "deal"}`.trim(),
+      description: `${listingLabelForDeal(payment.deal)} — Payment received (${payment.paymentNumber || deal?.dealNumber || "—"})`,
       deal: payment.deal, project: projectForDeal(payment.deal),
       sourceTransactionType: "property_sale_payment", sourceTransactionId: String(payment._id),
     });
@@ -71,7 +92,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
       if (!inPeriod(tier.accruedAt, start, end)) continue;
       rawLines.push({
         transactionDate: tier.accruedAt, category: "company_commission", direction: "debit", amount: round2(tier.amount),
-        description: `Company commission (${tier.thresholdPct}% paid) — ${oc.commissionNumber}`,
+        description: `${listingLabelForDeal(oc.deal)} — buyer reached ${tier.thresholdPct}% paid (${oc.commissionNumber})`,
         deal: oc.deal, project: projectForDeal(oc.deal),
         sourceTransactionType: "property_sale_owner_commission_tier", sourceTransactionId: `${oc._id}:tier:${tier._id}`,
       });
@@ -90,7 +111,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
         if (!inPeriod(tier.accruedAt, start, end)) continue;
         rawLines.push({
           transactionDate: tier.accruedAt, category: "broker_commission", direction: "debit", amount: round2(tier.amount),
-          description: `Broker commission (${tier.thresholdPct}% paid) — ${bc.commissionNumber}`,
+          description: `${listingLabelForDeal(bc.deal)} — buyer reached ${tier.thresholdPct}% paid (${bc.commissionNumber})`,
           deal: bc.deal, project: projectForDeal(bc.deal),
           sourceTransactionType: "property_sale_commission_tier", sourceTransactionId: `${bc._id}:tier:${tier._id}`,
         });
@@ -98,7 +119,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     } else if (["approved", "paid"].includes(bc.status) && inPeriod(bc.updatedAt, start, end)) {
       rawLines.push({
         transactionDate: bc.updatedAt, category: "broker_commission", direction: "debit", amount: round2(bc.commissionAmount),
-        description: `Broker commission — ${bc.commissionNumber}`,
+        description: `${listingLabelForDeal(bc.deal)} — full release (${bc.commissionNumber})`,
         deal: bc.deal, project: projectForDeal(bc.deal),
         sourceTransactionType: "property_sale_commission", sourceTransactionId: String(bc._id),
       });
@@ -116,6 +137,20 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     });
   }
 
+  for (const p of ownerPayouts) {
+    if (!inPeriod(p.date, start, end)) continue;
+    // The owner's entitlement is reduced by the FULL claim settled (cash paid + any CGT withheld on
+    // their behalf), not just the cash they physically received — otherwise a withheld-CGT portion would
+    // never leave their statement balance even though it's gone for good.
+    const cgt = round2(p.cgtAmount || 0);
+    rawLines.push({
+      transactionDate: p.date, category: "owner_payout", direction: "debit", amount: round2(p.amount + cgt),
+      description: `Owner payout — ${p.payoutNumber || ""}${cgt > 0 ? ` (incl. KES ${cgt.toLocaleString()} CGT withheld)` : ""}`.trim(),
+      deal: p.deal || null, project: p.deal ? projectForDeal(p.deal) : null,
+      sourceTransactionType: "property_sale_owner_payout", sourceTransactionId: String(p._id),
+    });
+  }
+
   rawLines.sort((a, b) => new Date(a.transactionDate) - new Date(b.transactionDate));
 
   let runningBalance = 0;
@@ -129,7 +164,8 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
   const companyCommission = sumBy("company_commission");
   const brokerCommission = sumBy("broker_commission");
   const rechargedExpenses = sumBy("expense");
-  const netBalance = round2(grossProceeds - companyCommission - brokerCommission - rechargedExpenses);
+  const ownerPayoutsTotal = sumBy("owner_payout");
+  const netBalance = round2(grossProceeds - companyCommission - brokerCommission - rechargedExpenses - ownerPayoutsTotal);
 
-  return { lines, totals: { grossProceeds, companyCommission, brokerCommission, rechargedExpenses, netBalance } };
+  return { lines, totals: { grossProceeds, companyCommission, brokerCommission, rechargedExpenses, ownerPayouts: ownerPayoutsTotal, netBalance } };
 };

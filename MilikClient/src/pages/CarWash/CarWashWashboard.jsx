@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { FaRedoAlt, FaClock, FaExclamationTriangle } from "react-icons/fa";
+import { FaRedoAlt, FaClock, FaExclamationTriangle, FaTv } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 
@@ -57,12 +57,12 @@ const JobCard = React.memo(({ job, onAdvance, onPayLater }) => {
   const canPayLater = job.status === "ready" && payStatus !== "paid";
 
   return (
-    <div className={`mb-1.5 border-l-4 ${borderCls} ${bgCls} rounded-sm px-2.5 py-1.5 shadow-sm`}>
+    <div className={`mb-1.5 border-l-4 ${borderCls} ${bgCls} px-2.5 py-1.5 shadow-sm`}>
       <div className="flex items-start justify-between gap-1">
         <div className={`text-sm font-black tracking-widest ${cfg.text} leading-tight`}>
           {job.plateNumber || job.itemDescription || "—"}
         </div>
-        <span className={`shrink-0 rounded px-1 py-0.5 text-[9px] font-bold ${PAY_BADGE[payStatus] ?? PAY_BADGE.unpaid}`}>
+        <span className={`shrink-0 px-1 py-0.5 text-[9px] font-bold ${PAY_BADGE[payStatus] ?? PAY_BADGE.unpaid}`}>
           {PAY_LABEL[payStatus] ?? "Unpaid"}
         </span>
       </div>
@@ -102,7 +102,7 @@ const ColHeader = ({ status, count }) => {
   return (
     <div className={`mb-3 border-b-2 ${cfg.border} pb-2 flex items-center justify-between`}>
       <span className={`text-xs font-black uppercase tracking-widest ${cfg.text}`}>{cfg.label}</span>
-      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${cfg.badge}`}>{count}</span>
+      <span className={`px-2 py-0.5 text-xs font-bold ${cfg.badge}`}>{count}</span>
     </div>
   );
 };
@@ -136,7 +136,7 @@ const OutstandingCard = React.memo(({ job, onNavigate }) => {
           {isOld && <FaExclamationTriangle size={8} />}
           {timeLabel}
         </div>
-        <span className={`rounded px-1 py-0.5 text-[9px] font-bold ${PAY_BADGE[payStatus] ?? PAY_BADGE.unpaid}`}>
+        <span className={`px-1 py-0.5 text-[9px] font-bold ${PAY_BADGE[payStatus] ?? PAY_BADGE.unpaid}`}>
           {PAY_LABEL[payStatus] ?? "Unpaid"}
         </span>
       </div>
@@ -246,23 +246,39 @@ const CarWashWashboard = () => {
     navigate(`/carwash/jobs?plate=${encodeURIComponent(plate || "")}`);
   }, [navigate]);
 
-  const refreshAction = (
-    <div className="flex items-center gap-3">
-      {lastLoaded && (
-        <span className="text-xs text-slate-400">Updated {elapsed(new Date(lastLoaded).toISOString())}</span>
-      )}
-      <button
-        type="button"
-        onClick={load}
-        className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-      >
-        <FaRedoAlt size={9} /> Refresh
-      </button>
-    </div>
-  );
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own header.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
 
   return (
-    <CarWashShell title="Washboard" action={refreshAction}>
+    <CarWashShell showToolbar={false}>
+      <div className="mb-1.5 flex flex-shrink-0 min-h-8 items-center justify-between gap-2 border border-slate-200 border-l-[#0B3B2E] bg-white px-3 py-1 shadow-sm" style={{ borderLeftWidth: 3 }}>
+        <span className="text-sm font-extrabold text-slate-900">Washboard</span>
+        <div className="flex items-center gap-3">
+          {lastLoaded && (
+            <span className="text-xs text-slate-400">Updated {elapsed(new Date(lastLoaded).toISOString())}</span>
+          )}
+          <button
+            type="button"
+            onClick={openQueueDisplay}
+            title="Open customer queue display screen"
+            className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaTv size={9} /> Queue Display
+          </button>
+          <button
+            type="button"
+            onClick={load}
+            className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaRedoAlt size={9} /> Refresh
+          </button>
+        </div>
+      </div>
       {loading ? (
         <div className="flex flex-1 items-center justify-center text-sm text-slate-400">Loading…</div>
       ) : (
@@ -272,7 +288,7 @@ const CarWashWashboard = () => {
             {COLUMNS.map((col) => {
               const colJobs = jobsByStatus[col] || [];
               return (
-                <div key={col} className="flex flex-1 flex-col overflow-hidden rounded border border-slate-200 bg-white p-3 shadow-sm">
+                <div key={col} className="flex flex-1 flex-col overflow-hidden border border-slate-200 bg-white p-3 shadow-sm">
                   <ColHeader status={col} count={colJobs.length} />
                   <div className="flex-1 overflow-y-auto">
                     {colJobs.length === 0 ? (
@@ -301,7 +317,7 @@ const CarWashWashboard = () => {
                   Outstanding — Pay Later
                 </span>
                 {outstanding.length > 0 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">
+                  <span className="bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-700">
                     {outstanding.length}
                   </span>
                 )}

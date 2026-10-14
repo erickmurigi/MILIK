@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { FaRedoAlt, FaSearch, FaUndo } from "react-icons/fa";
+import { FaRedoAlt, FaSearch, FaTv, FaUndo } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
@@ -27,7 +27,7 @@ const COMMISSIONS_COLUMNS = [
 ];
 const statuses     = ["earned", "payable", "paid", "cancelled"];
 const statusLabels = { earned: "Earned", payable: "Payable", paid: "Paid", cancelled: "Cancelled" };
-const DEFAULT_PAGE_SIZE = 30;
+const DEFAULT_PAGE_SIZE = 50;
 
 const getMonthBounds = () => {
   const now   = new Date();
@@ -231,36 +231,22 @@ const CarWashCommissions = () => {
       <button
         type="button"
         onClick={() => openReverseModal(row)}
-        className="inline-flex h-6 items-center gap-1 border border-rose-300 bg-rose-50 px-2 text-[10px] font-bold text-rose-700 hover:bg-rose-100"
+        className="p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800"
         title="Reverse this commission"
       >
-        <FaUndo size={8} /> Reverse
+        <FaUndo size={12} />
       </button>
     ) : null
   ), [openReverseModal]);
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Staff Commissions"
-      action={
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/carwash/commissions/payouts")}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            Payouts →
-          </button>
-        </div>
-      }
-    >
+    <CarWashShell showToolbar={false}>
       {/* Filter bar */}
       <form onSubmit={applyFilters} className="mt-1">
         <ListToolbar>
@@ -286,6 +272,12 @@ const CarWashCommissions = () => {
           <ListToolbar.Input type="date" value={filters.dateTo} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))} />
           <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button variant="outline" type="button" onClick={() => refetch()}>
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+          </ListToolbar.Button>
+          <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">Queue Display</ListToolbar.Button>
+          <ListToolbar.Button variant="outline" type="button" onClick={() => navigate("/carwash/commissions/payouts")}>Payouts →</ListToolbar.Button>
         </ListToolbar>
       </form>
 

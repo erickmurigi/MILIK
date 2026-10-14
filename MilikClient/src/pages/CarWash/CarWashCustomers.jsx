@@ -334,7 +334,7 @@ export default function CarWashCustomers() {
 
   // ── Pagination / search ──
   const [page, setPage]           = useTabState("/carwash/customers:page", 1);
-  const [limit, setLimit]         = useTabState("/carwash/customers:limit", 25);
+  const [limit, setLimit]         = useTabState("/carwash/customers:limit", 50);
   const [search, setSearch]       = useTabState("/carwash/customers:search", "");
   const [debouncedSearch, setDebouncedSearch] = useTabState("/carwash/customers:debouncedSearch", "");
   const searchRef  = useRef(null);
@@ -640,9 +640,11 @@ export default function CarWashCustomers() {
               {c.name || <span className="italic text-slate-400 font-normal">Unnamed</span>}
             </div>
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
-            {c.phone ? <><FaPhone size={8} className="text-slate-300" /> {c.phone}</> : <span className="italic">No phone</span>}
-          </div>
+          {c.phone && (
+            <div className="text-[10px] text-slate-500 mt-0.5 flex items-center gap-1">
+              <FaPhone size={8} className="text-slate-300" /> {c.phone}
+            </div>
+          )}
         </td>
 
         {/* Plates */}

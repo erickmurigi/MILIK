@@ -13,6 +13,7 @@ import {
   FaRedoAlt,
   FaTimes,
   FaTrash,
+  FaTv,
   FaUndo,
   FaUsers,
 } from "react-icons/fa";
@@ -57,7 +58,7 @@ const typePillClass = (type) =>
   : type === "deduction"  ? "border-orange-200 bg-orange-50 text-[#C8511A]"
   :                         "border-slate-200 bg-slate-50 text-slate-400";
 
-const DEFAULT_DETAIL_LIMIT = 30;
+const DEFAULT_DETAIL_LIMIT = 50;
 
 const STAFF_SAVINGS_COLUMNS = [
   { label: "Staff" },
@@ -392,32 +393,33 @@ const CarWashStaffSavings = () => {
     );
   }, [selectedStaff, canPay, openDisburse, handleToggleStaff]);
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Staff Savings"
-      action={
-        <>
-          {savingsEnabled && canManage && (
-            <button
-              type="button"
-              onClick={() => { setInitStartDate(todayISO()); setShowInitModal(true); }}
-              className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0a3127]"
-              title="Set a savings start date for all staff with no prior deduction history"
-            >
-              <FaFlag size={9} /> Set Savings Start Date
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={loadBalances}
-            disabled={balancesLoading}
-            className="inline-flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-2">
+        <span className="shrink-0 text-sm font-extrabold text-slate-900">Staff Savings</span>
+        <ListToolbar.Divider />
+        <ListToolbar.Button variant="outline" onClick={loadBalances} disabled={balancesLoading}>
+          <FaRedoAlt size={9} className={balancesLoading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">Queue Display</ListToolbar.Button>
+        {savingsEnabled && canManage && (
+          <ListToolbar.Button
+            icon={FaFlag}
+            variant="accent"
+            onClick={() => { setInitStartDate(todayISO()); setShowInitModal(true); }}
+            title="Set a savings start date for all staff with no prior deduction history"
           >
-            <FaRedoAlt size={9} className={balancesLoading ? "animate-spin" : ""} /> Refresh
-          </button>
-        </>
-      }
-    >
+            Set Savings Start Date
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
+
       <div className="flex flex-col min-h-0 h-full gap-2">
 
         {/* ── Savings disabled banner ────────────────────────────────────────── */}

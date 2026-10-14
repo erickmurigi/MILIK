@@ -3,13 +3,29 @@ import { createError } from "../../../utils/error.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SalePayment from "../models/SalePayment.js";
+import SaleAdvocate from "../models/SaleAdvocate.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
+import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
 import {
   postPropertySaleCommissionAccrual,
   postPropertySaleCommissionPayout,
   reversePropertySaleCommissionAccrual,
   reversePropertySaleCommissionPayout,
+  resolveWhtHandler,
 } from "../services/propertySaleAccountingService.js";
+
+// The advocate who actually collected this deal's trust funds — read off the deal's own advocate_trust
+// payments (the advocate who physically holds the money for this specific deal), not necessarily the
+// project's "assigned" advocate, which may have been overridden per-payment. Most recent wins when a
+// deal somehow has more than one (shouldn't happen in practice, but SalePayment.advocate is per-row).
+const resolveDealCollectingAdvocate = async (business, dealId) => {
+  const payment = await SalePayment.findOne({
+    business, deal: dealId, collectionMethod: "advocate_trust", advocate: { $ne: null },
+  }).sort({ paymentDate: -1 }).select("advocate").lean();
+  if (!payment?.advocate) return null;
+  return SaleAdvocate.findOne({ _id: payment.advocate, business }).select("whtHandledBy").lean();
+};
 
 const resolveCashbook = async (businessId, cashbookId) => {
   if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
@@ -134,6 +150,14 @@ export const updateCommissionStatus = async (req, res, next) => {
       return next(createError(400, `Not all commission tiers have released yet — ${oldCommission.releasedAmount} of ${oldCommission.commissionAmount} recognized so far`));
     }
 
+    // "source" (default "company_cashbook" — zero behavior change for every existing caller that
+    // doesn't send it): who physically pays the broker. "advocate_trust" means the advocate settles
+    // the broker directly out of trust funds they hold for THIS deal — guarded against that deal's own
+    // trust balance (dealAdvocateTrustBalance), never the advocate's whole-book balance, so one deal's
+    // payout can never draw against money actually collected for a different deal.
+    const source = req.body.source === "advocate_trust" ? "advocate_trust" : "company_cashbook";
+    let whtHandledBy = "agent";
+
     const update = { status, updatedBy: userId };
     if (status === "paid") {
       if (!payoutDate)   return next(createError(400, "Payout date is required when marking a commission as paid"));
@@ -141,10 +165,21 @@ export const updateCommissionStatus = async (req, res, next) => {
       update.payoutDate   = payoutDate;
       update.payoutMethod = payoutMethod;
       if (payoutReference) update.payoutReference = payoutReference;
+      update.payoutSource = source;
+
+      if (source === "advocate_trust") {
+        const trust = await dealAdvocateTrustBalance(business, oldCommission.deal);
+        if (Number(oldCommission.commissionAmount) > trust.available + 0.01) {
+          return next(createError(400, `This deal's advocate trust balance is only KES ${trust.available.toLocaleString()} — cannot pay out a KES ${Number(oldCommission.commissionAmount).toLocaleString()} commission from trust funds.`));
+        }
+        const advocateDoc = await resolveDealCollectingAdvocate(business, oldCommission.deal);
+        whtHandledBy = await resolveWhtHandler(business, advocateDoc);
+      }
     }
     if (notes) update.notes = notes;
 
-    // Resolve cashbook if provided (used for payout GL credit leg)
+    // Resolve cashbook if provided (used for payout GL credit leg) — never required for an
+    // advocate_trust payout, since the credit leg goes to 1314, not a company cashbook.
     let cashbookAcc = null;
     if (status === "paid" && cashbook) {
       cashbookAcc = await resolveCashbook(business, cashbook);
@@ -158,16 +193,27 @@ export const updateCommissionStatus = async (req, res, next) => {
 
     // GL hooks — all paths await and roll back on failure
     if (status === "approved" && oldCommission.status === "pending") {
-      // Finding 5: post accrual immediately on manual approval (not just at deal close)
-      try {
-        await postPropertySaleCommissionAccrual({ businessId: business, commission: oldCommission, userId });
-      } catch (glErr) {
-        await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
-        return next(createError(422, `GL accrual failed: ${glErr.message}. Commission status not changed.`));
+      // A staged commission (non-empty releaseSchedule) accrues tier-by-tier as the buyer pays
+      // (commissionReleaseService.applyTierCrossings -> postPropertySaleCommissionTierRelease), entirely
+      // independent of this manual approve step — tier accrual never advances commission.status past
+      // "pending" by design, so a staged commission can sit here already partially (or fully) accrued
+      // long before anyone clicks Approve. postPropertySaleCommissionAccrual posts the FULL gross amount
+      // under a different sourceTransactionType ("property_sale_commission" vs the tiers' "..._tier"),
+      // so its idempotency guard can't see the tier postings and would double-count the commission on
+      // top of them. Approve stays a pure status checkpoint for a staged commission — no GL effect here;
+      // "paid" already separately requires every tier to have released first.
+      if (!oldCommission.releaseSchedule?.length) {
+        // Finding 5: post accrual immediately on manual approval (not just at deal close)
+        try {
+          await postPropertySaleCommissionAccrual({ businessId: business, commission: oldCommission, userId });
+        } catch (glErr) {
+          await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
+          return next(createError(422, `GL accrual failed: ${glErr.message}. Commission status not changed.`));
+        }
       }
     } else if (status === "paid") {
       try {
-        await postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId, payoutDate, cashbookAccountId: cashbookAcc?._id || null });
+        await postPropertySaleCommissionPayout({ businessId: business, commission: oldCommission, userId, payoutDate, cashbookAccountId: cashbookAcc?._id || null, source, whtHandledBy });
       } catch (glErr) {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
         return next(createError(422, `GL posting failed: ${glErr.message}. Commission status not changed.`));

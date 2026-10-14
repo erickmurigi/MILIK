@@ -1441,9 +1441,19 @@ export const createPaymentVoucher = async (req, res, next) => {
       return next(createError(400, "Debit posting account is required for this voucher category"));
     }
 
-    const directPayment = status === "paid" && !CONTROL_ACCOUNT_CATEGORIES.has(voucherCategory);
+    // A voucher created directly as "paid" (no draft/approved accrual step) never needs a payable
+    // account, regardless of category — standard accounting practice: a payable only matters when
+    // there's a real time gap between recognizing the obligation and settling it (the draft -> approved
+    // -> paid flow, where "approved" posts Dr Expense/Cr Payable and "paid" later posts Dr Payable/Cr
+    // Cash). Paid-on-the-spot has no such gap, so it posts straight Dr Expense/Cr Cash. This used to be
+    // gated to non-control-account categories only (CONTROL_ACCOUNT_CATEGORIES), which wrongly forced
+    // landlord_maintenance/landlord_other/deposit_refund/sale_owner_expense through an unnecessary
+    // payable hop even when paid immediately, demanding a configured Accounts Payable default that has
+    // nothing to do with the transaction. Any payable the request (or an expense item's own default)
+    // would otherwise have supplied is deliberately ignored here — a paid-now voucher never has one.
+    const directPayment = status === "paid";
     const headerPayable = directPayment
-      ? (isValidObjectId(input.liabilityAccount) ? input.liabilityAccount : null)
+      ? null
       : await resolveHeaderPayable({
         businessId,
         requested: input.liabilityAccount,

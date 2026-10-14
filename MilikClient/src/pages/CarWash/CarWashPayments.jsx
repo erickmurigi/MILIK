@@ -2,12 +2,13 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaChevronDown, FaChevronRight, FaRedoAlt, FaSearch, FaSms, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaRedoAlt, FaSearch, FaSms, FaTimes, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import CwSmsModal from "./CwSmsModal";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import PaginationBar from "../../components/PaginationBar";
 import { useTabState } from "../../hooks/useTabState";
@@ -55,7 +56,7 @@ const useIsDesktop = () => {
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
 const reconciliationStatuses = ["pending", "reconciled", "flagged"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
 
@@ -243,16 +244,24 @@ const CarWashPayments = () => {
 
   const colCount = isConsolidated ? 10 : 9;
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Payments Register"
-      action={
-        <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-          <FaRedoAlt className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button variant="outline" onClick={() => refetch()}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+      </ListToolbar>
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
       <form
         onSubmit={applyFilters}
@@ -499,7 +508,7 @@ const CarWashPayments = () => {
                                     >
                                       <FaSms /> SMS
                                       {row.receivedFromPhone && (
-                                        <span className="rounded bg-emerald-100 px-1 text-[9px] font-black text-emerald-700">M-Pesa</span>
+                                        <span className="bg-emerald-100 px-1 text-[9px] font-black text-emerald-700">M-Pesa</span>
                                       )}
                                     </button>
                                   )}

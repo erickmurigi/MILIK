@@ -18,6 +18,26 @@ const saleAdvocateSchema = new mongoose.Schema(
     idNumber: { type: String, trim: true, default: "" },
     status: { type: String, enum: ADVOCATE_STATUSES, default: "active", index: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    // Who withholds/remits WHT when this advocate physically pays out a broker's commission from
+    // trust funds: "advocate" = self-remits to KRA under their own registration (no 2141 leg on our
+    // books); "agent" = forwards the withheld amount to the company, which remits via the existing
+    // WHT machinery (2141 gets credited, same as a normal direct-pay commission). null = inherit
+    // SaleSettings.advocateDefaults.whtHandledBy — see resolveWhtHandler in propertySaleAccountingService.js.
+    whtHandledBy: { type: String, enum: ["advocate", "agent"], default: null },
+    // Periodic control log comparing this advocate's actually-stated trust balance (from their own
+    // bank/client-account statement) against our system's computed balance. Read-only against the
+    // GL — no posting happens from this, it is an audit/control record only.
+    trustReconciliation: [
+      {
+        _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+        date: { type: Date, default: Date.now },
+        statedBalance: { type: Number },
+        systemBalance: { type: Number },
+        variance: { type: Number },
+        reconciledBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        notes: { type: String, trim: true, default: "" },
+      },
+    ],
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

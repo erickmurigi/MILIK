@@ -363,6 +363,18 @@ export const voidPayment = async (req, res, next) => {
     const voidLockErr = voidDeal && lockedDealError(voidDeal.status, "void");
     if (voidLockErr) return next(voidLockErr);
 
+    // Voiding an advocate_trust payment represents a REAL refund the advocate must have actually made
+    // to the buyer — not a data-entry correction, which is all a "direct" void ever means. Require the
+    // caller to confirm that and provide a reference before anything is touched. "direct" payments are
+    // completely unaffected (no change from today's behavior).
+    if (payment.collectionMethod === "advocate_trust") {
+      const refundReference = String(req.body.refundReference || "").trim();
+      if (req.body.refundConfirmed !== true || !refundReference) {
+        return next(createError(400, "Voiding an advocate-trust payment represents a real refund — confirm the advocate has refunded the buyer and provide a reference"));
+      }
+      payment.refundReference = refundReference;
+    }
+
     payment.status    = "cancelled";
     payment.updatedBy = userId;
     await payment.save();

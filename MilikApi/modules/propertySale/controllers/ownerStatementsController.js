@@ -27,6 +27,11 @@ export const createDraftStatement = async (req, res, next) => {
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
       return next(createError(400, "Invalid period range"));
     }
+    // A bare "To" date (from a plain <input type="date">) parses to midnight at the START of that day —
+    // without this, anything dated on the "To" day itself (a payment or voucher recorded later that same
+    // day) falls after the cutoff and silently drops off the statement, even though a user picking
+    // "through 14 Oct" obviously means the whole day, not "up to midnight at its start."
+    end.setHours(23, 59, 59, 999);
 
     const owner = await SaleOwner.findOne({ _id: ownerId, business }).lean();
     if (!owner) return next(createError(404, "Owner not found"));

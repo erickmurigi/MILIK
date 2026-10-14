@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
-import { FaPrint, FaRedoAlt, FaSearch } from "react-icons/fa";
+import { FaPrint, FaRedoAlt, FaSearch, FaTv } from "react-icons/fa";
 import { carWashApi, formatMoney, getActiveBranchId, todayISO } from "../../services/carWashApi";
 import { selectCurrentCompany } from "../../redux/selectors";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import AppSelect from "../../components/common/AppSelect";
 import { printTabularList } from "../../utils/printList";
 import { toast } from "react-toastify";
@@ -114,22 +115,24 @@ const CarWashServiceReport = () => {
     setApplied({ from, to, category });
   };
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Service Income Report"
-      action={
-        <>
-          <button type="button" onClick={load} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          <button type="button" onClick={handlePrint} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaPrint />
-            Print
-          </button>
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-2">
+        <span className="shrink-0 text-sm font-extrabold text-slate-900">Service Income Report</span>
+        <ListToolbar.Divider />
+        <ListToolbar.Button variant="outline" onClick={load}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint}>Print</ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">Queue Display</ListToolbar.Button>
+      </ListToolbar>
+
       <form onSubmit={submit} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 lg:grid-cols-[160px_160px_180px_1fr_auto_auto]">
         <input
           type="date"

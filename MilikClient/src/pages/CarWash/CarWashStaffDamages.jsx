@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { FaExclamationTriangle, FaPlus, FaRedoAlt, FaTimes, FaTrash, FaUndo } from "react-icons/fa";
+import { FaExclamationTriangle, FaPlus, FaRedoAlt, FaTimes, FaTrash, FaUndo, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload } from "../../services/carWashApi";
 import { fmtDate, todayISO } from "../../utils/dates";
@@ -251,7 +251,7 @@ export default function CarWashStaffDamages() {
           )}
         </td>
         <td className="px-3 py-2 text-center">
-          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[9px] font-black ${statusPill(d.status)}`}>
+          <span className={`inline-flex items-center border px-2 py-0.5 text-[9px] font-black uppercase ${statusPill(d.status)}`}>
             {statusLabel(d.status)}
           </span>
         </td>
@@ -261,39 +261,35 @@ export default function CarWashStaffDamages() {
 
   const renderDamageActions = useCallback((d) =>
     canManage && d.status === "pending" ? (
-      <div className="inline-flex items-center gap-1">
+      <div className="flex items-center justify-end gap-1">
         <button
           onClick={() => { setWaiveTarget(d); setWaiveNotes(""); }}
           title="Waive — write off this damage"
-          className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-600 hover:bg-slate-100"
+          className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
         >
-          <FaUndo className="text-[9px]" /> Waive
+          <FaUndo size={12} />
         </button>
         <button
           onClick={() => setDeleteTarget(d)}
           title="Delete record"
-          className="border border-red-200 bg-red-50 px-2 py-0.5 text-red-600 hover:bg-red-100"
+          className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
         >
-          <FaTrash className="text-[9px]" />
+          <FaTrash size={12} />
         </button>
       </div>
     ) : null
   , [canManage]);
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Staff Damages"
-      action={
-        canManage && (
-          <button
-            onClick={openForm}
-            className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127]"
-          >
-            <FaPlus className="text-[10px]" /> Record Damage
-          </button>
-        )
-      }
-    >
+    <CarWashShell showToolbar={false}>
       <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
 
         {/* Pending balances summary */}
@@ -340,12 +336,21 @@ export default function CarWashStaffDamages() {
           <ListToolbar.Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} />
           <ListToolbar.Button
             icon={FaRedoAlt}
+            variant="outline"
             type="button"
             onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-damages"] })}
           >
             Refresh
           </ListToolbar.Button>
+          <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">
+            Queue Display
+          </ListToolbar.Button>
           <span className="ml-auto shrink-0 pl-2 text-[9px] font-semibold text-slate-500">{total} record{total !== 1 ? "s" : ""}</span>
+          {canManage && (
+            <ListToolbar.Button icon={FaPlus} variant="accent" type="button" onClick={openForm}>
+              Record Damage
+            </ListToolbar.Button>
+          )}
         </ListToolbar>
 
         {/* Table */}

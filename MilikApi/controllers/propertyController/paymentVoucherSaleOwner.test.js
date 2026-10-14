@@ -59,16 +59,16 @@ describe("paymentVoucher — sale_owner_expense category", () => {
     })).rejects.toThrow(/sale owner was not found/i);
   });
 
-  it("creating a sale_owner_expense voucher with status=paid debits 1313 Owner Expense Recoverable and credits the settlement cashbook, balanced", async () => {
+  it("creating a sale_owner_expense voucher with status=paid debits 1313 Owner Expense Recoverable and credits the settlement cashbook directly, balanced, with no payable account needed", async () => {
     const { company, user, owner, settlementAccount } = await setup();
-    const liabilityAccount = await getAccountByCode(company._id, "2120"); // Accrued Expenses (liability) — the accrual/settlement hop
 
+    // Deliberately no liabilityAccount and no configured Accounts Payable default — a status:"paid"
+    // voucher never needs one, regardless of category: it posts straight Dr 1313 / Cr Cashbook.
     const created = await callController(createPaymentVoucher, {
       user,
       body: {
         category: "sale_owner_expense",
         saleOwner: String(owner._id),
-        liabilityAccount: String(liabilityAccount._id),
         settlementAccount: String(settlementAccount._id),
         amount: 7500,
         dueDate: new Date(),
@@ -94,11 +94,8 @@ describe("paymentVoucher — sale_owner_expense category", () => {
       sourceTransactionId: String(voucherId),
     }).lean();
 
-    // sale_owner_expense is a control-account category (like landlord_maintenance), so even a
-    // same-step "paid" voucher runs through both legs: Dr 1313 / Cr Liability (accrual), then
-    // Dr Liability / Cr Cashbook (settlement) — 4 legs, not the 2-leg "direct payment" shortcut
-    // that plain expense categories (e.g. company_operational) get.
-    expect(entries).toHaveLength(4);
+    // Paid on the spot: straight Dr 1313 / Cr Cashbook — 2 legs, no intermediate payable account.
+    expect(entries).toHaveLength(2);
 
     const recoverableDebit = entries.find((e) => e.direction === "debit" && String(e.accountId) === String(recoverableAccount._id));
     expect(recoverableDebit?.debit).toBe(7500);
@@ -197,21 +194,21 @@ describe("paymentVoucher — sale_owner_expense category", () => {
 // sale_owner_expense additions (CONTROL_ACCOUNT_CATEGORIES, resolveVoucherDebitAccount, etc.
 // are shared code paths that now also handle sale_owner_expense).
 describe("paymentVoucher — landlord_maintenance regression", () => {
-  it("still debits the property control account and credits the settlement cashbook, unaffected", async () => {
+  it("paid-now still debits the property control account and credits the settlement cashbook directly, with no payable account needed", async () => {
     const company = await createTestCompany({ modules: { propertyManagement: true, accounts: true } });
     await createTestChartOfAccounts(company._id);
     const user = await createTestUser({ company });
     const { landlord } = await createTestLandlord({ company });
     const { property } = await createTestProperty({ company, landlord });
     const settlementAccount = await getAccountByCode(company._id, "1100");
-    const liabilityAccount = await getAccountByCode(company._id, "2120");
 
+    // Deliberately no liabilityAccount and no configured Accounts Payable default — a status:"paid"
+    // voucher never needs one, regardless of category: it posts straight Dr property control / Cr Cashbook.
     const created = await callController(createPaymentVoucher, {
       user,
       body: {
         category: "landlord_maintenance",
         property: String(property._id),
-        liabilityAccount: String(liabilityAccount._id),
         settlementAccount: String(settlementAccount._id),
         amount: 4000,
         dueDate: new Date(),
@@ -229,9 +226,8 @@ describe("paymentVoucher — landlord_maintenance regression", () => {
       sourceTransactionType: "payment_voucher",
       sourceTransactionId: String(created.payload._id),
     }).lean();
-    // Control-account category: accrual (Dr property control / Cr liability) + settlement
-    // (Dr liability / Cr cashbook) — 4 legs, same shape as before the sale_owner_expense change.
-    expect(entries).toHaveLength(4);
+    // Paid on the spot: straight Dr property control / Cr Cashbook — 2 legs, no payable account hop.
+    expect(entries).toHaveLength(2);
 
     const totalDebit = entries.reduce((sum, e) => sum + Number(e.debit || 0), 0);
     const totalCredit = entries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
@@ -246,5 +242,29 @@ describe("paymentVoucher — landlord_maintenance regression", () => {
       const debitToRecoverable = entries.find((e) => e.direction === "debit" && String(e.accountId) === String(ownerRecoverableAccount._id));
       expect(debitToRecoverable).toBeUndefined();
     }
+  });
+
+  it("draft -> approved still posts through a payable account (the accrual/settlement hop is preserved for the non-paid-now flow)", async () => {
+    const company = await createTestCompany({ modules: { propertyManagement: true, accounts: true } });
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+    const { landlord } = await createTestLandlord({ company });
+    const { property } = await createTestProperty({ company, landlord });
+    const liabilityAccount = await getAccountByCode(company._id, "2120");
+
+    const created = await callController(createPaymentVoucher, {
+      user,
+      body: {
+        category: "landlord_maintenance",
+        property: String(property._id),
+        liabilityAccount: String(liabilityAccount._id),
+        amount: 4000,
+        dueDate: new Date(),
+        narration: "Plumbing repair",
+        status: "draft",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+    expect(String(created.payload.liabilityAccount?._id || created.payload.liabilityAccount)).toBe(String(liabilityAccount._id));
   });
 });

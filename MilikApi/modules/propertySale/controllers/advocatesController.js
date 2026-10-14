@@ -3,6 +3,8 @@ import { createError } from "../../../utils/error.js";
 import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleProject from "../models/SaleProject.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { advocateTrustBalance } from "./advocateRemittancesController.js";
+import { round2 } from "../../../utils/math.js";
 
 const sanitizeAdvocateBody = (body) => {
   const out = { ...body };
@@ -95,6 +97,40 @@ export const updateAdvocate = async (req, res, next) => {
     ).lean();
     if (!advocate) return next(createError(404, "Advocate not found"));
     res.status(200).json(advocate);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Trust reconciliation log: a periodic control comparing the advocate's actually-stated trust balance
+// (from their own bank/client-account statement) against our system's computed balance. Read-only
+// against the GL — no posting happens here, this is an audit/control record only (closes gap #5 of the
+// advocate-trust-settlement phase).
+export const reconcileTrust = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const advocate = await SaleAdvocate.findOne({ _id: req.params.id, business });
+    if (!advocate) return next(createError(404, "Advocate not found"));
+
+    const statedBalance = Number(req.body.statedBalance);
+    if (!Number.isFinite(statedBalance)) return next(createError(400, "statedBalance must be a number"));
+
+    const systemBalance = round2((await advocateTrustBalance(business, advocate._id)).outstanding);
+    const variance = round2(statedBalance - systemBalance);
+
+    advocate.trustReconciliation.push({
+      date: new Date(),
+      statedBalance: round2(statedBalance),
+      systemBalance,
+      variance,
+      reconciledBy: userId,
+      notes: req.body.notes || "",
+    });
+    advocate.updatedBy = userId;
+    await advocate.save();
+
+    res.status(201).json(advocate.trustReconciliation[advocate.trustReconciliation.length - 1]);
   } catch (err) {
     next(err);
   }

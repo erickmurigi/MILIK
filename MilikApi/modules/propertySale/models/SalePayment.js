@@ -25,6 +25,10 @@ const salePaymentSchema = new mongoose.Schema(
     advocate: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAdvocate", default: null },
     collectionMethod: { type: String, enum: COLLECTION_METHODS, default: "direct" },
     reference: { type: String, trim: true, default: "" },
+    // Set only when an "advocate_trust" payment is voided — voidPayment requires this (plus
+    // refundConfirmed in the request) because voiding such a payment represents a real refund the
+    // advocate must have actually made to the buyer, not just a data-entry correction.
+    refundReference: { type: String, trim: true, default: "" },
     status: { type: String, enum: PAYMENT_STATUSES, default: "paid" },
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
-import { FaExternalLinkAlt, FaRedoAlt, FaSearch } from "react-icons/fa";
+import { FaExternalLinkAlt, FaRedoAlt, FaSearch, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -12,7 +12,7 @@ import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import MilikTable from "../../components/common/MilikTable";
 
-const DEFAULT_PAGE_SIZE = 30;
+const DEFAULT_PAGE_SIZE = 50;
 const defaultFilters = { search: "" };
 
 // Hoisted to module scope so the reference is stable across renders — MilikTable
@@ -93,27 +93,25 @@ const CarWashCashbooks = () => {
     </>
   ), []);
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Cashbooks"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          <button type="button" onClick={() => navigate("/carwash/chart-of-accounts")} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-            <FaExternalLinkAlt />
-            Chart
-          </button>
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
       <form onSubmit={applyFilters} className="mb-2">
         <ListToolbar>
           <ListToolbar.Input width="w-56" placeholder="Cashbook code / name" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} />
           <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button variant="outline" type="button" onClick={() => refetch()}>
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+          </ListToolbar.Button>
+          <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">Queue Display</ListToolbar.Button>
+          <ListToolbar.Button icon={FaExternalLinkAlt} type="button" onClick={() => navigate("/carwash/chart-of-accounts")}>Chart</ListToolbar.Button>
         </ListToolbar>
       </form>
 

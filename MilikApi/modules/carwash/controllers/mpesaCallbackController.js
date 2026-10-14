@@ -16,6 +16,7 @@ import CarWashCustomer from "../models/CarWashCustomer.js";
 import CarWashCustomerCredit from "../models/CarWashCustomerCredit.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig, getRawSmsProfiles, getPrimarySmsProfile } from "../../../utils/companyModules.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
+import { recomputeCustomerStats, recomputeCustomerStatsForPlates } from "../services/customerStatsService.js";
 import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, postCarWashTopupLedger, postCarWashCustomerCreditCreationLedger } from "../services/carwashAccountingService.js";
 import { autoEnrollPlate, awardLoyaltyStamp, sendPaymentConfirmationSms, sendUnmatchedPaymentSms } from "./loyaltyController.js";
 import { sendAdHocSms, sendAdHocSmsToMasked } from "../../../services/communicationService.js";
@@ -136,6 +137,7 @@ const refreshJobPaymentStatus = async (business, jobId, opts = {}) => {
       status = "done";
     }
     await CarWashJob.updateOne({ _id: job._id, business }, { $set: { paymentStatus, status } });
+    if (job.plateNumber) recomputeCustomerStats(business, job.plateNumber).catch(() => {});
     return { ...(typeof job.toObject === "function" ? job.toObject() : job), paymentStatus, status };
   }
 
@@ -158,6 +160,7 @@ const refreshJobPaymentStatus = async (business, jobId, opts = {}) => {
     job.status = "done";
   }
   await job.save();
+  if (job.plateNumber) recomputeCustomerStats(business, job.plateNumber).catch(() => {});
   return job;
 };
 
@@ -840,6 +843,8 @@ export const confirmCarWashCallback = async (req, res) => {
 
           if (jobStatusOps.length) {
             await CarWashJob.bulkWrite(jobStatusOps);
+            const allocatedPlates = [...new Set(openVoucherJobs.map((j) => j.plateNumber).filter(Boolean))];
+            if (allocatedPlates.length) recomputeCustomerStatsForPlates(businessId, allocatedPlates).catch(() => {});
           }
         }
 

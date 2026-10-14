@@ -2,20 +2,21 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
-import { FaChevronDown, FaChevronRight, FaCopy, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaCopy, FaEdit, FaMinus, FaPlus, FaRedoAlt, FaSearch, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, VEHICLE_TYPES } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
+import ListToolbar from "../../components/common/ListToolbar";
 import { inputClass, labelClass } from "../../utils/formStyles";
 
 import Modal from "../../components/common/Modal";
 
 const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "", isCombo: false, comboDescription: "" };
 const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [], isTaxable: Boolean(f?.isTaxable), taxRate: f?.taxRate !== undefined ? String(f.taxRate) : "", isCombo: Boolean(f?.isCombo), comboDescription: String(f?.comboDescription || "") });
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
 const NEW_CATEGORY_SENTINEL = "__new__";
 
 const CarWashServices = () => {
@@ -202,55 +203,60 @@ const CarWashServices = () => {
   const toggleExpanded = (id) =>
     setExpandedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Services Register"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
+    <CarWashShell showToolbar={false}>
+      <form onSubmit={applyFilters}>
+        <ListToolbar className="mb-1">
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Active: {rowStats.active}
+          </span>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Inactive: {rowStats.inactive}
+          </span>
+          <ListToolbar.Divider />
+          <ListToolbar.Input
+            width="w-48"
+            placeholder="Search service / category"
+            value={filters.search}
+            onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))}
+          />
+          <AppSelect
+            compact
+            clearable
+            placeholder="All status"
+            value={filters.status}
+            onChange={(v) => setFilters((p) => ({ ...p, status: v ?? "" }))}
+            options={[
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
+            ]}
+          />
+          <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" type="button" onClick={() => refetch()} className={loading ? "[&_svg]:animate-spin" : ""}>
+            Refresh
+          </ListToolbar.Button>
+          <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">
+            Queue Display
+          </ListToolbar.Button>
           {canManage && (
-            <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-              <FaPlus /> New Service
-            </button>
+            <ListToolbar.Button icon={FaPlus} variant="accent" type="button" className="ml-auto" onClick={() => openCreate()}>
+              New Service
+            </ListToolbar.Button>
           )}
-        </>
-      }
-    >
-      <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
-        <input
-          className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
-          placeholder="Search service / category"
-          value={filters.search}
-          onChange={(e) => setFilters((p) => ({ ...p, search: e.target.value }))}
-        />
-        <AppSelect
-          size="sm"
-          clearable
-          placeholder="All status"
-          value={filters.status}
-          onChange={(v) => setFilters((p) => ({ ...p, status: v ?? "" }))}
-          options={[
-            { value: "active", label: "Active" },
-            { value: "inactive", label: "Inactive" },
-          ]}
-        />
-        <button type="submit" className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#FF8C00] px-4 text-xs font-bold text-white hover:bg-[#E67E00]">
-          <FaSearch /> Search
-        </button>
-        <button type="button" onClick={resetFilters} className="inline-flex h-8 items-center justify-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">
-          <FaRedoAlt /> Reset
-        </button>
+        </ListToolbar>
       </form>
 
       <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-        <div className="flex-shrink-0 flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Showing: <strong className="text-[#0B3B2E]">{rows.length}</strong> / {pagination.total}</span>
-          <span>Page: <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
-          <span>Active: <strong className="text-[#0B3B2E]">{rowStats.active}</strong></span>
-          <span>Inactive: <strong className="text-[#FF8C00]">{rowStats.inactive}</strong></span>
-        </div>
         {/* Mobile card list */}
         <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
           {rows.length ? rows.map((row) => {
@@ -286,13 +292,13 @@ const CarWashServices = () => {
                     </button>
                   )}
                   {canManage && (
-                    <button type="button" onClick={() => openDuplicate(row)} title="Duplicate this service" className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-50">
-                      <FaCopy size={9} /> Duplicate
+                    <button type="button" onClick={() => openDuplicate(row)} title="Duplicate this service" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                      <FaCopy size={12} />
                     </button>
                   )}
                   {canManage && (
-                    <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-1 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                      <FaEdit /> Edit
+                    <button type="button" onClick={() => openEdit(row)} title="Edit service" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                      <FaEdit size={12} />
                     </button>
                   )}
                 </div>
@@ -373,12 +379,12 @@ const CarWashServices = () => {
                       </td>
                       <td className="px-2 py-1 text-right">
                         {canManage && (
-                          <div className="inline-flex items-center gap-1">
-                            <button type="button" onClick={() => openDuplicate(row)} title="Duplicate" className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-bold text-slate-500 hover:bg-slate-50">
-                              <FaCopy size={9} /> Duplicate
+                          <div className="inline-flex items-center justify-end gap-1">
+                            <button type="button" onClick={() => openDuplicate(row)} title="Duplicate" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                              <FaCopy size={12} />
                             </button>
-                            <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                              <FaEdit /> Edit
+                            <button type="button" onClick={() => openEdit(row)} title="Edit service" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                              <FaEdit size={12} />
                             </button>
                           </div>
                         )}

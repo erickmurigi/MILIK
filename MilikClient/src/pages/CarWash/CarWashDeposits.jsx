@@ -5,17 +5,18 @@ import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useTabState } from "../../hooks/useTabState";
-import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch } from "react-icons/fa";
+import { FaChevronDown, FaChevronRight, FaPlus, FaRedoAlt, FaSearch, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, getActiveBranchId, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import AppSelect from "../../components/common/AppSelect";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import Modal from "../../components/common/Modal";
 import StatusBadge from "../../components/common/StatusBadge";
 
-const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_PAGE_SIZE = 50;
 const destinations = ["bank", "mpesa", "safe", "other"];
 const statuses = ["pending", "confirmed", "cancelled"];
 // Only the allowed forward transitions from each status
@@ -176,24 +177,30 @@ const CarWashDeposits = () => {
     setExpandedIds((prev) => (prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]));
   };
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Deposits Register"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
-          {canCreate && (
-            <button type="button" onClick={openModal} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-              <FaPlus />
-              New Deposit
-            </button>
-          )}
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button variant="outline" onClick={() => refetch()}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canCreate && (
+          <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openModal}>
+            New Deposit
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
       <form onSubmit={applyFilters} className="mb-2 flex-shrink-0 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 sm:grid-cols-2 xl:grid-cols-[160px_160px_190px_220px_1fr_auto_auto]">
         <input type="date" className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" value={filters.date} onChange={(event) => setFilters((prev) => ({ ...prev, date: event.target.value }))} />
         <AppSelect

@@ -1,12 +1,13 @@
 import React, { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FaEdit, FaPlus, FaRedoAlt } from "react-icons/fa";
+import { FaEdit, FaPlus, FaRedoAlt, FaTrashAlt, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
+import ListToolbar from "../../components/common/ListToolbar";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { useConfirm } from "../../context/ConfirmContext";
 
@@ -101,27 +102,37 @@ const CarWashBranches = () => {
     }
   };
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Branch Management"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          {canManage && (
-            <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white shadow-sm hover:bg-[#0A3127]">
-              <FaPlus /> New Branch
-            </button>
-          )}
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+          Total: {rows.length}
+        </span>
+        <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+          Active: {rows.filter((r) => r.active !== false).length}
+        </span>
+        <ListToolbar.Divider />
+        <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={() => refetch()}>
+          Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        {canManage && (
+          <ListToolbar.Button icon={FaPlus} variant="accent" className="ml-auto" onClick={openCreate}>
+            New Branch
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
       <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-wrap min-h-8 items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Total: <strong className="text-[#0B3B2E]">{rows.length}</strong></span>
-          <span>Active: <strong className="text-[#0B3B2E]">{rows.filter((r) => r.active !== false).length}</strong></span>
-        </div>
         <table className="w-full min-w-[900px] text-xs">
           <thead className="bg-[#0B3B2E] text-white">
             <tr>
@@ -161,12 +172,12 @@ const CarWashBranches = () => {
                     <div className="flex items-center justify-end gap-1">
                       {canManage && (
                         <>
-                          <button type="button" onClick={() => openEdit(row)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                            <FaEdit /> Edit
+                          <button type="button" onClick={() => openEdit(row)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Edit branch">
+                            <FaEdit size={12} />
                           </button>
                           {!row.isDefault && (
-                            <button type="button" onClick={() => handleDelete(row)} className="inline-flex items-center gap-1 border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
-                              Delete
+                            <button type="button" onClick={() => handleDelete(row)} className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Delete branch">
+                              <FaTrashAlt size={12} />
                             </button>
                           )}
                         </>

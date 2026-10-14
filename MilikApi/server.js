@@ -137,6 +137,7 @@ import saleScheduleRoutes   from "./modules/propertySale/routes/schedule.js";
 import saleSettingsRoutes   from "./modules/propertySale/routes/settings.js";
 import saleOwnerRoutes      from "./modules/propertySale/routes/owners.js";
 import saleOwnerStatementRoutes from "./modules/propertySale/routes/ownerStatements.js";
+import saleOwnerPayoutRoutes    from "./modules/propertySale/routes/ownerPayouts.js";
 import saleAdvocateRoutes      from "./modules/propertySale/routes/advocates.js";
 import saleAdvocateRemittanceRoutes from "./modules/propertySale/routes/advocateRemittances.js";
 import clientRoutes         from "./modules/clients/routes/clients.js";
@@ -377,18 +378,32 @@ const io = new Server(server, {
 });
 
 io.use(async (socket, next) => {
+  // A rejection here is what produces the client's "/socket.io/...?transport=polling" 400 — Engine.IO's
+  // standard response when connection middleware calls next(err). Previously silent, so a rejected
+  // reconnect storm left no trace to investigate after the fact; logged now (reason + remote address,
+  // never the token itself) so a recurrence is diagnosable instead of just a wall of client-side 400s.
+  const logReject = (reason) => {
+    console.warn(`[Socket.IO] Connection rejected (${reason}) — ip=${socket.handshake?.address || "unknown"} origin=${socket.handshake?.headers?.origin || "unknown"}`);
+  };
   try {
     // Prefer explicit auth.token (future clients), fall back to the HttpOnly cookie
     // that browsers send automatically with WebSocket upgrade requests.
     const token =
       socket.handshake?.auth?.token ||
       extractAuthTokenFromCookieHeader(socket.handshake?.headers?.cookie || "");
-    if (!token) return next(new Error("Authentication required for websocket connection"));
+    if (!token) {
+      logReject("no token");
+      return next(new Error("Authentication required for websocket connection"));
+    }
     const payload = jwt.verify(token, getJWTSecret(), { issuer: "milik-api", audience: "milik-client", algorithms: ["HS256"] });
-    if (await isBlacklistedAsync(token)) return next(new Error("Session has been revoked"));
+    if (await isBlacklistedAsync(token)) {
+      logReject("session revoked");
+      return next(new Error("Session has been revoked"));
+    }
     socket.data.user = payload;
     return next();
-  } catch (_error) {
+  } catch (error) {
+    logReject(error?.name || "invalid token");
     return next(new Error("Invalid websocket token"));
   }
 });
@@ -690,6 +705,7 @@ app.use("/api/sale/schedule",     saleScheduleRoutes);
 app.use("/api/sale/settings",    saleSettingsRoutes);
 app.use("/api/sale/owners",      saleOwnerRoutes);
 app.use("/api/sale/owner-statements", saleOwnerStatementRoutes);
+app.use("/api/sale/owner-payouts", saleOwnerPayoutRoutes);
 app.use("/api/sale/advocates",   saleAdvocateRoutes);
 app.use("/api/sale/advocate-remittances", saleAdvocateRemittanceRoutes);
 app.use("/api/inventory/locations",       invLocationRoutes);

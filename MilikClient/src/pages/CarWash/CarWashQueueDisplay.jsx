@@ -28,7 +28,7 @@ const StatusPulse = ({ color }) => (
 
 const JobCard = React.memo(({ job, colCfg, position, hasBg }) => (
   <div
-    className={`mb-2 border-l-4 ${colCfg.border} px-3 py-2.5 rounded-sm ${
+    className={`mb-2 border-l-4 ${colCfg.border} px-3 py-2.5 ${
       hasBg
         ? "bg-black/40 backdrop-blur-[2px] shadow-lg"
         : "bg-white/8"
@@ -200,7 +200,7 @@ const CarWashQueueDisplay = () => {
             return (
               <section
                 key={col.key}
-                className={`w-full overflow-hidden rounded-lg ${
+                className={`w-full overflow-hidden ${
                   bgImage ? "bg-black/10 backdrop-blur-[3px]" : ""
                 }`}
                 style={bgImage ? { border: "1px solid rgba(255,255,255,0.10)" } : {}}

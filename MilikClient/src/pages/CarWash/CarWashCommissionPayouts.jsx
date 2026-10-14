@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes, FaUndo, FaBan } from "react-icons/fa";
+import { FaMoneyBillWave, FaPiggyBank, FaRedoAlt, FaSearch, FaTimes, FaTv, FaUndo, FaBan } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
@@ -29,7 +29,7 @@ const PAYOUT_COLUMNS = [
   { label: "Date" },
 ];
 const methods    = ["cash", "mpesa", "bank", "card", "other"];
-const DEFAULT_PAGE_SIZE = 30;
+const DEFAULT_PAGE_SIZE = 50;
 
 // Mirror of backend computeDamageInstallment — used for payout modal preview
 const r2 = (v) => Math.round((Number(v || 0) + Number.EPSILON) * 100) / 100;
@@ -523,39 +523,23 @@ const CarWashCommissionPayouts = () => {
         type="button"
         onClick={() => openReverseModal(row)}
         title="Reverse this payout"
-        className="inline-flex items-center gap-1 rounded border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-100 hover:border-rose-300"
+        className="p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800"
       >
-        <FaUndo size={8} /> Reverse
+        <FaUndo size={12} />
       </button>
     ) : <span className="text-slate-300">—</span>;
   }, [openReverseModal]);
 
   const pageTotal = useMemo(() => payouts.reduce((s, p) => s + Number(p.amount || 0), 0), [payouts]);
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Commission Payouts"
-      action={
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => refetch()}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          {canPay && (
-            <button
-              type="button"
-              onClick={openPayout}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaMoneyBillWave size={9} /> New Payout
-            </button>
-          )}
-        </div>
-      }
-    >
+    <CarWashShell showToolbar={false}>
       {/* Filter bar */}
       <form onSubmit={applyFilters} className="mt-1">
         <ListToolbar>
@@ -573,6 +557,14 @@ const CarWashCommissionPayouts = () => {
           <ListToolbar.Input type="date" value={filters.dateTo} onChange={(e) => setFilters((p) => ({ ...p, dateTo: e.target.value }))} />
           <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
+          <ListToolbar.Divider />
+          <ListToolbar.Button variant="outline" type="button" onClick={() => refetch()}>
+            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+          </ListToolbar.Button>
+          <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">Queue Display</ListToolbar.Button>
+          {canPay && (
+            <ListToolbar.Button icon={FaMoneyBillWave} variant="accent" type="button" onClick={openPayout}>New Payout</ListToolbar.Button>
+          )}
         </ListToolbar>
       </form>
 

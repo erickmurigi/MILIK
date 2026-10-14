@@ -4,9 +4,24 @@ import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleAdvocateRemittance from "../models/SaleAdvocateRemittance.js";
 import SalePayment from "../models/SalePayment.js";
+import SaleDeal from "../models/SaleDeal.js";
+import SaleListing from "../models/SaleListing.js";
+import SaleProject from "../models/SaleProject.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { postSaleAdvocateRemittance } from "../services/propertySaleAccountingService.js";
+import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
+import { outstandingRecoverableExpenseVouchers } from "../services/recoverableExpense.js";
+
+// Owner id for a deal, resolved via its listing -> project -> owner (mirrors dealsController.js's
+// resolveListingOwner). null for a standalone listing or a project with no owner.
+const resolveDealOwner = async (business, listingId) => {
+  if (!listingId) return null;
+  const listing = await SaleListing.findOne({ business, _id: listingId }).select("project").lean();
+  if (!listing?.project) return null;
+  const project = await SaleProject.findOne({ business, _id: listing.project }).select("owner").lean();
+  return project?.owner || null;
+};
 
 const resolveCashbook = async (businessId, cashbookId) => {
   if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
@@ -105,14 +120,49 @@ export const createRemittance = async (req, res, next) => {
     const cashbookAcc = await resolveCashbook(business, req.body.cashbook);
     if (req.body.cashbook && !cashbookAcc) return next(createError(400, "Selected cashbook account not found"));
 
+    // Deal-scoped remittance (optional — null/omitted preserves the flat, ad-hoc, advocate-level
+    // remittance this endpoint has always supported, with no appliedTo split at all).
+    let dealDoc = null;
+    let appliedTo = [];
+    if (req.body.deal) {
+      if (!mongoose.isValidObjectId(String(req.body.deal))) return next(createError(400, "Invalid deal"));
+      dealDoc = await SaleDeal.findOne({ _id: req.body.deal, business }).select("_id listing").lean();
+      if (!dealDoc) return next(createError(400, "Deal not found"));
+
+      const trust = await dealAdvocateTrustBalance(business, dealDoc._id);
+      if (amount > trust.available + 0.01) {
+        return next(createError(400, `This deal's advocate trust balance is only KES ${trust.available.toLocaleString()} — cannot remit KES ${amount.toLocaleString()}.`));
+      }
+
+      // Apply the incoming cash against the owner's outstanding recoverable expenses first
+      // (oldest-due-first across however many vouchers it takes), then whatever's left over is
+      // treated as plain commission-cash — exactly the split postSaleAdvocateRemittance's
+      // postRecoverableExpenseSettlement step expects in appliedTo.
+      const ownerId = await resolveDealOwner(business, dealDoc.listing);
+      let remaining = round2(amount);
+      if (ownerId) {
+        const outstandingVouchers = await outstandingRecoverableExpenseVouchers(business, ownerId);
+        for (const v of outstandingVouchers) {
+          if (remaining <= 0) break;
+          const take = round2(Math.min(v.outstanding, remaining));
+          if (take <= 0) continue;
+          appliedTo.push({ category: "recoverable_expense", refId: v.voucherId, amount: take });
+          remaining = round2(remaining - take);
+        }
+      }
+      if (remaining > 0) appliedTo.push({ category: "owner_commission_cash", refId: null, amount: remaining });
+    }
+
     const remittanceNumber = await generateSequentialNumber(SaleAdvocateRemittance, business, "ADR");
     const remittance = await SaleAdvocateRemittance.create({
       business,
       remittanceNumber,
       advocate: advocate._id,
+      deal: dealDoc?._id || null,
       amount,
       date: req.body.date || new Date(),
       cashbook: cashbookAcc?._id || null,
+      appliedTo,
       reference: req.body.reference || "",
       notes: req.body.notes || "",
       createdBy: userId,
@@ -125,6 +175,7 @@ export const createRemittance = async (req, res, next) => {
         remittance,
         userId,
         cashbookAccountId: cashbookAcc?._id || null,
+        appliedTo,
       });
     } catch (glErr) {
       // GL failed — delete the remittance so DB and ledger stay in sync (same rollback pattern as

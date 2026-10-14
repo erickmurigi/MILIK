@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
   FaCar, FaCog, FaEdit, FaGift, FaRedoAlt, FaSearch,
-  FaSms, FaStar, FaStamp, FaTimes, FaUserPlus, FaCheck,
+  FaSms, FaStar, FaStamp, FaTimes, FaUserPlus, FaCheck, FaTv,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi } from "../../services/carWashApi";
@@ -541,7 +541,7 @@ const CarWashLoyalty = () => {
   const [search, setSearch]       = useTabState("/carwash/loyalty:search", "");
   const [debouncedSearch, setDebouncedSearch] = useTabState("/carwash/loyalty:debouncedSearch", "");
   const [page, setPage]           = useTabState("/carwash/loyalty:page", 1);
-  const [pageSize, setPageSize]   = useTabState("/carwash/loyalty:pageSize", 25);
+  const [pageSize, setPageSize]   = useTabState("/carwash/loyalty:pageSize", 50);
   const [dormantDays, setDormantDays] = useTabState("/carwash/loyalty:dormantDays", 0);
 
   // ── Selection for bulk SMS ────────────────────────────────────────────────
@@ -725,6 +725,14 @@ const CarWashLoyalty = () => {
 
   const allPageSelected = customers.length > 0 && customers.every(c => selectedIds.has(c._id));
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   // ── MilikTable props (memoized so the memo'd table doesn't re-diff on every keystroke) ──
   const isChecked = useCallback((c) => selectedIds.has(c._id), [selectedIds]);
   const isSelected = useCallback((c) => selectedIds.has(c._id), [selectedIds]);
@@ -791,28 +799,28 @@ const CarWashLoyalty = () => {
         {canManage && (
           <button
             onClick={() => handleStamp(c)}
-            className="inline-flex items-center gap-1 border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+            className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             title="Award manual stamp"
           >
-            <FaStamp className="text-[8px]" /> Stamp
+            <FaStamp size={12} />
           </button>
         )}
         {hasContact && (
           <button
             onClick={() => handleSms(c)}
-            className="p-1 text-slate-400 hover:text-emerald-700"
+            className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             title="Send SMS"
           >
-            <FaSms />
+            <FaSms size={12} />
           </button>
         )}
         {canManage && (
           <button
             onClick={() => handleEdit(c)}
-            className="p-1 text-slate-400 hover:text-emerald-700"
+            className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900"
             title="Edit customer"
           >
-            <FaEdit />
+            <FaEdit size={12} />
           </button>
         )}
       </div>
@@ -820,32 +828,18 @@ const CarWashLoyalty = () => {
   }, [canManage, handleStamp, handleSms, handleEdit]);
 
   return (
-    <CarWashShell
-      title="Customer Loyalty"
-      action={
-        <div className="flex items-center gap-2">
-          <div className="flex overflow-hidden border border-slate-300 text-[11px] font-black uppercase tracking-wide">
-            {[["customers", "Customers"], ["program", "Program Settings"]].map(([key, label]) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`px-3 py-1.5 transition ${tab === key ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {tab === "customers" && canManage && (
-            <button
-              onClick={openAdd}
-              className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127]"
-            >
-              <FaUserPlus className="text-[11px]" /> Register Customer
-            </button>
-          )}
-        </div>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <div className="mb-1 flex-shrink-0 flex overflow-hidden border border-slate-300 text-[11px] font-black uppercase tracking-wide w-fit">
+        {[["customers", "Customers"], ["program", "Program Settings"]].map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`px-3 py-1.5 transition ${tab === key ? "bg-[#0B3B2E] text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       {tab === "program" ? (
         <div className="flex-1 min-h-0 overflow-y-auto p-2">
           <ProgramPanel
@@ -906,6 +900,9 @@ const CarWashLoyalty = () => {
                 />
 
                 <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={refetch}>Refresh</ListToolbar.Button>
+                <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">
+                  Queue Display
+                </ListToolbar.Button>
 
                 {/* Bulk SMS bar */}
                 {selectedIds.size > 0 && (
@@ -920,6 +917,11 @@ const CarWashLoyalty = () => {
                 )}
 
                 <span className="ml-auto shrink-0 pl-2 text-[9px] font-semibold text-slate-500">{total} customer{total !== 1 ? "s" : ""}</span>
+                {canManage && (
+                  <ListToolbar.Button icon={FaUserPlus} variant="accent" type="button" onClick={openAdd}>
+                    Register Customer
+                  </ListToolbar.Button>
+                )}
               </ListToolbar>
 
               {/* Table */}

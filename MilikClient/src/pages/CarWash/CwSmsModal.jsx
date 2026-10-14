@@ -32,7 +32,7 @@ const TemplateChip = ({ label, color = "slate", onClick }) => {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded border px-2 py-0.5 text-[11px] font-bold transition ${colors[color] || colors.slate}`}
+      className={`border px-2 py-0.5 text-[11px] font-bold transition ${colors[color] || colors.slate}`}
     >
       {label}
     </button>
@@ -187,7 +187,7 @@ const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", on
               <span className={`text-[11px] ${counterColor}`}>
                 {chars}/{MAX_CHARS}
                 {smsLabel && (
-                  <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-black ${
+                  <span className={`ml-1.5 px-1.5 py-0.5 text-[10px] font-black ${
                     units >= 2 ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
                   }`}>
                     {smsLabel}

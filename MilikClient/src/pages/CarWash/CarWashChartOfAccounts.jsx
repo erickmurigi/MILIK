@@ -2,13 +2,14 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { selectCurrentCompany } from "../../redux/selectors";
-import { FaBook, FaCheckSquare, FaEdit, FaEye, FaPlus, FaRedoAlt, FaSearch, FaSquare, FaTimes, FaTrash } from "react-icons/fa";
+import { FaBook, FaCheckSquare, FaEdit, FaEye, FaPlus, FaRedoAlt, FaSearch, FaSquare, FaTimes, FaTrash, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import { useConfirm } from "../../context/ConfirmContext";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 
 const PAGE_SIZE = 30;
 const defaultFilters = { search: "", type: "" };
@@ -276,19 +277,45 @@ const CarWashChartOfAccounts = () => {
     }
   };
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Chart of Accounts"
-      action={
-        <>
-          <button type="button" onClick={openActivity} disabled={selectedAccounts.length !== 1} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"><FaEye /> Ledger</button>
-          {canCreate && <button type="button" onClick={openCreate} className="inline-flex h-8 items-center gap-1.5 bg-[#FF8C00] px-3 text-xs font-bold text-white hover:bg-[#E67E00]"><FaPlus /> Add Account</button>}
-          {canUpdate && <button type="button" onClick={openEdit} disabled={selectedAccounts.length !== 1 || selectedHasSystem} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:cursor-not-allowed disabled:opacity-45"><FaEdit /> Edit</button>}
-          {canDelete && <button type="button" onClick={deleteSelected} disabled={!selectedAccounts.length || selectedHasSystem || saving} className="inline-flex h-8 items-center gap-1.5 border border-red-200 bg-red-50 px-2.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-45"><FaTrash /> Delete</button>}
-          <button type="button" onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaRedoAlt className={loading ? "animate-spin" : ""} />Refresh</button>
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button icon={FaEye} variant="outline" onClick={openActivity} disabled={selectedAccounts.length !== 1}>
+          Ledger
+        </ListToolbar.Button>
+        {canUpdate && (
+          <ListToolbar.Button icon={FaEdit} variant="outline" onClick={openEdit} disabled={selectedAccounts.length !== 1 || selectedHasSystem}>
+            Edit
+          </ListToolbar.Button>
+        )}
+        {canDelete && (
+          <ListToolbar.Button icon={FaTrash} variant="danger" onClick={deleteSelected} disabled={!selectedAccounts.length || selectedHasSystem || saving}>
+            Delete
+          </ListToolbar.Button>
+        )}
+        <ListToolbar.Divider />
+        <ListToolbar.Button variant="outline" onClick={() => refetch()}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canCreate && (
+          <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openCreate}>
+            Add Account
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
+
       <form onSubmit={applyFilters} className="mb-2 grid gap-2 border border-slate-200 bg-white p-2 shadow-sm grid-cols-1 md:grid-cols-[1fr_220px_auto_auto]">
         <input className="h-8 border border-slate-300 px-2 text-xs font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none" placeholder="Search by code, account name, type, class, or subgroup" value={filters.search} onChange={(event) => setFilters((prev) => ({ ...prev, search: event.target.value }))} />
         <AppSelect

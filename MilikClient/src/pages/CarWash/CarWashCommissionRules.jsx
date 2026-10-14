@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaToggleOff, FaToggleOn } from "react-icons/fa";
+import { FaEdit, FaPlus, FaRedoAlt, FaSave, FaToggleOff, FaToggleOn, FaTv } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, normalizeListPayload } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
 import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
+import ListToolbar from "../../components/common/ListToolbar";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
 
@@ -175,22 +176,30 @@ const CarWashCommissionRules = () => {
     return { activeCount, inactiveCount };
   }, [rules]);
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Commission Rules"
-      action={
-        <>
-          <button type="button" onClick={() => refetch()} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
-          </button>
-          {canManage && (
-            <button type="button" onClick={openNew} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-              <FaPlus size={9} /> New Rule
-            </button>
-          )}
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1">
+        <ListToolbar.Button variant="outline" onClick={() => refetch()}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">
+          Queue Display
+        </ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canManage && (
+          <ListToolbar.Button icon={FaPlus} variant="accent" onClick={openNew}>
+            New Rule
+          </ListToolbar.Button>
+        )}
+      </ListToolbar>
       <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-4 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Total Rules: <strong className="text-[#0B3B2E]">{rules.length}</strong></span>
@@ -228,8 +237,8 @@ const CarWashCommissionRules = () => {
                 </td>
                 {canManage && (
                   <td className="px-3 py-2 text-right">
-                    <button type="button" onClick={() => openEdit(rule)} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-                      <FaEdit size={9} /> Edit
+                    <button type="button" onClick={() => openEdit(rule)} title="Edit rule" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+                      <FaEdit size={12} />
                     </button>
                   </td>
                 )}

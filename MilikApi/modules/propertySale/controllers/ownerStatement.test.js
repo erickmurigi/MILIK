@@ -95,6 +95,41 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     expect(expenseLine).toMatchObject({ amount: 15_000, direction: "debit" });
   });
 
+  it("a recharged expense voucher with no saleProject (an owner-level cost) shows up on the owner's combined statement but not on a single-project-scoped one", async () => {
+    const { business, owner, project, call } = await setup();
+    const liabilityAccount = await getAccountByCode(business, "2120");
+    const settlementAccount = await getAccountByCode(business, "1100");
+    await call(createPaymentVoucher, {
+      body: {
+        category: "sale_owner_expense", saleOwner: String(owner._id), // deliberately no saleProject
+        liabilityAccount: String(liabilityAccount._id), settlementAccount: String(settlementAccount._id),
+        amount: 8_000, dueDate: new Date(), paidDate: new Date(), narration: "Legal retainer", status: "paid",
+      },
+    });
+
+    // Scoped to one project: an owner-general cost isn't that project's to show.
+    const scoped = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    expect(scoped.payload.rechargedExpenses).toBe(0);
+
+    // Not scoped to any one project (the owner's combined statement): it must show up.
+    const combined = await call(createDraftStatement, { body: { owner: String(owner._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    expect(combined.payload.rechargedExpenses).toBe(8_000);
+  });
+
+  it("a bare 'To' date (e.g. \"2026-10-14\", exactly how a plain <input type=\"date\"> sends it) still includes activity recorded LATER that same day — it must mean the whole day, not midnight at its start", async () => {
+    const { owner, project, call } = await setup();
+    // setup() already pays the deal in full "now" (paymentDate defaults to the current moment) — reuse
+    // that payment rather than adding a second one, which would just overpay an already-fully-paid deal.
+
+    const bareToday = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD" — exactly what <input type="date"> sends, no time component
+    const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: bareToday } });
+    expect(res.payload.grossProceeds).toBe(1_000_000);
+
+    const full = await call(getStatement, { params: { id: String(res.payload._id) } });
+    const proceedsLines = full.payload.lines.filter((l) => l.category === "proceeds");
+    expect(proceedsLines.some((l) => l.amount === 1_000_000)).toBe(true);
+  });
+
   it("regenerating a draft replaces its lines rather than duplicating them", async () => {
     const { owner, project, call } = await setup();
     const first = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });

@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FaBan, FaCar, FaCheck, FaChevronRight, FaClock, FaFlagCheckered,
-  FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap, FaWind,
+  FaMoneyBillWave, FaPhone, FaPlus, FaRedoAlt, FaSoap, FaTv, FaWind,
 } from "react-icons/fa";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
 import CarWashShell from "./CarWashShell";
+import ListToolbar from "../../components/common/ListToolbar";
 import DashboardCard, { DashboardStatCard } from "../../components/Dashboard/DashboardCard";
 
 const paymentLabels = { cash: "Cash", mpesa: "M-Pesa", bank: "Bank", card: "Card", other: "Other" };
@@ -149,73 +150,64 @@ const CarWashDashboard = () => {
     [summary?.revenueByMethod]
   );
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="Daily Operations"
-      action={
-        <>
-          {/* Date stepper */}
-          <div className="flex h-7 items-center divide-x divide-slate-300 border border-slate-300 bg-white">
-            <button
-              type="button"
-              onClick={() => stepDay(-1)}
-              className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-100"
-              title="Previous day"
-            >
-              ‹
-            </button>
-            <button
-              type="button"
-              onClick={() => dateInputRef.current?.showPicker()}
-              className="relative flex h-full items-center px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-              title="Pick a date"
-            >
-              {dateLabel}
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={date}
-                onChange={(e) => changeDate(e.target.value)}
-                className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
-                tabIndex={-1}
-              />
-            </button>
-            <button
-              type="button"
-              onClick={() => stepDay(1)}
-              className="flex h-full w-6 items-center justify-center text-slate-500 hover:bg-slate-100"
-              title="Next day"
-            >
-              ›
-            </button>
-          </div>
-          {/* Today reset — only shown when not on today */}
-          {date !== today && (
-            <button
-              type="button"
-              onClick={resetToday}
-              className="h-7 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              Today
-            </button>
-          )}
+    <CarWashShell showToolbar={false}>
+      <ListToolbar className="mb-1.5">
+        <span className="shrink-0 text-sm font-extrabold text-slate-900">Daily Operations</span>
+        <ListToolbar.Divider />
+        {/* Date stepper */}
+        <div className="flex h-[22px] items-center divide-x divide-slate-300 border border-slate-300 bg-white shrink-0">
           <button
             type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-dashboard", date] })}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+            onClick={() => stepDay(-1)}
+            className="flex h-full w-5 items-center justify-center text-slate-500 hover:bg-slate-100"
+            title="Previous day"
           >
-            <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+            ‹
           </button>
           <button
             type="button"
-            onClick={() => navigate("/carwash/jobs/new")}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
+            onClick={() => dateInputRef.current?.showPicker()}
+            className="relative flex h-full items-center px-2 text-[10px] font-semibold text-slate-700 hover:bg-slate-50 whitespace-nowrap"
+            title="Pick a date"
           >
-            <FaPlus size={9} /> New Job
+            {dateLabel}
+            <input
+              ref={dateInputRef}
+              type="date"
+              value={date}
+              onChange={(e) => changeDate(e.target.value)}
+              className="pointer-events-none absolute inset-0 h-0 w-0 opacity-0"
+              tabIndex={-1}
+            />
           </button>
-        </>
-      }
-    >
+          <button
+            type="button"
+            onClick={() => stepDay(1)}
+            className="flex h-full w-5 items-center justify-center text-slate-500 hover:bg-slate-100"
+            title="Next day"
+          >
+            ›
+          </button>
+        </div>
+        {/* Today reset — only shown when not on today */}
+        {date !== today && (
+          <ListToolbar.Button variant="outline" onClick={resetToday}>Today</ListToolbar.Button>
+        )}
+        <ListToolbar.Button variant="outline" onClick={() => queryClient.invalidateQueries({ queryKey: ["cw-dashboard", date] })}>
+          <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} /> Refresh
+        </ListToolbar.Button>
+        <ListToolbar.Button icon={FaTv} variant="outline" onClick={openQueueDisplay} title="Open customer queue display screen">Queue Display</ListToolbar.Button>
+        <ListToolbar.Divider />
+        <ListToolbar.Button icon={FaPlus} variant="accent" onClick={() => navigate("/carwash/jobs/new")}>New Job</ListToolbar.Button>
+      </ListToolbar>
+
       <div className="flex-1 min-h-0 overflow-y-auto xl:flex xl:flex-col xl:overflow-hidden">
       {/* ── Stat cards ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">

@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import {
   FaCalendarAlt, FaCheckCircle, FaChevronDown, FaChevronRight,
   FaEnvelope, FaFileInvoice, FaMoneyBillWave, FaPlus, FaPrint, FaRedoAlt,
-  FaTimes, FaUndo, FaUser, FaExclamationTriangle, FaWallet, FaHistory,
+  FaTimes, FaTv, FaUndo, FaUser, FaExclamationTriangle, FaWallet, FaHistory,
   FaSearch, FaSort, FaSortUp, FaSortDown, FaBell,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
@@ -774,8 +774,14 @@ const CarWashAccounts = () => {
     return { totalOwed, totalPrepaidFloat, overLimit };
   }, [accounts]);
 
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell title="Credit Accounts">
+    <CarWashShell showToolbar={false}>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
 
         {/* ── Header ── */}
@@ -825,6 +831,9 @@ const CarWashAccounts = () => {
 
               <button onClick={() => refetch()} className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50">
                 <FaRedoAlt size={9} className={loading ? "animate-spin" : ""} />
+              </button>
+              <button onClick={openQueueDisplay} title="Open customer queue display screen" className="flex h-7 items-center gap-1 border border-slate-200 bg-white px-2 text-xs text-slate-600 hover:bg-slate-50">
+                <FaTv size={9} />
               </button>
               {canManage && (
                 <button onClick={() => setShowCreate(true)} className="flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">

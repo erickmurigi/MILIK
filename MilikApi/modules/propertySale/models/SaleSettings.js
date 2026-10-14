@@ -84,6 +84,12 @@ const saleSettingsSchema = new mongoose.Schema(
       ownerCommissionTiers:  { type: [releaseTierSchema], default: [] },
       brokerCommissionTiers: { type: [releaseTierSchema], default: [] },
     },
+    // Company-wide default for who withholds/remits WHT when an advocate pays a broker's commission
+    // out of trust funds. Overridable per-advocate (SaleAdvocate.whtHandledBy). "agent" (default) is
+    // today's exact behavior: the advocate forwards the withheld amount and the company remits it.
+    advocateDefaults: {
+      whtHandledBy: { type: String, enum: ["advocate", "agent"], default: "agent" },
+    },
   },
   { timestamps: true }
 );

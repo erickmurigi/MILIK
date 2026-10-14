@@ -4,7 +4,7 @@ import { useSelector } from "react-redux";
 import {
   FaCheckCircle, FaCodeBranch, FaExclamationTriangle, FaMobileAlt, FaRedoAlt,
   FaSearch, FaTimesCircle, FaCopy, FaLink, FaTimes, FaCarAlt, FaUndo,
-  FaUpload, FaFileAlt, FaToggleOn, FaToggleOff, FaBan,
+  FaUpload, FaFileAlt, FaToggleOn, FaToggleOff, FaBan, FaTv,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { carWashApi, formatMoney, normalizeListPayload, todayISO } from "../../services/carWashApi";
@@ -1003,7 +1003,7 @@ export default function CarWashMpesaNotifications() {
   const renderNotifActions = useCallback((n) => {
     const canAssign = canRecord && !n.isReversed && (n.status === "unmatched" || n.status === "error");
     return (
-      <div className="flex items-center justify-center gap-1.5">
+      <div className="flex items-center justify-center gap-1">
         {canRecord && !n.isReversed && n.amount > 0 && (
           n.status === "unmatched" || n.status === "error" ||
           (n.allocatedAmount > 0 && n.allocatedAmount < n.amount)
@@ -1011,30 +1011,30 @@ export default function CarWashMpesaNotifications() {
           <button
             type="button"
             onClick={() => setAllocateTarget(n)}
-            className="inline-flex items-center gap-1 border border-violet-300 bg-violet-50 px-2 py-1 text-[10px] font-bold text-violet-700 hover:bg-violet-100"
+            className="p-1 text-violet-600 hover:bg-violet-50 hover:text-violet-800"
             title="Allocate payment across jobs"
           >
-            <FaCodeBranch size={9} /> Allocate
+            <FaCodeBranch size={12} />
           </button>
         )}
         {canAssign && (
           <button
             type="button"
             onClick={() => setAssignTarget(n)}
-            className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] font-bold text-amber-700 hover:bg-amber-100"
+            className="p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800"
             title="Assign to correct job"
           >
-            <FaLink size={9} /> Assign
+            <FaLink size={12} />
           </button>
         )}
         {canEdit && !n.isReversed && n.status !== "matched" && (
           <button
             type="button"
             onClick={() => setReverseTarget(n)}
-            className="inline-flex items-center gap-1 border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-600 hover:bg-red-100"
+            className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800"
             title="Mark as reversed — blocks all allocation"
           >
-            <FaBan size={9} /> Reversed
+            <FaBan size={12} />
           </button>
         )}
       </div>
@@ -1057,25 +1057,16 @@ export default function CarWashMpesaNotifications() {
     </div>
   ), []);
 
+  // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
+  // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
+  const openQueueDisplay = () => {
+    const activeId = localStorage.getItem("milik_active_company_id");
+    if (!activeId) return;
+    window.open(`/display/carwash/${activeId}`, "_blank", "noopener,noreferrer");
+  };
+
   return (
-    <CarWashShell
-      title="M-Pesa Notifications"
-      action={
-        <>
-          {canEdit && (
-            <button
-              onClick={() => setShowUpload(true)}
-              className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-            >
-              <FaUpload size={10} /> Upload CSV
-            </button>
-          )}
-          <button onClick={() => refetch()} className="inline-flex h-8 items-center gap-1.5 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt className={loading ? "animate-spin" : ""} size={11} /> Refresh
-          </button>
-        </>
-      }
-    >
+    <CarWashShell showToolbar={false}>
       {showUpload && (
         <UploadModal
           onClose={() => { setShowUpload(false); refetch(); }}
@@ -1173,6 +1164,18 @@ export default function CarWashMpesaNotifications() {
           <ListToolbar.Input type="date" value={filters.dateTo} onChange={e => setFilters(p => ({ ...p, dateTo: e.target.value }))} title="To" />
           <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} type="button" onClick={reset}>Reset</ListToolbar.Button>
+          <ListToolbar.Divider />
+          {canEdit && (
+            <ListToolbar.Button icon={FaUpload} variant="outline" type="button" onClick={() => setShowUpload(true)}>
+              Upload CSV
+            </ListToolbar.Button>
+          )}
+          <ListToolbar.Button icon={FaRedoAlt} variant="outline" type="button" onClick={() => refetch()} className={loading ? "[&_svg]:animate-spin" : ""}>
+            Refresh
+          </ListToolbar.Button>
+          <ListToolbar.Button icon={FaTv} variant="outline" type="button" onClick={openQueueDisplay} title="Open customer queue display screen">
+            Queue Display
+          </ListToolbar.Button>
           <span className="ml-auto shrink-0 pl-2 text-[9px] font-semibold text-slate-500">
             {pagination.total} notification{pagination.total !== 1 ? "s" : ""}
           </span>
@@ -1181,11 +1184,6 @@ export default function CarWashMpesaNotifications() {
 
       {/* Table */}
       <div className="flex-1 min-h-0 flex flex-col border border-slate-200 bg-white shadow-sm">
-        <div className="flex items-center gap-4 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
-          <span>Showing <strong className="text-[#0B3B2E]">{notifications.length}</strong> / {pagination.total}</span>
-          <span>Page <strong className="text-[#0B3B2E]">{pagination.page}</strong> / {pagination.pages}</span>
-        </div>
-
         <MilikTable
           columns={MPESA_NOTIF_COLUMNS}
           rows={notifications}
