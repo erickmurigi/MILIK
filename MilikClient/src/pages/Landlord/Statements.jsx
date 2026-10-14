@@ -39,12 +39,22 @@ const compactAmount = (value) => {
 };
 
 
-// Returns payment status for a single statement row.
+// Returns payment status for a single statement row. Must consider the FULL bill — rent,
+// every utility (garbage, water, ...) and tax — not just rent: a tenant billed only for
+// garbage (no rent line at all) has row.invoicedRent === 0 but is very much billed. Checking
+// rent alone wrongly classified them "nobill", which then forced every invoiced cell on their
+// row (including their real, nonzero garbage amount) to render as "—" regardless of the
+// underlying data being correct.
 const getRowPaymentStatus = (row) => {
   if (!row.tenantId || String(row.tenantName || "").toLowerCase() === "vacant") return "vacant";
-  const invoiced = Number(row.invoicedRent || 0);
-  if (invoiced === 0) return "nobill";
-  const paid = Number(row.paidRent || 0);
+  const invoicedUtilities = Object.values(row?.utilities || {}).reduce((sum, u) => sum + Number(u?.invoiced || 0), 0);
+  const invoiced = Number(row.invoicedRent || 0) + invoicedUtilities + Number(row.invoicedTax || 0);
+  if (Math.abs(invoiced) < 0.005) return "nobill";
+  // Symmetric with "invoiced" above (rent + every utility + tax) — deliberately NOT
+  // row.totalPaid, which also folds in deposit collections; a tenant who's only paid a
+  // deposit but hasn't touched their rent/garbage bill must not show as "paid".
+  const paidUtilities = Object.values(row?.utilities || {}).reduce((sum, u) => sum + Number(u?.paid || 0), 0);
+  const paid = Number(row.paidRent || 0) + paidUtilities + Number(row.paidTax || 0);
   if (paid >= invoiced) return "paid";
   if (paid > 0) return "partial";
   return "unpaid";
