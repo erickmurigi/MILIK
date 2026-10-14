@@ -54,6 +54,16 @@ const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
 // Same field standard as the landlord form: bold labels, compact square inputs, readable text.
 const VOUCHER_LABEL = "mb-1 block text-xs font-bold text-slate-900";
 const VOUCHER_INPUT = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+// Same grey-header-bar Section used by AddLandlord.jsx — the house standard for a form card.
+const Section = ({ title, action, children }) => (
+  <div className="border border-slate-200 bg-white">
+    <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+      {action}
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 const whtFor = (gross, rate) => Math.round(Number(gross || 0) * Number(rate || 0)) / 100;
 // Landlord-side vouchers (and sale_owner_expense) post to a control account, so their lines have no payable or expense account of their own
 const LANDLORD_CONTROL_CATEGORY_VALUES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund", "sale_owner_expense"]);
@@ -351,7 +361,9 @@ const PaymentVouchers = () => {
   const normalizeVoucher = (voucher) => ({
     ...voucher,
     propertyId: voucher?.property?._id || voucher?.property || voucher?.propertyId || "",
-    propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName || (["company_operational", "petty_cash_float", "petty_cash_expense"].includes(String(voucher?.category || "")) ? "Company / Internal" : "N/A"),
+    propertyName: voucher?.property?.propertyName || voucher?.property?.name || voucher?.propertyName
+      || (voucher?.saleProject?.name || voucher?.saleProjectName || "")
+      || (["company_operational", "petty_cash_float", "petty_cash_expense"].includes(String(voucher?.category || "")) ? "Company / Internal" : "N/A"),
     landlordName: voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName || "N/A",
     saleOwnerId: voucher?.saleOwner?._id || voucher?.saleOwner || voucher?.saleOwnerId || "",
     saleOwnerName: voucher?.saleOwner?.fullName || voucher?.saleOwnerName || "",
@@ -371,12 +383,13 @@ const PaymentVouchers = () => {
     payeeBank: { ...blankForm.payeeBank, ...(voucher?.payeeBank || {}) },
     paymentMethod: voucher?.paymentMethod || "bank_transfer",
     // Who this voucher is actually payable to, across every category — a registered
-    // landlord, a registered Service Provider, or a free-text payee name, in that
-    // order. Drives the "Payee" list column and GL detail panel (see below); the
-    // print template's own "Landlord / Owner" field intentionally keeps using
-    // landlordName directly since it's landlord-specific, not a general payee.
+    // landlord, a registered sale owner, a registered Service Provider, or a free-text
+    // payee name, in that order. Drives the "Payee" list column and GL detail panel
+    // (see below); the print template's own "Landlord / Owner" field intentionally
+    // keeps using landlordName directly since it's landlord-specific, not a general payee.
     payeeDisplay:
       voucher?.landlord?.landlordName || voucher?.landlord?.name || voucher?.landlordName ||
+      voucher?.saleOwner?.fullName || voucher?.saleOwnerName ||
       voucher?.serviceProvider?.name  || voucher?.serviceProviderName ||
       voucher?.payeeName || "",
     whtAmount: voucher?.whtAmount != null ? String(voucher.whtAmount) : "",
@@ -651,6 +664,8 @@ const PaymentVouchers = () => {
     }
   };
 
+  const handleReset = () => setForm(blankForm);
+
   const openCreate = (prefill = null) => {
     setEditingVoucherId("");
     setForm(prefill ? withVoucherLines({ ...blankForm, ...prefill }) : blankForm);
@@ -889,43 +904,10 @@ const PaymentVouchers = () => {
       {showModal ? (
         <div className="flex h-full min-h-0 flex-col overflow-hidden bg-white">
 
-          {/* ── Breadcrumb header ── */}
-          <header className="shrink-0 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={closeForm}
-                className="text-[11px] font-bold text-[#0B3B2E] transition hover:underline"
-              >
-                ← Payment Vouchers
-              </button>
-              <span className="text-xs text-slate-300">/</span>
-              <span className="text-sm font-black text-slate-800">
-                {editingVoucherId ? "Edit Voucher" : "New Voucher"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={closeForm}
-                className="border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)}
-                className="flex items-center gap-1.5 bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:opacity-50"
-              >
-                <FaSave size={10} />
-                {saving ? "Saving…" : editingVoucherId ? "Update Voucher" : "Save Voucher"}
-              </button>
-            </div>
-          </header>
-
           {/* ── Body ── */}
-          <div className="flex flex-1 min-h-0 overflow-hidden">
-
-            {/* LEFT: Form — laid out in cards so it fits one screen */}
-            <div className="flex-1 overflow-y-auto bg-slate-50/60 px-3 py-2 space-y-2 min-w-0">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-50">
+            {/* Scrollable content */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-2.5">
 
               {form.sourceRequisitionNo && (
                 <div className="flex items-center gap-3 border border-violet-200 bg-violet-50 px-4 py-2">
@@ -936,11 +918,7 @@ const PaymentVouchers = () => {
               )}
 
               {/* ── Voucher header ── */}
-              <section className="border border-slate-200 bg-white p-3 shadow-sm">
-                <div className="mb-2 flex items-center gap-2">
-                  <div className="h-3.5 w-0.5 bg-[#0B3B2E]" />
-                  <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Voucher details</h2>
-                </div>
+              <Section title="Voucher Details">
                 <div className="grid grid-cols-2 gap-x-3 gap-y-2 lg:grid-cols-6">
                   {editingVoucherId && (
                     <label className="block">
@@ -958,6 +936,7 @@ const PaymentVouchers = () => {
                       value={form.category}
                       onChange={(val) => setForm((prev) => ({ ...prev, category: val ?? prev.category }))}
                       options={categoryOptions}
+                      size="sm"
                     />
                   </div>
                   <label className="block">
@@ -992,6 +971,7 @@ const PaymentVouchers = () => {
                         { value: "cheque",        label: "Cheque" },
                         { value: "other",         label: "Other" },
                       ]}
+                      size="sm"
                     />
                   </div>
                   {!editingVoucherId ? (
@@ -1005,6 +985,7 @@ const PaymentVouchers = () => {
                           { value: "approved", label: "Approved" },
                           { value: "paid",     label: "Paid now" },
                         ]}
+                        size="sm"
                       />
                     </div>
                   ) : (
@@ -1017,18 +998,11 @@ const PaymentVouchers = () => {
                 {form.status === "paid" && !editingVoucherId && (
                   <p className="mt-1.5 text-[10px] font-semibold text-amber-600">Paid posts both the accrual and the settlement entries straight away, so a settlement account is required.</p>
                 )}
-              </section>
+              </Section>
 
-              <div className="flex flex-col gap-3">
-
-                {/* ── Payee & amount ── */}
-                <section className="border border-slate-200 bg-white p-3 shadow-sm">
-                  <div className="mb-2 flex items-center gap-2">
-                    <div className="h-3.5 w-0.5 bg-emerald-500" />
-                    <h2 className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500">Payee &amp; amount</h2>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+              {/* ── Payee & amount ── */}
+              <Section title="Payee & Amount">
+                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
                     <div>
                       <AppSelect
                         label="Service provider"
@@ -1066,7 +1040,7 @@ const PaymentVouchers = () => {
                         }}
                         options={serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }))}
                         placeholder={serviceProvidersList.length > 0 ? "— None —" : "No registered vendors yet"}
-                        size="md"
+                        size="sm"
                         searchable
                         clearable
                         disabled={serviceProvidersList.length === 0}
@@ -1080,7 +1054,7 @@ const PaymentVouchers = () => {
                         maxLength={150}
                         onChange={(e) => setForm((prev) => ({ ...prev, payeeName: e.target.value }))}
                         placeholder="Who is being paid?"
-                        className={`${VOUCHER_INPUT} h-9 disabled:bg-slate-50 disabled:text-slate-500`}
+                        className={`${VOUCHER_INPUT} disabled:bg-slate-50 disabled:text-slate-500`}
                       />
                     </label>
                     {hasPMS && selectedCategoryMeta?.propertyRequired && (
@@ -1094,6 +1068,7 @@ const PaymentVouchers = () => {
                           }}
                           options={propertyOptions}
                           placeholder={selectedCategoryMeta?.propertyRequired ? "Select property…" : "No property — company level"}
+                          size="sm"
                           searchable
                           clearable
                         />
@@ -1111,6 +1086,7 @@ const PaymentVouchers = () => {
                             }}
                             options={saleOwnerOptions}
                             placeholder={saleOwnerOptions.length ? "Select owner…" : "No sale owners yet"}
+                            size="sm"
                             searchable
                             clearable
                             disabled={saleOwnerOptions.length === 0}
@@ -1123,6 +1099,7 @@ const PaymentVouchers = () => {
                             onChange={(val) => setForm((prev) => ({ ...prev, saleProjectId: val ?? "" }))}
                             options={saleProjectOptions}
                             placeholder="No specific project"
+                            size="sm"
                             searchable
                             clearable
                           />
@@ -1130,25 +1107,22 @@ const PaymentVouchers = () => {
                       </>
                     )}
                   </div>
+              </Section>
 
-                  {/* ── Payee bank: prefilled from the linked provider or landlord; optional ── */}
-                  <div className="mt-2">
-                    <BankDetailsFields
-                      values={form.payeeBank}
-                      onChange={(field, value) => setForm((prev) => ({ ...prev, payeeBank: { ...prev.payeeBank, [field]: value } }))}
-                      title="Payee bank & payment details"
-                      hideBranch
-                    />
-                  </div>
+              {/* ── Payee bank: prefilled from the linked provider or landlord; optional ── */}
+              <BankDetailsFields
+                values={form.payeeBank}
+                onChange={(field, value) => setForm((prev) => ({ ...prev, payeeBank: { ...prev.payeeBank, [field]: value } }))}
+                title="Payee bank & payment details"
+                hideBranch
+              />
 
-                  {/* ── Lines: each charge has its own expense item, property and WHT rate ── */}
-                  <div className="mt-2">
-                    <div className="mb-1 flex items-center justify-between">
-                      <span className={VOUCHER_LABEL}>Lines</span>
-                      <button type="button" onClick={addLine} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
-                        <FaPlus size={9} /> Add line
-                      </button>
-                    </div>
+              {/* ── Lines: each charge has its own expense item, property and WHT rate ── */}
+              <Section title="Lines" action={
+                <button type="button" onClick={addLine} className="flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+                  <FaPlus size={9} /> Add line
+                </button>
+              }>
                     <div className="overflow-x-auto border border-slate-200">
                       <table className="w-full min-w-[860px] table-auto text-[11px]">
                         <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -1282,7 +1256,6 @@ const PaymentVouchers = () => {
                     {selectedServiceProvider?.subjectToWht && Number(selectedServiceProvider?.whtRate) > 0 && (
                       <p className="mt-1 text-[10px] text-slate-400">{selectedServiceProvider.name} is subject to {selectedServiceProvider.whtRate}% WHT on each line.</p>
                     )}
-                  </div>
 
                   {lineTotals.amount > 0 && (
                     <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px]">
@@ -1302,14 +1275,17 @@ const PaymentVouchers = () => {
                         onChange={(val) => setForm((prev) => ({ ...prev, whtAccountId: val ?? "" }))}
                         options={liabilityAccountOptions}
                         placeholder={defaultWhtAccount ? `Default — ${defaultWhtAccount.code} ${defaultWhtAccount.name}` : "Default — 2141 Withholding Tax Payable"}
+                        size="sm"
                         searchable
                         clearable
                       />
                     </div>
                   )}
+              </Section>
 
-                  {(form.category === "petty_cash_float" || form.status === "paid") && (
-                  <div className="mt-2 grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
+              {(form.category === "petty_cash_float" || form.status === "paid") && (
+                <Section title="Settlement">
+                  <div className="grid grid-cols-1 gap-x-3 gap-y-2 sm:grid-cols-2">
                     {form.category === "petty_cash_float" && (
                       <AppSelect
                         label="Petty cash account *"
@@ -1317,6 +1293,7 @@ const PaymentVouchers = () => {
                         onChange={(val) => setForm((prev) => ({ ...prev, debitAccountId: val ?? "" }))}
                         options={debitAccountOptions}
                         placeholder="Search expense / asset account…"
+                        size="sm"
                         searchable
                         clearable
                       />
@@ -1328,27 +1305,27 @@ const PaymentVouchers = () => {
                         onChange={(val) => setForm((prev) => ({ ...prev, settlementAccountId: val ?? "" }))}
                         options={settlementAccountOptions}
                         placeholder="Search cashbook / petty cash…"
+                        size="sm"
                         searchable
                         clearable
                       />
                     )}
                   </div>
-                  )}
+                </Section>
+              )}
 
-                  <label className="mt-2 block">
-                    <span className={VOUCHER_LABEL}>Narration / description</span>
-                    <textarea
-                      rows={2}
-                      maxLength={1000}
-                      value={form.narration}
-                      onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
-                      placeholder="What is this payment for?"
-                      className={`${VOUCHER_INPUT} resize-none`}
-                    />
-                  </label>
+              <Section title="Narration">
+                  <textarea
+                    rows={2}
+                    maxLength={1000}
+                    value={form.narration}
+                    onChange={(e) => setForm((prev) => ({ ...prev, narration: e.target.value }))}
+                    placeholder="What is this payment for?"
+                    className={`${VOUCHER_INPUT} h-auto resize-none`}
+                  />
+              </Section>
 
-                  <div className="mt-3">
-                    <p className={VOUCHER_LABEL}>Journal entries {isPaidNow ? "(paid now)" : "(on approval)"}</p>
+              <Section title={`Journal Entries ${isPaidNow ? "(paid now)" : "(on approval)"}`}>
                     <div className="overflow-hidden border border-slate-200">
                       <table className="w-full text-[11px]">
                         <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
@@ -1385,12 +1362,39 @@ const PaymentVouchers = () => {
                         )}
                       </table>
                     </div>
-                  </div>
-                </section>
-
-              </div>
+              </Section>
             </div>
 
+            {/* Footer */}
+            <div className="flex-shrink-0 border-t border-slate-200 bg-white px-3 py-2">
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={closeForm}
+                  className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                {!editingVoucherId && (
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    Reset
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving || (editingVoucherId ? !canUpdateVoucher : !canCreateVoucher)}
+                  className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <FaSave size={11} />
+                  {saving ? "Saving…" : editingVoucherId ? "Update Voucher" : "Save Voucher"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       ) : (
@@ -1468,7 +1472,7 @@ const PaymentVouchers = () => {
                 { label: "Ref #" },
                 { label: "Category" },
                 { label: isLandlordWorkspace ? "Owner" : "Payee" },
-                { label: "Property" },
+                { label: "Property / Project" },
                 { label: "Amount (KES)", align: "right" },
                 { label: "Due Date" },
                 { label: "Paid Date" },
@@ -1506,16 +1510,17 @@ const PaymentVouchers = () => {
               }}
               renderActions={(voucher) => {
                 const isBusy = (action) => rowActionKey === `${voucher._id}:${action}`;
+                const btn = "p-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40";
                 return (
-                  <div className="flex justify-end gap-1">
-                    <button onClick={() => setGlVoucher(voucher)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
-                    <button onClick={() => handlePrintVoucher(voucher)} className="rounded p-1 text-purple-600 hover:bg-purple-50 hover:text-purple-800" title="Print"><FaPrint size={12} /></button>
-                    <button onClick={() => downloadVoucherPdf(voucher)} className="rounded p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Download PDF"><FaFilePdf size={12} /></button>
-                    {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800" title="Edit"><FaEdit size={12} /></button>}
-                    {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className="rounded p-1 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-800 disabled:opacity-40" title={isBusy("approved") ? "Working…" : "Approve"}><FaCheck size={12} /></button>}
-                    {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={isBusy("paid") ? "Working…" : "Mark Paid"}><FaSave size={12} /></button>}
-                    {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={isBusy("reversed") ? "Working…" : "Reverse"}><FaUndo size={12} /></button>}
-                    {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={isBusy("delete") ? "Working…" : "Delete"}><FaTrash size={12} /></button>}
+                  <div className="flex justify-end gap-0.5">
+                    <button onClick={() => setGlVoucher(voucher)} className={btn} title="View GL Entries"><FaBook size={11} /></button>
+                    <button onClick={() => handlePrintVoucher(voucher)} className={btn} title="Print"><FaPrint size={11} /></button>
+                    <button onClick={() => downloadVoucherPdf(voucher)} className={btn} title="Download PDF"><FaFilePdf size={11} /></button>
+                    {voucher.status === "draft" && canUpdateVoucher && <button onClick={() => openEdit(voucher)} className={btn} title="Edit"><FaEdit size={11} /></button>}
+                    {voucher.status === "draft" && canApproveVoucher && <button onClick={() => updateStatus(voucher, "approved")} disabled={!!rowActionKey} className={btn} title={isBusy("approved") ? "Working…" : "Approve"}><FaCheck size={11} /></button>}
+                    {(voucher.status === "draft" || voucher.status === "approved") && canUpdateVoucher && <button onClick={() => updateStatus(voucher, "paid")} disabled={!!rowActionKey} className={btn} title={isBusy("paid") ? "Working…" : "Mark Paid"}><FaSave size={11} /></button>}
+                    {voucher.status !== "reversed" && canReverseVoucher && <button onClick={() => updateStatus(voucher, "reversed")} disabled={!!rowActionKey} className={btn} title={isBusy("reversed") ? "Working…" : "Reverse"}><FaUndo size={11} /></button>}
+                    {canDeleteVoucher && <button onClick={() => removeVoucher(voucher)} disabled={!!rowActionKey} className="p-1 text-rose-600 hover:bg-rose-50 disabled:opacity-40" title={isBusy("delete") ? "Working…" : "Delete"}><FaTrash size={11} /></button>}
                   </div>
                 );
               }}
