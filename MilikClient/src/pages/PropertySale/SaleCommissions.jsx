@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaUndo } from "react-icons/fa";
+import { FaCalculator, FaCheck, FaMoneyBillWave, FaPrint, FaRedoAlt, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -313,6 +313,34 @@ const SaleCommissions = () => {
     } finally { setActionKey(""); }
   }, [confirm, biz, invalidate, queryClient]);
 
+  const handleRecalculate = useCallback(async (commission) => {
+    // Preview uses the agent list already loaded for the filter dropdown — no extra round-trip — so the
+    // confirm dialog can show real old-vs-new numbers. If the preview shows no real change, or the
+    // commission was deliberately set differently for this one deal, the user can just say no here.
+    const agent = agentsRef.find((a) => String(a._id) === String(commission.agent?._id || commission.agent));
+    const newRate = agent?.commissionRate;
+    const newType = agent?.commissionType || "percentage";
+    const computedAmount = agent
+      ? (newType === "percentage" ? (Number(commission.saleAmount || 0) * Number(newRate || 0)) / 100 : Number(newRate || 0))
+      : null;
+    const approvedNote = commission.status === "approved"
+      ? " This commission is already APPROVED, so its existing ledger entries will be reversed and reposted at the new rate (tier-by-tier, if staged) — not just a number change."
+      : "";
+    const preview = agent
+      ? `${commission.commissionNumber}: ${commission.commissionRate}${commission.commissionType === "percentage" ? "%" : " KES"} (${fmtKES(commission.commissionAmount)}) → ${newRate}${newType === "percentage" ? "%" : " KES"} (${fmtKES(computedAmount)}), using ${agent.fullName}'s current rate.${approvedNote} If this commission's rate was deliberately set differently for this specific deal, do not proceed.`
+      : `${commission.commissionNumber} will be refreshed from ${T.saleAgent}'s current commission rate.${approvedNote}`;
+    if (!await confirm({ title: "Recalculate Commission", message: preview, confirmText: "Recalculate" })) return;
+    setActionKey(`${commission._id}:recalculate`);
+    try {
+      await saleApi.recalculateCommission(commission._id, { business: biz });
+      toast.success("Commission recalculated from the agent's current rate");
+      invalidate();
+      queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] });
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to recalculate");
+    } finally { setActionKey(""); }
+  }, [confirm, biz, invalidate, queryClient, agentsRef, T.saleAgent]);
+
   const handlePayout = async (payoutForm) => {
     if (!payoutForm.payoutMethod || !payoutForm.payoutDate) { toast.warn("Payout method and date are required"); return; }
     setSaving(true);
@@ -426,6 +454,17 @@ const SaleCommissions = () => {
             <FaCheck className="mr-0.5 inline text-[8px]" /> Approve
           </button>
         )
+      )}
+      {(c.status === "pending" || c.status === "approved") && (
+        <button
+          type="button"
+          onClick={() => handleRecalculate(c)}
+          disabled={!!actionKey}
+          title={c.status === "approved" ? "Refresh this commission's rate — reverses and reposts its ledger entries at the agent's current rate" : "Refresh this commission's rate and amount from the agent's current rate"}
+          className="p-1 text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-40"
+        >
+          <FaCalculator size={11} />
+        </button>
       )}
       {c.status === "approved" && (
         <button type="button" onClick={() => setShowPayout(c)} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-100">

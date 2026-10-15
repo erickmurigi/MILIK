@@ -5,7 +5,7 @@ import mongoose from "mongoose";
  * the parent statement is "draft" (regenerate = delete + reinsert); frozen once approved.
  */
 
-const LINE_CATEGORIES = ["proceeds", "company_commission", "broker_commission", "expense"];
+const LINE_CATEGORIES = ["proceeds", "company_commission", "broker_commission", "expense", "owner_payout"];
 
 const saleOwnerStatementLineSchema = new mongoose.Schema(
   {

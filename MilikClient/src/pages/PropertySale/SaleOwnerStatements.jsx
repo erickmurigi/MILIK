@@ -8,7 +8,6 @@ import { saleApi, fmtKES } from "../../services/propertySaleApi";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
 import { printTabularList } from "../../utils/printKit";
 import { POPUP_BLOCKED, money, shortDate } from "./salePrint";
@@ -17,28 +16,53 @@ import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 const todayIso = () => new Date().toISOString().slice(0, 10);
 const firstOfMonthIso = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10); };
 
-const CATEGORY_LABEL = { proceeds: "Proceeds", company_commission: "Company Commission", broker_commission: "Broker Commission", expense: "Recharged Expense" };
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+
+const CATEGORY_LABEL = { proceeds: "Proceeds", company_commission: "Agency Commission", broker_commission: "Broker Commission", expense: "Recharged Expense", owner_payout: "Owner Payout" };
+const CATEGORY_BADGE = {
+  proceeds:           "border-emerald-200 bg-emerald-50 text-emerald-700",
+  company_commission: "border-violet-200 bg-violet-50 text-violet-700",
+  broker_commission:  "border-amber-200 bg-amber-50 text-amber-700",
+  expense:             "border-slate-200 bg-slate-50 text-slate-600",
+  owner_payout:        "border-blue-200 bg-blue-50 text-blue-700",
+};
 
 const lineColumns = [
   { label: "Date" }, { label: "Category" }, { label: "Description" },
   { label: "Amount", align: "right" }, { label: "Balance", align: "right" },
 ];
 
-const renderLineRow = (row) => (
-  <>
-    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{shortDate(row.transactionDate)}</td>
-    <td className="px-3 py-1.5 border-r border-gray-100">
-      <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${row.direction === "credit" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-        {CATEGORY_LABEL[row.category] || row.category}
-      </span>
-    </td>
-    <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{row.description}</td>
-    <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums ${row.direction === "credit" ? "text-emerald-700" : "text-red-600"}`}>
-      {row.direction === "credit" ? "+" : "-"}{fmtKES(row.amount)}
-    </td>
-    <td className="px-3 py-1.5 text-right font-mono font-bold tabular-nums text-slate-900">{fmtKES(row.runningBalance)}</td>
-  </>
-);
+// A line's description is already shaped "{Plot} — what happened · reference" by the backend
+// (ownerStatementService.js) — split off the reference so it can render as a muted trailing detail
+// instead of competing with the actual explanation for the reader's attention.
+const splitDescription = (description) => {
+  const idx = (description || "").lastIndexOf(" · ");
+  if (idx === -1) return { headline: description, ref: null };
+  return { headline: description.slice(0, idx), ref: description.slice(idx + 3) };
+};
+
+const renderLineRow = (row) => {
+  const { headline, ref } = splitDescription(row.description);
+  return (
+    <>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{shortDate(row.transactionDate)}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100">
+        <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${CATEGORY_BADGE[row.category] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
+          {CATEGORY_LABEL[row.category] || row.category}
+        </span>
+      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">
+        {headline}
+        {ref && <span className="ml-1.5 font-mono text-[10px] text-slate-400">{ref}</span>}
+      </td>
+      <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums ${row.direction === "credit" ? "text-emerald-700" : "text-red-600"}`}>
+        {row.direction === "credit" ? "+" : "-"}{fmtKES(row.amount)}
+      </td>
+      <td className="px-3 py-1.5 text-right font-mono font-bold tabular-nums text-slate-900">{fmtKES(row.runningBalance)}</td>
+    </>
+  );
+};
 
 const SaleOwnerStatements = () => {
   const T = useTerms("saleOwner", "saleOwners", "saleOwnerStatement", "saleProject");
@@ -127,9 +151,10 @@ const SaleOwnerStatements = () => {
       company: currentCompany,
       summaryItems: [
         ["Gross proceeds", money(statement.grossProceeds)],
-        ["Company commission", money(statement.companyCommission)],
+        ["Agency commission", money(statement.companyCommission)],
         ["Broker commission", money(statement.brokerCommission)],
         ["Recharged expenses", money(statement.rechargedExpenses)],
+        ["Paid to owner", money(statement.ownerPayouts)],
         ["Net balance", money(statement.netBalance)],
       ],
       columns: [
@@ -152,21 +177,21 @@ const SaleOwnerStatements = () => {
         <div className="flex flex-shrink-0 flex-wrap items-end gap-2 border border-slate-200 bg-white px-3 py-2">
           <div className="w-56">
             <label className={labelClass}>{T.saleOwner}</label>
-            <AppSelect value={ownerId} onChange={(v) => { setOwnerId(v ?? ""); setProjectId(""); setStatementId(""); }} options={ownerFormOptions} placeholder={`Choose ${T.saleOwner.toLowerCase()}`} size="md" searchable clearable />
+            <AppSelect value={ownerId} onChange={(v) => { setOwnerId(v ?? ""); setProjectId(""); setStatementId(""); }} options={ownerFormOptions} placeholder={`Choose ${T.saleOwner.toLowerCase()}`} size="sm" searchable clearable />
           </div>
           <div className="w-56">
             <label className={labelClass}>{T.saleProject} (optional)</label>
-            <AppSelect value={projectId} onChange={(v) => setProjectId(v ?? "")} options={projectOptions} placeholder="All projects" size="md" searchable clearable />
+            <AppSelect value={projectId} onChange={(v) => setProjectId(v ?? "")} options={projectOptions} placeholder="All projects" size="sm" searchable clearable />
           </div>
           <div>
             <label className={labelClass}>From</label>
-            <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className={`${inputClass} h-8`} />
+            <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} className={inputClass} />
           </div>
           <div>
             <label className={labelClass}>To</label>
-            <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={`${inputClass} h-8`} />
+            <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className={inputClass} />
           </div>
-          <button type="button" onClick={handleGenerate} disabled={generating} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
+          <button type="button" onClick={handleGenerate} disabled={generating} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127] disabled:opacity-60">
             <FaSyncAlt size={10} className={generating ? "animate-spin" : ""} /> {statementId ? "Regenerate Draft" : "Generate Draft"}
           </button>
         </div>
@@ -219,13 +244,25 @@ const SaleOwnerStatements = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-5 gap-0 border-b border-slate-100">
-                  {[["Gross proceeds", statement.grossProceeds, ""], ["Company commission", statement.companyCommission, "text-red-600"], ["Broker commission", statement.brokerCommission, "text-red-600"], ["Recharged expenses", statement.rechargedExpenses, "text-red-600"], ["Net balance", statement.netBalance, "text-emerald-700"]].map(([label, val, tone], i) => (
-                    <div key={label} className={`border-r border-slate-100 px-3 py-2.5 ${i === 4 ? "border-r-0" : ""}`}>
+                <div className="grid grid-cols-6 gap-0 border-b border-slate-100">
+                  {[
+                    ["Gross proceeds", statement.grossProceeds, ""],
+                    ["Agency commission", statement.companyCommission, "text-red-600"],
+                    ["Broker commission", statement.brokerCommission, "text-red-600"],
+                    ["Recharged expenses", statement.rechargedExpenses, "text-red-600"],
+                    ["Paid to owner", statement.ownerPayouts, "text-red-600"],
+                    ["Net balance", statement.netBalance, statement.netBalance >= 0 ? "text-emerald-700" : "text-rose-600"],
+                  ].map(([label, val, tone], i) => (
+                    <div key={label} className={`border-r border-slate-100 px-3 py-2.5 ${i === 5 ? "border-r-0" : ""}`}>
                       <div className="text-[9px] font-black uppercase tracking-wide text-slate-400">{label}</div>
                       <div className={`mt-0.5 font-mono font-black tabular-nums text-sm ${tone || "text-slate-900"}`}>{fmtKES(val)}</div>
                     </div>
                   ))}
+                </div>
+                <div className="flex-shrink-0 border-b border-slate-100 bg-[#F8FAF9] px-3 py-1.5 text-[10px] text-slate-500">
+                  {statement.netBalance >= 0
+                    ? <>Amount currently due to <span className="font-bold text-slate-700">{statement.owner?.fullName}</span> for this period.</>
+                    : <>Amount overpaid to <span className="font-bold text-slate-700">{statement.owner?.fullName}</span> for this period — recoverable against a future payout.</>}
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-auto">

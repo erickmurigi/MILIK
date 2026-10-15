@@ -57,8 +57,8 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
       business: businessId, deal: { $in: dealIds }, status: "paid",
       paymentDate: { $gte: start, $lte: end },
     }).select("amount paymentDate deal paymentNumber").lean(),
-    SaleOwnerCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber deal").lean(),
-    SaleCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionAmount releaseSchedule status updatedAt deal").lean(),
+    SaleOwnerCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionRate commissionType deal").lean(),
+    SaleCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionAmount commissionRate commissionType releaseSchedule status updatedAt deal").lean(),
     // saleProject is optional on the voucher (an owner-level recharge — e.g. a legal fee covering the
     // relationship generally, not one plot — has no project at all) — when the statement isn't scoped
     // to one specific project, a project-less voucher must still show up here. `$in` with `null` in the
@@ -77,11 +77,19 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
 
   const rawLines = [];
 
+  // "3%" for a percentage-rate commission, "KES 50,000" for a flat one — shown inline so the owner can
+  // verify the deduction without cross-checking the Commissions page, since the rate genuinely does vary
+  // per agent/deal and does get corrected after the fact (see recalculateCommissionRate).
+  const rateLabel = (rate, type) => (type === "flat" ? `KES ${Number(rate || 0).toLocaleString()}` : `${rate}%`);
+
+  // Every line below reads "{Plot} — what happened · reference" — the same shape, category to
+  // category, so an owner skimming several plots down the page can scan the dash-separated
+  // explanation without having to parse each category's own phrasing style.
   for (const payment of payments) {
     const deal = dealById.get(String(payment.deal));
     rawLines.push({
       transactionDate: payment.paymentDate, category: "proceeds", direction: "credit", amount: round2(payment.amount),
-      description: `${listingLabelForDeal(payment.deal)} — Payment received (${payment.paymentNumber || deal?.dealNumber || "—"})`,
+      description: `${listingLabelForDeal(payment.deal)} — Payment received from buyer · ${payment.paymentNumber || deal?.dealNumber || "—"}`,
       deal: payment.deal, project: projectForDeal(payment.deal),
       sourceTransactionType: "property_sale_payment", sourceTransactionId: String(payment._id),
     });
@@ -92,7 +100,11 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
       if (!inPeriod(tier.accruedAt, start, end)) continue;
       rawLines.push({
         transactionDate: tier.accruedAt, category: "company_commission", direction: "debit", amount: round2(tier.amount),
-        description: `${listingLabelForDeal(oc.deal)} — buyer reached ${tier.thresholdPct}% paid (${oc.commissionNumber})`,
+        // thresholdPct is the tier's configured milestone, not necessarily the buyer's exact cumulative
+        // %paid at this moment — a single payment can jump past several tiers at once (e.g. 10% -> 60%
+        // crosses both a 30% and a 50% tier in the same pass), so "passed the Nth% milestone" is the
+        // honest claim; "buyer has paid N%" would be flatly wrong whenever that happens.
+        description: `${listingLabelForDeal(oc.deal)} — Agency commission released at ${rateLabel(oc.commissionRate, oc.commissionType)}, passed the ${tier.thresholdPct}% payment milestone · ${oc.commissionNumber}`,
         deal: oc.deal, project: projectForDeal(oc.deal),
         sourceTransactionType: "property_sale_owner_commission_tier", sourceTransactionId: `${oc._id}:tier:${tier._id}`,
       });
@@ -111,7 +123,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
         if (!inPeriod(tier.accruedAt, start, end)) continue;
         rawLines.push({
           transactionDate: tier.accruedAt, category: "broker_commission", direction: "debit", amount: round2(tier.amount),
-          description: `${listingLabelForDeal(bc.deal)} — buyer reached ${tier.thresholdPct}% paid (${bc.commissionNumber})`,
+          description: `${listingLabelForDeal(bc.deal)} — Broker commission released at ${rateLabel(bc.commissionRate, bc.commissionType)}, passed the ${tier.thresholdPct}% payment milestone · ${bc.commissionNumber}`,
           deal: bc.deal, project: projectForDeal(bc.deal),
           sourceTransactionType: "property_sale_commission_tier", sourceTransactionId: `${bc._id}:tier:${tier._id}`,
         });
@@ -119,7 +131,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     } else if (["approved", "paid"].includes(bc.status) && inPeriod(bc.updatedAt, start, end)) {
       rawLines.push({
         transactionDate: bc.updatedAt, category: "broker_commission", direction: "debit", amount: round2(bc.commissionAmount),
-        description: `${listingLabelForDeal(bc.deal)} — full release (${bc.commissionNumber})`,
+        description: `${listingLabelForDeal(bc.deal)} — Broker commission at ${rateLabel(bc.commissionRate, bc.commissionType)} (full release) · ${bc.commissionNumber}`,
         deal: bc.deal, project: projectForDeal(bc.deal),
         sourceTransactionType: "property_sale_commission", sourceTransactionId: String(bc._id),
       });
@@ -129,9 +141,11 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
   for (const v of vouchers) {
     const effectiveDate = v.paidDate || v.dueDate;
     if (!inPeriod(effectiveDate, start, end)) continue;
+    const projLabel = v.saleProject ? projectNameById.get(String(v.saleProject)) : null;
+    const what = v.narration || (v.payeeName ? `Paid to ${v.payeeName}` : "Recharged expense");
     rawLines.push({
       transactionDate: effectiveDate, category: "expense", direction: "debit", amount: round2(v.amount),
-      description: `${v.voucherNo || "Expense"} — ${v.narration || v.payeeName || "recharged expense"}`.trim(),
+      description: `${projLabel ? `${projLabel} — ` : ""}${what}${v.voucherNo ? ` · ${v.voucherNo}` : ""}`,
       deal: null, project: v.saleProject,
       sourceTransactionType: "payment_voucher", sourceTransactionId: String(v._id),
     });
@@ -145,7 +159,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     const cgt = round2(p.cgtAmount || 0);
     rawLines.push({
       transactionDate: p.date, category: "owner_payout", direction: "debit", amount: round2(p.amount + cgt),
-      description: `Owner payout — ${p.payoutNumber || ""}${cgt > 0 ? ` (incl. KES ${cgt.toLocaleString()} CGT withheld)` : ""}`.trim(),
+      description: `Paid out to owner${p.payoutNumber ? ` · ${p.payoutNumber}` : ""}${cgt > 0 ? ` (incl. KES ${cgt.toLocaleString()} CGT withheld)` : ""}`,
       deal: p.deal || null, project: p.deal ? projectForDeal(p.deal) : null,
       sourceTransactionType: "property_sale_owner_payout", sourceTransactionId: String(p._id),
     });

@@ -122,6 +122,7 @@ export const saleApi = {
   listCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions", { params })),
   getCommission: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/commissions/${id}`, { params })),
   updateCommissionStatus: async (id, payload) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/status`, payload)),
+  recalculateCommission: async (id, params = {}) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/recalculate`, params)),
 
   // Cashbook accounts (for payment recording)
   listCashbookAccounts: async (params = {}) => {

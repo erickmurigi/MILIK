@@ -45,6 +45,16 @@ const acctTypePill = {
   monthly: "bg-blue-100 text-blue-700 border-blue-200",
 };
 
+const creditStatusPill = {
+  active:      "bg-emerald-100 text-emerald-700 border-emerald-200",
+  applied:     "bg-slate-100 text-slate-600 border-slate-200",
+  written_off: "bg-red-100 text-red-700 border-red-200",
+  refunded:    "bg-blue-100 text-blue-700 border-blue-200",
+};
+const creditStatusLabel = {
+  active: "Available", applied: "Applied", written_off: "Written off", refunded: "Refunded",
+};
+
 // ── Last visit recency colour ──────────────────────────────────────────────────
 const lastVisitClass = (lastVisit) => {
   if (!lastVisit) return "text-slate-300";
@@ -141,6 +151,9 @@ const CustomerDetail = React.memo(({ customer, program }) => {
   const jobs = useMemo(() =>
     (stmtData?.jobs || []).map((j) => ({ ...j, dateFmt: j.date ? new Date(j.date).toLocaleDateString("en-KE", FMT_DATE_OPTS) : "—" })),
   [stmtData]);
+  const credits = useMemo(() =>
+    (stmtData?.credits || []).map((c) => ({ ...c, dateFmt: c.date ? new Date(c.date).toLocaleDateString("en-KE", FMT_DATE_OPTS) : "—" })),
+  [stmtData]);
   return (
     <>
       <div className="mb-3 flex items-center justify-between">
@@ -201,6 +214,29 @@ const CustomerDetail = React.memo(({ customer, program }) => {
                 </tr>
               </tfoot>
             </table>
+          </div>
+        )}
+        {credits.length > 0 && (
+          <div className="mt-3">
+            <div className="mb-1.5 text-[10px] font-extrabold uppercase tracking-widest text-slate-500">Credit History</div>
+            <div className="divide-y divide-slate-100 border border-slate-200">
+              {credits.map((c) => (
+                <div key={String(c._id)} className="flex flex-wrap items-center justify-between gap-2 bg-white px-3 py-1.5 text-[11px]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-bold text-slate-700">{c.dateFmt}</span>
+                      <span className={`inline-flex border px-1.5 py-0.5 text-[9px] font-bold uppercase ${creditStatusPill[c.status] || creditStatusPill.applied}`}>
+                        {creditStatusLabel[c.status] || c.status}
+                      </span>
+                      {c.sourceJobNumber && <span className="text-slate-400">from {c.sourceJobNumber}</span>}
+                      {c.appliedToJobNumber && <span className="text-slate-400">→ applied to {c.appliedToJobNumber}</span>}
+                    </div>
+                    {c.notes && <div className="mt-0.5 text-[10px] text-slate-400">{c.notes}</div>}
+                  </div>
+                  <span className="font-bold tabular-nums text-slate-700">{fmt(c.amount)}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
     </>

@@ -38,7 +38,7 @@ const fillPlaceholders = (text, vars) =>
 
 // Rate used when the deal doesn't set one: the company's default from Property Sale settings, else the statutory 5%
 const DEFAULT_COMMISSION_WHT_RATE = 5;
-const defaultWhtRate = async (business) => {
+export const defaultWhtRate = async (business) => {
   const settings = await SaleSettings.findOne({ business }).select("commissionDefaults.whtRate").lean();
   return clampWhtRate(settings?.commissionDefaults?.whtRate, DEFAULT_COMMISSION_WHT_RATE);
 };

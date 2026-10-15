@@ -89,7 +89,7 @@ const ApplyJobModal = ({ credit, onApply, onClose }) => {
         </div>
         <div className="p-4 space-y-3">
           <div>
-            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500">
+            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-900">
               Search by plate
             </label>
             <div className="relative">
@@ -206,7 +206,7 @@ const RefundModal = ({ credit, cashbooks, onRefund, onClose }) => {
             />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-500">
+            <label className="mb-1 block text-[11px] font-extrabold uppercase tracking-widest text-slate-900">
               Note (optional)
             </label>
             <input

@@ -15,6 +15,7 @@ import { createDeal } from "./dealsController.js";
 import { createPayment } from "./paymentsController.js";
 import { updateCommissionStatus } from "./commissionsController.js";
 import { approveStatement, createDraftStatement, getStatement } from "./ownerStatementsController.js";
+import { createOwnerPayout } from "./ownerPayoutsController.js";
 import { createPaymentVoucher } from "../../../controllers/propertyController/paymentVoucher.js";
 import { getAccountByCode } from "../../../test/factories.financial.js";
 
@@ -154,6 +155,23 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     const doc = await SaleOwnerStatement.findById(draft.payload._id);
     doc.notes = "trying to edit an approved statement";
     await expect(doc.save()).rejects.toThrow(/cannot be modified/i);
+  });
+
+  it("an owner payout in the period shows as its own deduction and generation doesn't throw (LINE_CATEGORIES must include owner_payout)", async () => {
+    const { owner, project, call } = await setup();
+    const payoutRes = await call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000 } });
+    expect(payoutRes.statusCode).toBe(201);
+
+    const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    expect(res.statusCode).toBe(201);
+    expect(res.payload).toMatchObject({
+      grossProceeds: 1_000_000, companyCommission: 30_000, brokerCommission: 20_000, ownerPayouts: 100_000,
+      netBalance: 1_000_000 - 30_000 - 20_000 - 100_000,
+    });
+
+    const full = await call(getStatement, { params: { id: String(res.payload._id) } });
+    const payoutLine = full.payload.lines.find((l) => l.category === "owner_payout");
+    expect(payoutLine).toMatchObject({ amount: 100_000, direction: "debit" });
   });
 
   it("a period with no activity for the owner returns a zeroed statement, not an error", async () => {

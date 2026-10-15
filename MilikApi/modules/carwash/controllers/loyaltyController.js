@@ -1095,7 +1095,7 @@ export const getCustomerStatement = async (req, res, next) => {
 
     const plates = (customer.plates || []).map(normalizePlate).filter(Boolean);
     if (!plates.length) {
-      return res.json({ success: true, data: { customer, jobs: [], totals: { invoiced: 0, paid: 0, outstanding: 0 } } });
+      return res.json({ success: true, data: { customer, jobs: [], credits: [], totals: { invoiced: 0, paid: 0, outstanding: 0 } } });
     }
 
     const jobs = await CarWashJob.find({
@@ -1116,28 +1116,57 @@ export const getCustomerStatement = async (req, res, next) => {
       : [];
     const paidByJob = new Map(payTotals.map((p) => [String(p._id), round2(Number(p.paid || 0))]));
 
-    let runningBalance = 0;
     let totalInvoiced = 0;
     let totalPaid = 0;
 
+    // balance is this job's OWN outstanding (charge - paid), not a running
+    // cumulative total â€” a prior version carried a running balance forward
+    // row to row, which made an already-fully-paid job display a stale,
+    // unrelated balance left over from an earlier underpaid job and made the
+    // statement look like it had bugs it didn't. Payments are always capped
+    // at a job's own outstanding (overpayment is routed to credit instead),
+    // so charge - paid can never go negative and summing every row's balance
+    // still equals totals.outstanding below.
     const rows = jobs.map((j) => {
-      const charge = round2(Number(j.price || 0) - Number(j.discountAmount || 0));
-      const paid   = paidByJob.get(String(j._id)) || 0;
-      runningBalance = round2(runningBalance + charge - paid);
-      totalInvoiced  = round2(totalInvoiced + charge);
-      totalPaid      = round2(totalPaid + paid);
+      const charge  = round2(Number(j.price || 0) - Number(j.discountAmount || 0));
+      const paid    = paidByJob.get(String(j._id)) || 0;
+      const balance = round2(Math.max(0, charge - paid));
+      totalInvoiced = round2(totalInvoiced + charge);
+      totalPaid     = round2(totalPaid + paid);
 
       const sl = j.serviceLines || [];
       const serviceName = sl.length
         ? sl[0].serviceName + (sl.length > 1 ? ` +${sl.length - 1}` : "")
         : (j.serviceName || "â€”");
 
-      return { _id: j._id, jobNumber: j.jobNumber, plateNumber: j.plateNumber, serviceName, charge, paid, balance: runningBalance, date: j.createdAt };
+      return { _id: j._id, jobNumber: j.jobNumber, plateNumber: j.plateNumber, serviceName, charge, paid, balance, date: j.createdAt };
     });
+    const runningBalance = round2(totalInvoiced - totalPaid);
+
+    // Credit history — every overpayment-derived credit this customer has ever had, win or
+    // lose status, so "where did this Ksh X credit come from" is answerable from the statement
+    // itself instead of requiring a separate lookup on the Credit Balances page.
+    const creditDocs = await CarWashCustomerCredit.find({ business, customer: customer._id })
+      .sort({ createdAt: 1 })
+      .populate("sourceJob", "jobNumber plateNumber createdAt")
+      .populate("appliedToJob", "jobNumber plateNumber")
+      .select("amount status notes sourceJob appliedToJob appliedAt createdAt")
+      .lean();
+    const credits = creditDocs.map((c) => ({
+      _id: c._id,
+      amount: round2(Number(c.amount || 0)),
+      status: c.status,
+      notes: c.notes || "",
+      sourceJobNumber: c.sourceJob?.jobNumber || null,
+      sourcePlate: c.sourceJob?.plateNumber || null,
+      appliedToJobNumber: c.appliedToJob?.jobNumber || null,
+      appliedAt: c.appliedAt || null,
+      date: c.createdAt,
+    }));
 
     res.json({
       success: true,
-      data: { customer, jobs: rows, totals: { invoiced: totalInvoiced, paid: totalPaid, outstanding: runningBalance } },
+      data: { customer, jobs: rows, credits, totals: { invoiced: totalInvoiced, paid: totalPaid, outstanding: runningBalance } },
     });
   } catch (err) {
     next(err);

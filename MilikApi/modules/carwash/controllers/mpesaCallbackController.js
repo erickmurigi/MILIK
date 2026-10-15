@@ -1266,10 +1266,14 @@ export const listUnpaidJobs = async (req, res, next) => {
     const since = new Date();
     since.setMonth(since.getMonth() - 6);
 
+    // Fetch every candidate job in the window first — do NOT cap this query.
+    // Capping here (as the old code did) would select by recency alone, so an
+    // old unpaid job could be silently excluded once enough newer jobs exist,
+    // regardless of how real its debt is. The cap below is applied only to the
+    // final, already-filtered unpaid list.
     const jobs = await CarWashJob.find({ business, status: { $nin: ["cancelled"] }, createdAt: { $gte: since } })
       .select("jobNumber plateNumber customerName serviceName price discountAmount createdAt creditAccount")
       .sort({ createdAt: -1 })
-      .limit(500)
       .lean();
 
     if (!jobs.length) return res.json({ success: true, data: [] });
@@ -1289,7 +1293,7 @@ export const listUnpaidJobs = async (req, res, next) => {
       if (outstanding > 0) unpaid.push({ ...j, net, paid, outstanding });
     }
 
-    res.json({ success: true, data: unpaid });
+    res.json({ success: true, data: unpaid.slice(0, 500) });
   } catch (err) {
     next(err);
   }

@@ -593,8 +593,10 @@ export const createJob = async (req, res, next) => {
     // record's amount is reduced by that portion and stays active for a future job — never
     // mutated in place beyond that amount reduction, so its own history/ledger trail stays intact.
     // Not applied to voucher jobs (billed to a third party, not this customer) — same exclusion
-    // the prepaid block already uses.
-    if (plateNumber && jobType === "vehicle" && resolvedCreditAccountType !== "voucher") {
+    // the prepaid block already uses. Staff can opt out via applyCustomerCredit:false (the Add Job
+    // form shows a checkbox for this, defaulted on so existing behavior/other callers are unchanged).
+    const wantsCustomerCreditApply = req.body.applyCustomerCredit !== false;
+    if (wantsCustomerCreditApply && plateNumber && jobType === "vehicle" && resolvedCreditAccountType !== "voucher") {
       const stillDue = round2(Math.max(0, netPrice - appliedSoFar));
       if (stillDue > 0.009) {
         try {

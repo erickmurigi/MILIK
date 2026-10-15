@@ -306,7 +306,7 @@ const PlateLookupWidget = ({ plate, onPlateChange, onCustomerFound, onCustomerCl
 // Row content only — no border/margin of its own. Rendered inside the single shared
 // status panel below (with CreditAccountRow / the reward row) so three related pieces
 // of plate/customer info read as one connected panel, not three stacked alert boxes.
-const PlateLookupRow = ({ lookupResult }) => {
+const PlateLookupRow = ({ lookupResult, applyCredit, onApplyCreditChange }) => {
   if (!lookupResult) return null;
   const card = lookupResult?.loyaltyCard;
   const customer = lookupResult?.customer;
@@ -342,11 +342,19 @@ const PlateLookupRow = ({ lookupResult }) => {
           )}
         </div>
         {creditBalance > 0 && (
-          <div className="mt-0.5 flex items-center gap-1.5 text-amber-800">
+          <label className="mt-0.5 flex cursor-pointer items-center gap-1.5 text-amber-800">
+            <input
+              type="checkbox"
+              checked={applyCredit}
+              onChange={(e) => onApplyCreditChange(e.target.checked)}
+              className="accent-amber-600"
+            />
             <FaCoins className="shrink-0 text-amber-500" size={10} />
             <span className="font-black">KES {formatMoney(creditBalance)} credit on account</span>
-            <span className="font-normal text-amber-700">— will be auto-applied to this job's balance</span>
-          </div>
+            <span className="font-normal text-amber-700">
+              {applyCredit ? "— will be applied to this job's balance" : "— not applying, will collect full amount"}
+            </span>
+          </label>
         )}
       </div>
     </div>
@@ -356,19 +364,25 @@ const PlateLookupRow = ({ lookupResult }) => {
 // ─── Credit account banner ─────────────────────────────────────────────────────
 const CreditAccountRow = ({ plate, jobTotal, onAccountDetected }) => {
   const [account, setAccount] = useState(null);
-  const prevPlate = useRef("");
+  const normalizedPlate = String(plate || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const [prevPlate, setPrevPlate] = useState("");
 
-  useEffect(() => {
-    const p = String(plate || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (!p || p === prevPlate.current) return;
-    prevPlate.current = p;
+  // Reset adjusted during render (React's documented pattern for state that depends on a
+  // changed prop) instead of inside the effect below, so a stale account from the previous
+  // plate never flashes while the new lookup is in flight. Uses state, not a ref, for the
+  // comparison — reading a ref's value during render is its own, separate violation.
+  if (normalizedPlate && normalizedPlate !== prevPlate) {
+    setPrevPlate(normalizedPlate);
     setAccount(null);
     onAccountDetected(null);
-    if (p.length < 4) return;
-    carWashApi.lookupAccountByPlate(p)
+  }
+
+  useEffect(() => {
+    if (!normalizedPlate || normalizedPlate.length < 4) return;
+    carWashApi.lookupAccountByPlate(normalizedPlate)
       .then((data) => { setAccount(data || null); onAccountDetected(data || null); })
       .catch(() => {});
-  }, [plate]); // eslint-disable-line
+  }, [normalizedPlate]); // eslint-disable-line
 
   if (!account) return null;
 
@@ -637,6 +651,9 @@ const CarWashAddJob = () => {
   const [jobType, setJobType] = useState("vehicle");
   const [plateNumber, setPlateNumber] = useState("");
   const [plateLookupResult, setPlateLookupResult] = useState(null);
+  // Defaulted off: credit is the customer's money, so spending it down requires
+  // an active staff decision rather than happening silently by default.
+  const [applyCustomerCredit, setApplyCustomerCredit] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
   const [itemDescription, setItemDescription] = useState("");
@@ -1083,6 +1100,7 @@ const CarWashAddJob = () => {
           isRewardLine: Boolean(l.isRewardLine),
         })),
       discountAmount: discountNum,
+      applyCustomerCredit,
       creditAccount: (jobType === "vehicle" && isVoucherJob) ? (voucherAccount?._id || null) : (creditAccount?._id || null),
       notes,
       branch: (isAllBranches && !isEditMode && selectedBranchId) ? selectedBranchId : undefined,
@@ -1309,7 +1327,11 @@ const CarWashAddJob = () => {
                   panel with color-coded rows. */}
               {jobType === "vehicle" && plateLookupResult && (
                 <div className="mt-1 divide-y divide-slate-200 border border-slate-200">
-                  <PlateLookupRow lookupResult={plateLookupResult} />
+                  <PlateLookupRow
+                    lookupResult={plateLookupResult}
+                    applyCredit={applyCustomerCredit}
+                    onApplyCreditChange={setApplyCustomerCredit}
+                  />
                   {!isVoucherJob && (
                     <CreditAccountRow
                       plate={plateNumber}

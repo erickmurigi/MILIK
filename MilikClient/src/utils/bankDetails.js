@@ -38,4 +38,4 @@ export const bankInputClass = (hasError = false) =>
       : "border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20"
   }`;
 
-export const bankLabelClass = "mb-1 block text-xs font-bold text-slate-900";
+export const bankLabelClass = "mb-1 block text-xs font-black text-slate-900";

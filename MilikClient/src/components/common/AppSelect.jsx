@@ -211,7 +211,7 @@ const AppSelect = ({
   return (
     <div className={`${label ? "w-full" : minWidthCls} ${className}`}>
       {label && (
-        <label className="mb-1 block text-xs font-bold text-slate-700">
+        <label className="mb-1 block text-xs font-black text-slate-900">
           {label}
           {required && <span className="ml-0.5 text-rose-500">*</span>}
         </label>

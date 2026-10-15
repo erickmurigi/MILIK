@@ -993,8 +993,14 @@ export const voidTopupDirect = async (req, res, next) => {
     if (topup.isVoided) return next(createError(400, "This top-up has already been voided"));
     const userId = currentUserId(req);
     const reason = String(req.body.reason || "").trim();
-    await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
     const account = await CarWashCreditAccount.findOne({ _id: topup.account, business });
+    // The wallet balance may already be partly or fully spent on jobs since this top-up was
+    // recorded — reversing more than what's still sitting in the wallet would silently drive
+    // accountCredit negative (the schema's min:0 isn't enforced on $inc updates).
+    if (account && round2(account.accountCredit || 0) < round2(topup.amount) - 0.009) {
+      return next(createError(400, `Cannot void: only KES ${round2(account.accountCredit || 0).toLocaleString()} of this top-up's KES ${round2(topup.amount).toLocaleString()} remains unspent in the wallet`));
+    }
+    await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
     if (account) {
       await CarWashCreditAccount.findByIdAndUpdate(
         account._id,
@@ -1020,11 +1026,18 @@ export const voidTopup = async (req, res, next) => {
     const userId = currentUserId(req);
     const reason = String(req.body.reason || "").trim();
 
+    // Reduce the account credit atomically by the voided amount
+    const account = await CarWashCreditAccount.findOne({ _id: req.params.id, business });
+    // The wallet balance may already be partly or fully spent on jobs since this top-up was
+    // recorded — reversing more than what's still sitting in the wallet would silently drive
+    // accountCredit negative (the schema's min:0 isn't enforced on $inc updates).
+    if (account && round2(account.accountCredit || 0) < round2(topup.amount) - 0.009) {
+      return next(createError(400, `Cannot void: only KES ${round2(account.accountCredit || 0).toLocaleString()} of this top-up's KES ${round2(topup.amount).toLocaleString()} remains unspent in the wallet`));
+    }
+
     // Reverse ledger entries
     await reverseCarWashTopupLedger({ businessId: business, topupId: topup._id, reason: reason || "Top-up voided", req });
 
-    // Reduce the account credit atomically by the voided amount
-    const account = await CarWashCreditAccount.findOne({ _id: req.params.id, business });
     if (account) {
       await CarWashCreditAccount.findByIdAndUpdate(
         account._id,

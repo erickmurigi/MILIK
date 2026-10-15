@@ -529,15 +529,16 @@ const AccountJobsList = ({ accId, accountType }) => {
     enabled:  !!accId,
     staleTime: 45_000,
   });
+  const isWallet = ["prepaid", "voucher"].includes(accountType);
   const jobs = useMemo(() => {
     const all = accountData?.jobs || [];
-    return accountType === "prepaid" ? all : all.filter((j) => j.paymentStatus !== "paid");
-  }, [accountData, accountType]);
+    return isWallet ? all : all.filter((j) => j.paymentStatus !== "paid");
+  }, [accountData, isWallet]);
 
   if (isLoading) return <div className="text-[11px] text-slate-400">Loading…</div>;
   if (!jobs.length) return (
     <div className="text-[11px] text-emerald-600 font-semibold">
-      {accountType === "prepaid" ? "No jobs yet" : "All jobs paid ✓"}
+      {isWallet ? "No jobs yet" : "All jobs paid ✓"}
     </div>
   );
   return (
@@ -549,7 +550,7 @@ const AccountJobsList = ({ accId, accountType }) => {
             <div className="text-[10px] text-slate-500">{j.plateNumber} · {j.serviceName} · {fmtDate(j.jobDate || j.createdAt)}</div>
           </div>
           <div className="text-right">
-            {accountType === "prepaid"
+            {isWallet
               ? <div className="font-black text-emerald-700 text-[11px]">{formatMoney(j.paidAmount || 0)}</div>
               : <div className="font-black text-red-600 text-[11px]">{formatMoney(j.outstanding)}</div>}
             <div className={`text-[10px] font-bold ${j.paymentStatus === "paid" ? "text-emerald-600" : j.paymentStatus === "partial" ? "text-amber-600" : "text-slate-500"}`}>{j.paymentStatus}</div>
@@ -753,24 +754,28 @@ const CarWashAccounts = () => {
     } finally { setRemindSending(false); }
   }, [remindTarget]);
 
-  // Open reminder SMS (no statement required — direct balance nudge)
-  const openRemind = useCallback((e, acc) => {
+  // Open reminder SMS (no statement required — direct balance nudge). Same flow for both
+  // directions: "outstanding" nudges a customer who owes money to settle; "prepaid" nudges a
+  // wallet-account customer that they still have credit sitting unused, to bring them back in.
+  const openRemind = useCallback((e, acc, kind = "outstanding") => {
     e.stopPropagation();
     const name    = acc.customer?.name || "Customer";
-    const balance = fmt(acc.currentBalance || 0);
+    const balance = fmt(kind === "prepaid" ? acc.accountCredit || 0 : acc.currentBalance || 0);
     setRemindTarget({
       _id:        acc._id,
       _customerId: acc.customer?._id,
       name,
       phone: acc.customer?.phone || "",
+      balance,
+      kind,
     });
   }, []);
 
   // KPI strip
   const stats = useMemo(() => {
-    const totalOwed         = accounts.reduce((s, a) => a.accountType !== "prepaid" ? s + Math.max(0, Number(a.currentBalance || 0)) : s, 0);
-    const totalPrepaidFloat = accounts.reduce((s, a) => a.accountType === "prepaid" ? s + Number(a.accountCredit || 0) : s, 0);
-    const overLimit         = accounts.filter((a) => a.accountType !== "prepaid" && a.creditLimit > 0 && a.currentBalance > a.creditLimit).length;
+    const totalOwed         = accounts.reduce((s, a) => !["prepaid", "voucher"].includes(a.accountType) ? s + Math.max(0, Number(a.currentBalance || 0)) : s, 0);
+    const totalPrepaidFloat = accounts.reduce((s, a) => ["prepaid", "voucher"].includes(a.accountType) ? s + Number(a.accountCredit || 0) : s, 0);
+    const overLimit         = accounts.filter((a) => !["prepaid", "voucher"].includes(a.accountType) && a.creditLimit > 0 && a.currentBalance > a.creditLimit).length;
     return { totalOwed, totalPrepaidFloat, overLimit };
   }, [accounts]);
 
@@ -888,7 +893,7 @@ const CarWashAccounts = () => {
                 const balance    = Number(acc.currentBalance || 0);
                 const overLimit  = acc.creditLimit > 0 && balance > acc.creditLimit;
                 const expanded   = expandedId === acc._id;
-                const isPrepaid  = acc.accountType === "prepaid";
+                const isPrepaid  = ["prepaid", "voucher"].includes(acc.accountType);
                 return (
                   <React.Fragment key={acc._id}>
                     <tr className={`border-b border-slate-100 ${overLimit ? "bg-amber-50/60" : "bg-white hover:bg-slate-50/60"} cursor-pointer`}
@@ -944,6 +949,13 @@ const CarWashAccounts = () => {
                               <FaWallet size={8} /> Top Up
                             </button>
                           )}
+                          {/* Quick prepaid-balance reminder SMS — mirrors the outstanding-balance Remind below */}
+                          {isPrepaid && acc.customer?.phone && Number(acc.accountCredit || 0) > 0 && (
+                            <button onClick={(e) => openRemind(e, acc, "prepaid")} title="Remind customer of their available prepaid balance"
+                              className="inline-flex items-center gap-1 border border-slate-200 bg-white px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-50">
+                              <FaBell size={8} /> Remind
+                            </button>
+                          )}
                           {!isPrepaid && balance > 0 && acc.status === "active" && canRecord && (
                             <button onClick={() => setPayTarget(acc)} className="inline-flex items-center gap-1 border border-orange-200 bg-orange-50 px-2 py-0.5 text-[9px] font-bold text-orange-700 hover:bg-orange-100">
                               <FaMoneyBillWave size={8} /> Pay
@@ -996,7 +1008,7 @@ const CarWashAccounts = () => {
                                   </div>
                                 </div>
                                 <div className="text-[11px] font-black uppercase tracking-wide text-slate-500 mb-1">Recent Jobs</div>
-                                <AccountJobsList accId={acc._id} accountType="prepaid" />
+                                <AccountJobsList accId={acc._id} accountType={acc.accountType} />
                               </div>
                               <div>
                                 <div className="mb-2 flex items-center justify-between">
@@ -1124,9 +1136,11 @@ const CarWashAccounts = () => {
       {remindTarget && (
         <CwSmsModal
           target={{ _id: remindTarget._customerId, name: remindTarget.name, phone: remindTarget.phone }}
-          defaultBody={`Hi ${remindTarget.name || "Customer"}, you have an outstanding balance on your car wash account. Please contact us to settle. Thank you.`}
+          defaultBody={remindTarget.kind === "prepaid"
+            ? `Hi ${remindTarget.name || "Customer"}, you have a prepaid balance of ${remindTarget.balance} available on your car wash account. Visit us anytime to use it. Thank you.`
+            : `Hi ${remindTarget.name || "Customer"}, you have an outstanding balance of ${remindTarget.balance} on your car wash account. Please contact us to settle. Thank you.`}
           templates={[]}
-          context="Balance Reminder"
+          context={remindTarget.kind === "prepaid" ? "Prepaid Balance Reminder" : "Balance Reminder"}
           onSend={sendStatementSms}
           onClose={() => setRemindTarget(null)}
           sending={remindSending}

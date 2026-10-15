@@ -52,7 +52,7 @@ const DEFAULT_PAGE_SIZE = 50;
 const isRawObjectId = (s) => /^[a-f\d]{24}$/i.test(String(s || ""));
 
 // Same field standard as the landlord form: bold labels, compact square inputs, readable text.
-const VOUCHER_LABEL = "mb-1 block text-xs font-bold text-slate-900";
+const VOUCHER_LABEL = "mb-1 block text-xs font-black text-slate-900";
 const VOUCHER_INPUT = "h-7 w-full border border-slate-300 bg-white px-2.5 text-sm text-slate-900 outline-none placeholder:text-slate-500 transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 // Same grey-header-bar Section used by AddLandlord.jsx — the house standard for a form card.
 const Section = ({ title, action, children }) => (
@@ -224,6 +224,11 @@ const PaymentVouchers = () => {
   const [editingVoucherId, setEditingVoucherId] = useState("");
   const [glVoucher, setGlVoucher] = useState(null);
   const [form, setForm] = useState(blankForm);
+  // Collapsed by default — most vouchers don't need payee bank details up front (cash/already-on-file
+  // vendors). Clicking to open it, loading a vendor with details on file, or editing a voucher that
+  // already has some saved all reveal it; it never auto-hides once shown or once data exists.
+  const [payeeBankOpen, setPayeeBankOpen] = useState(false);
+  const hasPayeeBankValues = Object.values(form.payeeBank || {}).some((v) => String(v || "").trim());
   const editingVoucher = useMemo(() => (editingVoucherId ? vouchers.find((row) => row._id === editingVoucherId) : null), [editingVoucherId, vouchers]);
   const selectedCategoryMeta = useMemo(
     () => categories.find((category) => category.value === form.category) || categories[0] || BASE_CATEGORIES[0],
@@ -1109,13 +1114,23 @@ const PaymentVouchers = () => {
                   </div>
               </Section>
 
-              {/* ── Payee bank: prefilled from the linked provider or landlord; optional ── */}
-              <BankDetailsFields
-                values={form.payeeBank}
-                onChange={(field, value) => setForm((prev) => ({ ...prev, payeeBank: { ...prev.payeeBank, [field]: value } }))}
-                title="Payee bank & payment details"
-                hideBranch
-              />
+              {/* ── Payee bank: prefilled from the linked provider or landlord; optional, collapsed by default ── */}
+              {payeeBankOpen || hasPayeeBankValues ? (
+                <BankDetailsFields
+                  values={form.payeeBank}
+                  onChange={(field, value) => setForm((prev) => ({ ...prev, payeeBank: { ...prev.payeeBank, [field]: value } }))}
+                  title="Payee bank & payment details"
+                  hideBranch
+                />
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setPayeeBankOpen(true)}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline"
+                >
+                  <FaPlus size={8} /> Add payee bank & payment details
+                </button>
+              )}
 
               {/* ── Lines: each charge has its own expense item, property and WHT rate ── */}
               <Section title="Lines" action={
@@ -1125,7 +1140,7 @@ const PaymentVouchers = () => {
               }>
                     <div className="overflow-x-auto border border-slate-200">
                       <table className="w-full min-w-[860px] table-auto text-[11px]">
-                        <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600">
                           <tr>
                             <th className="px-2 py-1">Expense item</th>
                             {showExpenseAccountColumn && <th className="px-2 py-1">Expense account</th>}
@@ -1328,7 +1343,7 @@ const PaymentVouchers = () => {
               <Section title={`Journal Entries ${isPaidNow ? "(paid now)" : "(on approval)"}`}>
                     <div className="overflow-hidden border border-slate-200">
                       <table className="w-full text-[11px]">
-                        <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        <thead className="bg-slate-50 text-left text-[10px] font-bold uppercase tracking-wide text-slate-600">
                           <tr>
                             <th className="w-12 px-2 py-1">Side</th>
                             <th className="px-2 py-1">Account</th>

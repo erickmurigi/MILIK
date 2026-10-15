@@ -3,17 +3,24 @@ import { createError } from "../../../utils/error.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SaleDeal from "../models/SaleDeal.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleAdvocate from "../models/SaleAdvocate.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
-import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
+import { dealAdvocateTrustBalance, sumPaidForDeal, percentPaid } from "../services/dealProgress.js";
+import { newlyCrossedTiers } from "../services/commissionReleaseService.js";
 import {
   postPropertySaleCommissionAccrual,
   postPropertySaleCommissionPayout,
+  postPropertySaleCommissionTierRelease,
   reversePropertySaleCommissionAccrual,
   reversePropertySaleCommissionPayout,
+  reversePropertySaleCommissionTierRelease,
   resolveWhtHandler,
 } from "../services/propertySaleAccountingService.js";
+import { round2 } from "../../../utils/math.js";
+import { calcWithholding } from "../../../utils/withholdingTax.js";
+import { defaultWhtRate } from "./dealsController.js";
 
 // The advocate who actually collected this deal's trust funds — read off the deal's own advocate_trust
 // payments (the advocate who physically holds the money for this specific deal), not necessarily the
@@ -248,6 +255,109 @@ export const updateCommissionStatus = async (req, res, next) => {
     }
 
     res.status(200).json(commission);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// A commission's rate/type/WHT are snapshotted at deal creation from the agent's own record and the
+// company's WHT default — deliberately, so a later rate change never silently rewrites an already-agreed
+// deal's economics. But that means a commission created BEFORE an agent's rate (or the company's WHT
+// default) was corrected stays stuck at the old figures forever unless someone explicitly asks for it to
+// be refreshed. This does exactly that, for one commission at a time — never bulk, never silent — so a
+// deliberately custom rate on one specific deal isn't blindly overwritten along with everything else; the
+// frontend shows the caller the old-vs-new numbers before they confirm.
+//
+// Works for "pending" AND "approved" (a staged commission can be "approved" with tiers already
+// accrued — approval itself posts no GL for a staged one, see updateCommissionStatus). Never "paid" —
+// money has already physically moved by then, and correcting a disbursed amount isn't a rate fix, it's a
+// reversal + a fresh payout, a deliberately separate, more consequential action (the existing "reversed"
+// transition) that this does not attempt.
+//
+// Whatever's already posted for this commission (tier releases, or a legacy one-shot accrual) is reversed
+// first, then re-derived from scratch against the deal's CURRENT payment progress and the agent's CURRENT
+// rate — using the exact same tier-crossing math (newlyCrossedTiers) a live payment would have used, so a
+// staged commission ends up exactly where it would be if the correct rate had been in place from the
+// start, not just a renamed number with no ledger to match it.
+const eligibleForRecalculate = new Set(["pending", "approved"]);
+
+export const recalculateCommissionRate = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+
+    const scopedAgentId = await resolveAgentScope(req, business);
+    const commission = await SaleCommission.findOne({ _id: req.params.id, business, ...(scopedAgentId && { agent: scopedAgentId }) });
+    if (!commission) return next(createError(404, "Commission not found"));
+    if (req.saleAgentSelf && String(commission.agent) === req.saleAgentSelf) {
+      return next(createError(403, "Agents cannot change the status of their own commissions"));
+    }
+    if (!eligibleForRecalculate.has(commission.status)) {
+      return next(createError(400, `Only a pending or approved commission can be recalculated (this one is "${commission.status}")`));
+    }
+
+    const agent = await SaleAgent.findOne({ _id: commission.agent, business }).select("commissionRate commissionType").lean();
+    if (!agent) return next(createError(404, "Agent not found"));
+
+    const isStaged = Boolean(commission.releaseSchedule?.length);
+    const hadLegacyAccrual = !isStaged && commission.status === "approved";
+    const reason = `Rate recalculated — ${commission.commissionNumber}`;
+
+    try {
+      // Reverse whatever is already posted — every prior tier release for a staged commission (it can
+      // accrue tiers while still "pending"), or the single legacy accrual for a non-staged "approved" one.
+      if (isStaged && commission.tierReleases?.length) {
+        for (const tierRelease of commission.tierReleases) {
+          await reversePropertySaleCommissionTierRelease({ businessId: business, commission, tierRelease, userId, reason });
+        }
+      } else if (hadLegacyAccrual) {
+        await reversePropertySaleCommissionAccrual({ businessId: business, commission, userId, reason });
+      }
+
+      // Recompute rate/type/amount/WHT from the agent's CURRENT record and the company's CURRENT default.
+      const commissionRate = Number(agent.commissionRate || 0);
+      const commissionType = agent.commissionType || "percentage";
+      const commissionAmount = round2(
+        commissionType === "percentage" ? (Number(commission.saleAmount || 0) * commissionRate) / 100 : commissionRate
+      );
+      const whtRate = await defaultWhtRate(business);
+      const { whtAmount, netAmount } = calcWithholding(commissionAmount, whtRate);
+
+      commission.commissionRate = commissionRate;
+      commission.commissionType = commissionType;
+      commission.commissionAmount = commissionAmount;
+      commission.whtRate = whtRate;
+      commission.whtAmount = whtAmount;
+      commission.netAmount = netAmount;
+
+      if (isStaged) {
+        // Re-derive exactly which tiers SHOULD have fired by now, against the NEW commissionAmount and the
+        // deal's actual, current payment progress — not just "however much was released before".
+        const deal = await SaleDeal.findOne({ _id: commission.deal, business }).select("agreedPrice").lean();
+        const totalPaid = deal ? await sumPaidForDeal(business, commission.deal) : 0;
+        const currentPct = deal ? percentPaid(totalPaid, deal.agreedPrice) : 0;
+
+        commission.tierReleases = [];
+        commission.releasedAmount = 0;
+        const crossed = newlyCrossedTiers(commission, 0, currentPct);
+        for (const tier of crossed) {
+          commission.tierReleases.push({ ...tier, status: "accrued", accruedAt: new Date(), paidAt: null });
+          const pushed = commission.tierReleases[commission.tierReleases.length - 1];
+          commission.releasedAmount = round2(Number(commission.releasedAmount || 0) + tier.amount);
+          await postPropertySaleCommissionTierRelease({ businessId: business, commission, tierRelease: pushed, userId });
+        }
+      } else if (hadLegacyAccrual) {
+        await postPropertySaleCommissionAccrual({ businessId: business, commission, userId });
+      }
+    } catch (glErr) {
+      return next(createError(422, `GL reversal/re-posting failed while recalculating: ${glErr.message}. Check this commission's ledger entries before retrying.`));
+    }
+
+    commission.updatedBy = userId;
+    await commission.save();
+
+    const populated = await populateCommission(SaleCommission.findById(commission._id)).lean();
+    res.status(200).json(populated);
   } catch (err) {
     next(err);
   }

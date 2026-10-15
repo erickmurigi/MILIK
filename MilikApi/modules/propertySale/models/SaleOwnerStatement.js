@@ -26,6 +26,7 @@ const saleOwnerStatementSchema = new mongoose.Schema(
     companyCommission: { type: Number, required: true, default: 0 },
     brokerCommission: { type: Number, required: true, default: 0 },
     rechargedExpenses: { type: Number, required: true, default: 0 },
+    ownerPayouts: { type: Number, required: true, default: 0 },
     netBalance: { type: Number, required: true, default: 0 },
     currency: { type: String, required: true, default: "KES", trim: true, uppercase: true },
     entryCount: { type: Number, required: true, default: 0, min: 0 },

@@ -17,7 +17,10 @@ import {
 // and work out each one's incremental amount (so partial accruals across tiers never leave a stray cent —
 // the last tier crossed in this call gets commissionAmount minus everything already released, not its
 // raw releasePct share).
-const newlyCrossedTiers = (commission, previousPctPaid, newPctPaid) => {
+// Exported so commissionsController.js's recalculateCommissionRate can re-derive, from scratch, exactly
+// which tiers SHOULD have fired by now against a freshly recomputed commissionAmount — the same math,
+// reused rather than duplicated.
+export const newlyCrossedTiers = (commission, previousPctPaid, newPctPaid) => {
   const tiers = commission.releaseSchedule || [];
   if (!tiers.length || newPctPaid <= previousPctPaid) return [];
   const already = new Set((commission.tierReleases || []).map((t) => t.thresholdPct));
