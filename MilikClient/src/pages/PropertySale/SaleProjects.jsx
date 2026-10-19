@@ -16,7 +16,8 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTerms } from "../../hooks/useTerm";
 import SalePrintButton from "./SalePrintButton";
-import { fetchAllPages, money, printAfterFetch } from "./salePrint";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, money, printAfterFetch } from "./salePrint";
 import { useTabState } from "../../hooks/useTabState";
 import SaleProjectFormModal from "./SaleProjectFormModal";
 import SaleProjectPanel from "./SaleProjectPanel";
@@ -31,14 +32,14 @@ const STATUS_OPTIONS = [
 ];
 
 const projectTableCols = (T) => [
-  { label: `${T.saleProject} No.` },
-  { label: "Name" },
-  { label: "Location" },
-  { label: "Progress", width: 190 },
-  { label: "Sell-through", align: "right" },
-  { label: T.saleUnits, align: "right" },
-  { label: "Total Value", align: "right" },
-  { label: "Status" },
+  { label: `${T.saleProject} No.`, width: "8%" },
+  { label: "Name", width: "15%" },
+  { label: "Location", width: "11%" },
+  { label: T.saleOwner, width: "12%" },
+  { label: "Progress", width: "24%" },
+  { label: T.saleUnits, align: "right", width: "7%" },
+  { label: "Total Value", align: "right", width: "13%" },
+  { label: "Status", width: "8%" },
 ];
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
@@ -51,13 +52,20 @@ const renderProjectRow = (row) => (
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600 max-w-[160px] truncate">
       {[row.town, row.county].filter(Boolean).join(", ") || row.location || "—"}
     </td>
+    <td className="px-3 py-1.5 border-r border-gray-100 max-w-[150px] truncate text-slate-600">
+      {row.owner?.fullName || "—"}
+    </td>
     <td className="px-3 py-1.5 border-r border-gray-100">
-      <SaleProjectProgressBar units={row.units} />
+      <div className="flex items-center gap-1.5">
+        <SaleProjectProgressBar units={row.units} className="flex-1" />
+        <span className="shrink-0 font-bold tabular-nums text-slate-900">{fmtPct(row.sellThrough)}</span>
+      </div>
       <div className="mt-0.5 text-[9px] font-semibold normal-case text-slate-400">
-        {row.units?.sold || 0} sold · {row.units?.under_contract || 0} contract · {row.units?.reserved || 0} reserved · {row.units?.available || 0} available
+        {row.units?.total
+          ? <>{row.units?.sold || 0} sold · {row.units?.under_contract || 0} contract · {row.units?.reserved || 0} reserved · {row.units?.available || 0} available</>
+          : "No units added yet"}
       </div>
     </td>
-    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtPct(row.sellThrough)}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right tabular-nums text-slate-700">{row.units?.total || 0}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.value?.total || 0)}</td>
     <td className="px-3 py-1.5">
@@ -69,7 +77,7 @@ const renderProjectRow = (row) => (
 const actionBtn = "inline-flex items-center gap-1 border border-[#B7C9C0] bg-white px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]";
 
 const SaleProjects = () => {
-  const T = useTerms("saleProject", "saleProjects", "saleUnits");
+  const T = useTerms("saleProject", "saleProjects", "saleUnits", "saleOwner");
   const PROJECT_TABLE_COLS = useMemo(() => projectTableCols(T), [T]);
   const confirm = useConfirm();
   const navigate = useNavigate();
@@ -134,6 +142,32 @@ const SaleProjects = () => {
     setPrinting(false);
   };
 
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listProjects, { search: debouncedSearch, status: statusFilt }), ({ rows }) => {
+      const units = (r, k) => Number(r.units?.[k] || 0);
+      return {
+        filename: "projects",
+        columns: [
+          { label: `${T.saleProject} No.`, value: (r) => r.projectNumber },
+          { label: "Name", value: (r) => r.name },
+          { label: "Location", value: (r) => [r.town, r.county].filter(Boolean).join(", ") || r.location || "—" },
+          { label: "Sold", value: (r) => units(r, "sold") },
+          { label: "Contract", value: (r) => units(r, "under_contract") },
+          { label: "Reserved", value: (r) => units(r, "reserved") },
+          { label: "Available", value: (r) => units(r, "available") },
+          { label: T.saleUnits, value: (r) => units(r, "total") },
+          { label: "Sell-through", value: (r) => fmtPct(r.sellThrough) },
+          { label: "Total Value (KES)", value: (r) => money(r.value?.total || 0) },
+          { label: "Status", value: (r) => r.status },
+        ],
+        rows,
+      };
+    });
+    setExporting(false);
+  };
+
   const projects = useMemo(() => data?.data ?? [], [data?.data]);
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, data?.pages ?? Math.ceil(total / pageSize));
@@ -193,16 +227,16 @@ const SaleProjects = () => {
 
   const renderProjectActions = useCallback((row) => (
     <div className="inline-flex items-center gap-1">
-      <button type="button" onClick={() => openProject(row)} className={actionBtn}>
-        <FaExternalLinkAlt className="text-[9px]" /> Open
+      <button type="button" onClick={() => openProject(row)} title="Open" className={actionBtn}>
+        <FaExternalLinkAlt className="text-[9px]" />
       </button>
-      <button type="button" onClick={() => setFormModal({ project: row })} className={actionBtn}>
-        <FaEdit className="text-[9px]" /> Edit
+      <button type="button" onClick={() => setFormModal({ project: row })} title="Edit" className={actionBtn}>
+        <FaEdit className="text-[9px]" />
       </button>
-      <button type="button" disabled={busyId === row._id} onClick={() => handleArchive(row)} className={`${actionBtn} disabled:opacity-50`}>
-        {row.status === "archived" ? <><FaUndo className="text-[9px]" /> Restore</> : <><FaArchive className="text-[9px]" /> Archive</>}
+      <button type="button" disabled={busyId === row._id} onClick={() => handleArchive(row)} title={row.status === "archived" ? "Restore" : "Archive"} className={`${actionBtn} disabled:opacity-50`}>
+        {row.status === "archived" ? <FaUndo className="text-[9px]" /> : <FaArchive className="text-[9px]" />}
       </button>
-      <button type="button" disabled={busyId === row._id} onClick={() => handleDelete(row)} className="border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
+      <button type="button" disabled={busyId === row._id} onClick={() => handleDelete(row)} title="Delete" className="border border-red-200 bg-white px-2 py-0.5 text-[10px] font-bold text-red-600 hover:bg-red-50 disabled:opacity-50">
         <FaTrash className="text-[9px]" />
       </button>
     </div>
@@ -215,12 +249,12 @@ const SaleProjects = () => {
   return (
     <PropertySaleShell>
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total === 1 ? T.saleProject : T.saleProjects).toLowerCase()}</span>}
         onReset={resetFilters}
         activeCount={activeCount}
         trailing={
           <>
             <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <ListToolbar.Button
               variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-projects", biz] })}

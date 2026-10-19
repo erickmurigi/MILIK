@@ -1,76 +1,37 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar from "./SaleFilterBar";
+import MilikTable from "../../components/common/MilikTable";
 import { useTerms } from "../../hooks/useTerm";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import SalePrintButton from "./SalePrintButton";
-import { printNow, shortDate } from "./salePrint";
+import SaleExportButton from "./SaleExportButton";
+import { exportToExcel, printNow, shortDate } from "./salePrint";
 
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1).replace(/_/g, " ");
 
-const LEAD_STATUSES = [
-  { key: "new",           color: "bg-blue-400" },
-  { key: "contacted",     color: "bg-sky-400" },
-  { key: "qualified",     color: "bg-violet-400" },
-  { key: "site_visited",  color: "bg-indigo-400" },
-  { key: "proposal_sent", color: "bg-amber-400" },
-  { key: "negotiating",   color: "bg-orange-400" },
-  { key: "converted",     color: "bg-emerald-500" },
-  { key: "lost",          color: "bg-rose-400" },
-];
+const LEAD_STATUSES = ["new", "contacted", "qualified", "site_visited", "proposal_sent", "negotiating", "converted", "lost"];
+const OFFER_STATUSES = ["pending", "negotiating", "accepted", "rejected", "expired", "withdrawn"];
 
 // Backend returns camelCase keys for multi-word lead statuses.
-const LEAD_KEY_MAP = {
-  site_visited:  "siteVisited",
-  proposal_sent: "proposalSent",
-};
+const LEAD_KEY_MAP = { site_visited: "siteVisited", proposal_sent: "proposalSent" };
 const toCamel = (k) => k.replace(/_([a-z])/g, (_, c) => c.toUpperCase());
 const leadCount = (leads, key) => leads[LEAD_KEY_MAP[key] ?? toCamel(key)] ?? leads[key] ?? 0;
 
-const OFFER_STATUSES = [
-  { key: "pending",     color: "bg-amber-400" },
-  { key: "negotiating", color: "bg-orange-400" },
-  { key: "accepted",    color: "bg-emerald-500" },
-  { key: "rejected",    color: "bg-rose-400" },
-  { key: "expired",     color: "bg-slate-400" },
-  { key: "withdrawn",   color: "bg-slate-300" },
-];
+// Only genuine win/loss end-states get a status color — the rest (New, Contacted, Qualified...)
+// are just pipeline position, not a judgment, so they stay plain text per house convention.
+const STATUS_BADGE = { converted: "text-emerald-700 font-bold", accepted: "text-emerald-700 font-bold", lost: "text-rose-600", rejected: "text-rose-600" };
 
-function FunnelStep({ label, count, rate, rateLabel, color }) {
-  const width = Math.max(12, rate);
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-28 shrink-0 text-right text-[10px] font-black uppercase tracking-wide text-slate-500">{label}</div>
-      <div className="flex-1">
-        <div className="relative h-8 bg-slate-100">
-          <div
-            className={`${color} absolute left-0 top-0 h-full flex items-center px-3`}
-            style={{ width: `${width}%` }}
-          >
-            <span className="text-xs font-black text-white whitespace-nowrap">{count.toLocaleString()}</span>
-          </div>
-        </div>
-      </div>
-      <div className="w-24 shrink-0 text-[10px] text-slate-400">{rateLabel}</div>
-    </div>
-  );
-}
+const pct = (part, whole) => (whole > 0 ? Math.round((part / whole) * 100) : 0);
 
-function RateCard({ label, value, note }) {
-  return (
-    <div className="border border-slate-200 bg-white px-4 py-3">
-      <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{label}</div>
-      <div className="mt-1 text-2xl font-black tabular-nums text-[#0B3B2E]">{value}%</div>
-      {note && <div className="mt-0.5 text-[10px] text-slate-400">{note}</div>}
-    </div>
-  );
-}
+const statusCols = [{ label: "Status" }, { label: "Count", align: "right" }];
 
 export default function SaleConversionFunnel() {
   const T = useTerms("saleLeads", "saleOffers", "saleDeal", "saleDeals");
   const biz = useSelector((s) => s.company?.currentCompany?._id);
+  const company = useSelector((s) => s.company?.currentCompany);
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["sale-funnel", biz],
@@ -83,19 +44,34 @@ export default function SaleConversionFunnel() {
   const offers = data?.offers ?? {};
   const deals  = data?.deals  ?? {};
   const rates  = data?.rates  ?? {};
+  const baseline = leads.total || 0;
 
-  const company = useSelector((s) => s.company?.currentCompany);
+  const stageRows = useMemo(() => [
+    { name: T.saleLeads, count: leads.total ?? 0, fromPrev: "Starting point", ofTotal: 100 },
+    { name: T.saleOffers, count: offers.total ?? 0, fromPrev: `${rates.leadsToOffers ?? 0}%`, ofTotal: pct(offers.total ?? 0, baseline) },
+    { name: T.saleDeals, count: deals.total ?? 0, fromPrev: `${rates.offersToDeals ?? 0}%`, ofTotal: pct(deals.total ?? 0, baseline) },
+    { name: `${T.saleDeals} Closed`, count: deals.closed ?? 0, fromPrev: `${rates.dealsToClose ?? 0}%`, ofTotal: pct(deals.closed ?? 0, baseline) },
+  ], [T, leads.total, offers.total, deals.total, deals.closed, rates, baseline]);
+
+  const leadStatusRows = useMemo(() => [
+    ...LEAD_STATUSES.map((key) => ({ key, label: cap(key), count: leadCount(leads, key) })),
+    ...(leads.other > 0 ? [{ key: "other", label: "Custom stages", count: leads.other }] : []),
+  ], [leads]);
+
+  const offerStatusRows = useMemo(() => OFFER_STATUSES.map((key) => ({ key, label: cap(key), count: offers[key] ?? 0 })), [offers]);
+
+  const buildFunnelPrintRows = () => [
+    ...stageRows.map((r) => ({ name: r.name, count: String(r.count), note: r.fromPrev })),
+    ...leadStatusRows.map((r) => ({ name: `   ${T.saleLeads}: ${r.label}`, count: String(r.count), note: "" })),
+    ...offerStatusRows.map((r) => ({ name: `   ${T.saleOffers}: ${r.label}`, count: String(r.count), note: "" })),
+  ];
+  const funnelColumns = [
+    { label: "Stage", value: (r) => r.name },
+    { label: "Count", value: (r) => r.count },
+    { label: "Conversion", value: (r) => r.note },
+  ];
+
   const printReport = () => {
-    const stage = (name, count, note) => ({ name, count: String(count ?? 0), note });
-    const rows = [
-      stage(T.saleLeads, leads.total, "Starting point"),
-      stage(T.saleOffers, offers.total, `${rates.leadsToOffers ?? 0}% of ${T.saleLeads.toLowerCase()}`),
-      stage(T.saleDeals, deals.total, `${rates.offersToDeals ?? 0}% of ${T.saleOffers.toLowerCase()}`),
-      stage(`${T.saleDeals} closed`, deals.closed, `${rates.dealsToClose ?? 0}% of ${T.saleDeals.toLowerCase()}`),
-      ...LEAD_STATUSES.map(({ key }) => stage(`   ${T.saleLeads}: ${cap(key)}`, leadCount(leads, key), "")),
-      ...(leads.other > 0 ? [stage(`   ${T.saleLeads}: Custom stages`, leads.other, "")] : []),
-      ...OFFER_STATUSES.map(({ key }) => stage(`   ${T.saleOffers}: ${cap(key)}`, offers[key], "")),
-    ];
     printNow({
       title: "Conversion Funnel",
       subtitle: `Pipeline from ${T.saleLeads.toLowerCase()} to closed ${T.saleDeals.toLowerCase()} as at ${shortDate(new Date())}`,
@@ -112,147 +88,119 @@ export default function SaleConversionFunnel() {
         { label: "Count", align: "right", value: (r) => r.count },
         { label: "Conversion", value: (r) => r.note },
       ],
-      rows,
+      rows: buildFunnelPrintRows(),
     });
   };
 
-  const maxCount = Math.max(leads.total || 0, offers.total || 0, deals.total || 0, 1);
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportToExcel(funnelColumns, buildFunnelPrintRows(), "conversion-funnel");
+    setExporting(false);
+  };
 
   return (
     <PropertySaleShell>
-      <SaleFilterBar
-        leading={
-          <span className="shrink-0 font-mono text-[10px] font-black text-slate-500">
-            {leads.total ?? 0}L → {offers.total ?? 0}O → {deals.total ?? 0}D
-          </span>
-        }
-        trailing={
-          <>
-            <SalePrintButton onClick={printReport} disabled={isLoading} />
-            <button
-              onClick={() => refetch()}
-              disabled={isFetching}
-              className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
-            >
-              {isFetching ? "…" : "Refresh"}
-            </button>
-          </>
-        }
-      />
-
-      {isLoading ? (
-        <div className="py-12 text-center text-xs text-slate-400">Loading funnel…</div>
-      ) : (
-        <div className="space-y-6 px-1 pb-4">
-          {/* KPI cards */}
-          <div className="grid grid-cols-3 gap-2">
-            <RateCard label={`${T.saleLeads} → ${T.saleOffers}`} value={rates.leadsToOffers ?? 0} note={`${offers.total} of ${leads.total} ${T.saleLeads.toLowerCase()}`} />
-            <RateCard label={`${T.saleOffers} → ${T.saleDeals}`} value={rates.offersToDeals ?? 0} note={`${deals.total} of ${offers.total} ${T.saleOffers.toLowerCase()}`} />
-            <RateCard label={`${T.saleDeals} Closed`} value={rates.dealsToClose ?? 0} note={`${deals.closed} of ${deals.total} ${T.saleDeals.toLowerCase()}`} />
-          </div>
-
-          {/* Funnel bars */}
-          <div className="border border-slate-200 bg-white px-4 py-4 space-y-1.5">
-            <div className="mb-3 text-[10px] font-black uppercase tracking-wide text-slate-500">Pipeline Funnel</div>
-            <FunnelStep
-              label={T.saleLeads}
-              count={leads.total || 0}
-              rate={100}
-              color="bg-[#0B3B2E]"
-              rateLabel="Starting point"
-            />
-            <FunnelStep
-              label={T.saleOffers}
-              count={offers.total || 0}
-              rate={maxCount > 0 ? Math.round(((offers.total || 0) / maxCount) * 100) : 0}
-              color="bg-violet-500"
-              rateLabel={`${rates.leadsToOffers ?? 0}% conversion`}
-            />
-            <FunnelStep
-              label={T.saleDeals}
-              count={deals.total || 0}
-              rate={maxCount > 0 ? Math.round(((deals.total || 0) / maxCount) * 100) : 0}
-              color="bg-emerald-500"
-              rateLabel={`${rates.offersToDeals ?? 0}% conversion`}
-            />
-            <FunnelStep
-              label="Closed"
-              count={deals.closed || 0}
-              rate={maxCount > 0 ? Math.round(((deals.closed || 0) / maxCount) * 100) : 0}
-              color="bg-emerald-700"
-              rateLabel={`${rates.dealsToClose ?? 0}% of deals`}
-            />
-          </div>
-
-          {/* Value summary */}
-          <div className="grid grid-cols-2 gap-2">
-            <div className="border border-slate-200 bg-white px-4 py-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">Active {T.saleDeal} Value</div>
-              <div className="mt-1 text-lg font-black tabular-nums text-[#0B3B2E]">{fmtKES(deals.activeValue ?? 0)}</div>
-              <div className="mt-0.5 text-[10px] text-slate-400">{deals.active} active deal{deals.active !== 1 ? "s" : ""}</div>
+      <div className="flex h-full flex-col gap-1.5">
+        <SaleFilterBar
+          leading={
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                [T.saleLeads, leads.total ?? 0],
+                [T.saleOffers, offers.total ?? 0],
+                [T.saleDeals, deals.total ?? 0],
+                ["Closed", deals.closed ?? 0],
+                [`Active ${T.saleDeal} Value`, fmtKES(deals.activeValue ?? 0)],
+                [`Closed ${T.saleDeal} Value`, fmtKES(deals.closedValue ?? 0)],
+              ].map(([lbl, val]) => (
+                <span key={lbl} className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                  {lbl}: <span className="text-slate-900">{val}</span>
+                </span>
+              ))}
             </div>
-            <div className="border border-emerald-200 bg-emerald-50 px-4 py-3">
-              <div className="text-[10px] font-black uppercase tracking-wide text-emerald-600">Closed {T.saleDeal} Value</div>
-              <div className="mt-1 text-lg font-black tabular-nums text-emerald-700">{fmtKES(deals.closedValue ?? 0)}</div>
-              <div className="mt-0.5 text-[10px] text-emerald-600">{deals.closed} closed deal{deals.closed !== 1 ? "s" : ""}</div>
-            </div>
-          </div>
+          }
+          trailing={
+            <>
+              <SalePrintButton onClick={printReport} disabled={isLoading} />
+              <SaleExportButton onClick={exportReport} busy={exporting} disabled={isLoading} />
+              <button
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="inline-flex items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3] disabled:opacity-50"
+              >
+                {isFetching ? "…" : "Refresh"}
+              </button>
+            </>
+          }
+        />
 
-          {/* Breakdown tables */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Leads by status */}
-            <div className="border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">{T.saleLeads} by Status</div>
-              <table className="w-full text-xs">
-                <tbody>
-                  {LEAD_STATUSES.map(({ key, color }) => (
-                    <tr key={key} className="border-b border-slate-50">
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`inline-block h-2 w-2 shrink-0 ${color}`} />
-                          <span className="text-slate-700">{cap(key)}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{leadCount(leads, key).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                  {(leads.other ?? 0) > 0 && (
-                    <tr className="border-b border-slate-50">
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-block h-2 w-2 shrink-0 bg-slate-400" />
-                          <span className="text-slate-700">Custom stages</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{leads.other.toLocaleString()}</td>
-                    </tr>
+        {isLoading ? (
+          <div className="flex flex-1 items-center justify-center text-xs text-slate-400">Loading funnel…</div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
+            {/* Pipeline stages */}
+            <div className="flex-none border border-slate-200 bg-white shadow-sm">
+              <MilikTable
+                columns={[
+                  { label: "Stage" },
+                  { label: "Count", align: "right" },
+                  { label: "Conversion from previous", align: "right" },
+                  { label: "% of total", align: "right" },
+                ]}
+                rows={stageRows}
+                rowKey="name"
+                loading={false}
+                empty="No pipeline activity yet."
+                renderRow={(r) => (
+                  <>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900 normal-case">{r.name}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black tabular-nums text-slate-900">{r.count.toLocaleString()}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right tabular-nums text-slate-600">{r.fromPrev}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums text-slate-600">{r.ofTotal}%</td>
+                  </>
+                )}
+              />
+            </div>
+
+            {/* Status breakdowns */}
+            <div className="grid flex-none grid-cols-1 gap-1.5 sm:grid-cols-2">
+              <div className="border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-800">{T.saleLeads} by Status</div>
+                <MilikTable
+                  columns={statusCols}
+                  rows={leadStatusRows}
+                  rowKey="key"
+                  loading={false}
+                  empty="No leads yet."
+                  renderRow={(r) => (
+                    <>
+                      <td className={`px-3 py-1.5 border-r border-gray-100 normal-case ${STATUS_BADGE[r.key] || "text-slate-700"}`}>{r.label}</td>
+                      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-900">{r.count.toLocaleString()}</td>
+                    </>
                   )}
-                </tbody>
-              </table>
-            </div>
+                />
+              </div>
 
-            {/* Offers by status */}
-            <div className="border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-slate-500">{T.saleOffers} by Status</div>
-              <table className="w-full text-xs">
-                <tbody>
-                  {OFFER_STATUSES.map(({ key, color }) => (
-                    <tr key={key} className="border-b border-slate-50">
-                      <td className="px-3 py-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`inline-block h-2 w-2 shrink-0 ${color}`} />
-                          <span className="text-slate-700">{cap(key)}</span>
-                        </div>
-                      </td>
-                      <td className="px-3 py-1.5 text-right font-mono font-semibold tabular-nums">{(offers[key] ?? 0).toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-black uppercase tracking-wide text-slate-800">{T.saleOffers} by Status</div>
+                <MilikTable
+                  columns={statusCols}
+                  rows={offerStatusRows}
+                  rowKey="key"
+                  loading={false}
+                  empty="No offers yet."
+                  renderRow={(r) => (
+                    <>
+                      <td className={`px-3 py-1.5 border-r border-gray-100 normal-case ${STATUS_BADGE[r.key] || "text-slate-700"}`}>{r.label}</td>
+                      <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-900">{r.count.toLocaleString()}</td>
+                    </>
+                  )}
+                />
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </PropertySaleShell>
   );
 }

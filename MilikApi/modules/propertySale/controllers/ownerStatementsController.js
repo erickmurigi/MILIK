@@ -43,6 +43,30 @@ export const createDraftStatement = async (req, res, next) => {
       return next(createError(409, "This period already has an approved statement — create a new period or a later version (not yet supported) instead"));
     }
 
+    // Overlap guard, scoped per owner (not per owner+project) — an "all projects" statement already
+    // covers everything a later per-project one would, so tracking the cutoff per-owner is the only
+    // choice that can never let two approved statements double-count the same transaction. A new
+    // period must start strictly after the latest approved statement's end, mirroring the Landlord
+    // Statement side's cutoff enforcement. Runs even when `existing` is a still-draft match, since an
+    // unrelated approval made after that draft was first created could have made its period stale.
+    const latestApproved = await SaleOwnerStatement.findOne({ business, owner: ownerId, status: "approved" })
+      .sort({ periodEnd: -1 }).select("periodEnd statementNumber").lean();
+    if (latestApproved && start <= latestApproved.periodEnd) {
+      return next(createError(400, `This period overlaps the already-approved statement ${latestApproved.statementNumber} (through ${latestApproved.periodEnd.toISOString().slice(0, 10)}) — pick a start date after that.`));
+    }
+
+    // Regenerating for a different date range shouldn't pile up abandoned attempts — only one
+    // unapproved draft per owner+project is kept at a time, so "Generate" always replaces whatever
+    // draft the user was previously exploring instead of leaving it behind as clutter.
+    if (!existing) {
+      const staleDrafts = await SaleOwnerStatement.find({ business, owner: ownerId, project: projectId || null, status: "draft" }).select("_id").lean();
+      if (staleDrafts.length) {
+        const staleIds = staleDrafts.map((d) => d._id);
+        await SaleOwnerStatementLine.deleteMany({ statement: { $in: staleIds } });
+        await SaleOwnerStatement.deleteMany({ _id: { $in: staleIds } });
+      }
+    }
+
     const { lines, totals } = await generateOwnerStatementData({ businessId: business, ownerId, projectId, periodStart: start, periodEnd: end });
 
     let statement = existing;
@@ -106,6 +130,24 @@ export const listStatements = async (req, res, next) => {
   }
 };
 
+// Discards an unapproved draft the user doesn't want to keep. Approved statements are rejected here
+// explicitly (clearer message) even though the model's own pre("findOneAndDelete") hook already
+// blocks it as a second line of defense.
+export const deleteDraftStatement = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const statement = await SaleOwnerStatement.findOne({ _id: req.params.id, business });
+    if (!statement) return next(createError(404, "Statement not found"));
+    if (statement.status === "approved") return next(createError(400, "Approved statements cannot be deleted"));
+
+    await SaleOwnerStatementLine.deleteMany({ statement: statement._id });
+    await statement.deleteOne();
+    res.status(200).json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const approveStatement = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
@@ -117,6 +159,32 @@ export const approveStatement = async (req, res, next) => {
     statement.status = "approved";
     statement.approvedAt = new Date();
     statement.approvedBy = userId;
+    await statement.save();
+
+    const populated = await populateStatement(SaleOwnerStatement.findById(statement._id)).lean();
+    res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Reverses approval back to "draft", for correcting a statement that was approved too soon. Approving
+// posts no GL entries of its own (it's a pure reporting freeze), so this is a plain status flip — never
+// a ledger reversal — and the model's own guard (REVERSAL_ALLOWED_PATHS) ensures only status/approval
+// bookkeeping fields can change here, never the frozen financial figures. The period then becomes
+// freely regeneratable again, and (since it's no longer "approved") no longer counts as the owner's
+// overlap-guard cutoff for new drafts.
+export const reverseStatementApproval = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const statement = await SaleOwnerStatement.findOne({ _id: req.params.id, business });
+    if (!statement) return next(createError(404, "Statement not found"));
+    if (statement.status !== "approved") return next(createError(400, "Only an approved statement can be reversed"));
+
+    statement.status = "draft";
+    statement.reversedAt = new Date();
+    statement.reversedBy = userId;
     await statement.save();
 
     const populated = await populateStatement(SaleOwnerStatement.findById(statement._id)).lean();

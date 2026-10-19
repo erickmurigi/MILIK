@@ -12,7 +12,7 @@ const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-KE", { day: "2-di
 
 // Right-hand detail panel of the Projects list (same pattern as the Listings panel): summary, photos, quick actions.
 export default function SaleProjectPanel({ project, onClose, onOpen, onEdit, onChanged }) {
-  const T = useTerms("saleProject", "saleUnits", "saleAgent");
+  const T = useTerms("saleProject", "saleUnits", "saleAgent", "saleAdvocate");
   const [busy, setBusy] = useState(false);
   const u = project.units || {};
 
@@ -47,6 +47,7 @@ export default function SaleProjectPanel({ project, onClose, onOpen, onEdit, onC
   const rows = [
     ["Location", [project.town, project.county].filter(Boolean).join(", ") || project.location],
     [T.saleAgent, project.assignedAgent?.fullName],
+    [T.saleAdvocate, project.assignedAdvocate?.fullName],
     [T.saleUnits, `${u.total || 0} (${u.available || 0} available)`],
     ["Sold", `${u.sold || 0} · ${fmtPct(project.sellThrough)} sell-through`],
     ["Value", fmtKES(project.value?.total || 0)],
@@ -70,18 +71,18 @@ export default function SaleProjectPanel({ project, onClose, onOpen, onEdit, onC
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleProject} Details</div>
-          <SaleProjectProgressBar units={u} className="mb-3" />
-          <div className="space-y-1.5">
+        <div className="border-b border-slate-100 px-4 py-2.5">
+          <div className="mb-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">{T.saleProject} Details</div>
+          <SaleProjectProgressBar units={u} className="mb-2.5" />
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             {rows.map(([label, val]) => (
-              <div key={label} className="flex items-baseline gap-2">
-                <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-                <span className="text-xs text-slate-800">{val}</span>
+              <div key={label} className="min-w-0">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</div>
+                <div className="truncate text-xs font-semibold text-slate-800">{val}</div>
               </div>
             ))}
           </div>
-          {project.description && <p className="mt-3 text-[11px] leading-relaxed text-slate-500">{project.description}</p>}
+          {project.description && <p className="mt-2.5 text-[11px] leading-relaxed text-slate-500">{project.description}</p>}
         </div>
 
         <SalePhotoGallery

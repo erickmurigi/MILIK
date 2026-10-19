@@ -15,7 +15,15 @@ const saleBuyerSchema = new mongoose.Schema(
     // Free-form: lead sources are admin-configurable in Sale Settings and carry over on conversion
     source: { type: String, trim: true, default: "walk_in" },
     kycStatus: { type: String, enum: KYC_STATUSES, default: "pending" },
+    // Legacy: a free-text label with no file behind it (kept so existing buyers' entries keep showing).
+    // New uploads go into kycFiles instead — an actual file on disk, retrievable in any session.
     kycDocuments: [{ type: String, trim: true }],
+    kycFiles: [{
+      url:        { type: String, required: true },
+      name:       { type: String, required: true, trim: true },
+      size:       { type: Number, default: 0 },
+      uploadedAt: { type: Date, default: Date.now },
+    }],
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

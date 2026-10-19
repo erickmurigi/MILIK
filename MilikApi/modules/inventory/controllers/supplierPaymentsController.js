@@ -4,6 +4,7 @@ import { createError } from "../../../utils/error.js";
 import { resolveActiveBusinessId, currentUserId } from "../services/inventoryScope.js";
 import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postSupplierPaymentLedger, reverseSupplierPaymentLedger } from "../services/inventoryAccountingService.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 const populatePayment = (q) =>
   q
@@ -76,6 +77,13 @@ export const createSupplierPayment = async (req, res, next) => {
     });
 
     try {
+      await claimPaymentReference({ business, reference: payment.reference, sourceModel: "InvSupplierPayment", sourceId: payment._id });
+    } catch (refErr) {
+      await InvSupplierPayment.deleteOne({ _id: payment._id });
+      return next(refErr);
+    }
+
+    try {
       await postSupplierPaymentLedger({ businessId: business, payment, userId });
     } catch (err) {
       console.error("[INV GL] postSupplierPaymentLedger failed:", err);
@@ -101,6 +109,7 @@ export const voidSupplierPayment = async (req, res, next) => {
     payment.voidedBy  = userId;
     payment.updatedBy = userId;
     await payment.save();
+    await releasePaymentReference({ business, reference: payment.reference, sourceModel: "InvSupplierPayment", sourceId: payment._id }).catch(() => {});
 
     try {
       await reverseSupplierPaymentLedger({ businessId: business, paymentId: payment._id, userId });

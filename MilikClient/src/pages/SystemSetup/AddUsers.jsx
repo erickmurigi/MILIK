@@ -123,21 +123,17 @@ const makeDefaultAssignment = (company) => {
   };
 };
 
-// Property Sales' granular permission grants (moduleRolePresets.js) are stored under camelCase
-// resource keys (e.g. 'saleDeals'), but the actual API routes check kebab-case keys instead
-// (e.g. "sale-deals") and several routes check resources — CRM leads/activities, owners, owner
-// statements, dashboard, advocates, advocate-payments — that don't exist in the permission
-// catalog at all. Net effect: for every existing propertySale role, the granular grants never
-// match anything at the API layer, so moduleAccess ('Full access' below) is the ONLY thing that
-// actually gates these routes server-side — explicit per-resource restrictions are cosmetic
-// until that catalog is reconciled with the routes (a separate, larger piece of work).
-//
-// That makes 'Full access' unsafe specifically for the Advocate role: it's meant for an external
-// third party and should never get create/update/delete/approve/pay access across the module.
-// Scoping ONLY this roleKey to 'View only' closes that gap without touching any other profile's
-// existing behavior (Sales Agent etc. have the same underlying issue, but changing their access
-// today would newly block real write actions they already rely on, for no safety gain — that's a
-// call for whoever does the fuller permission-catalog fix, not a side effect of adding Advocate).
+// Property Sales' granular permission grants (moduleRolePresets.js / accessMatrix.js) now use
+// kebab-case resource keys matching exactly what the API routes check (e.g. "sale-deals"), so an
+// explicit grant like the Advocate role's does take effect on its own — hasCompanyActionPermission
+// returns true immediately on an explicit match, regardless of moduleAccess level (see
+// utils/permissions.js). 'View only' is kept here anyway, deliberately, as defense-in-depth specific
+// to the Advocate role: it's meant for an external third party, so anything NOT in its short explicit
+// grant list (create/update/delete/approve/pay on the rest of the module) should stay blocked even if
+// that grant list is ever extended carelessly — 'Full access' would remove that backstop entirely.
+// Other profiles (Sales Agent etc.) don't get this treatment because their explicit grants are already
+// the complete, intended scope of what they need; there's no "rest of the module" they should be
+// defended against the way an external advocate's account should be.
 const VIEW_ONLY_PROPERTY_SALE_ROLES = new Set(['advocate']);
 
 const applyProfileToAssignment = (profile, assignment, company) => {

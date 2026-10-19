@@ -30,7 +30,12 @@ import { LISTING_STATUS_MAP } from "../../utils/saleListingConstants";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import SaleListingAgent from "./SaleListingAgent";
 import { listingAgentText } from "../../utils/saleAgent";
+import SaleListingAdvocate from "./SaleListingAdvocate";
+import { listingAdvocateText } from "../../utils/saleAdvocate";
 import { blankListingForm, customFieldRows, listingFormFromRow, typeDefOf } from "../../utils/saleListingForm";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, money, printAfterFetch } from "./salePrint";
 
 // Lazy-load the xlsx-backed helpers only when the Import modal is actually used.
 const parseSaleListingsExcel = (file) => import("../../utils/excelTemplates").then((m) => m.parseSaleListingsExcel(file));
@@ -42,7 +47,7 @@ const PAGE_SIZE      = 50;
 
 const STATUS_OPTIONS    = STATUSES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 
-const listingTableCols = (T, withProject) => [
+const listingTableCols = (T, withProject, withAdvocate) => [
   { label: `${T.saleListing} No.` },
   { label: "Title" },
   ...(withProject ? [{ label: `${T.saleProject} / ${T.saleUnit}` }] : []),
@@ -50,6 +55,7 @@ const listingTableCols = (T, withProject) => [
   { label: "Location" },
   { label: "Asking Price", align: "right" },
   { label: T.saleAgent },
+  ...(withAdvocate ? [{ label: T.saleAdvocate }] : []),
   { label: "Status" },
 ];
 
@@ -71,7 +77,7 @@ const renderListingHead = (row) => (
   </>
 );
 
-const renderListingTail = (row) => (
+const renderListingTail = (row, withAdvocate) => (
   <>
     <td className="px-3 py-1.5 border-r border-gray-100">
       <span className="capitalize text-slate-500">{(row.propertyType || "—").replace(/_/g, " ")}</span>
@@ -83,6 +89,11 @@ const renderListingTail = (row) => (
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
       <SaleListingAgent row={row} />
     </td>
+    {withAdvocate && (
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
+        <SaleListingAdvocate row={row} />
+      </td>
+    )}
     <td className="px-3 py-1.5">
       <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
     </td>
@@ -92,10 +103,10 @@ const renderListingTail = (row) => (
 // The link must not select the row underneath it
 const stopRowClick = (e) => e.stopPropagation();
 
-const renderListingRow = (row) => <>{renderListingHead(row)}{renderListingTail(row)}</>;
+const renderListingRow = (row, withAdvocate) => <>{renderListingHead(row)}{renderListingTail(row, withAdvocate)}</>;
 
 // Same row with a Project / Unit cell (companies that sell in projects)
-const renderListingRowWithProject = (row) => (
+const renderListingRowWithProject = (row, withAdvocate) => (
   <>
     {renderListingHead(row)}
     <td className="px-3 py-1.5 border-r border-gray-100 max-w-[180px]">
@@ -109,13 +120,13 @@ const renderListingRowWithProject = (row) => (
         </Link>
       ) : <span className="text-slate-300">—</span>}
     </td>
-    {renderListingTail(row)}
+    {renderListingTail(row, withAdvocate)}
   </>
 );
 
 
 const SaleListings = () => {
-  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents", "saleUnit", "saleProject", "saleProjects");
+  const T = useTerms("saleListing", "saleListings", "saleAgent", "saleAgents", "saleAdvocate", "saleUnit", "saleProject", "saleProjects");
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -136,10 +147,11 @@ const SaleListings = () => {
   const debouncedSearch = useDebounce(search, 400);
   const biz = currentCompany?._id;
 
-  const { saleSettings, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, propertyTypeDefs, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
+  const { saleSettings, propertyTypeOptions: PROPERTY_TYPE_OPTIONS, propertyTypeDefs, agentFormOptions, agentFilterOptions, advocateFormOptions } = useSaleFormOptions(biz);
 
   // Companies that sell in projects see units in this list too (with a Project / Unit column) and can narrow it
   const usesProjects = !!saleSettings?.useProjects;
+  const usesAdvocates = !!saleSettings?.useAdvocates;
   const scope = usesProjects ? scopeFilt : "";
   // The import template lists the company's own property types and one column per custom field of those types
   const importTemplateOptions = useMemo(() => {
@@ -154,7 +166,11 @@ const SaleListings = () => {
     }));
     return { types: types.map((t) => t.name.toLowerCase()), extraColumns };
   }, [saleSettings]);
-  const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T, usesProjects), [T, usesProjects]);
+  const LISTING_TABLE_COLS = useMemo(() => listingTableCols(T, usesProjects, usesAdvocates), [T, usesProjects, usesAdvocates]);
+  const renderRow = useCallback(
+    (row) => (usesProjects ? renderListingRowWithProject(row, usesAdvocates) : renderListingRow(row, usesAdvocates)),
+    [usesProjects, usesAdvocates]
+  );
   const SCOPE_OPTIONS = useMemo(() => [
     { value: "none", label: "Standalone only" },
     { value: "any", label: `In ${T.saleProjects.toLowerCase()} only` },
@@ -253,17 +269,63 @@ const SaleListings = () => {
     </div>
   ), [printListing, openEdit, statusBusy, handleStatusChange, handleDelete]);
 
+  const buildReportFilters = () => ({
+    business: biz, search: debouncedSearch, status: statusFilt, propertyType: typeFilt, agentId: agentFilt,
+    ...(scope && { project: scope }),
+  });
+  const reportColumns = [
+    { label: `${T.saleListing} No.`, value: (r) => r.listingNumber },
+    { label: "Title", value: (r) => r.title },
+    { label: "Type", value: (r) => (r.propertyType || "—").replace(/_/g, " ") },
+    { label: "Location", value: (r) => [r.town, r.county].filter(Boolean).join(", ") || r.location || "—" },
+    { label: "Asking Price (KES)", align: "right", value: (r) => money(r.askingPrice) },
+    { label: T.saleAgent, value: (r) => r.assignedAgent?.fullName || "—" },
+    ...(usesAdvocates ? [{ label: T.saleAdvocate, value: (r) => r.assignedAdvocate?.fullName || "—" }] : []),
+    { label: "Status", value: (r) => r.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilt && `Status: ${statusFilt.replace(/_/g, " ")}`,
+      typeFilt && `Type: ${typeFilt.replace(/_/g, " ")}`,
+      agentFilt && agentFilterOptions.find((o) => o.value === agentFilt)?.label,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listListings, buildReportFilters()), ({ rows }) => ({
+      title: T.saleListings,
+      subtitle: described.join(" · ") || `All ${T.saleListings.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listListings, buildReportFilters()), ({ rows }) => ({
+      filename: "listings",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   const resetFilters = () => { setSearch(""); setStatusFilt(""); setTypeFilt(""); setAgentFilt(""); setScopeFilt(""); setPage(1); };
 
   return (
     <PropertySaleShell>
       {/* Filter bar */}
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} listing{total !== 1 ? "s" : ""}</span>}
         onReset={resetFilters}
         activeCount={[search, statusFilt, typeFilt, agentFilt, scope].filter(Boolean).length}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <ListToolbar.Button
               variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
@@ -303,11 +365,11 @@ const SaleListings = () => {
             minWidth={720}
             onRowClick={handleRowClick}
             isSelected={isRowSelected}
-            renderRow={usesProjects ? renderListingRowWithProject : renderListingRow}
+            renderRow={renderRow}
             renderActions={renderListingActions}
           />
 
-          <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
+          <PaginationBar page={page} pages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} label={T.saleListings.toLowerCase()} />
         </div>
 
         {/* Dismiss overlay — clicking outside the panel closes it */}
@@ -325,6 +387,7 @@ const SaleListings = () => {
               ["Size", selected.size ? `${selected.size} ${selected.sizeUnit}` : null],
               ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
               [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
+              ...(usesAdvocates ? [[T.saleAdvocate, listingAdvocateText(selected, T.saleProject.toLowerCase())]] : []),
               ...customFieldRows(selected, typeDefOf(propertyTypeDefs, selected).fields),
             ]}
             editLabel={`Edit ${T.saleListing}`}
@@ -346,6 +409,7 @@ const SaleListings = () => {
           biz={biz}
           propertyTypeOptions={PROPERTY_TYPE_OPTIONS}
           agentFormOptions={agentFormOptions}
+          advocateFormOptions={advocateFormOptions}
           invalidate={invalidate}
           onClose={() => setListingModal(null)}
         />

@@ -21,6 +21,7 @@ import { postCarWashPaymentLedger, reverseCarWashPaymentLedger, reverseCarWashTo
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { recomputeCustomerStats } from "../services/customerStatsService.js";
 import { describeStkOutcome } from "../services/stkOutcome.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 export const AMOUNT_TOLERANCE = 0.01; // KES 0.01 tolerance for all amount comparisons
 const PAYMENT_METHODS = new Set(["cash", "mpesa", "bank", "card", "other"]);
@@ -220,6 +221,16 @@ export const recordPayment = async (req, res, next) => {
       createdBy: userId,
       updatedBy: userId,
     });
+
+    // System-wide guard — covers every method's reference, not just the mpesa-only check above.
+    // Claimed right after creation, before any GL/job-status work, so a duplicate rolls back cleanly.
+    try {
+      await claimPaymentReference({ business, reference: payment.reference, sourceModel: "CarWashPayment", sourceId: payment._id });
+    } catch (refErr) {
+      await payment.deleteOne();
+      return next(refErr);
+    }
+
     const { job: updatedJob, paidAmount: totalEffectivePaid } = await refreshJobPaymentStatus(business, job._id, job);
 
     // Persist M-Pesa payer phone in-memory now (needed by accrual + SMS below).
@@ -348,6 +359,7 @@ export const deletePayment = async (req, res, next) => {
     const deletedPaymentRef = payment.reference;
     const deletedPaymentMethod = payment.method;
     await payment.deleteOne();
+    await releasePaymentReference({ business, reference: deletedPaymentRef, sourceModel: "CarWashPayment", sourceId: deletedPaymentId }).catch(() => {});
 
     // Clean up overpayment artifacts so no phantom credits remain after deletion
     // 1. CarWashCustomerCredit â€” created when payment exceeded outstanding (manual OR M-Pesa cash-customer overpayment)

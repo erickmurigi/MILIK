@@ -121,6 +121,8 @@ export const listProjects = async (req, res, next) => {
       const rx = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ name: rx }, { projectNumber: rx }, { location: rx }, { town: rx }];
     }
+    // advocate-scoped user (mandatory, ungated) can only see projects they're the default advocate for
+    if (req.saleAdvocateId) filter.assignedAdvocate = req.saleAdvocateId;
 
     const [projects, total] = await Promise.all([
       SaleProject.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("assignedAgent", AGENT_FIELDS).populate("owner", OWNER_FIELDS).populate("assignedAdvocate", ADVOCATE_FIELDS).lean(),
@@ -223,6 +225,11 @@ export const getProject = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const project = await findProject(business, req.params.id);
     if (!project) return next(createError(404, "Project not found"));
+    // advocate-scoped user (mandatory, ungated) can only see their own assigned project — not just filtered
+    // from a list, scoped out as 404 here too, matching every other advocate-scoped lookup in this module.
+    if (req.saleAdvocateId && String(project.assignedAdvocate || "") !== req.saleAdvocateId) {
+      return next(createError(404, "Project not found"));
+    }
 
     const units = await SaleListing.find({ business, project: project._id }).select("askingPrice listedDate status").lean();
     // Counts and values come from the units already loaded for the performance figures (no second query)
@@ -401,6 +408,9 @@ export const listProjectUnits = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const project = await findProject(business, req.params.id);
     if (!project) return next(createError(404, "Project not found"));
+    if (req.saleAdvocateId && String(project.assignedAdvocate || "") !== req.saleAdvocateId) {
+      return next(createError(404, "Project not found"));
+    }
 
     const filter = { business, project: project._id };
     if (UNIT_STATUSES.includes(req.query.status)) filter.status = req.query.status;

@@ -150,7 +150,7 @@ const routeNames = {
   '/sale/offers': 'Offers',
   '/sale/deals': 'Deals',
   '/sale/payments': 'Payments',
-  '/sale/commissions': 'Commissions',
+  '/sale/commissions': 'Broker Commissions',
   '/sale/reports': 'Reports',
   '/sale/reports/sales': 'Monthly Sales',
   '/sale/financials': 'GL & Accounts',

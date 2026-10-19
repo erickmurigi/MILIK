@@ -10,6 +10,7 @@ import {
   deleteProperty,
   getPropertyUnits,
   getPropertyTenants,
+  getPropertyCollectionSummary,
   bulkImportProperties,
   backfillPropertyAccounts,
   uploadPropertyImages,
@@ -46,6 +47,9 @@ router.get("/units/:id", verifyUser, getPropertyUnits)
 
 // Get property tenants
 router.get("/tenants/:id", verifyUser, getPropertyTenants)
+
+// Get property's this-month invoiced/collected + total arrears (mobile Tenants list)
+router.get("/collection-summary/:id", verifyUser, getPropertyCollectionSummary)
 
 // Listing photos
 router.post("/:id/images", verifyUser, imagesUpload.array("images", 15), uploadPropertyImages)

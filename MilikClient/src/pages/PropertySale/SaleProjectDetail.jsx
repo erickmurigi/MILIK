@@ -28,25 +28,27 @@ import SaleProjectUnitPanel from "./SaleProjectUnitPanel";
 import SaleProjectPerformance from "./SaleProjectPerformance";
 import SalePhotoGallery from "./SalePhotoGallery";
 import SaleListingAgent from "./SaleListingAgent";
+import SaleListingAdvocate from "./SaleListingAdvocate";
 import SaleProjectProgressBar from "./SaleProjectProgressBar";
 import { PROJECT_STATUS_MAP, STATUS_SWATCH, errorMessage, fmtPct, useProjectInvalidate } from "./SaleProjectShared";
 import { LISTING_STATUS_MAP, STATUS_LABEL, UNIT_STATUSES } from "../../utils/saleListingConstants";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 
-const TERM_KEYS = ["saleProject", "saleProjects", "saleUnit", "saleUnits", "saleListing", "saleListings", "saleAgent", "saleAgents", "saleDeal", "saleDeals", "saleOffers"];
+const TERM_KEYS = ["saleProject", "saleProjects", "saleUnit", "saleUnits", "saleListing", "saleListings", "saleAgent", "saleAgents", "saleAdvocate", "saleAdvocates", "saleDeal", "saleDeals", "saleOffers"];
 
-const unitTableCols = (T) => [
+const unitTableCols = (T, withAdvocate) => [
   { label: `${T.saleUnit} No.` },
   { label: "Block" },
   { label: "Type" },
   { label: "Size" },
   { label: "Asking Price", align: "right" },
   { label: T.saleAgent },
+  ...(withAdvocate ? [{ label: T.saleAdvocate }] : []),
   { label: "Status" },
 ];
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
-const renderUnitRow = (row) => (
+const renderUnitRow = (row, withAdvocate) => (
   <>
     <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.unitNumber || row.listingNumber}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.block || "—"}</td>
@@ -54,6 +56,9 @@ const renderUnitRow = (row) => (
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.size ? `${row.size} ${row.sizeUnit || ""}` : "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums text-slate-900">{fmtKES(row.askingPrice)}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600"><SaleListingAgent row={row} /></td>
+    {withAdvocate && (
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600"><SaleListingAdvocate row={row} /></td>
+    )}
     <td className="px-3 py-1.5"><StatusBadge status={row.status} map={LISTING_STATUS_MAP} /></td>
   </>
 );
@@ -85,12 +90,14 @@ const btnPrimary = "inline-flex items-center gap-1 bg-[#0B3B2E] px-3 py-1 text-[
 const SaleProjectDetail = () => {
   const { id } = useParams();
   const T = useTerms(...TERM_KEYS);
-  const UNIT_COLS = useMemo(() => unitTableCols(T), [T]);
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const biz = useSelector((s) => s.company?.currentCompany?._id);
   const invalidate = useProjectInvalidate(biz, id);
-  const { propertyTypeOptions, agentFormOptions } = useSaleFormOptions(biz);
+  const { propertyTypeOptions, agentFormOptions, saleSettings } = useSaleFormOptions(biz);
+  const usesAdvocates = !!saleSettings?.useAdvocates;
+  const UNIT_COLS = useMemo(() => unitTableCols(T, usesAdvocates), [T, usesAdvocates]);
+  const renderUnitRowBound = useCallback((row) => renderUnitRow(row, usesAdvocates), [usesAdvocates]);
 
   const [tab, setTab] = useState("units");
   const [photoBusy, setPhotoBusy] = useState(false);
@@ -305,6 +312,9 @@ const SaleProjectDetail = () => {
               {project.assignedAgent?.fullName && (
                 <div className="mt-0.5 text-[11px] text-slate-500">{T.saleAgent}: <span className="font-semibold text-slate-700">{project.assignedAgent.fullName}</span></div>
               )}
+              {usesAdvocates && project.assignedAdvocate?.fullName && (
+                <div className="mt-0.5 text-[11px] text-slate-500">{T.saleAdvocate}: <span className="font-semibold text-slate-700">{project.assignedAdvocate.fullName}</span></div>
+              )}
               {project.description && <div className="mt-0.5 max-w-3xl text-[11px] text-slate-400">{project.description}</div>}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -446,7 +456,7 @@ const SaleProjectDetail = () => {
                   minWidth={720}
                   onRowClick={handleRowClick}
                   isSelected={isSelected}
-                  renderRow={renderUnitRow}
+                  renderRow={renderUnitRowBound}
                 />
               )}
             </div>

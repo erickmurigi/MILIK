@@ -22,6 +22,8 @@ export default function SalesLayout() {
       <Stack.Screen name="deals/[id]"     options={{ title: T.saleDeal }} />
       <Stack.Screen name="listings/index" options={{ title: T.saleListings }} />
       <Stack.Screen name="listings/[id]"  options={{ title: T.saleListing }} />
+      <Stack.Screen name="commissions"         options={{ title: 'Commissions Due' }} />
+      <Stack.Screen name="overdue-instalments" options={{ title: 'Overdue Instalments' }} />
     </Stack>
   );
 }

@@ -10,6 +10,7 @@ import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from
 import { postSaleOwnerPayout } from "../services/propertySaleAccountingService.js";
 import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
 import { generateOwnerStatementData } from "../services/ownerStatementService.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 const resolveCashbook = async (businessId, cashbookId) => {
   if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
@@ -38,6 +39,21 @@ const resolveOwnerOutstandingBalance = async (business, ownerId) => {
     periodStart: new Date(0), periodEnd: new Date(),
   });
   return totals.netBalance;
+};
+
+// Live "what's owed right now" figure — not tied to any one statement (a payout isn't modeled as
+// belonging to a specific statement, only to the owner), so this is the honest answer to "has this
+// owner been paid" rather than trying to retroactively mark a frozen, already-approved statement paid.
+export const getOwnerOutstandingBalance = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const owner = await SaleOwner.findOne({ _id: req.params.ownerId, business }).select("_id").lean();
+    if (!owner) return next(createError(404, "Owner not found"));
+    const outstanding = round2(await resolveOwnerOutstandingBalance(business, owner._id));
+    res.status(200).json({ outstanding });
+  } catch (err) {
+    next(err);
+  }
 };
 
 export const listOwnerPayouts = async (req, res, next) => {
@@ -81,6 +97,9 @@ export const createOwnerPayout = async (req, res, next) => {
 
     const amount = Number(req.body.amount);
     if (!Number.isFinite(amount) || amount <= 0) return next(createError(400, "Amount must be a number greater than 0"));
+
+    const reference = String(req.body.reference || "").trim();
+    if (!reference) return next(createError(400, "A reference number is required"));
 
     // CGT is always the owner's own personal obligation to KRA, never a liability on this company's
     // books — withheld here purely for record-keeping (computed externally, e.g. via KRA iTax) and to
@@ -139,11 +158,22 @@ export const createOwnerPayout = async (req, res, next) => {
       source,
       advocate: advocateAcc?._id || null,
       cashbook: cashbookAcc?._id || null,
-      reference: req.body.reference || "",
+      reference,
       notes: req.body.notes || "",
       createdBy: userId,
       updatedBy: userId,
     });
+
+    // reference (payout to owner) and cgtReference (owner's own remittance to KRA) are two distinct
+    // real-world transactions, each guarded independently.
+    try {
+      await claimPaymentReference({ business, reference: payout.reference, sourceModel: "SaleOwnerPayout", sourceId: payout._id });
+      await claimPaymentReference({ business, reference: payout.cgtReference, sourceModel: "SaleOwnerPayout", sourceId: payout._id });
+    } catch (refErr) {
+      await releasePaymentReference({ business, reference: payout.reference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});
+      await SaleOwnerPayout.deleteOne({ _id: payout._id });
+      return next(refErr);
+    }
 
     try {
       await postSaleOwnerPayout({
@@ -156,6 +186,8 @@ export const createOwnerPayout = async (req, res, next) => {
       // GL failed — delete the payout so DB and ledger stay in sync (same rollback pattern used
       // throughout this module, e.g. advocateRemittancesController.js's createRemittance)
       await SaleOwnerPayout.deleteOne({ _id: payout._id });
+      await releasePaymentReference({ business, reference: payout.reference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});
+      await releasePaymentReference({ business, reference: payout.cgtReference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});
       return next(createError(422, `Owner payout saved but GL posting failed: ${glErr.message}. Payout has been rolled back.`));
     }
 

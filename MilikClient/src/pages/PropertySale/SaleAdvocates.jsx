@@ -18,6 +18,9 @@ import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
 import { getUsers } from "../../redux/apiCalls";
 import { selectAllUsers } from "../../redux/selectors";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
 
 const PAGE_SIZE = 50;
 
@@ -205,6 +208,43 @@ const SaleAdvocates = () => {
     </div>
   ), [printAdvocate, openEdit, handleDelete]);
 
+  const reportColumns = [
+    { label: `${T.saleAdvocate} No.`, value: (r) => r.advocateNumber },
+    { label: "Name", value: (r) => r.fullName },
+    { label: "Firm", value: (r) => r.firm || "—" },
+    { label: "Phone", value: (r) => r.phone || "—" },
+    { label: T.saleProjects, value: (r) => r.projectCount ?? 0 },
+    { label: "Status", value: (r) => r.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilter && `Status: ${statusFilter}`,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listAdvocates, { business: biz, search: debouncedSearch, status: statusFilter || undefined }), ({ rows }) => ({
+      title: T.saleAdvocates,
+      subtitle: described.join(" · ") || `All ${T.saleAdvocates.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listAdvocates, { business: biz, search: debouncedSearch, status: statusFilter || undefined }), ({ rows }) => ({
+      filename: "advocates",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
       <SaleFilterBar
@@ -213,6 +253,8 @@ const SaleAdvocates = () => {
         activeCount={[search, statusFilter].filter(Boolean).length}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-advocates", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
             </button>

@@ -15,6 +15,7 @@ import { nextSequenceNumber } from "../../../utils/sequenceService.js";
 import { postPosSaleLedger, reversePosSaleLedger } from "../services/inventoryAccountingService.js";
 import InvPaymentMethod from "../models/InvPaymentMethod.js";
 import { andInto, saleSearchFilter } from "../services/inventorySearch.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 const BUILT_IN_PAYMENT_CODES = new Set(["cash", "mpesa", "card", "credit"]);
 
@@ -231,6 +232,23 @@ export const createSale = async (req, res, next) => {
       status: "completed",
     });
 
+    // Each non-blank payment-leg ref is claimed independently — a sale can carry several
+    // (e.g. split cash + M-Pesa + card); a duplicate rolls back whatever was already claimed.
+    const claimedRefs = [];
+    try {
+      for (const p of sale.payments) {
+        if (!p.ref) continue;
+        await claimPaymentReference({ business, reference: p.ref, sourceModel: "POSSale", sourceId: sale._id });
+        claimedRefs.push(p.ref);
+      }
+    } catch (refErr) {
+      await Promise.all(claimedRefs.map((ref) =>
+        releasePaymentReference({ business, reference: ref, sourceModel: "POSSale", sourceId: sale._id }).catch(() => {})
+      ));
+      await POSSale.deleteOne({ _id: sale._id });
+      return next(refErr);
+    }
+
     // Deduct stock for tracked products — parallel across all lines
     await Promise.all(
       enrichedLines
@@ -303,6 +321,11 @@ export const voidSale = async (req, res, next) => {
     sale.voidedAt = new Date();
     sale.voidReason = String(voidReason).trim();
     await sale.save();
+    await Promise.all(
+      sale.payments.filter((p) => p.ref).map((p) =>
+        releasePaymentReference({ business, reference: p.ref, sourceModel: "POSSale", sourceId: sale._id }).catch(() => {})
+      )
+    );
 
     try {
       await reversePosSaleLedger({ businessId: business, sale, userId });

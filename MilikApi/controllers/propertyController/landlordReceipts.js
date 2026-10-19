@@ -13,6 +13,8 @@ import SequenceCounter from "../../models/SequenceCounter.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { claimPaymentReference, releasePaymentReference } from "../../services/paymentReferenceGuard.js";
+import { voucherReferenceKey } from "../../utils/voucherReference.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -306,6 +308,13 @@ export const createLandlordReceipt = async (req, res, next) => {
       updatedBy: actorUserId,
     });
 
+    try {
+      await claimPaymentReference({ business: businessId, reference: created.referenceNumber, sourceModel: "LandlordReceipt", sourceId: created._id });
+    } catch (refErr) {
+      await LandlordReceipt.deleteOne({ _id: created._id });
+      return next(refErr);
+    }
+
     await created.populate([
       { path: "landlord", select: "landlordName landlordCode email phoneNumber" },
       { path: "property", select: "propertyName propertyCode landlords" },
@@ -403,6 +412,9 @@ export const updateLandlordReceipt = async (req, res, next) => {
       fallbackErrorMessage: "Authenticated user is required for landlord receipt update.",
     });
 
+    const oldReferenceNumber = existing.referenceNumber;
+    const referenceChanged   = voucherReferenceKey(normalizedReference) !== voucherReferenceKey(oldReferenceNumber);
+
     existing.landlord = landlordId;
     existing.property = propertyId;
     existing.receiptDate = req.body?.receiptDate ? new Date(req.body.receiptDate) : existing.receiptDate;
@@ -425,7 +437,18 @@ export const updateLandlordReceipt = async (req, res, next) => {
       return next(createError(400, "Valid receipt date is required."));
     }
 
+    if (referenceChanged) {
+      try {
+        await claimPaymentReference({ business: businessId, reference: normalizedReference, sourceModel: "LandlordReceipt", sourceId: existing._id });
+      } catch (refErr) {
+        return next(refErr);
+      }
+    }
+
     await existing.save();
+    if (referenceChanged) {
+      await releasePaymentReference({ business: businessId, reference: oldReferenceNumber, sourceModel: "LandlordReceipt", sourceId: existing._id }).catch(() => {});
+    }
     await existing.populate([
       { path: "landlord", select: "landlordName landlordCode email phoneNumber" },
       { path: "property", select: "propertyName propertyCode landlords" },
@@ -685,6 +708,7 @@ export const deleteLandlordReceipt = async (req, res, next) => {
     }
 
     await LandlordReceipt.deleteOne({ _id: receipt._id });
+    await releasePaymentReference({ business: businessId, reference: receipt.referenceNumber, sourceModel: "LandlordReceipt", sourceId: receipt._id }).catch(() => {});
     return res.status(200).json({ success: true, message: "Landlord receipt deleted successfully." });
   } catch (error) {
     next(error);

@@ -77,19 +77,20 @@ export default function SalePhotoGallery({ images = [], busy = false, onUpload, 
             </div>
           ))}
         </div>
-      ) : (
-        <div className="mb-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 bg-slate-50/60 py-10">
-          <FaCamera size={28} className="text-slate-200" />
+      ) : !onUpload ? (
+        <div className="mb-3 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-200 bg-slate-50/60 py-8">
+          <FaCamera size={24} className="text-slate-200" />
           <div className="text-xs font-semibold text-slate-400">No photos yet</div>
-          {onUpload && <div className="px-4 text-center text-[9px] text-slate-300">{emptyHint}</div>}
         </div>
-      )}
+      ) : null}
 
       {onUpload && (
         <>
           <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden" onChange={handleFiles} />
+          {/* count === 0: this single dropzone IS the empty state too — no separate "No photos yet" box
+              stacked above it, which used to double up the visual weight of an otherwise-empty section. */}
           <div
-            className={`flex cursor-pointer flex-col items-center justify-center gap-1.5 border-2 border-dashed py-4 transition-colors ${busy ? "cursor-wait border-slate-200 bg-slate-50" : "border-[#B7C9C0] bg-[#F1F6F3]/60 hover:border-[#0B3B2E]/30 hover:bg-[#F1F6F3]"}`}
+            className={`flex cursor-pointer flex-col items-center justify-center gap-1 border-2 border-dashed transition-colors ${count === 0 ? "py-7" : "py-3"} ${busy ? "cursor-wait border-slate-200 bg-slate-50" : "border-[#B7C9C0] bg-[#F1F6F3]/60 hover:border-[#0B3B2E]/30 hover:bg-[#F1F6F3]"}`}
             onClick={() => !busy && fileRef.current?.click()}
           >
             {busy ? (
@@ -97,11 +98,17 @@ export default function SalePhotoGallery({ images = [], busy = false, onUpload, 
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#0B3B2E] border-t-transparent" />
                 <div className="text-[11px] font-bold text-[#0B3B2E]">Uploading…</div>
               </>
+            ) : count === 0 ? (
+              <>
+                <FaCamera size={22} className="text-[#0B3B2E]/40" />
+                <div className="text-[11px] font-bold text-[#0B3B2E]">No photos yet — click to upload</div>
+                <div className="px-4 text-center text-[9px] text-slate-400">{emptyHint}</div>
+              </>
             ) : (
               <>
-                <FaCamera size={18} className="text-[#0B3B2E]/40" />
-                <div className="text-[11px] font-bold text-[#0B3B2E]">Upload Photos</div>
-                <div className="text-[9px] text-slate-400">Click to select &bull; JPEG, PNG, WebP &bull; 10 MB each</div>
+                <FaCamera size={14} className="text-[#0B3B2E]/40" />
+                <div className="text-[11px] font-bold text-[#0B3B2E]">Add More Photos</div>
+                <div className="text-[9px] text-slate-400">JPEG, PNG, WebP &bull; 10 MB each</div>
               </>
             )}
           </div>

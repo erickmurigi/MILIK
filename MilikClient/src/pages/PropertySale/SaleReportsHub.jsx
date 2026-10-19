@@ -1,505 +1,220 @@
-import React, { lazy, memo, Suspense, useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useSelector } from "react-redux";
+import React, { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { toast } from "react-toastify";
-import {
-  FaExternalLinkAlt, FaCoins, FaFileExcel, FaChartLine, FaUserTie, FaCity, FaPhoneAlt, FaWhatsapp, FaSyncAlt, FaRegClock,
-} from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { FaExternalLinkAlt, FaFilePdf } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
-import { EmbeddedReportContext } from "./EmbeddedReportContext";
-import SalePrintButton from "./SalePrintButton";
-import { printAfterFetch } from "./salePrint";
+import Modal from "../../components/common/Modal";
 import AppSelect from "../../components/common/AppSelect";
-import PaginationBar from "../../components/PaginationBar";
-import { fmtKES, saleApi } from "../../services/propertySaleApi";
+import SaleReportPdfModal from "./SaleReportPdfModal";
+import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
 
-// Report Center: every Property Sales report in one page, grouped by the question it answers. A live "pulse" strip sits
-// on top; the money-owed and register reports open inside the page, the older ones open as their own pages.
-const GREEN = "#0B3B2E";
-const SaleCashFlow = lazy(() => import("./SaleCashFlow"));
-const SaleMonthly = lazy(() => import("./SaleReports"));
-const SaleFunnel = lazy(() => import("./SaleConversionFunnel"));
-const SaleAgentsPerformance = lazy(() => import("./SaleAgentsPerformance"));
-const SaleCommissions = lazy(() => import("./SaleCommissions"));
-const SaleProjects = lazy(() => import("./SaleProjects"));
-const n2 = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const dt = (v) => (v ? new Date(v).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
+// Reports Center: one page, three columns of clickable report names — no blurb text, nothing to
+// read before you've even picked a report. A report either generates a real PDF (small parameter
+// modal, then a full-page preview exactly like the PMS Landlord Statement workspace) or opens its
+// own already-built page (Monthly Sales, Conversion Funnel, etc. — these have working dedicated
+// views; routing straight to the PDF pipeline is a later, purely mechanical extension, not a
+// reason to hide a page that already works behind a "coming soon" badge).
+const inputCls = "h-7 w-full border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E]";
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-const inputCls = "h-7 border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0B3B2E]";
+const today = () => ymd(new Date());
+const yearStart = () => ymd(new Date(new Date().getFullYear(), 0, 1));
 
-const AGING = [
-  { key: "notDue", label: "Not yet due", bar: "bg-emerald-500", text: "text-emerald-700" },
-  { key: "d1_30", label: "1–30 days late", bar: "bg-amber-400", text: "text-amber-700" },
-  { key: "d31_60", label: "31–60 days", bar: "bg-orange-500", text: "text-orange-700" },
-  { key: "d61_90", label: "61–90 days", bar: "bg-rose-500", text: "text-rose-700" },
-  { key: "d90plus", label: "Over 90 days", bar: "bg-red-800", text: "text-red-800" },
-  { key: "unscheduled", label: "No due date", bar: "bg-slate-400", text: "text-slate-600" },
+const DEAL_STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "closed", label: "Closed" },
+  { value: "cancelled", label: "Cancelled" },
 ];
-const BUCKET_BADGE = { d1_30: "bg-amber-100 text-amber-800", d31_60: "bg-orange-100 text-orange-800", d61_90: "bg-rose-100 text-rose-800", d90plus: "bg-red-100 text-red-900" };
+const COMMISSION_STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "paid", label: "Paid" },
+  { value: "cancelled", label: "Cancelled" },
+  { value: "reversed", label: "Reversed" },
+];
 
-const toWhatsApp = (phone) => {
-  const digits = String(phone || "").replace(/\D/g, "");
-  if (digits.length < 9) return "";
-  if (digits.startsWith("254")) return digits;
-  return `254${digits.replace(/^0/, "")}`;
-};
-
-// ── a small shared table: columns give the cell, and the raw value used for the Excel export ───────────────────────
-const Grid = memo(({ columns, rows, loading, empty }) => (
-  <div className="min-h-0 flex-1 overflow-auto">
-    <table className="w-full min-w-[900px] border-collapse text-[11px]">
-      <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-        <tr>
-          {columns.map((c) => (
-            <th key={c.key} className={`whitespace-nowrap px-2.5 py-1.5 font-bold ${c.right ? "text-right" : "text-left"}`}>{c.label}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {loading && !rows.length ? (
-          <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-slate-500">Loading…</td></tr>
-        ) : !rows.length ? (
-          <tr><td colSpan={columns.length} className="px-4 py-10 text-center text-slate-500">{empty}</td></tr>
-        ) : rows.map((r, i) => (
-          <tr key={r._id || i} className={`border-b border-slate-100 ${i % 2 ? "bg-slate-50/60" : "bg-white"} hover:bg-emerald-50/40`}>
-            {columns.map((c) => (
-              <td key={c.key} className={`px-2.5 py-1.5 ${c.right ? "text-right tabular-nums" : ""} ${c.cls || "text-slate-700"}`}>{c.render ? c.render(r) : r[c.key]}</td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </div>
-));
-
-// what one cell prints as: an explicit print value, else the export value (money formatted), else the raw field
-const printCell = (c, r) => {
-  const v = c.xl ? c.xl(r) : c.render ? "" : r[c.key];
-  return typeof v === "number" && c.right ? (v === 0 ? "—" : n2(v)) : v ?? "";
-};
-
-const exportExcel = async (columns, rows, name) => {
-  const XLSX = await import("xlsx");
-  const sheet = XLSX.utils.aoa_to_sheet([
-    columns.map((c) => c.label),
-    ...rows.map((r) => columns.map((c) => (c.xl ? c.xl(r) : c.render ? undefined : r[c.key]) ?? "")),
-  ]);
-  const book = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(book, sheet, "Report");
-  XLSX.writeFile(book, `${name}-${ymd(new Date())}.xlsx`);
-};
-
-// ── report views ───────────────────────────────────────────────────────────────────────────────────────────────────
-const usePaged = (id, params, fetcher) => {
-  const [pageSize, setPageSize] = useState(50);
-  // the page number belongs to one set of filters: changing any filter starts again from page 1
-  const key = JSON.stringify(params);
-  const [pageState, setPageState] = useState({ key, page: 1 });
-  const page = pageState.key === key ? pageState.page : 1;
-  const setPage = (n) => setPageState({ key, page: n });
-  const query = useQuery({
-    queryKey: ["sale-report", id, params, page, pageSize],
-    queryFn: () => fetcher({ ...params, page, limit: pageSize }),
-    staleTime: 30_000,
-    placeholderData: (previous) => previous, // keep the old rows on screen while the next page or filter loads
-  });
-  return { query, page, setPage, pageSize, setPageSize, all: () => fetcher({ ...params, page: 1, limit: 5000 }) };
-};
-
-const ReportFrame = ({ toolbar, summary, columns, exportColumns, paged, exportName, empty, label, printMeta }) => {
-  const company = useSelector((s) => s.company?.currentCompany);
-  const [exporting, setExporting] = useState(false);
-  const [printing, setPrinting] = useState(false);
-  const { query, page, setPage, pageSize, setPageSize } = paged;
-  const rows = query.data?.data || [];
-  const runExport = async () => {
-    setExporting(true);
-    try {
-      const all = await paged.all();
-      await exportExcel(exportColumns || columns, all.data || [], exportName);
-    } catch (e) {
-      toast.error(e?.response?.data?.message || "Could not export the report");
-    } finally { setExporting(false); }
-  };
-  const runPrint = async () => {
-    setPrinting(true);
-    const cols = exportColumns || columns;
-    await printAfterFetch(() => paged.all(), (all) => ({
-      ...printMeta,
-      company,
-      columns: cols.map((c) => ({ label: c.label, align: c.right ? "right" : "left", value: (r) => printCell(c, r) })),
-      rows: all.data || [],
-    }));
-    setPrinting(false);
-  };
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-        {toolbar}
-        <div className="ml-auto flex items-center gap-2">
-          <button type="button" onClick={() => query.refetch()} disabled={query.isFetching} className="inline-flex h-7 items-center gap-1.5 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
-            <FaSyncAlt size={10} className={query.isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
-          <SalePrintButton onClick={runPrint} busy={printing} disabled={!rows.length} />
-          <button type="button" onClick={runExport} disabled={exporting || !rows.length} className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-2.5 text-xs font-semibold text-white hover:bg-[#0A3127] disabled:opacity-50">
-            <FaFileExcel size={11} /> {exporting ? "Preparing…" : "Excel"}
-          </button>
-        </div>
-      </div>
-      {summary}
-      <Grid columns={columns} rows={rows} loading={query.isLoading} empty={empty} />
-      <PaginationBar page={page} pages={query.data?.pages || 1} total={query.data?.total ?? 0} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(n) => { setPageSize(n); setPage(1); }} loading={query.isFetching} label={label} />
-    </div>
-  );
-};
-
-const AgingBar = ({ totals }) => {
-  const total = AGING.reduce((s, a) => s + Number(totals?.[a.key] || 0), 0);
-  return (
-    <div className="flex-none border-b border-slate-200 bg-white px-3 py-2.5">
-      <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
-        {total > 0 && AGING.map((a) => {
-          const v = Number(totals?.[a.key] || 0);
-          return v > 0 ? <div key={a.key} className={a.bar} style={{ width: `${(v / total) * 100}%` }} title={`${a.label}: ${fmtKES(v)}`} /> : null;
-        })}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1">
-        {AGING.map((a) => (
-          <div key={a.key} className="flex items-center gap-1.5 text-[11px]">
-            <span className={`h-2 w-2 rounded-full ${a.bar}`} />
-            <span className="text-slate-500">{a.label}</span>
-            <span className={`font-bold tabular-nums ${a.text}`}>{n2(totals?.[a.key])}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const ReceivablesView = ({ filters, T, filterText }) => {
-  const [overdueOnly, setOverdueOnly] = useState(false);
-  const params = { projectId: filters.projectId, agentId: filters.agentId, asOf: filters.asOf, overdueOnly: overdueOnly ? "1" : undefined };
-  const paged = usePaged("receivables", params, saleApi.getReceivables);
-  const columns = useMemo(() => [
-    { key: "dealNumber", label: T.saleDeal, cls: "font-bold text-slate-900 whitespace-nowrap" },
-    { key: "buyerName", label: T.saleBuyer, render: (r) => <div><div className="font-semibold text-slate-800">{r.buyerName}</div><div className="text-[10px] text-slate-400">{r.buyerPhone}</div></div>, xl: (r) => r.buyerName },
-    { key: "unit", label: `${T.saleListing} · ${T.saleProject}`, render: (r) => <div><div>{r.unit}</div><div className="text-[10px] text-slate-400">{r.project}</div></div>, xl: (r) => `${r.unit} ${r.project}`.trim() },
-    { key: "agentName", label: T.saleAgent },
-    { key: "agreedPrice", label: "Agreed", right: true, render: (r) => n2(r.agreedPrice), xl: (r) => r.agreedPrice },
-    { key: "paid", label: "Paid", right: true, render: (r) => n2(r.paid), xl: (r) => r.paid },
-    { key: "balance", label: "Balance", right: true, cls: "font-bold text-slate-900", render: (r) => n2(r.balance), xl: (r) => r.balance },
-    ...AGING.map((a) => ({ key: a.key, label: a.label, right: true, cls: a.text, render: (r) => (r[a.key] ? n2(r[a.key]) : "·"), xl: (r) => r[a.key] })),
-    { key: "daysLate", label: "Oldest late", right: true, render: (r) => (r.daysLate ? `${r.daysLate} d` : "—"), xl: (r) => r.daysLate },
-  ], [T]);
-  const t = paged.query.data?.totals;
-  const printMeta = {
-    title: "Receivables Aging",
-    subtitle: [`As of ${dt(filters.asOf || new Date())}`, overdueOnly && "Overdue only", filterText].filter(Boolean).join(" · "),
-    summaryItems: [["Owed", n2(t?.balance)], ["Overdue", n2(t?.overdue)], ["Not yet due", n2(t?.notDue)], ["No due date", n2(t?.unscheduled)], [`${T.saleDeal}s`, String(t?.deals ?? 0)]],
-    totalsRow: ["TOTAL", `${t?.deals ?? 0} ${T.saleDeal.toLowerCase()}s`, "", "", "", "", n2(t?.balance), ...AGING.map((a) => n2(t?.[a.key])), ""],
-  };
-  return (
-    <ReportFrame
-      paged={paged}
-      columns={columns}
-      printMeta={printMeta}
-      exportName="receivables-aging"
-      label="deals"
-      empty="Nobody owes anything for this selection."
-      summary={<AgingBar totals={paged.query.data?.totals} />}
-      toolbar={
-        <>
-          <label className="flex items-center gap-1.5 text-xs text-slate-600">
-            <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} /> Overdue only
-          </label>
-          <span className="text-[11px] text-slate-400">As of {dt(filters.asOf || new Date())} · closed deals with a balance are included, cancelled ones are not</span>
-        </>
-      }
-    />
-  );
-};
-
-const OverdueView = ({ filters, T, filterText }) => {
-  const [minDays, setMinDays] = useState(0);
-  const params = { projectId: filters.projectId, agentId: filters.agentId, asOf: filters.asOf, minDays: minDays || undefined };
-  const paged = usePaged("overdue", params, saleApi.getOverdueInstallments);
-  const totals = paged.query.data?.totals;
-  const columns = useMemo(() => [
-    { key: "buyerName", label: T.saleBuyer, render: (r) => <div><div className="font-semibold text-slate-800">{r.buyerName}</div><div className="text-[10px] text-slate-400">{r.buyerPhone}</div></div>, xl: (r) => r.buyerName },
-    { key: "buyerPhone", label: "Phone", render: () => null, xl: (r) => r.buyerPhone },
-    { key: "dealNumber", label: T.saleDeal, cls: "font-bold text-slate-900 whitespace-nowrap" },
-    { key: "unit", label: `${T.saleListing} · ${T.saleProject}`, render: (r) => <div><div>{r.unit}</div><div className="text-[10px] text-slate-400">{r.project}</div></div>, xl: (r) => `${r.unit} ${r.project}`.trim() },
-    { key: "installmentNumber", label: "Instalment", render: (r) => `#${r.installmentNumber}${r.description ? ` · ${r.description}` : ""}`, xl: (r) => r.installmentNumber },
-    { key: "dueDate", label: "Was due", render: (r) => dt(r.dueDate), xl: (r) => dt(r.dueDate), cls: "whitespace-nowrap" },
-    { key: "daysLate", label: "Days late", right: true, render: (r) => <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${BUCKET_BADGE[r.bucket] || ""}`}>{r.daysLate} d</span>, xl: (r) => r.daysLate },
-    { key: "amount", label: "Amount", right: true, cls: "font-bold text-slate-900", render: (r) => n2(r.amount), xl: (r) => r.amount },
-    { key: "agentName", label: T.saleAgent },
-    {
-      key: "follow", label: "Follow up",
-      render: (r) => {
-        const wa = toWhatsApp(r.buyerPhone);
-        const text = `Dear ${r.buyerName}, a friendly reminder that instalment ${r.installmentNumber} of ${fmtKES(r.amount)} for ${r.unit || "your purchase"} was due on ${dt(r.dueDate)}. Kindly settle it at your earliest convenience. Thank you.`;
-        return (
-          <div className="flex gap-1.5">
-            {r.buyerPhone && <a href={`tel:${r.buyerPhone}`} title="Call" className="border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100"><FaPhoneAlt size={10} /></a>}
-            {wa && <a href={`https://wa.me/${wa}?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer" title="WhatsApp reminder" className="border border-emerald-200 p-1.5 text-emerald-600 hover:bg-emerald-50"><FaWhatsapp size={11} /></a>}
-          </div>
-        );
-      },
-      xl: () => "",
-    },
-  ], [T]);
-  // the phone column is only for the export; the screen shows it under the buyer name
-  const screenColumns = useMemo(() => columns.filter((c) => c.key !== "buyerPhone"), [columns]);
-  const exportColumns = useMemo(() => columns.filter((c) => c.key !== "follow"), [columns]);
-  const printMeta = {
-    title: "Overdue Instalments",
-    subtitle: [`As of ${dt(filters.asOf || new Date())}`, minDays ? `${minDays}+ days late` : "", filterText].filter(Boolean).join(" · "),
-    summaryItems: [["Overdue", n2(totals?.amount)], ["Instalments", String(totals?.count ?? 0)], ...["d1_30", "d31_60", "d61_90", "d90plus"].map((k) => [AGING.find((a) => a.key === k).label, n2(totals?.buckets?.[k]?.amount)])],
-    totalsRow: ["TOTAL", "", "", "", `${totals?.count ?? 0} instalments`, "", "", n2(totals?.amount), ""],
-  };
-  return (
-    <ReportFrame
-      paged={paged}
-      columns={screenColumns}
-      printMeta={printMeta}
-      exportName="overdue-instalments"
-      label="instalments"
-      empty="No instalment is overdue for this selection."
-      summary={
-        <div className="flex flex-none flex-wrap items-center gap-x-6 gap-y-1 border-b border-slate-200 bg-white px-3 py-2 text-xs">
-          <span><b className="tabular-nums text-red-700">{n2(totals?.amount)}</b> <span className="text-slate-500">overdue across</span> <b>{totals?.count ?? 0}</b> <span className="text-slate-500">instalments</span></span>
-          {["d1_30", "d31_60", "d61_90", "d90plus"].map((k) => (
-            <span key={k} className="text-slate-500">{AGING.find((a) => a.key === k).label}: <b className="tabular-nums text-slate-800">{n2(totals?.buckets?.[k]?.amount)}</b></span>
-          ))}
-        </div>
-      }
-      toolbar={
-        <div className="flex items-center gap-1">
-          {[[0, "All"], [30, "30+ days"], [60, "60+ days"], [90, "90+ days"]].map(([d, label]) => (
-            <button key={d} type="button" onClick={() => setMinDays(d)} className={`h-7 border px-3 text-[11px] font-bold ${minDays === d ? "border-[#0B3B2E] bg-[#0B3B2E] text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>{label}</button>
-          ))}
-        </div>
-      }
-      exportColumns={exportColumns}
-    />
-  );
-};
-
-const RegisterView = ({ filters, T, filterText }) => {
-  const [status, setStatus] = useState("");
-  const [search, setSearch] = useState("");
-  const [debounced, setDebounced] = useState("");
-  useEffect(() => { const t = setTimeout(() => setDebounced(search.trim()), 350); return () => clearTimeout(t); }, [search]);
-  const params = { projectId: filters.projectId, agentId: filters.agentId, dateFrom: filters.dateFrom, dateTo: filters.dateTo, status: status || undefined, search: debounced || undefined };
-  const paged = usePaged("register", params, saleApi.getSalesRegister);
-  const totals = paged.query.data?.totals;
-  const columns = useMemo(() => [
-    { key: "dealDate", label: "Date", render: (r) => dt(r.dealDate), xl: (r) => dt(r.dealDate), cls: "whitespace-nowrap" },
-    { key: "dealNumber", label: T.saleDeal, cls: "font-bold text-slate-900 whitespace-nowrap" },
-    { key: "buyerName", label: T.saleBuyer },
-    { key: "unit", label: T.saleListing },
-    { key: "project", label: T.saleProject },
-    { key: "agentName", label: T.saleAgent },
-    { key: "askingPrice", label: "Asking", right: true, render: (r) => (r.askingPrice == null ? "—" : n2(r.askingPrice)), xl: (r) => r.askingPrice },
-    { key: "discount", label: "Discount", right: true, render: (r) => (r.discount ? n2(r.discount) : "·"), xl: (r) => r.discount },
-    { key: "agreedPrice", label: "Agreed", right: true, cls: "font-bold text-slate-900", render: (r) => n2(r.agreedPrice), xl: (r) => r.agreedPrice },
-    { key: "paid", label: "Paid", right: true, render: (r) => n2(r.paid), xl: (r) => r.paid },
-    { key: "balance", label: "Balance", right: true, render: (r) => n2(r.balance), xl: (r) => r.balance },
-    {
-      key: "status", label: "Status",
-      render: (r) => <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${r.status === "cancelled" ? "bg-slate-200 text-slate-600" : r.status === "closed" ? "bg-emerald-100 text-emerald-800" : "bg-blue-100 text-blue-800"}`}>{r.status}</span>,
-      xl: (r) => r.status,
-    },
-    { key: "titleTransferDate", label: "Title transferred", render: (r) => dt(r.titleTransferDate), xl: (r) => (r.titleTransferDate ? dt(r.titleTransferDate) : "") },
-  ], [T]);
-  const printMeta = {
-    title: "Sales Register",
-    subtitle: [`${dt(filters.dateFrom)} – ${dt(filters.dateTo)}`, status && `Status: ${status}`, debounced && `Search: ${debounced}`, filterText].filter(Boolean).join(" · "),
-    summaryItems: [[`${T.saleDeal}s`, String(totals?.deals ?? 0)], ["Cancelled", String(totals?.cancelled ?? 0)], ["Agreed", n2(totals?.agreed)], ["Paid", n2(totals?.paid)], ["Balance", n2(totals?.balance)]],
-    totalsRow: ["TOTAL", `${totals?.deals ?? 0} ${T.saleDeal.toLowerCase()}s`, "", "", "", "", "", "", n2(totals?.agreed), n2(totals?.paid), n2(totals?.balance), "", ""],
-  };
-  return (
-    <ReportFrame
-      paged={paged}
-      columns={columns}
-      printMeta={printMeta}
-      exportName="sales-register"
-      label="deals"
-      empty="No deals match this selection."
-      summary={
-        <div className="flex flex-none flex-wrap items-center gap-x-6 gap-y-1 border-b border-slate-200 bg-white px-3 py-2 text-xs">
-          <span><b>{totals?.deals ?? 0}</b> <span className="text-slate-500">deals{totals?.cancelled ? ` (${totals.cancelled} cancelled)` : ""}</span></span>
-          <span className="text-slate-500">Agreed <b className="tabular-nums text-slate-900">{n2(totals?.agreed)}</b></span>
-          <span className="text-slate-500">Paid <b className="tabular-nums text-emerald-700">{n2(totals?.paid)}</b></span>
-          <span className="text-slate-500">Balance <b className="tabular-nums text-red-700">{n2(totals?.balance)}</b></span>
-        </div>
-      }
-      toolbar={
-        <>
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`Search ${T.saleDeal.toLowerCase()}, ${T.saleBuyer.toLowerCase()}, ${T.saleListing.toLowerCase()}…`} className={`${inputCls} w-64`} />
-          <AppSelect value={status} onChange={(v) => setStatus(v || "")} size="sm" clearable placeholder="All statuses"
-            options={[{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }]} />
-        </>
-      }
-    />
-  );
-};
-
-// ── catalogue ──────────────────────────────────────────────────────────────────────────────────────────────────────
 const buildGroups = (T) => [
   {
-    id: "collections", title: "Money owed", icon: FaCoins, blurb: "Who owes what, and who to call today",
+    title: "Collections",
     items: [
-      { id: "receivables", label: "Receivables aging", desc: `What ${T.saleBuyer.toLowerCase()}s still owe, aged by how late`, view: ReceivablesView, filters: ["asOf"] },
-      { id: "overdue", label: "Overdue instalments", desc: "The follow-up list, oldest first, with call and WhatsApp", view: OverdueView, filters: ["asOf"] },
-      { id: "cash-flow", label: "Cash flow forecast", desc: "Instalments due in the next 30, 60 and 90 days", to: "/sale/reports/cash-flow", page: SaleCashFlow },
+      { id: "receivables", label: "Receivables Aging", fields: [{ type: "project" }, { type: "agent" }, { type: "asOf" }] },
+      { id: "cash-flow", label: "Cash Flow Forecast", to: "/sale/reports/cash-flow" },
     ],
   },
   {
-    id: "sales", title: "Sales & pipeline", icon: FaChartLine, blurb: "What was sold and how it came about",
+    title: "Sales & Pipeline",
     items: [
-      { id: "register", label: "Sales register", desc: `Every ${T.saleDeal.toLowerCase()} with discount, paid and balance`, view: RegisterView, filters: ["dates"] },
-      { id: "monthly", label: "Monthly sales", desc: "Sales and collections per month, with drill-down", to: "/sale/reports/sales", page: SaleMonthly },
-      { id: "funnel", label: "Conversion funnel", desc: "Leads to viewings to offers to deals", to: "/sale/reports/funnel", page: SaleFunnel },
+      {
+        id: "register", label: "Sales Register",
+        fields: [{ type: "project" }, { type: "agent" }, { type: "dateRange" }, { type: "select", key: "status", label: "Status", options: DEAL_STATUS_OPTIONS }, { type: "text", key: "search", label: "Search" }],
+      },
+      { id: "monthly", label: "Monthly Sales", to: "/sale/reports/sales" },
+      { id: "funnel", label: "Conversion Funnel", to: "/sale/reports/funnel" },
     ],
   },
   {
-    id: "agents", title: `${T.saleAgent}s & commission`, icon: FaUserTie, blurb: "Who sells, and what they are owed",
+    title: `${T.saleAgent}s & Commissions`,
     items: [
-      { id: "agent-performance", label: `${T.saleAgent} performance`, desc: "Deals, value and conversion per person", to: "/sale/agents/performance", page: SaleAgentsPerformance },
-      { id: "commissions", label: "Commissions", desc: "Earned, payable and paid, with statements", to: "/sale/commissions", page: SaleCommissions },
-    ],
-  },
-  {
-    id: "stock", title: "Projects & stock", icon: FaCity, blurb: "What is left to sell",
-    items: [
-      { id: "projects", label: `${T.saleProject}s`, desc: "Units sold, reserved and left per project", to: "/sale/projects", page: SaleProjects },
-      { id: "planned-stock", label: "Aging stock", desc: "Units unsold for 30, 60, 90+ days", planned: true },
-      { id: "planned-title", label: "Title & transfer tracker", desc: "Fully paid but not yet transferred", planned: true },
-      { id: "planned-pl", label: `${T.saleProject} profit & loss`, desc: "Sales against tagged costs", planned: true },
+      {
+        id: "commissions", label: "Commissions",
+        fields: [{ type: "agent" }, { type: "select", key: "status", label: "Status", options: COMMISSION_STATUS_OPTIONS }, { type: "dateRange" }],
+      },
+      { id: "agent-performance", label: `${T.saleAgent} Performance`, to: "/sale/agents/performance" },
+      { id: "projects", label: `${T.saleProject}s Summary`, to: "/sale/projects" },
     ],
   },
 ];
 
-const PulseTile = ({ label, value, sub, tone = "text-slate-900", onClick }) => (
-  <button type="button" onClick={onClick} disabled={!onClick} className="min-w-0 border border-slate-200 bg-white px-3 py-2 text-left shadow-sm transition enabled:hover:border-[#0B3B2E] disabled:cursor-default">
-    <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{label}</div>
-    <div className={`mt-0.5 truncate text-lg font-black tabular-nums ${tone}`}>{value}</div>
-    <div className="truncate text-[10px] text-slate-500">{sub}</div>
-  </button>
-);
+const defaultValuesFor = (report) => {
+  const v = {};
+  for (const f of report.fields || []) {
+    if (f.type === "project") v.projectId = "";
+    else if (f.type === "agent") v.agentId = "";
+    else if (f.type === "asOf") v.asOf = today();
+    else if (f.type === "dateRange") { v.dateFrom = yearStart(); v.dateTo = today(); }
+    else v[f.key] = "";
+  }
+  return v;
+};
+
+const buildParams = (values) => Object.fromEntries(Object.entries(values).filter(([, v]) => v !== "" && v != null));
+
+const Field = ({ field, values, setValues, T, projectOptions, agentOptions }) => {
+  const set = (key) => (v) => setValues((s) => ({ ...s, [key]: v ?? "" }));
+  switch (field.type) {
+    case "project":
+      return (
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold text-slate-600">{T.saleProject}</label>
+          <AppSelect value={values.projectId} onChange={set("projectId")} size="sm" searchable clearable placeholder={`All ${T.saleProject.toLowerCase()}s`} options={projectOptions} />
+        </div>
+      );
+    case "agent":
+      return (
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold text-slate-600">{T.saleAgent}</label>
+          <AppSelect value={values.agentId} onChange={set("agentId")} size="sm" searchable clearable placeholder={`All ${T.saleAgent.toLowerCase()}s`} options={agentOptions} />
+        </div>
+      );
+    case "asOf":
+      return (
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold text-slate-600">As of</label>
+          <input type="date" value={values.asOf} max={today()} onChange={(e) => set("asOf")(e.target.value)} className={inputCls} />
+        </div>
+      );
+    case "dateRange":
+      return (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold text-slate-600">From</label>
+            <input type="date" value={values.dateFrom} max={values.dateTo || today()} onChange={(e) => set("dateFrom")(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="mb-1 block text-[11px] font-semibold text-slate-600">To</label>
+            <input type="date" value={values.dateTo} min={values.dateFrom} max={today()} onChange={(e) => set("dateTo")(e.target.value)} className={inputCls} />
+          </div>
+        </div>
+      );
+    case "select":
+      return (
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold text-slate-600">{field.label}</label>
+          <AppSelect value={values[field.key]} onChange={set(field.key)} size="sm" clearable placeholder={`All`} options={field.options} />
+        </div>
+      );
+    case "text":
+      return (
+        <div>
+          <label className="mb-1 block text-[11px] font-semibold text-slate-600">{field.label}</label>
+          <input value={values[field.key]} onChange={(e) => set(field.key)(e.target.value)} className={inputCls} />
+        </div>
+      );
+    default:
+      return null;
+  }
+};
+
+const ReportParamsModal = ({ report, T, projectOptions, agentOptions, onClose, onGenerate }) => {
+  const [values, setValues] = useState(() => defaultValuesFor(report));
+  return (
+    <Modal
+      title={report.label}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="h-8 border border-slate-300 bg-white px-4 text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => onGenerate(buildParams(values))} className="h-8 bg-[#0B3B2E] px-4 text-xs font-bold text-white hover:bg-[#0A3127]">Generate PDF</button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        {(report.fields || []).map((f, i) => (
+          <Field key={f.key || f.type || i} field={f} values={values} setValues={setValues} T={T} projectOptions={projectOptions} agentOptions={agentOptions} />
+        ))}
+        {!report.fields?.length && <p className="text-xs text-slate-500">No filters needed — this report covers everything.</p>}
+      </div>
+    </Modal>
+  );
+};
 
 export default function SaleReportsHub() {
   const T = useTerms("saleDeal", "saleBuyer", "saleListing", "saleAgent", "saleProject");
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
   const groups = useMemo(() => buildGroups(T), [T]);
-  const items = useMemo(() => groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g }))), [groups]);
-  const active = items.find((i) => i.id === params.get("r") && (i.view || i.page)) || items.find((i) => i.id === "receivables");
-  const select = (item) => (item.view || item.page ? setParams({ r: item.id }, { replace: true }) : null);
+  const [activeReport, setActiveReport] = useState(null);
+  const [pdfJob, setPdfJob] = useState(null);
+  const selectItem = (item) => (item.to ? navigate(item.to) : setActiveReport(item));
 
-  const [filters, setFilters] = useState({ projectId: "", agentId: "", asOf: "", dateFrom: ymd(new Date(new Date().getFullYear(), 0, 1)), dateTo: ymd(new Date()) });
-  const setF = (k) => (v) => setFilters((f) => ({ ...f, [k]: v || "" }));
-
-  const [projects, agents, pulse, cash] = [
-    useQuery({ queryKey: ["sale-rep-projects"], queryFn: () => saleApi.listProjects({ limit: 200 }), staleTime: 300_000 }),
-    useQuery({ queryKey: ["sale-rep-agents"], queryFn: () => saleApi.listAgents({ limit: 200 }), staleTime: 300_000 }),
-    useQuery({ queryKey: ["sale-rep-pulse"], queryFn: () => saleApi.getReceivables({ limit: 1 }), staleTime: 60_000 }),
-    useQuery({ queryKey: ["sale-rep-cash"], queryFn: () => saleApi.getCashFlowForecast({}), staleTime: 60_000 }),
-  ];
-  const totals = pulse.data?.totals;
-  const filterText = [
-    (projects.data?.data || []).find((p) => p._id === filters.projectId)?.name,
-    (agents.data?.data || []).find((a) => a._id === filters.agentId)?.fullName,
-  ].filter(Boolean).join(" · ");
-  const overduePct = totals?.balance > 0 ? Math.round((totals.overdue / totals.balance) * 100) : 0;
-  const View = active.view;
+  const projects = useQuery({ queryKey: ["sale-rep-projects"], queryFn: () => saleApi.listProjects({ limit: 200 }), staleTime: 300_000 });
+  const agents = useQuery({ queryKey: ["sale-rep-agents"], queryFn: () => saleApi.listAgents({ limit: 200 }), staleTime: 300_000 });
+  const projectOptions = useMemo(() => (projects.data?.data || []).map((p) => ({ value: p._id, label: [p.projectNumber, p.name].filter(Boolean).join(" · ") })), [projects.data]);
+  const agentOptions = useMemo(() => (agents.data?.data || []).map((a) => ({ value: a._id, label: a.fullName })), [agents.data]);
 
   return (
-    <PropertySaleShell title="Reports" subtitle="Everything owed, sold and left to sell">
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
-        {/* pulse */}
-        <div className="grid flex-none grid-cols-2 gap-1.5 lg:grid-cols-4">
-          <PulseTile label="Owed by buyers" value={fmtKES(totals?.balance)} sub={`${totals?.deals ?? 0} ${T.saleDeal.toLowerCase()}s with a balance`} onClick={() => setParams({ r: "receivables" }, { replace: true })} />
-          <PulseTile label="Overdue now" tone="text-red-700" value={fmtKES(totals?.overdue)} sub={`${overduePct}% of what is owed`} onClick={() => setParams({ r: "overdue" }, { replace: true })} />
-          <PulseTile label="Due in 30 days" tone="text-emerald-700" value={fmtKES(cash.data?.next30?.amount)} sub={`${cash.data?.next30?.count ?? 0} instalments`} onClick={() => setParams({ r: "cash-flow" }, { replace: true })} />
-          <PulseTile label="No due date" tone="text-amber-700" value={fmtKES(totals?.unscheduled)} sub="owed but not on any instalment plan" onClick={() => setParams({ r: "receivables" }, { replace: true })} />
-        </div>
-
-        <div className="flex min-h-0 flex-1 gap-1.5">
-          {/* catalogue */}
-          <nav className="hidden w-64 flex-none overflow-y-auto border border-slate-200 bg-white md:block">
-            {groups.map((g) => (
-              <div key={g.id} className="border-b border-slate-100 py-2">
-                <div className="flex items-center gap-2 px-3 pb-1">
-                  <g.icon size={12} style={{ color: GREEN }} />
-                  <div>
-                    <div className="text-[11px] font-black uppercase tracking-[0.1em]" style={{ color: GREEN }}>{g.title}</div>
-                    <div className="text-[10px] text-slate-400">{g.blurb}</div>
-                  </div>
-                </div>
-                {g.items.map((item) => {
-                  const on = active.id === item.id;
-                  return (
-                    <button key={item.id} type="button" disabled={item.planned} onClick={() => select(item)}
-                      className={`flex w-full items-start gap-2 border-l-[3px] px-3 py-1.5 text-left transition ${on ? "border-[#0B3B2E] bg-emerald-50" : "border-transparent hover:bg-slate-50"} ${item.planned ? "cursor-default opacity-60" : ""}`}>
-                      <div className="min-w-0 flex-1">
-                        <div className={`text-xs ${on ? "font-black text-[#0B3B2E]" : "font-semibold text-slate-800"}`}>{item.label}</div>
-                        <div className="text-[10px] leading-snug text-slate-500">{item.desc}</div>
-                      </div>
-                      {item.planned && <span className="mt-0.5 flex-none rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-bold text-slate-500"><FaRegClock className="mr-0.5 inline" size={8} />Soon</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </nav>
-
-          {/* workspace */}
-          <section className="flex min-w-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
-            <div className="flex flex-none flex-wrap items-center gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
-              <div className="mr-2">
-                <div className="text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{active.group.title}</div>
-                <h2 className="text-sm font-black text-slate-900">{active.label}</h2>
-              </div>
-              <div className="md:hidden">
-                <AppSelect value={active.id} onChange={(v) => { const it = items.find((i) => i.id === v); if (it) select(it); }} size="sm"
-                  options={items.filter((i) => !i.planned).map((i) => ({ value: i.id, label: i.label }))} />
-              </div>
-              {active.view && <AppSelect value={filters.projectId} onChange={setF("projectId")} size="sm" searchable clearable placeholder={`All ${T.saleProject.toLowerCase()}s`}
-                options={(projects.data?.data || []).map((p) => ({ value: p._id, label: [p.projectNumber, p.name].filter(Boolean).join(" · ") }))} />}
-              {active.view && <AppSelect value={filters.agentId} onChange={setF("agentId")} size="sm" searchable clearable placeholder={`All ${T.saleAgent.toLowerCase()}s`}
-                options={(agents.data?.data || []).map((a) => ({ value: a._id, label: a.fullName }))} />}
-              {active.filters?.includes("asOf") && (
-                <label className="flex items-center gap-1.5 text-xs text-slate-500">As of <input type="date" value={filters.asOf} max={ymd(new Date())} onChange={(e) => setF("asOf")(e.target.value)} className={inputCls} /></label>
-              )}
-              {active.filters?.includes("dates") && (
-                <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                  <input type="date" value={filters.dateFrom} max={filters.dateTo} onChange={(e) => setF("dateFrom")(e.target.value)} className={inputCls} /> to
-                  <input type="date" value={filters.dateTo} min={filters.dateFrom} onChange={(e) => setF("dateTo")(e.target.value)} className={inputCls} />
-                </span>
-              )}
-              {active.to && (
-                <button type="button" onClick={() => navigate(active.to)} className="ml-auto inline-flex h-7 items-center gap-1.5 border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50" title="Open this report on its own page">
-                  <FaExternalLinkAlt size={10} /> Own page
+    <PropertySaleShell title="Reports">
+      <div className="grid flex-1 grid-cols-1 gap-px overflow-y-auto bg-slate-200 md:grid-cols-3">
+        {groups.map((g) => (
+          <div key={g.title} className="bg-white p-4">
+            <div className="mb-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-400">{g.title}</div>
+            <div className="flex flex-col">
+              {g.items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectItem(item)}
+                  className="flex items-center justify-between gap-2 border-b border-slate-100 py-2.5 text-left text-sm font-semibold text-slate-800 transition hover:text-[#0B3B2E]"
+                >
+                  {item.label}
+                  {item.to ? <FaExternalLinkAlt size={10} className="flex-none text-slate-300" /> : <FaFilePdf size={11} className="flex-none text-slate-300" />}
                 </button>
-              )}
+              ))}
             </div>
-            {View ? (
-              <View key={active.id} filters={filters} T={T} filterText={filterText} />
-            ) : (
-              <EmbeddedReportContext.Provider value>
-                <Suspense fallback={<div className="p-6 text-center text-sm text-slate-500">Loading report…</div>}>
-                  <active.page key={active.id} />
-                </Suspense>
-              </EmbeddedReportContext.Provider>
-            )}
-          </section>
-        </div>
+          </div>
+        ))}
       </div>
+
+      {activeReport && (
+        <ReportParamsModal
+          report={activeReport}
+          T={T}
+          projectOptions={projectOptions}
+          agentOptions={agentOptions}
+          onClose={() => setActiveReport(null)}
+          onGenerate={(params) => {
+            setPdfJob({ reportId: activeReport.id, title: activeReport.label, params });
+            setActiveReport(null);
+          }}
+        />
+      )}
+
+      <SaleReportPdfModal
+        open={Boolean(pdfJob)}
+        reportId={pdfJob?.reportId}
+        title={pdfJob?.title}
+        params={pdfJob?.params}
+        onClose={() => setPdfJob(null)}
+      />
     </PropertySaleShell>
   );
 }

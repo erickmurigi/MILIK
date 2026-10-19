@@ -18,8 +18,21 @@ import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
-import { inputClass, labelClass } from "../../utils/formStyles";
+import ListToolbar from "../../components/common/ListToolbar";
 import { useTerms } from "../../hooks/useTerm";
+import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
+import SaleDocumentsField from "./SaleDocumentsField";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
+
+// Local override, not the shared utils/formStyles.js — that file's labelClass/inputClass predate the
+// bold-value-matches-label-weight convention now standard across PropertySale forms (see
+// SaleActivityFormModal.jsx / AppSelect.jsx's label and selected-value weight).
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
 
 const SOURCES      = ["walk_in", "referral", "online", "social_media", "agent", "cold_call", "other"];
 const KYC_STATUSES = ["pending", "verified", "rejected"];
@@ -51,16 +64,22 @@ const KYC_FILTER_OPTIONS    = KYC_STATUSES.map((s) => ({ value: s, label: s.char
 const SOURCE_FILTER_OPTIONS = SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) }));
 const SOURCE_FORM_OPTIONS   = SOURCES.map((s) => ({ value: s, label: s.replace(/_/g, " ") }));
 const KYC_FORM_OPTIONS      = KYC_STATUSES.map((s) => ({ value: s, label: s }));
-const buyerColumns          = (T) => [{ label: `${T.saleBuyer} No.` }, { label: "Name" }, { label: "Phone" }, { label: "Email" }, { label: "Source" }, { label: "KYC" }];
+const buyerColumns = (T) => [
+  { label: `${T.saleBuyer} No.`, width: "10%" },
+  { label: "Name", width: "22%" },
+  { label: "ID / Passport", width: "13%" },
+  { label: "Phone", width: "14%" },
+  { label: "Email", width: "19%" },
+  { label: "Source", width: "11%" },
+  { label: "KYC", width: "9%" },
+];
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
 const renderBuyerRow = (row) => (
   <>
     <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#0B3B2E]">{row.buyerNumber}</td>
-    <td className="px-3 py-1.5 border-r border-gray-100">
-      <div className="font-bold text-slate-900">{row.fullName}</div>
-      {row.idNumber && <div className="text-[10px] text-slate-400">ID: {row.idNumber}</div>}
-    </td>
+    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900 truncate">{row.fullName}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-600">{row.idNumber || "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.phone || "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.email || "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 capitalize text-slate-600">{String(row.source || "").replace(/_/g, " ")}</td>
@@ -72,18 +91,25 @@ const renderBuyerRow = (row) => (
 
 // Modals / inputs below own their own text state so keystrokes never re-render the page, rows or detail panel.
 
-function BuyerFormModal({ editingId, initial, saving, onClose, onSubmit }) {
+function BuyerFormModal({ editingId, initial, saving, invalidate, onClose, onSubmit }) {
   const T = useTerms("saleBuyer");
   const [form, setForm] = useState(initial);
-  const [docModalInput, setDocModalInput] = useState("");
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
-  const addDocToForm = () => {
-    const t = docModalInput.trim();
-    if (!t) return;
-    setForm((p) => ({ ...p, kycDocuments: [...p.kycDocuments, t] }));
-    setDocModalInput("");
-  };
+  // Real uploaded KYC files — only once the buyer exists (editingId), since there's nowhere to stage
+  // an upload-on-create for this modal (it hands off to the parent's own createBuyer/updateBuyer, not a
+  // self-contained save like the Listing/Project forms). The legacy free-text kycDocuments labels below
+  // still display read-only, for buyers that already have them, but new entries always go through here.
+  const docs = useSalePhotoDraft({
+    entityId: editingId,
+    initialImages: initial.kycFiles || [],
+    upload: saleApi.uploadBuyerDocuments,
+    remove: saleApi.deleteBuyerDocument,
+    onChanged: invalidate,
+    itemLabel: "document",
+    responseKey: "documents",
+    fieldName: "documents",
+  });
 
   return (
     <Modal
@@ -101,7 +127,7 @@ function BuyerFormModal({ editingId, initial, saving, onClose, onSubmit }) {
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="md:col-span-2">
-          <label className={labelClass}>Full Name</label>
+          <label className={labelClass}>Full Name<Required /></label>
           <input value={form.fullName} onChange={f("fullName")} className={inputClass} />
         </div>
         <div>
@@ -131,44 +157,41 @@ function BuyerFormModal({ editingId, initial, saving, onClose, onSubmit }) {
           <input value={form.address} onChange={f("address")} className={inputClass} />
         </div>
         <div className="md:col-span-2">
-          <label className={labelClass}>KYC Documents</label>
           {form.kycDocuments.length > 0 && (
-            <div className="mb-1 space-y-1">
-              {form.kycDocuments.map((doc, idx) => (
-                <div key={idx} className="flex items-center gap-2 border border-slate-200 bg-[#F1F6F3] px-2.5 py-1.5">
-                  <FaFileAlt size={9} className="flex-shrink-0 text-[#0B3B2E]" />
-                  <span className="flex-1 min-w-0 truncate text-xs text-slate-700">{doc}</span>
-                  <button
-                    type="button"
-                    onClick={() => setForm((p) => ({ ...p, kycDocuments: p.kycDocuments.filter((_, i) => i !== idx) }))}
-                    className="text-rose-400 hover:text-rose-600"
-                  >
-                    <FaTimes size={9} />
-                  </button>
-                </div>
-              ))}
+            <div className="mb-2">
+              <label className={labelClass}>Legacy KYC References</label>
+              <p className="mb-1 text-[10px] text-slate-400">Text labels recorded before file upload was added — no file is attached to these.</p>
+              <div className="space-y-1">
+                {form.kycDocuments.map((doc, idx) => (
+                  <div key={idx} className="flex items-center gap-2 border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                    <FaFileAlt size={9} className="flex-shrink-0 text-slate-400" />
+                    <span className="flex-1 min-w-0 truncate text-xs text-slate-600">{doc}</span>
+                    <button
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, kycDocuments: p.kycDocuments.filter((_, i) => i !== idx) }))}
+                      className="text-rose-400 hover:text-rose-600"
+                    >
+                      <FaTimes size={9} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
-          <div className="flex gap-1">
-            <input
-              value={docModalInput}
-              onChange={(e) => setDocModalInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && addDocToForm()}
-              placeholder="Document reference, e.g. National ID copy"
-              className={inputClass}
-            />
-            <button
-              type="button"
-              onClick={addDocToForm}
-              className="h-8 border border-[#B7C9C0] bg-[#F1F6F3] px-2.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/30"
-            >
-              <FaPlus size={9} />
-            </button>
-          </div>
+          {editingId ? (
+            <SaleDocumentsField docs={docs} hasRecord />
+          ) : (
+            <>
+              <label className={labelClass}>KYC Documents</label>
+              <p className="border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[10px] text-slate-400">
+                Save this {T.saleBuyer.toLowerCase()} first, then reopen Edit to upload KYC documents.
+              </p>
+            </>
+          )}
         </div>
         <div className="md:col-span-2">
           <label className={labelClass}>Notes</label>
-          <textarea rows={2} value={form.notes} onChange={f("notes")} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <textarea rows={2} value={form.notes} onChange={f("notes")} className={textareaClass} />
         </div>
       </div>
     </Modal>
@@ -205,22 +228,39 @@ function BuyerEmailModal({ target, company, sending, onSend, onClose }) {
   );
 }
 
-// KYC document reference input in the detail panel. `onAdd(label)` resolves true on success (then the box clears).
-function KycDocAdd({ kycSaving, onAdd }) {
-  const [docInput, setDocInput] = useState("");
-  const submit = async () => {
-    const label = docInput.trim();
-    if (!label) return;
-    if (await onAdd(label)) setDocInput("");
-  };
+// KYC documents section of the detail panel — `key={buyer._id}` at the call site forces a fresh
+// useSalePhotoDraft instance (and thus fresh `saved` state) whenever the selected buyer changes, since
+// this panel stays mounted across row clicks rather than remounting like the modal does.
+function BuyerKycPanel({ buyer, kycSaving, onRemoveLegacyDoc, invalidate }) {
+  const docs = useSalePhotoDraft({
+    entityId: buyer._id,
+    initialImages: buyer.kycFiles || [],
+    upload: saleApi.uploadBuyerDocuments,
+    remove: saleApi.deleteBuyerDocument,
+    onChanged: invalidate,
+    itemLabel: "document",
+    responseKey: "documents",
+    fieldName: "documents",
+  });
   return (
-    <div className="flex gap-1">
-      <input value={docInput} onChange={(e) => setDocInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
-        placeholder="e.g. National ID copy" className="h-7 flex-1 border border-slate-200 bg-white px-2.5 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-      <button type="button" onClick={submit} disabled={kycSaving || !docInput.trim()}
-        className="h-7 border border-[#B7C9C0] bg-[#F1F6F3] px-2.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/30 disabled:opacity-50">
-        <FaPlus size={9} />
-      </button>
+    <div className="px-4 py-3">
+      {(buyer.kycDocuments || []).length > 0 && (
+        <div className="mb-3">
+          <div className="mb-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Legacy KYC References</div>
+          <div className="space-y-1">
+            {buyer.kycDocuments.map((doc, idx) => (
+              <div key={idx} className="flex items-center gap-2 border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <FaFileAlt size={9} className="flex-shrink-0 text-slate-400" />
+                <span className="flex-1 min-w-0 truncate text-xs text-slate-600" title={doc}>{doc}</span>
+                <button type="button" onClick={() => onRemoveLegacyDoc(buyer, idx)} disabled={kycSaving} className="flex-shrink-0 p-0.5 text-rose-400 hover:text-rose-600 disabled:opacity-40">
+                  <FaTimes size={9} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <SaleDocumentsField docs={docs} hasRecord />
     </div>
   );
 }
@@ -306,6 +346,7 @@ const SaleBuyers = () => {
         source:       row.source       || "walk_in",
         kycStatus:    row.kycStatus    || "pending",
         kycDocuments: Array.isArray(row.kycDocuments) ? [...row.kycDocuments] : [],
+        kycFiles:     Array.isArray(row.kycFiles) ? [...row.kycFiles] : [],
         notes:        row.notes        || "",
       },
     });
@@ -348,22 +389,6 @@ const SaleBuyers = () => {
       toast.success(`KYC set to ${newStatus}`);
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to update KYC status");
-    } finally {
-      setKycSaving(false);
-    }
-  };
-
-  const handleAddDoc = async (buyer, label) => {
-    setKycSaving(true);
-    try {
-      const docs = [...(buyer.kycDocuments || []), label];
-      await saleApi.updateBuyer(buyer._id, { kycDocuments: docs, business: biz });
-      invalidate();
-      toast.success("Document added");
-      return true;
-    } catch (err) {
-      toast.error(err?.response?.data?.message || "Failed to add document");
-      return false;
     } finally {
       setKycSaving(false);
     }
@@ -413,7 +438,10 @@ const SaleBuyers = () => {
   };
 
   const printBuyer = useCallback((row) => {
-    const docs = Array.isArray(row.kycDocuments) ? row.kycDocuments : [];
+    const docs = [
+      ...(Array.isArray(row.kycDocuments) ? row.kycDocuments : []),
+      ...(Array.isArray(row.kycFiles) ? row.kycFiles.map((f) => f.name) : []),
+    ];
     const printed = printDocument({
       company: currentCompany,
       docType: `${T.saleBuyer} Profile`,
@@ -443,29 +471,75 @@ const SaleBuyers = () => {
     </div>
   ), [printBuyer, openEdit, handleDelete]);
 
+  const buildReportFilters = () => ({
+    business: biz, search: debouncedSearch, kycStatus: kycFilter, source: sourceFilter,
+  });
+  const reportColumns = [
+    { label: `${T.saleBuyer} No.`, value: (r) => r.buyerNumber },
+    { label: "Name", value: (r) => r.fullName },
+    { label: "ID / Passport", value: (r) => r.idNumber || "—" },
+    { label: "Phone", value: (r) => r.phone || "—" },
+    { label: "Email", value: (r) => r.email || "—" },
+    { label: "Source", value: (r) => humanize(r.source) },
+    { label: "KYC", value: (r) => r.kycStatus },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      kycFilter && `KYC: ${humanize(kycFilter)}`,
+      sourceFilter && `Source: ${humanize(sourceFilter)}`,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listBuyers, buildReportFilters()), ({ rows }) => ({
+      title: T.saleBuyers,
+      subtitle: described.join(" · ") || `All ${T.saleBuyers.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listBuyers, buildReportFilters()), ({ rows }) => ({
+      filename: "buyers",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} {(total === 1 ? T.saleBuyer : T.saleBuyers).toLowerCase()}</span>}
         onReset={() => { setSearch(""); setKycFilter(""); setSourceFilter(""); setPage(1); }}
         activeCount={[search, kycFilter, sourceFilter].filter(Boolean).length}
         trailing={
           <>
-            <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-              <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
-            </button>
-            <button type="button" onClick={() => setShowImportModal(true)} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-              <FaFileImport size={9} /> Import
-            </button>
-            <button type="button" onClick={openCreate} className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]">
-              <FaPlus size={8} /> New {T.saleBuyer}
-            </button>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
+            <ListToolbar.Button
+              variant="outline"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-buyers", biz] })}
+            >
+              <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaFileImport} variant="outline" onClick={() => setShowImportModal(true)}>
+              Import
+            </ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
+              New {T.saleBuyer}
+            </ListToolbar.Button>
           </>
         }
       >
         <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Name, phone, ID…" />
-        <AppSelect value={kycFilter} onChange={(v) => { setKycFilter(v ?? ""); setPage(1); }} options={KYC_FILTER_OPTIONS} placeholder="All KYC" clearable size="sm" />
-        <AppSelect value={sourceFilter} onChange={(v) => { setSourceFilter(v ?? ""); setPage(1); }} options={SOURCE_FILTER_OPTIONS} placeholder="All Sources" clearable size="sm" />
+        <AppSelect value={kycFilter} onChange={(v) => { setKycFilter(v ?? ""); setPage(1); }} options={KYC_FILTER_OPTIONS} placeholder="All KYC" clearable compact />
+        <AppSelect value={sourceFilter} onChange={(v) => { setSourceFilter(v ?? ""); setPage(1); }} options={SOURCE_FILTER_OPTIONS} placeholder="All Sources" clearable compact />
       </SaleFilterBar>
 
       {/* Table + KYC detail panel */}
@@ -483,7 +557,7 @@ const SaleBuyers = () => {
             renderActions={renderBuyerActions}
           />
 
-          <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
+          <PaginationBar page={page} pages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} label={T.saleBuyers.toLowerCase()} />
         </div>
 
         {selected && (
@@ -582,28 +656,7 @@ const SaleBuyers = () => {
                       )}
                     </div>
                   </div>
-                  <div className="px-4 py-3">
-                    <div className="mb-2 flex items-baseline gap-1.5">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">KYC Documents</span>
-                      <span className="text-[10px] font-bold text-slate-500">({(selected.kycDocuments || []).length})</span>
-                    </div>
-                    {(selected.kycDocuments || []).length > 0 ? (
-                      <div className="mb-2 space-y-1">
-                        {selected.kycDocuments.map((doc, idx) => (
-                          <div key={idx} className="flex items-center gap-2 border border-slate-200 bg-[#F1F6F3] px-2.5 py-1.5">
-                            <FaFileAlt size={9} className="flex-shrink-0 text-[#0B3B2E]" />
-                            <span className="flex-1 min-w-0 truncate text-xs text-slate-800" title={doc}>{doc}</span>
-                            <button type="button" onClick={() => handleRemoveDoc(selected, idx)} disabled={kycSaving} className="flex-shrink-0 p-0.5 text-rose-400 hover:text-rose-600 disabled:opacity-40">
-                              <FaTimes size={9} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mb-2 text-[11px] text-slate-400">No documents recorded.</div>
-                    )}
-                    <KycDocAdd kycSaving={kycSaving} onAdd={(label) => handleAddDoc(selected, label)} />
-                  </div>
+                  <BuyerKycPanel key={selected._id} buyer={selected} kycSaving={kycSaving} onRemoveLegacyDoc={handleRemoveDoc} invalidate={invalidate} />
                 </>
               )}
 
@@ -808,7 +861,7 @@ const SaleBuyers = () => {
 
       {/* New / Edit Buyer Modal */}
       {buyerModal && (
-        <BuyerFormModal editingId={buyerModal.editingId} initial={buyerModal.initial} saving={saving} onClose={() => setBuyerModal(null)} onSubmit={handleSave} />
+        <BuyerFormModal editingId={buyerModal.editingId} initial={buyerModal.initial} saving={saving} invalidate={invalidate} onClose={() => setBuyerModal(null)} onSubmit={handleSave} />
       )}
 
       <ImportModal

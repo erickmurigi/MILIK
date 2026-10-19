@@ -10,6 +10,7 @@ import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
 import { normalizeCompanyId } from "../verifyToken.js";
 import { round2 } from "../../utils/math.js";
+import { claimPaymentReference, releasePaymentReference } from "../../services/paymentReferenceGuard.js";
 
 // req.user.company is always trusted first — a client-supplied business/company
 // value is only used as a fallback for requests with no authenticated company
@@ -288,6 +289,13 @@ export const remitVat = async (req, res, next) => {
       remittedAt: new Date(),
     });
 
+    try {
+      await claimPaymentReference({ business: businessId, reference: paymentReference, sourceModel: "TaxRemittance", sourceId: remittance._id });
+    } catch (refErr) {
+      await TaxRemittance.deleteOne({ _id: remittance._id });
+      return next(refErr);
+    }
+
     // Post GL entries. If any step throws, clean up the remittance record and re-throw.
     const journalGroupId    = new mongoose.Types.ObjectId();
     const touchedAccountIds = [];
@@ -361,6 +369,7 @@ export const remitVat = async (req, res, next) => {
       // GL posting failed â€” delete the orphaned TaxRemittance and any partial GL entries
       await TaxRemittance.deleteOne({ _id: remittance._id }).catch(() => {});
       await FinancialLedgerEntry.deleteMany({ sourceTransactionType: "tax_remittance", sourceTransactionId: String(remittance._id) }).catch(() => {});
+      await releasePaymentReference({ business: businessId, reference: paymentReference, sourceModel: "TaxRemittance", sourceId: remittance._id }).catch(() => {});
       throw glErr;
     }
 
@@ -416,6 +425,7 @@ export const voidRemittance = async (req, res, next) => {
     remittance.voidedBy   = actorUserId;
     remittance.voidReason = reason || "";
     await remittance.save();
+    await releasePaymentReference({ business: businessId, reference: remittance.paymentReference, sourceModel: "TaxRemittance", sourceId: remittance._id }).catch(() => {});
 
     aggregateChartOfAccountBalances(businessId, touchedAccountIds).catch(() => {});
 

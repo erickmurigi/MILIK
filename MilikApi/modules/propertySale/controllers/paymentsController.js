@@ -16,6 +16,10 @@ import {
 } from "../services/propertySaleAccountingService.js";
 import { sumPaidForDeal, percentPaid } from "../services/dealProgress.js";
 import { applyTierCrossings } from "../services/commissionReleaseService.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
+import { voucherReferenceKey } from "../../../utils/voucherReference.js";
+
+const SOURCE_MODEL = "SalePayment";
 
 // Agent-scoped or advocate-scoped users only see payments on their own deals (query fragment; empty for
 // everyone else). The two scopes are mutually exclusive in practice (a user is linked to at most one of
@@ -199,12 +203,21 @@ export const createPayment = async (req, res, next) => {
       updatedBy: userId,
     });
 
+    // Claim the reference before any GL work — a duplicate here must never leave a GL entry to unwind.
+    try {
+      await claimPaymentReference({ business, reference: payment.reference, sourceModel: SOURCE_MODEL, sourceId: payment._id });
+    } catch (refErr) {
+      await SalePayment.deleteOne({ _id: payment._id });
+      return next(refErr);
+    }
+
     // The check above is read-then-write, so two concurrent submits can both pass it. Re-check after the
     // insert (before any GL posting): if the deal is now overpaid, remove this payment and reject.
     // Worst case under a true race is that both requests are rejected; never that both are kept.
     const totalAfter = await sumPaidForDeal(business, deal._id);
     if (round2(totalAfter) > round2(deal.agreedPrice) + OVERPAY_TOLERANCE) {
       await SalePayment.deleteOne({ _id: payment._id });
+      await releasePaymentReference({ business, reference: payment.reference, sourceModel: SOURCE_MODEL, sourceId: payment._id }).catch(() => {});
       return next(overpaymentError(payment.amount, round2(deal.agreedPrice - (totalAfter - payment.amount))));
     }
 
@@ -218,6 +231,7 @@ export const createPayment = async (req, res, next) => {
     } catch (glErr) {
       // GL failed — delete the payment so DB and ledger stay in sync
       await SalePayment.deleteOne({ _id: payment._id });
+      await releasePaymentReference({ business, reference: payment.reference, sourceModel: SOURCE_MODEL, sourceId: payment._id }).catch(() => {});
       return next(createError(422, `Payment saved but GL posting failed: ${glErr.message}. Payment has been rolled back.`));
     }
 
@@ -231,6 +245,7 @@ export const createPayment = async (req, res, next) => {
       // Never leave a payment recorded with an un-posted tier — unwind the payment and its GL together.
       await reversePropertySalePaymentLedger({ businessId: business, payment, userId }).catch(() => {});
       await SalePayment.deleteOne({ _id: payment._id });
+      await releasePaymentReference({ business, reference: payment.reference, sourceModel: SOURCE_MODEL, sourceId: payment._id }).catch(() => {});
       return next(createError(422, `Payment saved but commission tier posting failed: ${tierErr.message}. Payment has been rolled back.`));
     }
 
@@ -297,11 +312,23 @@ export const updatePayment = async (req, res, next) => {
       newPctPaid       = percentPaid(otherPaid + Number(updates.amount), dealForUpdate.agreedPrice);
     }
 
+    // Reference change — claim the new one before any GL work, so a duplicate never leaves GL to unwind.
+    const newReference     = updates.reference !== undefined ? updates.reference : old.reference;
+    const referenceChanged = voucherReferenceKey(newReference) !== voucherReferenceKey(old.reference);
+    if (referenceChanged) {
+      try {
+        await claimPaymentReference({ business, reference: newReference, sourceModel: SOURCE_MODEL, sourceId: old._id });
+      } catch (refErr) {
+        return next(refErr);
+      }
+    }
+
     if (glCorrectionNeeded) {
       // Reverse old GL entries first
       try {
         await reversePropertySalePaymentLedger({ businessId: business, payment: old, userId });
       } catch (glErr) {
+        if (referenceChanged) await releasePaymentReference({ business, reference: newReference, sourceModel: SOURCE_MODEL, sourceId: old._id }).catch(() => {});
         return next(createError(422, `GL reversal failed: ${glErr.message}. Payment not updated.`));
       }
     }
@@ -313,7 +340,13 @@ export const updatePayment = async (req, res, next) => {
         { new: true, runValidators: true }
       )
     ).lean();
-    if (!payment) return next(createError(404, "Payment not found"));
+    if (!payment) {
+      if (referenceChanged) await releasePaymentReference({ business, reference: newReference, sourceModel: SOURCE_MODEL, sourceId: old._id }).catch(() => {});
+      return next(createError(404, "Payment not found"));
+    }
+    if (referenceChanged) {
+      await releasePaymentReference({ business, reference: old.reference, sourceModel: SOURCE_MODEL, sourceId: old._id }).catch(() => {});
+    }
 
     if (glCorrectionNeeded) {
       try {
@@ -388,6 +421,9 @@ export const voidPayment = async (req, res, next) => {
       return next(createError(422, `GL reversal failed: ${glErr.message}. Payment void has been rolled back.`));
     }
 
+    // Voided payments are corrections, not real transactions — free the reference for reuse.
+    await releasePaymentReference({ business, reference: payment.reference, sourceModel: SOURCE_MODEL, sourceId: payment._id }).catch(() => {});
+
     // No tier-crossing check here, deliberately: voiding a payment only ever decreases %paid, and tier
     // release is a one-way ratchet (applyTierCrossings no-ops whenever newPctPaid <= previousPctPaid) —
     // only an explicit deal cancellation claws back an already-released tier.
@@ -406,6 +442,8 @@ export const deletePayment = async (req, res, next) => {
     if (!payment) return next(createError(404, "Payment not found"));
     if (payment.status === "paid") return next(createError(400, "Cannot delete a confirmed payment — void it first to reverse it"));
     await payment.deleteOne();
+    // Defensive — a voided payment already released its reference, this is a no-op in that case.
+    await releasePaymentReference({ business, reference: payment.reference, sourceModel: SOURCE_MODEL, sourceId: payment._id }).catch(() => {});
     res.status(200).json({ message: "Payment deleted" });
   } catch (err) {
     next(err);

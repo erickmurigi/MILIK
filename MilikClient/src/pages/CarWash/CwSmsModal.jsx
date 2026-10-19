@@ -101,8 +101,8 @@ const CwSmsModal = ({ target, defaultBody = "", templates = [], context = "", on
   const smsLabel = units === 0 ? "" : units === 1 ? "1 SMS" : `${units} SMS`;
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-slate-950/50 px-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-md border border-slate-200 bg-white shadow-2xl">
 
         {/* ── Header ── */}
         <div className="flex items-start justify-between gap-3 bg-[#0B3B2E] px-4 py-3 text-white">

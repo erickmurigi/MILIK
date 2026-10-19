@@ -33,6 +33,8 @@ const saleOwnerStatementSchema = new mongoose.Schema(
     generatedAt: { type: Date, required: true, default: Date.now },
     approvedAt: { type: Date, default: null },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    reversedAt: { type: Date, default: null },
+    reversedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     supersedesStatementId: { type: mongoose.Schema.Types.ObjectId, ref: "SaleOwnerStatement", default: null },
     supersededByStatementId: { type: mongoose.Schema.Types.ObjectId, ref: "SaleOwnerStatement", default: null },
     notes: { type: String, default: "", trim: true },
@@ -55,9 +57,17 @@ saleOwnerStatementSchema.post("init", function () {
 });
 
 // Once approved, a statement is immutable — corrections require a new version (not built in v1,
-// but the schema fields exist for it).
+// but the schema fields exist for it) — with exactly one deliberate exception: reversing the approval
+// back to "draft" (approving posts no GL entries of its own, so this is a pure status flip, never a
+// ledger reversal). Only status/approvedAt/approvedBy/reversedAt/reversedBy/notes may change on that
+// transition — the frozen financial figures (grossProceeds, netBalance, lines, etc.) can never move,
+// even during a reversal, so a reversal can't double as a backdoor edit.
+const REVERSAL_ALLOWED_PATHS = new Set(["status", "approvedAt", "approvedBy", "reversedAt", "reversedBy", "notes", "updatedAt"]);
 saleOwnerStatementSchema.pre("save", function (next) {
-  if (this.isModified() && !this.isNew && this._original?.status === "approved") {
+  if (this.isNew || !this.isModified() || this._original?.status !== "approved") return next();
+  const reversingToDraft = this.isModified("status") && this.status === "draft";
+  const onlyAllowedFieldsChanged = this.modifiedPaths().every((p) => REVERSAL_ALLOWED_PATHS.has(p));
+  if (!reversingToDraft || !onlyAllowedFieldsChanged) {
     return next(new Error("Approved owner statements cannot be modified."));
   }
   next();

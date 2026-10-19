@@ -7,16 +7,21 @@ import Modal from "../../components/common/Modal";
 import AmountInput from "./AmountInput";
 import SalePhotosField from "./SalePhotosField";
 import useSalePhotoDraft from "../../hooks/useSalePhotoDraft";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import AppSelect from "../../components/common/AppSelect";
 import { errorMessage } from "./SaleProjectShared";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 
-const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none";
+// Local override, not the shared utils/formStyles.js — that file's labelClass/inputClass predate the
+// bold-value-matches-label-weight convention now standard across PropertySale forms (see
+// SaleActivityFormModal.jsx / AppSelect.jsx's label and selected-value weight).
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
 
 const blankForm = () => ({
   name: "", description: "", location: "", town: "", county: "", country: "Kenya",
-  launchDate: "", targetUnits: "", targetValue: "", notes: "", assignedAgent: "", owner: "",
+  launchDate: "", targetUnits: "", targetValue: "", notes: "", assignedAgent: "", assignedAdvocate: "", owner: "",
 });
 
 const formFromProject = (p) => ({
@@ -25,14 +30,15 @@ const formFromProject = (p) => ({
   launchDate: p.launchDate ? new Date(p.launchDate).toISOString().split("T")[0] : "",
   targetUnits: p.targetUnits ?? "", targetValue: p.targetValue ?? "", notes: p.notes || "",
   assignedAgent: p.assignedAgent?._id || p.assignedAgent || "",
+  assignedAdvocate: p.assignedAdvocate?._id || p.assignedAdvocate || "",
   owner: p.owner?._id || p.owner || "",
 });
 
 // Create / edit a project. Owns its form state so typing never re-renders the page behind it.
 export default function SaleProjectFormModal({ project = null, onSaved, onClose }) {
-  const T = useTerms("saleProject", "saleUnits", "saleAgent", "saleOwner");
+  const T = useTerms("saleProject", "saleUnits", "saleAgent", "saleAdvocate", "saleOwner");
   const biz = useSelector((s) => s.company?.currentCompany?._id);
-  const { agentFormOptions, ownerFormOptions, saleSettings } = useSaleFormOptions(biz);
+  const { agentFormOptions, advocateFormOptions, ownerFormOptions, saleSettings } = useSaleFormOptions(biz);
   const [form, setForm] = useState(() => (project ? formFromProject(project) : blankForm()));
   const [saving, setSaving] = useState(false);
 
@@ -62,6 +68,7 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         targetValue: form.targetValue === "" ? null : Number(form.targetValue),
         launchDate: form.launchDate || null,
         assignedAgent: form.assignedAgent || null,
+        assignedAdvocate: form.assignedAdvocate || null,
         owner: form.owner || null,
       };
       const saved = project ? await saleApi.updateProject(project._id, payload) : await saleApi.createProject(payload);
@@ -79,7 +86,7 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
   return (
     <Modal
       title={project ? `Edit ${T.saleProject}` : `New ${T.saleProject}`}
-      size="lg"
+      size="extraWide"
       onClose={handleClose}
       footer={
         <>
@@ -90,16 +97,16 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
         </>
       }
     >
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="md:col-span-2">
-          <label className={labelClass}>Name *</label>
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="md:col-span-3">
+          <label className={labelClass}>Name<Required /></label>
           <input value={form.name} onChange={set("name")} className={inputClass} placeholder="e.g. Kitengela Gardens Phase 2" autoFocus />
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-3">
           <label className={labelClass}>Description</label>
           <textarea rows={2} value={form.description} onChange={set("description")} className={textareaClass} />
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-3">
           <label className={labelClass}>Location / Address</label>
           <input value={form.location} onChange={set("location")} className={inputClass} />
         </div>
@@ -119,7 +126,15 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
           <label className={labelClass}>Launch Date</label>
           <input type="date" value={form.launchDate} onChange={set("launchDate")} className={inputClass} />
         </div>
-        <div className="md:col-span-2">
+        <div>
+          <label className={labelClass}>Target {T.saleUnits}</label>
+          <input type="number" min="0" value={form.targetUnits} onChange={set("targetUnits")} className={inputClass} placeholder="Optional" />
+        </div>
+        <div>
+          <label className={labelClass}>Target Value (KES)</label>
+          <AmountInput value={form.targetValue} onChange={(v) => setForm((p) => ({ ...p, targetValue: v }))} className={inputClass} placeholder="Optional" />
+        </div>
+        <div>
           <AppSelect
             label={`Default ${T.saleAgent} for ${T.saleUnits.toLowerCase()}`}
             value={form.assignedAgent}
@@ -131,11 +146,28 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
             clearable
           />
           <p className="mt-1 text-[10px] text-slate-400">
-            Every {T.saleUnits.toLowerCase()} without its own {T.saleAgent.toLowerCase()} follows this one. Set an {T.saleAgent.toLowerCase()} on a single {T.saleUnits.toLowerCase()} to override it.
+            Every {T.saleUnits.toLowerCase()} without its own {T.saleAgent.toLowerCase()} follows this one.
           </p>
         </div>
+        {saleSettings?.useAdvocates && (
+          <div>
+            <AppSelect
+              label={`Default ${T.saleAdvocate} for ${T.saleUnits.toLowerCase()}`}
+              value={form.assignedAdvocate}
+              onChange={(v) => setForm((p) => ({ ...p, assignedAdvocate: v ?? "" }))}
+              options={advocateFormOptions}
+              placeholder="None"
+              size="md"
+              searchable
+              clearable
+            />
+            <p className="mt-1 text-[10px] text-slate-400">
+              Every deal under this {T.saleProject.toLowerCase()} is prefilled with this {T.saleAdvocate.toLowerCase()}, unless overridden.
+            </p>
+          </div>
+        )}
         {saleSettings?.useOwners && (
-          <div className="md:col-span-2">
+          <div>
             <AppSelect
               label={T.saleOwner}
               value={form.owner}
@@ -147,23 +179,15 @@ export default function SaleProjectFormModal({ project = null, onSaved, onClose 
               clearable
             />
             <p className="mt-1 text-[10px] text-slate-400">
-              The property/project {T.saleOwner.toLowerCase()} this is sold on behalf of. Leave empty if the company sells this one for itself.
+              Who this is sold on behalf of. Leave empty if the company sells for itself.
             </p>
           </div>
         )}
-        <div>
-          <label className={labelClass}>Target {T.saleUnits}</label>
-          <input type="number" min="0" value={form.targetUnits} onChange={set("targetUnits")} className={inputClass} placeholder="Optional" />
-        </div>
-        <div>
-          <label className={labelClass}>Target Value (KES)</label>
-          <AmountInput value={form.targetValue} onChange={(v) => setForm((p) => ({ ...p, targetValue: v }))} className={inputClass} placeholder="Optional" />
-        </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-3">
           <label className={labelClass}>Internal Notes</label>
           <textarea rows={2} value={form.notes} onChange={set("notes")} className={textareaClass} />
         </div>
-        <div className="md:col-span-2">
+        <div className="md:col-span-3">
           <SalePhotosField photos={photos} hasRecord={Boolean(project)} />
         </div>
       </div>

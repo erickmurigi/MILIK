@@ -11,7 +11,9 @@ import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { postSaleAdvocateRemittance } from "../services/propertySaleAccountingService.js";
 import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
+import { advocateProjectFilter } from "../middleware/advocateScope.js";
 import { outstandingRecoverableExpenseVouchers } from "../services/recoverableExpense.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 // Owner id for a deal, resolved via its listing -> project -> owner (mirrors dealsController.js's
 // resolveListingOwner). null for a standalone listing or a project with no owner.
@@ -111,7 +113,14 @@ export const createRemittance = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const advocate = await SaleAdvocate.findOne({ _id: req.body.advocate, business }).select("_id").lean();
+    // Scoped advocate caller: always remit as themselves, regardless of what req.body.advocate said —
+    // same "never let the caller's own input override the scope" rule as listRemittances. 404 (not 403)
+    // matches advocatesController.js's convention of not confirming other advocates exist.
+    const advocateId = req.saleAdvocateId || req.body.advocate;
+    if (req.saleAdvocateId && req.body.advocate && String(req.body.advocate) !== req.saleAdvocateId) {
+      return next(createError(404, "Advocate not found"));
+    }
+    const advocate = await SaleAdvocate.findOne({ _id: advocateId, business }).select("_id").lean();
     if (!advocate) return next(createError(400, "Advocate not found"));
 
     const amount = Number(req.body.amount);
@@ -126,7 +135,11 @@ export const createRemittance = async (req, res, next) => {
     let appliedTo = [];
     if (req.body.deal) {
       if (!mongoose.isValidObjectId(String(req.body.deal))) return next(createError(400, "Invalid deal"));
-      dealDoc = await SaleDeal.findOne({ _id: req.body.deal, business }).select("_id listing").lean();
+      // Scoped advocate caller: the deal must be one of their own assigned-project deals — otherwise
+      // they could remit against trust funds collected on a deal (and possibly by another advocate)
+      // outside their scope, since dealAdvocateTrustBalance is deal-level, not advocate-specific.
+      const dealScopeFilter = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+      dealDoc = await SaleDeal.findOne({ _id: req.body.deal, business, ...dealScopeFilter }).select("_id listing").lean();
       if (!dealDoc) return next(createError(400, "Deal not found"));
 
       const trust = await dealAdvocateTrustBalance(business, dealDoc._id);
@@ -170,6 +183,13 @@ export const createRemittance = async (req, res, next) => {
     });
 
     try {
+      await claimPaymentReference({ business, reference: remittance.reference, sourceModel: "SaleAdvocateRemittance", sourceId: remittance._id });
+    } catch (refErr) {
+      await SaleAdvocateRemittance.deleteOne({ _id: remittance._id });
+      return next(refErr);
+    }
+
+    try {
       await postSaleAdvocateRemittance({
         businessId: business,
         remittance,
@@ -181,6 +201,7 @@ export const createRemittance = async (req, res, next) => {
       // GL failed — delete the remittance so DB and ledger stay in sync (same rollback pattern as
       // paymentsController.js's createPayment)
       await SaleAdvocateRemittance.deleteOne({ _id: remittance._id });
+      await releasePaymentReference({ business, reference: remittance.reference, sourceModel: "SaleAdvocateRemittance", sourceId: remittance._id }).catch(() => {});
       return next(createError(422, `Remittance saved but GL posting failed: ${glErr.message}. Remittance has been rolled back.`));
     }
 

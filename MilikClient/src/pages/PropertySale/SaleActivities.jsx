@@ -1,9 +1,14 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
-import { FaCalendarAlt, FaEdit, FaPlus, FaTimes, FaTrash } from "react-icons/fa";
+import {
+  FaBell, FaClipboardList, FaEdit, FaEnvelope, FaHandshake, FaHome,
+  FaPhone, FaPlus, FaStickyNote, FaTrash, FaWhatsapp,
+} from "react-icons/fa";
 import { toast } from "react-toastify";
 import PropertySaleShell from "./PropertySaleShell";
+import MilikTable from "../../components/common/MilikTable";
+import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
 import { saleApi } from "../../services/propertySaleApi";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -11,44 +16,40 @@ import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar, { FilterDateRange, FilterSearch } from "./SaleFilterBar";
-import { labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
+import SaleActivityFormModal, { ACTIVITY_TYPE_OPTIONS, OUTCOME_OPTIONS, blankActivityForm } from "./SaleActivityFormModal";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
 
-const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
-const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
-
-const ACTIVITY_TYPE_OPTIONS = ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }));
-const OUTCOME_OPTIONS       = OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }));
-const ACT_ICONS      = { call: "📞", email: "✉️", meeting: "🤝", site_visit: "🏠", whatsapp: "💬", note: "📝", follow_up: "🔔" };
+// One icon per type for scannability — but a single neutral badge color, not a per-type palette; the
+// type itself isn't a status, so giving it decorative color would violate the house rule that color is
+// reserved for things that actually mean something (outcome below is the real status here).
+const ACT_ICONS = { call: FaPhone, email: FaEnvelope, meeting: FaHandshake, site_visit: FaHome, whatsapp: FaWhatsapp, note: FaStickyNote, follow_up: FaBell };
 const OUTCOME_COLORS = { positive: "text-emerald-600", neutral: "text-slate-500", negative: "text-rose-600", no_answer: "text-amber-600", not_applicable: "text-slate-400" };
-const G = "bg-[#F1F6F3] border-[#B7C9C0] text-[#0B3B2E]";
-const O = "bg-orange-50 border-orange-200 text-orange-700";
-const TYPE_COLORS    = { call: G, email: O, meeting: G, site_visit: O, whatsapp: G, note: O, follow_up: G };
-
-const blankForm = { type: "call", subject: "", notes: "", date: "", durationMinutes: "", outcome: "not_applicable", nextAction: "", nextActionDate: "", relatedLead: "", relatedBuyer: "", relatedDeal: "" };
 
 const fmt    = (v) => v ? new Date(v).toLocaleString("en-KE", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-const fmtDay = (v) => v ? new Date(v).toLocaleDateString("en-KE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }) : "";
+const fmtDay = (v) => v ? new Date(v).toLocaleDateString("en-KE", { weekday: "long", day: "2-digit", month: "long", year: "numeric" }) : "Other";
 const fmtShort = (v) => v ? new Date(v).toLocaleDateString("en-KE", { day: "2-digit", month: "short" }) : "";
 const LIMIT  = 50;
 
-const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
-
-function groupByDay(activities) {
-  const groups = new Map();
-  for (const a of activities) {
-    const day = new Date(a.date).toDateString();
-    if (!groups.has(day)) groups.set(day, []);
-    groups.get(day).push(a);
-  }
-  return groups;
-}
+const activityTableCols = [
+  { label: "Activity #", width: "8%" },
+  { label: "Date & Time", width: "12%" },
+  { label: "Type", width: "9%" },
+  { label: "Subject", width: "18%" },
+  { label: "Related To", width: "16%" },
+  { label: "Outcome", width: "9%" },
+  { label: "Duration", align: "right", width: "7%" },
+  { label: "Logged By", width: "10%" },
+];
 
 export default function SaleActivities() {
   const T       = useTerms("saleLead", "saleLeads", "saleBuyer", "saleBuyers", "saleDeal", "saleListing");
   const confirm = useConfirm();
   const qc      = useQueryClient();
-  const biz     = useSelector((s) => s.company?.currentCompany?._id);
+  const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const biz     = currentCompany?._id;
 
   const [search,        setSearch]    = useTabState("/sale/crm/activities:search", "");
   const debSearch                     = useDebounce(search, 400);
@@ -61,10 +62,8 @@ export default function SaleActivities() {
   const [page,          setPage]      = useTabState("/sale/crm/activities:page", 1);
   const [pageSize,      setPageSize]  = useTabState("/sale/crm/activities:pageSize", LIMIT);
 
-  const [showModal, setShowModal]     = useState(false);
-  const [editingId, setEditingId]     = useState("");
-  const [form,      setForm]          = useState(blankForm);
-  const [saving,    setSaving]        = useState(false);
+  const [actModal, setActModal] = useState(null); // { editingAct, initial } while the log/edit modal is open
+  const [saving,   setSaving]   = useState(false);
 
   const { data: activitiesData, isLoading, isFetching } = useQuery({
     queryKey: ["sale-activities-all", biz, debSearch, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to, page, pageSize],
@@ -77,16 +76,16 @@ export default function SaleActivities() {
   // Leads/buyers feed the always-visible filter dropdowns; deals are only needed by the log/edit modal.
   const { data: leadsData }  = useQuery({ queryKey: ["sale-leads-ref",  biz], queryFn: () => saleApi.listLeads({ business: biz, limit: 200 }),  enabled: !!biz, staleTime: 5 * 60_000 });
   const { data: buyersData } = useQuery({ queryKey: ["sale-buyers-ref", biz], queryFn: () => saleApi.listBuyers({ business: biz, limit: 200 }), enabled: !!biz, staleTime: 5 * 60_000 });
-  const { data: dealsData }  = useQuery({ queryKey: ["sale-deals-ref",  biz], queryFn: () => saleApi.listDeals({ business: biz, limit: 200 }),  enabled: !!biz && showModal, staleTime: 5 * 60_000 });
+  const { data: dealsData }  = useQuery({ queryKey: ["sale-deals-ref",  biz], queryFn: () => saleApi.listDeals({ business: biz, limit: 200 }),  enabled: !!biz && !!actModal, staleTime: 5 * 60_000 });
 
   const activities = useMemo(() => activitiesData?.data ?? [], [activitiesData]);
   const total      = activitiesData?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const grouped    = useMemo(() => groupByDay(activities), [activities]);
 
   const leadOptions  = useMemo(() => (leadsData?.data  ?? []).map((l) => ({ value: l._id, label: `${l.fullName} (${l.leadNumber})` })), [leadsData]);
   const buyerOptions = useMemo(() => (buyersData?.data ?? []).map((b) => ({ value: b._id, label: `${b.fullName} (${b.buyerNumber})` })), [buyersData]);
   const dealOptions  = useMemo(() => (dealsData?.data  ?? []).map((d) => ({ value: d._id, label: `${d.dealNumber}${d.buyer?.fullName ? ` — ${d.buyer.fullName}` : ""}` })), [dealsData]);
+  const linkOptions  = useMemo(() => ({ leadOptions, buyerOptions, dealOptions }), [leadOptions, buyerOptions, dealOptions]);
 
   const invalidate = useCallback(() => {
     qc.invalidateQueries({ queryKey: ["sale-activities-all", biz] });
@@ -94,14 +93,10 @@ export default function SaleActivities() {
     qc.invalidateQueries({ queryKey: ["sale-leads", biz] });
   }, [qc, biz]);
 
-  const openCreate = () => {
-    setEditingId("");
-    setForm({ ...blankForm, date: new Date().toISOString().slice(0, 16) });
-    setShowModal(true);
-  };
-  const openEdit = (act) => {
-    setEditingId(act._id);
-    setForm({
+  const openCreate = () => setActModal({ editingAct: null, initial: { ...blankActivityForm, date: new Date().toISOString().slice(0, 16) } });
+  const openEdit = (act) => setActModal({
+    editingAct: act,
+    initial: {
       type: act.type, subject: act.subject || "", notes: act.notes || "",
       date: new Date(act.date).toISOString().slice(0, 16),
       durationMinutes: act.durationMinutes || "",
@@ -111,20 +106,20 @@ export default function SaleActivities() {
       relatedLead:  act.relatedLead?._id  || act.relatedLead  || "",
       relatedBuyer: act.relatedBuyer?._id || act.relatedBuyer || "",
       relatedDeal:  act.relatedDeal?._id  || act.relatedDeal  || "",
-    });
-    setShowModal(true);
-  };
+    },
+  });
 
-  const handleSave = async () => {
+  const handleSave = async (form) => {
     if (!form.type) return toast.warning("Activity type is required");
     if (!form.date) return toast.warning("Date is required");
+    const editingId = actModal?.editingAct?._id;
     setSaving(true);
     try {
       const payload = { ...form, business: biz };
       if (editingId) await saleApi.updateActivity(editingId, payload);
       else await saleApi.createActivity(payload);
       invalidate();
-      setShowModal(false);
+      setActModal(null);
       toast.success(`Activity ${editingId ? "updated" : "logged"}`);
     } catch (err) { toast.error(err?.response?.data?.message || "Save failed"); }
     finally { setSaving(false); }
@@ -147,29 +142,130 @@ export default function SaleActivities() {
     return null;
   };
 
+  const renderActivityRow = useCallback((act) => {
+    const Icon = ACT_ICONS[act.type] || FaClipboardList;
+    const entity = entityLabel(act);
+    return (
+      <>
+        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap font-mono font-bold text-[#0B3B2E]">{act.activityNumber || "—"}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-700">{fmt(act.date)}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-1.5 py-0.5 text-[9px] font-bold uppercase text-[#0B3B2E]">
+            <Icon size={8} />{(act.type || "").replace(/_/g, " ")}
+          </span>
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100 max-w-[220px] truncate text-slate-700">{act.subject || "—"}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 max-w-[180px] truncate">
+          {entity ? <span className="font-semibold text-[#0B3B2E]">{entity}</span> : <span className="text-slate-300">—</span>}
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap">
+          {act.outcome && act.outcome !== "not_applicable"
+            ? <span className={`capitalize ${OUTCOME_COLORS[act.outcome]}`}>{act.outcome.replace(/_/g, " ")}</span>
+            : <span className="text-slate-300">—</span>}
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100 text-right tabular-nums text-slate-600">
+          {act.durationMinutes > 0 ? `${act.durationMinutes} min` : "—"}
+        </td>
+        <td className="px-3 py-1.5 text-slate-500 whitespace-nowrap">{act.createdBy?.name || act.createdBy?.fullName || "—"}</td>
+      </>
+    );
+  }, [T]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const renderActivityActions = useCallback((act) => (
+    <div className="inline-flex items-center gap-1">
+      <button onClick={() => openEdit(act)} title="Edit" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+        <FaEdit size={9} />
+      </button>
+      <button onClick={() => handleDelete(act)} title="Delete" className="border border-red-200 bg-white px-2 py-0.5 text-[11px] font-bold text-red-600 hover:bg-red-50">
+        <FaTrash size={9} />
+      </button>
+    </div>
+  ), [openEdit, handleDelete]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const renderActivityExpanded = useCallback((act) => {
+    if (!act.notes && !act.nextAction) {
+      return <div className="text-[10px] text-slate-400">No notes or next action logged for this activity.</div>;
+    }
+    return (
+      <div className="max-w-xl space-y-1.5 text-[11px]">
+        {act.notes && <p className="text-slate-600">{act.notes}</p>}
+        {act.nextAction && (
+          <p className="font-semibold text-[#0B3B2E]">
+            → {act.nextAction}{act.nextActionDate ? ` · ${fmtShort(act.nextActionDate)}` : ""}
+          </p>
+        )}
+      </div>
+    );
+  }, []);
+
+  const buildReportFilters = () => ({
+    business: biz, search: debSearch, type: typeFilter, outcome: outcomeFilter,
+    relatedLead: leadFilter, relatedBuyer: buyerFilter, from, to,
+  });
+  const reportColumns = [
+    { label: "Activity #", value: (a) => a.activityNumber || "—" },
+    { label: "Date & Time", value: (a) => fmt(a.date) },
+    { label: "Type", value: (a) => (a.type || "").replace(/_/g, " ") },
+    { label: "Subject", value: (a) => a.subject || "—" },
+    { label: "Related To", value: (a) => entityLabel(a) || "—" },
+    { label: "Outcome", value: (a) => (a.outcome && a.outcome !== "not_applicable" ? a.outcome.replace(/_/g, " ") : "—") },
+    { label: "Duration (min)", value: (a) => (a.durationMinutes > 0 ? a.durationMinutes : "—") },
+    { label: "Logged By", value: (a) => a.createdBy?.name || a.createdBy?.fullName || "—" },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      typeFilter && `Type: ${typeFilter.replace(/_/g, " ")}`,
+      outcomeFilter && `Outcome: ${outcomeFilter.replace(/_/g, " ")}`,
+      (from || to) && `${from || "…"} – ${to || "…"}`,
+      debSearch && `Search: ${debSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listActivities, buildReportFilters()), ({ rows }) => ({
+      title: "Activities",
+      subtitle: described.join(" · ") || "All activities",
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listActivities, buildReportFilters()), ({ rows }) => ({
+      filename: "activities",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
       <div className="flex flex-col h-full">
 
         {/* Filter bar */}
         <SaleFilterBar
-          leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">{total} activit{total === 1 ? "y" : "ies"}</span>}
           onReset={() => { setSearch(""); setType(""); setOutcome(""); setLead(""); setBuyer(""); setFrom(""); setTo(""); setPage(1); }}
           activeCount={[search, typeFilter, outcomeFilter, leadFilter, buyerFilter, from, to].filter(Boolean).length}
           trailing={
-            <button
-              onClick={openCreate}
-              className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-            >
-              <FaPlus size={9} /> Log Activity
-            </button>
+            <>
+              <SalePrintButton onClick={printReport} busy={printing} disabled={isLoading || total === 0} />
+              <SaleExportButton onClick={exportReport} busy={exporting} disabled={isLoading || total === 0} />
+              <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
+                Log Activity
+              </ListToolbar.Button>
+            </>
           }
         >
           <FilterSearch value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search activities…" />
-          <AppSelect value={typeFilter} onChange={(v) => { setType(v ?? ""); setPage(1); }} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" size="sm" clearable />
-          <AppSelect value={outcomeFilter} onChange={(v) => { setOutcome(v ?? ""); setPage(1); }} options={OUTCOME_OPTIONS} placeholder="All Outcomes" size="sm" clearable />
-          <AppSelect value={leadFilter} onChange={(v) => { setLead(v ?? ""); setPage(1); }} options={leadOptions} placeholder={`All ${T.saleLeads}`} size="sm" searchable clearable />
-          <AppSelect value={buyerFilter} onChange={(v) => { setBuyer(v ?? ""); setPage(1); }} options={buyerOptions} placeholder={`All ${T.saleBuyers}`} size="sm" searchable clearable />
+          <AppSelect value={typeFilter} onChange={(v) => { setType(v ?? ""); setPage(1); }} options={ACTIVITY_TYPE_OPTIONS} placeholder="All Types" clearable compact />
+          <AppSelect value={outcomeFilter} onChange={(v) => { setOutcome(v ?? ""); setPage(1); }} options={OUTCOME_OPTIONS} placeholder="All Outcomes" clearable compact />
+          <AppSelect value={leadFilter} onChange={(v) => { setLead(v ?? ""); setPage(1); }} options={leadOptions} placeholder={`All ${T.saleLeads}`} searchable clearable compact />
+          <AppSelect value={buyerFilter} onChange={(v) => { setBuyer(v ?? ""); setPage(1); }} options={buyerOptions} placeholder={`All ${T.saleBuyers}`} searchable clearable compact />
           <FilterDateRange
             from={from} to={to}
             onFromChange={(e) => { setFrom(e.target.value); setPage(1); }}
@@ -177,138 +273,44 @@ export default function SaleActivities() {
           />
         </SaleFilterBar>
 
-        {/* Timeline + PaginationBar */}
+        {/* Table — grouped by day via MilikTable's own groupBy (orange-accent section header),
+            matching every other PropertySale list page instead of a bespoke timeline layout */}
         <div className="flex flex-col flex-1 min-h-0 border border-slate-200 bg-white shadow-sm">
-          <div className="flex-1 min-h-0 overflow-auto px-4 py-4 space-y-6">
-            {isLoading && <div className="text-center text-slate-400 text-xs py-10">Loading…</div>}
-            {!isLoading && activities.length === 0 && (
-              <div className="text-center text-slate-400 text-xs py-10">No activities found</div>
-            )}
-            {[...grouped.entries()].map(([day, dayActs]) => (
-              <div key={day}>
-                <div className="mb-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
-                  <span>{fmtDay(dayActs[0].date)}</span>
-                  <span className="h-px flex-1 bg-slate-200" />
-                  <span className="border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-slate-400">{dayActs.length}</span>
-                </div>
-                <div className="space-y-1.5">
-                  {dayActs.map((act) => {
-                    const entity = entityLabel(act);
-                    return (
-                      <div key={act._id} className="group flex gap-3 border border-slate-100 bg-white px-4 py-3 hover:border-[#B7C9C0] hover:bg-[#F1F6F3]">
-                        <div className="mt-0.5 flex-shrink-0 text-base">{ACT_ICONS[act.type] || "📋"}</div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${TYPE_COLORS[act.type] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                                {(act.type || "").replace(/_/g, " ")}
-                              </span>
-                              {act.subject && <span className="text-xs font-semibold text-slate-700">{act.subject}</span>}
-                            </div>
-                            <div className="flex flex-shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                              <button onClick={() => openEdit(act)} className="border border-[#B7C9C0] bg-white p-1 text-[#0B3B2E] hover:bg-[#F1F6F3]"><FaEdit size={9} /></button>
-                              <button onClick={() => handleDelete(act)} className="border border-red-200 bg-white p-1 text-red-600 hover:bg-red-50"><FaTrash size={9} /></button>
-                            </div>
-                          </div>
-                          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
-                            {act.activityNumber && <span className="font-mono font-bold text-slate-400">{act.activityNumber}</span>}
-                            <span>{fmt(act.date)}</span>
-                            {act.durationMinutes > 0 && <span>{act.durationMinutes} min</span>}
-                            {act.outcome && act.outcome !== "not_applicable" && (
-                              <span className={`capitalize ${OUTCOME_COLORS[act.outcome]}`}>{act.outcome.replace(/_/g, " ")}</span>
-                            )}
-                            {entity && <span className="font-semibold text-[#0B3B2E]">{entity}</span>}
-                            {act.createdBy && <span>by {act.createdBy.name || act.createdBy.fullName}</span>}
-                          </div>
-                          {act.notes && <p className="mt-1 text-[11px] text-slate-500">{act.notes}</p>}
-                          {act.nextAction && (
-                            <p className="mt-1 text-[11px] font-semibold text-[#0B3B2E]">
-                              → {act.nextAction}{act.nextActionDate ? ` · ${fmtShort(act.nextActionDate)}` : ""}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
+          <MilikTable
+            columns={activityTableCols}
+            rows={activities}
+            loading={isLoading}
+            empty="No activities found."
+            minWidth={820}
+            groupBy={(row) => fmtDay(row.date)}
+            renderRow={renderActivityRow}
+            renderActions={renderActivityActions}
+            renderExpanded={renderActivityExpanded}
+          />
 
           <PaginationBar
             page={page}
             pages={totalPages}
+            total={total}
             pageSize={pageSize}
             onPageChange={setPage}
             onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
             loading={isFetching}
+            label="activities"
           />
         </div>
       </div>
 
       {/* ── Log / Edit Activity Modal ──────────────────────────────────────────── */}
-      {showModal && (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-              <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-                <FaCalendarAlt />{editingId ? "Edit Activity" : "Log Activity"}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
-              <div>
-                <AppSelect label="Type *" value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v ?? "" }))} options={ACTIVITY_TYPE_OPTIONS} size="md" />
-              </div>
-              <div>
-                <label className={labelClass}>Date & Time *</label>
-                <input type="datetime-local" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Subject</label>
-                <input value={form.subject} onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <AppSelect label="Outcome" value={form.outcome} onChange={(v) => setForm((f) => ({ ...f, outcome: v ?? "" }))} options={OUTCOME_OPTIONS} size="md" />
-              </div>
-              <div>
-                <label className={labelClass}>Duration (min)</label>
-                <input type="number" value={form.durationMinutes} onChange={(e) => setForm((f) => ({ ...f, durationMinutes: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-
-              <div>
-                <AppSelect label={`Link to ${T.saleLead}`} value={form.relatedLead} onChange={(v) => setForm((f) => ({ ...f, relatedLead: v ?? "", relatedBuyer: "", relatedDeal: "" }))} options={leadOptions} placeholder="— None —" size="md" searchable clearable />
-              </div>
-              <div>
-                <AppSelect label={`Link to ${T.saleBuyer}`} value={form.relatedBuyer} onChange={(v) => setForm((f) => ({ ...f, relatedBuyer: v ?? "", relatedLead: "", relatedDeal: "" }))} options={buyerOptions} placeholder="— None —" size="md" searchable clearable disabled={!!form.relatedLead} />
-              </div>
-              <div className="col-span-2">
-                <AppSelect label={`Link to ${T.saleDeal}`} value={form.relatedDeal} onChange={(v) => setForm((f) => ({ ...f, relatedDeal: v ?? "", relatedLead: "", relatedBuyer: "" }))} options={dealOptions} placeholder="— None —" size="md" searchable clearable disabled={!!(form.relatedLead || form.relatedBuyer)} />
-              </div>
-
-              <div className="col-span-2">
-                <label className={labelClass}>Notes</label>
-                <textarea rows={3} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
-              </div>
-              <div className="col-span-2">
-                <label className={labelClass}>Next Action</label>
-                <input value={form.nextAction} onChange={(e) => setForm((f) => ({ ...f, nextAction: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-              <div>
-                <label className={labelClass}>Next Action Date</label>
-                <input type="date" value={form.nextActionDate} onChange={(e) => setForm((f) => ({ ...f, nextActionDate: e.target.value }))} className={`${modalInputCls} h-8`} />
-              </div>
-            </div>
-
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-              <button onClick={() => setShowModal(false)} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleSave} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
-                {saving ? "Saving…" : editingId ? "Update" : "Log Activity"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {actModal && (
+        <SaleActivityFormModal
+          editingAct={actModal.editingAct}
+          initial={actModal.initial}
+          saving={saving}
+          linkOptions={linkOptions}
+          onClose={() => setActModal(null)}
+          onSubmit={handleSave}
+        />
       )}
     </PropertySaleShell>
   );

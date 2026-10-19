@@ -8,16 +8,34 @@ import SaleLead, { LEAD_STATUSES } from "../models/SaleLead.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 import { ownDealIds } from "../middleware/agentScope.js";
+import { advocateProjectFilter, ownAdvocateDealIds, ownListingIds } from "../middleware/advocateScope.js";
 import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
 
 // Filter fragments restricting each report figure to the caller's own records when the company keeps agents to
-// their own data (req.saleAgentId); all empty otherwise. Listings and buyers stay business-wide. Ids are real
-// ObjectIds because aggregate() does not cast. Payments and installments follow the agent's deals.
+// their own data (req.saleAgentId), or when the caller is advocate-scoped (req.saleAdvocateId, mandatory,
+// ungated); all empty otherwise. Ids are real ObjectIds because aggregate() does not cast. Payments and
+// installments follow the scoped deals either way. `listing` stays empty for agents (listings/buyers are
+// business-wide for them) but restricts to the advocate's own listings/units, matching listingsController.js.
 const reportScope = async (req, business) => {
-  if (!req.saleAgentId) return { deal: {}, offer: {}, lead: {}, commission: {}, dealChild: {} };
+  if (req.saleAdvocateId) {
+    const [dealIds, listingIds] = await Promise.all([
+      ownAdvocateDealIds(req, business),
+      ownListingIds(req, business),
+    ]);
+    return {
+      deal: await advocateProjectFilter(req, business, "listing"),
+      listing: { _id: { $in: listingIds } },
+      offer: { listing: { $in: listingIds } },
+      lead: {}, // leads have no advocate concept (no assignedAdvocate field on SaleLead) — left business-wide
+      commission: { deal: { $in: dealIds } },
+      dealChild: { deal: { $in: dealIds } },
+    };
+  }
+  if (!req.saleAgentId) return { deal: {}, listing: {}, offer: {}, lead: {}, commission: {}, dealChild: {} };
   const agent = new mongoose.Types.ObjectId(String(req.saleAgentId));
   return {
     deal: { agent },
+    listing: {},
     offer: { agent },
     lead: { assignedAgent: agent },
     commission: { agent },
@@ -34,7 +52,7 @@ export const getDashboardStats = async (req, res, next) => {
     const now = new Date();
     const [listingStats, dealStats, paymentStats, commissionStats, leadStats, overdueLeads, recentDeals, recentListings] = await Promise.all([
       SaleListing.aggregate([
-        { $match: { business: bId } },
+        { $match: { business: bId, ...sc.listing } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
       SaleDeal.aggregate([
@@ -65,7 +83,7 @@ export const getDashboardStats = async (req, res, next) => {
         .populate("listing", "title listingNumber propertyType")
         .populate("buyer", "fullName buyerNumber")
         .lean(),
-      SaleListing.find({ business, status: { $in: ["available", "reserved"] } })
+      SaleListing.find({ business, status: { $in: ["available", "reserved"] }, ...sc.listing })
         .sort({ createdAt: -1 })
         .limit(5)
         .populate("assignedAgent", "fullName")

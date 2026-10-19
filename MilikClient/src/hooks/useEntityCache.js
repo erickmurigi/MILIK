@@ -25,8 +25,13 @@
 
 import { useSelector } from 'react-redux';
 
-// Collections fetched within this window are treated as fresh (skip re-fetch).
-const STALE_MS = 30_000;
+// Collections fetched within this window are treated as fresh (skip re-fetch). Every consumer of this
+// hook uses these flags purely for cross-page REFERENCE data (a dropdown/filter on some other page's own
+// primary list, never a page's own editable rows — those always dispatch unconditionally on mount,
+// independent of this cache) — matching the longer staleTime (2-10 min) already given to the equivalent
+// React Query reference-data queries in PropertySale, instead of this flat 30s that redundantly
+// refetched properties/units/tenants/etc. on nearly every revisit.
+const STALE_MS = 2 * 60_000;
 
 const isFresh = (loadedFor, loadedAt, bid) =>
   !!bid && loadedFor === bid && Date.now() - (loadedAt || 0) < STALE_MS;

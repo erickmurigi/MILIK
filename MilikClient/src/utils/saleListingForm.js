@@ -4,7 +4,7 @@ export const blankListingForm = (propertyType = "plot") => ({
   title: "", propertyType, description: "", size: "", sizeUnit: "sqm",
   location: "", town: "", county: "", country: "Kenya", askingPrice: "",
   negotiable: true, titleDeedAvailable: false, titleDeedNumber: "",
-  assignedAgent: "", listedDate: todayISO(), amenities: "", notes: "",
+  assignedAgent: "", assignedAdvocate: "", listedDate: todayISO(), amenities: "", notes: "",
   unitNumber: "", block: "", attributes: {},
 });
 
@@ -18,6 +18,7 @@ export const listingFormFromRow = (row) => ({
   titleDeedAvailable: row.titleDeedAvailable || false,
   titleDeedNumber: row.titleDeedNumber || "",
   assignedAgent: row.assignedAgent?._id || row.assignedAgent || "",
+  assignedAdvocate: row.assignedAdvocate?._id || row.assignedAdvocate || "",
   listedDate: row.listedDate ? new Date(row.listedDate).toISOString().split("T")[0] : todayISO(),
   amenities: Array.isArray(row.amenities) ? row.amenities.join(", ") : "",
   notes: row.notes || "",

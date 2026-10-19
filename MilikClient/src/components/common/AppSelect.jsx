@@ -211,9 +211,9 @@ const AppSelect = ({
   return (
     <div className={`${label ? "w-full" : minWidthCls} ${className}`}>
       {label && (
-        <label className="mb-1 block text-xs font-black text-slate-900">
+        <label className="mb-1 block text-xs font-bold text-slate-900">
           {label}
-          {required && <span className="ml-0.5 text-rose-500">*</span>}
+          {required && <span className="ml-0.5 font-black text-red-600">*</span>}
         </label>
       )}
 
@@ -242,7 +242,7 @@ const AppSelect = ({
       >
         <span
           className={`flex-1 truncate ${
-            selectedOption ? "font-medium text-slate-900" : "text-slate-400"
+            selectedOption ? "font-bold text-slate-900" : "text-slate-400"
           }`}
         >
           {selectedOption?.label ?? placeholder}

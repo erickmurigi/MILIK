@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import CarWashDeposit from "../models/CarWashDeposit.js";
 import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 const DESTINATIONS = new Set(["bank", "mpesa", "safe", "other"]);
 const STATUSES = new Set(["pending", "confirmed", "cancelled"]);
@@ -158,6 +159,13 @@ export const createDeposit = async (req, res, next) => {
         throw err;
       }
     }
+    try {
+      await claimPaymentReference({ business, reference: deposit.reference, sourceModel: "CarWashDeposit", sourceId: deposit._id });
+    } catch (refErr) {
+      await CarWashDeposit.deleteOne({ _id: deposit._id });
+      return next(refErr);
+    }
+
     res.status(201).json({ success: true, data: deposit, deposit, message: "Car Wash deposit recorded" });
   } catch (error) {
     next(error);
@@ -194,6 +202,9 @@ export const updateDepositStatus = async (req, res, next) => {
     }
 
     await deposit.save();
+    if (status === "cancelled") {
+      await releasePaymentReference({ business, reference: deposit.reference, sourceModel: "CarWashDeposit", sourceId: deposit._id }).catch(() => {});
+    }
     await deposit.populate([
       { path: "depositedBy",  select: "name username email" },
       { path: "confirmedBy",  select: "name username email" },

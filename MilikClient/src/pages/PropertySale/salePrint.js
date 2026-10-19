@@ -46,6 +46,31 @@ export const printSaleDocument = async (run) => {
   }
 };
 
+/** Writes rows to an .xlsx file using the same {label, value(row)} column shape the print spec's
+ * `columns` already use — one column list serves both Print and Export. */
+export const exportToExcel = async (columns, rows, filename) => {
+  const XLSX = await import("xlsx");
+  const sheet = XLSX.utils.aoa_to_sheet([
+    columns.map((c) => c.label),
+    ...rows.map((r) => columns.map((c) => (c.value ? c.value(r) : r[c.key]) ?? "")),
+  ]);
+  const book = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(book, sheet, "Export");
+  const ymd = new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(book, `${filename}-${ymd}.xlsx`);
+};
+
+/** Export rows that must be fetched first — mirrors printAfterFetch's shape so a page's existing
+ * printReport buildSpec can usually be reused as-is for exportReport too. */
+export const exportAfterFetch = async (fetchRows, buildSpec) => {
+  try {
+    const { rows, columns, filename } = buildSpec(await fetchRows());
+    await exportToExcel(columns, rows, filename);
+  } catch (error) {
+    toast.error(error?.response?.data?.message || "Could not prepare the export");
+  }
+};
+
 /** Every page of a paged list endpoint (the sale endpoints cap one page at 200). */
 export const fetchAllPages = async (fetcher, params, { pageSize = 200, maxPages = 25 } = {}) => {
   const rows = [];

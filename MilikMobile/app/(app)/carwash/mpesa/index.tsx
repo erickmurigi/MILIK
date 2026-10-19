@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import DropdownFilter from '../../../../components/ui/DropdownFilter';
 import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
 import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
 import { cleanDecimal, fmtDateTime, fmtKES } from '../../../../utils/pmsFormat';
@@ -437,19 +438,9 @@ export default function CarWashMpesaScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        <FlatList
-          horizontal
-          data={RANGE_CHIPS}
-          keyExtractor={c => c.key}
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={styles.chipsRow}
-          renderItem={({ item: c }) => (
-            <TouchableOpacity style={[styles.chip, range === c.key && styles.chipActive]} onPress={() => setRange(c.key)}>
-              <Text style={[styles.chipText, range === c.key && styles.chipTextActive]}>{c.label}</Text>
-            </TouchableOpacity>
-          )}
-        />
+        <View style={styles.rangeRow}>
+          <DropdownFilter title="Date range" value={range} options={RANGE_CHIPS} onChange={k => setRange(k as Range)} style={{ alignSelf: 'flex-start', minWidth: 150 }} />
+        </View>
 
         {(unmatched || matched) ? (
           <View style={styles.summaryStrip}>
@@ -539,11 +530,7 @@ const styles = StyleSheet.create({
   tabText:       { fontSize: 12, fontWeight: '600', color: '#475569' },
   tabTextActive: { color: '#fff' },
 
-  chipsRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 8 },
-  chip: { paddingHorizontal: 13, paddingVertical: 6, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#E2E8F0' },
-  chipActive:     { backgroundColor: CW, borderColor: CW },
-  chipText:       { fontSize: 12, fontWeight: '600', color: '#475569' },
-  chipTextActive: { color: '#fff' },
+  rangeRow: { paddingHorizontal: 16, paddingBottom: 8 },
 
   summaryStrip: {
     flexDirection: 'row', marginHorizontal: 16, marginBottom: 8,

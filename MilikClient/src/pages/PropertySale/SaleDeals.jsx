@@ -17,19 +17,31 @@ import { fmtDate } from "../../utils/dates";
 import AmountInput from "./AmountInput";
 import { useConfirm } from "../../context/ConfirmContext";
 import { useTabState } from "../../hooks/useTabState";
-import { printSaleDocument } from "./salePrint";
+import { exportAfterFetch, fetchAllPages, money, printAfterFetch, printSaleDocument } from "./salePrint";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
 import { printPaymentReceiptById } from "./SalePaymentReceipt";
 import { printDealSummaryById } from "./SaleDealSummary";
 import { printDealStatementById } from "./SaleDealStatement";
-import { useTerms, prefixedTerm } from "../../hooks/useTerm";
+import { useTerms } from "../../hooks/useTerm";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import StatusBadge from "../../components/common/StatusBadge";
 import MilikTable from "../../components/common/MilikTable";
+import DealFormModal from "./SaleDealFormModal";
+import { PAYMENT_PLAN_LABEL, ScheduleRowsEditor, blankScheduleGeneratorFields } from "./SaleScheduleGenerator";
 
-const PAGE_SIZE = 25;
+// Local override, not the shared utils/formStyles.js — that file's labelClass/inputClass predate the
+// bold-value-matches-label-weight convention now standard across PropertySale forms (see
+// SaleActivityFormModal.jsx / AppSelect.jsx's label and selected-value weight).
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "h-7 w-full border border-slate-200 bg-white px-2.5 text-sm font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const textareaClass = "w-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+const REFERENCE_REQUIRED_METHODS = ["mpesa", "bank_transfer", "cheque"];
+
+const PAGE_SIZE = 50;
 
 const DEAL_STATUS_MAP = {
   active:    "border-[#B7C9C0] bg-[#F1F6F3] text-[#0B3B2E]",
@@ -38,9 +50,14 @@ const DEAL_STATUS_MAP = {
 };
 
 const blankDealForm = {
-  listing: "", buyer: "", agent: "", agreedPrice: "",
+  listing: "", buyer: "", agent: "", advocate: "", agreedPrice: "", paymentPlan: "installment",
   dealDate: todayISO(), expectedClosingDate: "", notes: "",
   commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "",
+  // depositMode/depositValue/installmentCount/frequency/firstInstallmentDate/scheduleRows — the schedule
+  // preview's own inputs, never sent to the API (handleSave strips them before building the
+  // create/update payload; only the resulting scheduleRows get saved, via a separate setSchedule call
+  // chained after the deal itself is created).
+  ...blankScheduleGeneratorFields,
 };
 
 const PAYMENT_TYPES   = ["deposit", "installment", "final_payment", "other"];
@@ -49,19 +66,21 @@ const fmtLabel        = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c)
 
 const PAYMENT_TYPE_OPTIONS   = PAYMENT_TYPES.map((t) => ({ value: t, label: fmtLabel(t) }));
 const PAYMENT_METHOD_OPTIONS = PAYMENT_METHODS.map((m) => ({ value: m, label: fmtLabel(m) }));
-const COMMISSION_TYPE_OPTIONS = [{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }];
 const DEAL_STATUS_OPTIONS    = [{ value: "active", label: "Active" }, { value: "closed", label: "Closed" }, { value: "cancelled", label: "Cancelled" }];
 const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod: "bank_transfer", cashbook: "", reference: "", paymentDate: todayISO(), notes: "", collectionMethod: "direct", advocate: "" };
 
-const dealTableCols = (T) => [
-  { label: `${T.saleDeal} No.` },
-  { label: "Property" },
-  { label: T.saleBuyer },
-  { label: T.saleAgent },
-  { label: "Agreed Price", align: "right" },
-  { label: "Paid",         align: "right" },
-  { label: "Balance",      align: "right" },
-  { label: "Status" },
+const dealTableCols = (T, withAdvocate) => [
+  { label: `${T.saleDeal} No.`, width: "8%" },
+  { label: "Property", width: "14%" },
+  { label: `${T.saleListing} No.`, width: "9%" },
+  { label: T.saleBuyer, width: "13%" },
+  { label: `${T.saleBuyer} No.`, width: "9%" },
+  { label: T.saleAgent, width: "11%" },
+  ...(withAdvocate ? [{ label: T.saleAdvocate, width: "11%" }] : []),
+  { label: "Agreed Price", align: "right", width: "13%" },
+  { label: "Paid",         align: "right", width: "9%" },
+  { label: "Balance",      align: "right", width: "9%" },
+  { label: "Status", width: "5%" },
 ];
 
 // Server supplies `balance` on every deal payload; fall back to the local computation only if absent.
@@ -70,21 +89,22 @@ const dealBalance = (d) => d?.balance ?? ((d?.agreedPrice || 0) - (d?.totalPaid 
 const blankCloseForm = () => ({ actualClosingDate: todayISO(), titleTransferDate: "", handoverNotes: "", stampDutyAmount: "", stampDutyCashbook: "" });
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
-const renderDealRow = (row) => {
+// Listing No. / Buyer No. get their own columns (not a subtext line) so every cell stays single-line —
+// the Agreed Price progress bar is the one deliberate exception, same as Projects' own Progress column.
+const renderDealRow = (row, withAdvocate) => {
   const balance = dealBalance(row);
   const pct = row.agreedPrice > 0 ? Math.min(100, Math.round(((row.totalPaid || 0) / row.agreedPrice) * 100)) : 0;
   return (
     <>
       <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.dealNumber}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100">
-        <div className="max-w-[140px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</div>
-        <div className="text-[10px] text-slate-400">{row.listing?.listingNumber}</div>
-      </td>
-      <td className="px-3 py-1.5 border-r border-gray-100">
-        <div className="font-semibold text-slate-800">{row.buyer?.fullName || "—"}</div>
-        <div className="text-[10px] text-slate-400">{row.buyer?.buyerNumber}</div>
-      </td>
+      <td className="px-3 py-1.5 border-r border-gray-100 max-w-[160px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{row.listing?.listingNumber || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800">{row.buyer?.fullName || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{row.buyer?.buyerNumber || "—"}</td>
       <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
+      {withAdvocate && (
+        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.advocate?.fullName || <span className="italic text-slate-400">None</span>}</td>
+      )}
       <td className="px-3 py-1.5 border-r border-gray-100 text-right">
         <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>
         <div className="mt-0.5 h-1 w-full overflow-hidden bg-slate-100">
@@ -102,85 +122,6 @@ const renderDealRow = (row) => {
 
 // ── Modals / inputs below own their form state so keystrokes never re-render the page, table or detail panel. ──
 // Submit handlers stay in the page (they own the in-flight guards); each modal hands its current form up on submit.
-
-function DealFormModal({ editingId, initial, saving, listingFormOptions, buyerOptions, agentFormOptions, agents, onClose, onSubmit }) {
-  const T = useTerms("saleDeal", "saleListing", "saleBuyer", "saleAgent");
-  const [form, setForm] = useState(initial);
-  return (
-    <Modal
-      title={editingId ? `Edit ${T.saleDeal}` : `New ${prefixedTerm("Sale", T.saleDeal, "saleDeal")}`}
-      wide
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
-            {saving ? "Saving…" : editingId ? `Update ${T.saleDeal}` : `Create ${T.saleDeal}`}
-          </button>
-        </>
-      }
-    >
-      <div className="grid gap-3 md:grid-cols-2">
-        <div>
-          <AppSelect label={`${T.saleListing} / Property`} value={form.listing} onChange={(v) => setForm((p) => ({ ...p, listing: v ?? "" }))} options={listingFormOptions} placeholder={`Select ${T.saleListing.toLowerCase()}…`} size="md" searchable />
-        </div>
-        <div>
-          <AppSelect label={T.saleBuyer} value={form.buyer} onChange={(v) => setForm((p) => ({ ...p, buyer: v ?? "" }))} options={buyerOptions} placeholder={`Select ${T.saleBuyer.toLowerCase()}…`} size="md" searchable />
-        </div>
-        <div>
-          <AppSelect label={`${prefixedTerm("Sales", T.saleAgent, "saleAgent")} (Optional)`} value={form.agent} onChange={(v) => setForm((p) => ({ ...p, agent: v ?? "", commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "" }))} options={agentFormOptions} placeholder={`No ${T.saleAgent.toLowerCase()}`} size="md" searchable clearable />
-        </div>
-        {!editingId && form.agent && (() => {
-          const selAgent = agents.find((a) => a._id === form.agent);
-          return (
-            <div className="md:col-span-2 border border-slate-200 bg-slate-50 px-3 py-2.5">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" checked={!!form.commOverrideEnabled} onChange={(e) => setForm((p) => ({ ...p, commOverrideEnabled: e.target.checked }))} className="h-3.5 w-3.5 accent-[#0B3B2E]" />
-                <span className="text-[11px] font-extrabold uppercase tracking-wide text-slate-600">Override Commission</span>
-                {selAgent && !form.commOverrideEnabled && (
-                  <span className="ml-1 text-[11px] text-slate-400">
-                    (Default: {selAgent.commissionType === "percentage" ? `${selAgent.commissionRate}%` : `KES ${Number(selAgent.commissionRate).toLocaleString()}`} — {selAgent.commissionType})
-                  </span>
-                )}
-              </label>
-              {form.commOverrideEnabled && (
-                <div className="mt-2.5 grid gap-3 sm:grid-cols-3">
-                  <div>
-                    <AppSelect label="Commission Type" value={form.commissionTypeOverride || selAgent?.commissionType || "percentage"} onChange={(v) => setForm((p) => ({ ...p, commissionTypeOverride: v ?? "", commissionAmountOverride: "" }))} options={COMMISSION_TYPE_OPTIONS} size="md" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>{(form.commissionTypeOverride || selAgent?.commissionType) === "flat" ? "Commission Amount (KES)" : "Commission Rate (%)"}</label>
-                    <input type="number" min="0" step="0.01" value={form.commissionRateOverride} onChange={(e) => setForm((p) => ({ ...p, commissionRateOverride: e.target.value, commissionAmountOverride: "" }))} className={inputClass} placeholder={selAgent ? String(selAgent.commissionRate) : ""} />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Direct Amount Override (KES)</label>
-                    <input type="number" min="0" step="0.01" value={form.commissionAmountOverride} onChange={(e) => setForm((p) => ({ ...p, commissionAmountOverride: e.target.value }))} className={inputClass} placeholder="Skip rate — set exact amount" />
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })()}
-        <div>
-          <label className={labelClass}>Agreed Price (KES)</label>
-          <AmountInput value={form.agreedPrice} onChange={(v) => setForm((p) => ({ ...p, agreedPrice: v }))} className={inputClass} placeholder="e.g. 8,500,000" />
-        </div>
-        <div>
-          <label className={labelClass}>{T.saleDeal} Date</label>
-          <input type="date" value={form.dealDate} onChange={(e) => setForm((p) => ({ ...p, dealDate: e.target.value }))} className={inputClass} />
-        </div>
-        <div>
-          <label className={labelClass}>Expected Closing Date</label>
-          <input type="date" value={form.expectedClosingDate} onChange={(e) => setForm((p) => ({ ...p, expectedClosingDate: e.target.value }))} className={inputClass} />
-        </div>
-        <div className="md:col-span-2">
-          <label className={labelClass}>Notes</label>
-          <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
-        </div>
-      </div>
-    </Modal>
-  );
-}
 
 function CancelDealModal({ deal, actionKey, onClose, onConfirm }) {
   const T = useTerms("saleDeal", "saleListing", "saleBuyer");
@@ -216,7 +157,7 @@ function CancelDealModal({ deal, actionKey, onClose, onConfirm }) {
         </label>
       </div>
       <label className={labelClass}>Reason for Cancellation</label>
-      <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder={`Optional — e.g. ${T.saleBuyer.toLowerCase()} withdrew, financing fell through…`} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-rose-500 focus:outline-none" />
+      <textarea rows={3} value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder={`Optional — e.g. ${T.saleBuyer.toLowerCase()} withdrew, financing fell through…`} className="w-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-rose-500 focus:ring-1 focus:ring-rose-500/20" />
     </Modal>
   );
 }
@@ -248,7 +189,7 @@ function CloseDealModal({ deal, cashbookOptions, actionKey, onClose, onConfirm }
         </div>
         <div className="md:col-span-2">
           <label className={labelClass}>Handover Notes</label>
-          <textarea rows={2} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <textarea rows={2} value={closeForm.handoverNotes} onChange={(e) => setCloseForm((p) => ({ ...p, handoverNotes: e.target.value }))} className={textareaClass} />
         </div>
         <div className="md:col-span-2 border-t border-slate-100 pt-3">
           <div className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-500">Stamp Duty / Transfer Costs (Optional)</div>
@@ -266,7 +207,7 @@ function CloseDealModal({ deal, cashbookOptions, actionKey, onClose, onConfirm }
                 placeholder="— Fallback if blank —"
                 clearable
                 searchable
-                size="md"
+                size="sm"
               />
             </div>
           </div>
@@ -321,10 +262,10 @@ function RecordPaymentModal({ deal, saving, cashbookOptions, useAdvocates, advoc
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <div>
-          <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
+          <AppSelect label="Payment Type" value={payForm.paymentType} onChange={(v) => setPayForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="sm" />
         </div>
         <div>
-          <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
+          <AppSelect label="Method" value={payForm.paymentMethod} onChange={(v) => setPayForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="sm" />
         </div>
         <div>
           <label className={labelClass}>Amount (KES)</label>
@@ -334,32 +275,20 @@ function RecordPaymentModal({ deal, saving, cashbookOptions, useAdvocates, advoc
           <label className={labelClass}>Payment Date</label>
           <input type="date" value={payForm.paymentDate} onChange={(e) => setPayForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} />
         </div>
-        <div className="md:col-span-2">
-          <AppSelect
-            label="Bank / Cashbook Account (GL Debit)"
-            value={payForm.cashbook}
-            onChange={(v) => setPayForm((f) => ({ ...f, cashbook: v ?? "" }))}
-            options={cashbookOptions}
-            placeholder="— Fallback receipts account if blank —"
-            clearable
-            searchable
-            size="md"
-          />
-        </div>
         {useAdvocates && (
           <div className="md:col-span-2 grid grid-cols-2 gap-2">
             <div>
               <AppSelect
                 label="Collected"
                 value={payForm.collectionMethod}
-                onChange={(v) => setPayForm((f) => ({ ...f, collectionMethod: v ?? "direct", advocate: v === "advocate_trust" ? f.advocate : "" }))}
+                onChange={(v) => setPayForm((f) => ({ ...f, collectionMethod: v ?? "direct", advocate: v === "advocate_trust" ? f.advocate : "", cashbook: v === "advocate_trust" ? "" : f.cashbook }))}
                 options={[{ value: "direct", label: "Direct to company" }, { value: "advocate_trust", label: "Via advocate trust account" }]}
-                size="md"
+                size="sm"
               />
             </div>
             {payForm.collectionMethod === "advocate_trust" && (
               <div>
-                <AppSelect label="Advocate *" value={payForm.advocate} onChange={(v) => setPayForm((f) => ({ ...f, advocate: v ?? "" }))} options={advocateFormOptions} placeholder="Select advocate…" size="md" searchable />
+                <AppSelect label="Advocate" required value={payForm.advocate} onChange={(v) => setPayForm((f) => ({ ...f, advocate: v ?? "" }))} options={advocateFormOptions} placeholder="Select advocate…" size="sm" searchable />
               </div>
             )}
           </div>
@@ -369,24 +298,39 @@ function RecordPaymentModal({ deal, saving, cashbookOptions, useAdvocates, advoc
             <p className="text-[10px] text-slate-500">This money sits in the advocate's trust account until they remit it — record that remittance separately from Trust Remittances once it arrives.</p>
           </div>
         )}
+        {payForm.collectionMethod !== "advocate_trust" && (
+          <div className="md:col-span-2">
+            <AppSelect
+              label="Bank / Cashbook Account (GL Debit)"
+              value={payForm.cashbook}
+              onChange={(v) => setPayForm((f) => ({ ...f, cashbook: v ?? "" }))}
+              options={cashbookOptions}
+              placeholder="— Fallback receipts account if blank —"
+              clearable
+              searchable
+              size="sm"
+            />
+          </div>
+        )}
         <div className="md:col-span-2">
           <label className={labelClass}>
-            {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference (Optional)"}
+            {payForm.paymentMethod === "mpesa" ? "M-Pesa Code" : payForm.paymentMethod === "cheque" ? "Cheque No." : payForm.paymentMethod === "bank_transfer" ? "EFT / Ref No." : "Reference"}
+            {REFERENCE_REQUIRED_METHODS.includes(payForm.paymentMethod) && <Required />}
           </label>
           <input
             type="text"
             value={payForm.reference}
             onChange={(e) => setPayForm((f) => ({ ...f, reference: e.target.value }))}
-            className={`${inputClass} font-mono ${["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
-            placeholder={payForm.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : "Optional…"}
+            className={`${inputClass} font-mono ${REFERENCE_REQUIRED_METHODS.includes(payForm.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
+            placeholder={payForm.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : payForm.paymentMethod === "bank_transfer" ? "e.g. RTGS/001/2026" : payForm.paymentMethod === "cheque" ? "e.g. 000123" : "Optional…"}
           />
-          {["mpesa", "cheque", "bank_transfer"].includes(payForm.paymentMethod) && (
-            <div className="mt-1 text-[10px] font-semibold text-amber-600">Reference required for {fmtLabel(payForm.paymentMethod)} — used for reconciliation</div>
+          {REFERENCE_REQUIRED_METHODS.includes(payForm.paymentMethod) && (
+            <div className="mt-1 text-[10px] font-semibold text-amber-600">Required for {fmtLabel(payForm.paymentMethod)} — used for reconciliation</div>
           )}
         </div>
         <div className="md:col-span-2">
           <label className={labelClass}>Notes</label>
-          <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <textarea rows={2} value={payForm.notes} onChange={(e) => setPayForm((f) => ({ ...f, notes: e.target.value }))} className={textareaClass} />
         </div>
       </div>
     </Modal>
@@ -395,7 +339,6 @@ function RecordPaymentModal({ deal, saving, cashbookOptions, useAdvocates, advoc
 
 function ScheduleBuilderModal({ initialItems, agreedPrice, saving, onClose, onSave }) {
   const [scheduleItems, setScheduleItems] = useState(initialItems);
-  const scheduleTotal = scheduleItems.reduce((s, i) => s + Number(i.expectedAmount || 0), 0);
   return (
     <Modal
       title="Payment Schedule"
@@ -410,41 +353,7 @@ function ScheduleBuilderModal({ initialItems, agreedPrice, saving, onClose, onSa
         </>
       }
     >
-      <div className="space-y-2">
-        {scheduleItems.map((item, idx) => (
-          <div key={idx} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-end border border-slate-200 bg-slate-50 px-3 py-2">
-            <div>
-              <label className={labelClass}>Due Date</label>
-              <input type="date" value={item.dueDate} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Amount (KES)</label>
-              <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={inputClass} placeholder="0.00" />
-            </div>
-            <div>
-              <label className={labelClass}>Description</label>
-              <input type="text" value={item.description} onChange={(e) => setScheduleItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={inputClass} placeholder={`Installment ${idx + 1}`} />
-            </div>
-            <div>
-              <button type="button" onClick={() => setScheduleItems((prev) => prev.filter((_, i) => i !== idx))} className="h-8 w-8 border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center">
-                <FaTrash size={9} />
-              </button>
-            </div>
-          </div>
-        ))}
-        <button type="button" onClick={() => setScheduleItems((prev) => [...prev, { dueDate: "", expectedAmount: "", description: `Installment ${prev.length + 1}` }])} className="inline-flex items-center gap-1 border border-[#B7C9C0] bg-[#F1F6F3] px-3 py-1.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#B7C9C0]/40">
-          <FaPlus size={8} /> Add Installment
-        </button>
-        {scheduleItems.length > 0 && (
-          <div className="mt-2 text-right text-xs">
-            <span className="text-slate-500">Schedule total: </span>
-            <span className={`font-black ${Math.abs(scheduleTotal - agreedPrice) < 1 ? "text-emerald-700" : "text-rose-600"}`}>
-              {fmtKES(scheduleTotal)}
-            </span>
-            <span className="text-slate-400"> / {fmtKES(agreedPrice)}</span>
-          </div>
-        )}
-      </div>
+      <ScheduleRowsEditor items={scheduleItems} setItems={setScheduleItems} agreedPrice={agreedPrice} />
     </Modal>
   );
 }
@@ -547,8 +456,7 @@ function DealDocUpload({ dealId }) {
 }
 
 const SaleDeals = () => {
-  const T = useTerms("saleDeal", "saleDeals", "saleListing", "saleListings", "saleBuyer", "saleBuyers", "saleAgent", "saleAgents");
-  const dealCols = useMemo(() => dealTableCols(T), [T]);
+  const T = useTerms("saleDeal", "saleDeals", "saleListing", "saleListings", "saleBuyer", "saleBuyers", "saleAgent", "saleAgents", "saleAdvocate");
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -584,6 +492,9 @@ const SaleDeals = () => {
 
   const biz = currentCompany?._id;
   const { saleSettings, advocateFormOptions } = useSaleFormOptions(biz);
+  const usesAdvocates = !!saleSettings?.useAdvocates;
+  const dealCols = useMemo(() => dealTableCols(T, usesAdvocates), [T, usesAdvocates]);
+  const renderRow = useCallback((row) => renderDealRow(row, usesAdvocates), [usesAdvocates]);
 
   const { data: dealsData, isLoading: loading, isFetching } = useQuery({
     queryKey: ["sale-deals", biz, appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo, page, pageSize],
@@ -662,7 +573,7 @@ const SaleDeals = () => {
   const agentFilterOptions  = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName}${a.agentNumber ? ` (${a.agentNumber})` : ""}` })), [agents]);
   const agentFormOptions    = useMemo(() => agents.map((a)  => ({ value: a._id, label: `${a.fullName} (${a.agentNumber})` })), [agents]);
   const listingFilterOptions= useMemo(() => listings.map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
-  const listingFormOptions  = useMemo(() => listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}` })), [listings]);
+  const listingFormOptions  = useMemo(() => listings.filter((l) => ["available", "reserved", "under_contract"].includes(l.status)).map((l) => ({ value: l._id, label: `${l.listingNumber} — ${l.title}`, advocate: l.effectiveAdvocate?._id ?? null })), [listings]);
 
   const dealPmts    = useMemo(() => (dealPmtsData?.data ?? []).filter((p) => p.status === "paid"), [dealPmtsData]);
   const dealComm    = dealCommData?.data?.[0] ?? null;
@@ -763,7 +674,9 @@ const SaleDeals = () => {
         listing: row.listing?._id || row.listing || "",
         buyer:   row.buyer?._id   || row.buyer   || "",
         agent:   row.agent?._id   || row.agent   || "",
+        advocate: row.advocate?._id || row.advocate || "",
         agreedPrice:         row.agreedPrice || "",
+        paymentPlan:         row.paymentPlan || "installment",
         dealDate:            row.dealDate ? new Date(row.dealDate).toISOString().split("T")[0] : todayISO(),
         expectedClosingDate: row.expectedClosingDate ? new Date(row.expectedClosingDate).toISOString().split("T")[0] : "",
         notes:               row.notes || "",
@@ -777,15 +690,34 @@ const SaleDeals = () => {
     if (!form.agreedPrice || Number(form.agreedPrice) <= 0) return toast.warning("Valid agreed price required");
     setSaving(true);
     try {
-      const { commOverrideEnabled, commissionRateOverride, commissionTypeOverride, commissionAmountOverride, ...baseForm } = form;
-      const payload = { ...baseForm, business: biz, agreedPrice: Number(form.agreedPrice), agent: form.agent || undefined, expectedClosingDate: form.expectedClosingDate || undefined };
+      // depositMode/depositValue/installmentCount/frequency/firstInstallmentDate/scheduleRows only drive
+      // the generator above — the deal itself never stores them; scheduleRows gets saved separately via
+      // setSchedule, once the new deal's id exists to attach it to.
+      const {
+        commOverrideEnabled, commissionRateOverride, commissionTypeOverride, commissionAmountOverride,
+        depositMode, depositValue, installmentCount, frequency, firstInstallmentDate, scheduleRows,
+        ...baseForm
+      } = form;
+      const payload = { ...baseForm, business: biz, agreedPrice: Number(form.agreedPrice), agent: form.agent || undefined, advocate: form.advocate || undefined, expectedClosingDate: form.expectedClosingDate || undefined };
       if (!editingId && form.agent && commOverrideEnabled) {
         if (commissionRateOverride !== "") payload.commissionRateOverride = Number(commissionRateOverride);
         if (commissionTypeOverride !== "") payload.commissionTypeOverride = commissionTypeOverride;
         if (commissionAmountOverride !== "") payload.commissionAmountOverride = Number(commissionAmountOverride);
       }
-      if (editingId) await saleApi.updateDeal(editingId, payload);
-      else await saleApi.createDeal(payload);
+      if (editingId) {
+        await saleApi.updateDeal(editingId, payload);
+      } else {
+        const newDeal = await saleApi.createDeal(payload);
+        if (scheduleRows?.length) {
+          try {
+            await saleApi.setSchedule({ dealId: newDeal._id, items: scheduleRows });
+          } catch (scheduleErr) {
+            // The deal itself is already created successfully — a schedule mismatch shouldn't look like
+            // the whole save failed. Open the existing schedule builder flow as the fallback.
+            toast.warn(scheduleErr?.response?.data?.message || "Deal created, but the payment schedule couldn't be saved — set it up from the deal's Schedule tab.");
+          }
+        }
+      }
       invalidate();
       if (editingId) invalidateDeal(editingId);
       setDealModal(null);
@@ -853,6 +785,9 @@ const SaleDeals = () => {
     if (!payingDeal) return;
     if (!payForm.amount || Number(payForm.amount) <= 0) return toast.warning("Valid amount required");
     if (payForm.collectionMethod === "advocate_trust" && !payForm.advocate) return toast.warning("Select which advocate collected this payment");
+    if (REFERENCE_REQUIRED_METHODS.includes(payForm.paymentMethod) && !payForm.reference.trim()) {
+      return toast.warning(`A reference number is required for ${fmtLabel(payForm.paymentMethod)} payments`);
+    }
     setPayingSave(true);
     try {
       const { cashbook, ...payBase } = payForm;
@@ -865,7 +800,7 @@ const SaleDeals = () => {
       queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] });
       setPayingDeal(null);
       toast.success("Payment recorded");
-      window.open(`/sale/payments/${payment._id}/receipt`, "_blank");
+      printSaleDocument((win) => printPaymentReceiptById(payment._id, { company: currentCompany, T, win }));
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record payment");
     } finally {
@@ -906,6 +841,57 @@ const SaleDeals = () => {
   const applySearch = (e) => { e.preventDefault(); setAppliedSearch(search); setPage(1); };
   const resetFilters = () => { setSearch(""); setAppliedSearch(""); setStatusFilter(""); setAgentFilt(""); setBuyerFilt(""); setListingFilt(""); setDateFrom(""); setDateTo(""); setPage(1); };
 
+  const buildReportFilters = () => ({
+    business: biz, search: appliedSearch, status: statusFilter,
+    agentId: agentFilt, buyerId: buyerFilt, listingId: listingFilt, dateFrom, dateTo,
+  });
+  const reportColumns = [
+    { label: `${T.saleDeal} No.`, value: (r) => r.dealNumber },
+    { label: "Property", value: (r) => r.listing?.title || "—" },
+    { label: `${T.saleListing} No.`, value: (r) => r.listing?.listingNumber || "—" },
+    { label: T.saleBuyer, value: (r) => r.buyer?.fullName || "—" },
+    { label: `${T.saleBuyer} No.`, value: (r) => r.buyer?.buyerNumber || "—" },
+    { label: T.saleAgent, value: (r) => r.agent?.fullName || "—" },
+    ...(usesAdvocates ? [{ label: T.saleAdvocate, value: (r) => r.advocate?.fullName || "—" }] : []),
+    { label: "Agreed Price (KES)", align: "right", value: (r) => money(r.agreedPrice) },
+    { label: "Paid (KES)", align: "right", value: (r) => money(r.totalPaid || 0) },
+    { label: "Balance (KES)", align: "right", value: (r) => money(dealBalance(r)) },
+    { label: "Status", value: (r) => r.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilter && `Status: ${statusFilter.charAt(0).toUpperCase()}${statusFilter.slice(1)}`,
+      agentFilt && agentFilterOptions.find((o) => o.value === agentFilt)?.label,
+      buyerFilt && buyerOptions.find((o) => o.value === buyerFilt)?.label,
+      listingFilt && listingFilterOptions.find((o) => o.value === listingFilt)?.label,
+      (dateFrom || dateTo) && `${dateFrom ? fmtDate(dateFrom) : "…"} – ${dateTo ? fmtDate(dateTo) : "…"}`,
+      appliedSearch && `Search: ${appliedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listDeals, buildReportFilters()), ({ rows }) => ({
+      title: `${T.saleDeals}`,
+      subtitle: described.join(" · ") || `All ${T.saleDeals.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+      totalsRow: ["TOTAL", "", "", "", "", "", money(rows.reduce((s, r) => s + Number(r.agreedPrice || 0), 0)), money(rows.reduce((s, r) => s + Number(r.totalPaid || 0), 0)), money(rows.reduce((s, r) => s + Number(dealBalance(r) || 0), 0)), ""],
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listDeals, buildReportFilters()), ({ rows }) => ({
+      filename: "deals",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   const handleRowClick       = useCallback((row) => setSelected((prev) => prev?._id === row._id ? null : row), [setSelected]);
   const handlePrintSummary   = useCallback((e) => {
     const id = e.currentTarget.dataset.id;
@@ -929,16 +915,16 @@ const SaleDeals = () => {
       </button>
       {row.status === "active" && (
         <>
-          <button type="button" onClick={() => setPayingDeal(row)} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
-            <FaMoneyBillWave className="text-[9px]" /> Pay
+          <button type="button" onClick={() => setPayingDeal(row)} title="Record Payment" className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+            <FaMoneyBillWave className="text-[9px]" />
           </button>
-          <button type="button" onClick={() => openEdit(row)} className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+          <button type="button" onClick={() => openEdit(row)} title="Edit" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[11px] font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
             <FaEdit className="text-[9px]" />
           </button>
-          <button type="button" onClick={() => setClosingDeal(row)} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
-            <FaCheck className="text-[9px]" /> Close
+          <button type="button" onClick={() => setClosingDeal(row)} title={`Close ${T.saleDeal}`} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100">
+            <FaCheck className="text-[9px]" />
           </button>
-          <button type="button" onClick={() => setCancellingDeal(row)} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
+          <button type="button" onClick={() => setCancellingDeal(row)} title={`Cancel ${T.saleDeal}`} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-100">
             <FaBan className="text-[9px]" />
           </button>
         </>
@@ -957,12 +943,13 @@ const SaleDeals = () => {
 
       {/* ── Filter bar ───────────────────────────────────────────────────── */}
       <SaleFilterBar
-        leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total !== 1 ? T.saleDeals : T.saleDeal).toLowerCase()}</span>}
         onSubmit={applySearch}
         onReset={resetFilters}
         activeCount={[appliedSearch, statusFilter, agentFilt, buyerFilt, listingFilt, dateFrom, dateTo].filter(Boolean).length}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <ListToolbar.Button
               variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-deals", biz] })}
@@ -1004,11 +991,11 @@ const SaleDeals = () => {
           minWidth={780}
           onRowClick={handleRowClick}
           isSelected={isRowSelected}
-          renderRow={renderDealRow}
+          renderRow={renderRow}
           renderActions={renderDealActions}
         />
 
-        <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
+        <PaginationBar page={page} pages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} label={T.saleDeals.toLowerCase()} />
       </div>
 
       {selected && (
@@ -1044,6 +1031,12 @@ const SaleDeals = () => {
             </div>
             {liveSelected.listing?.listingNumber && <div className="pl-4 text-[10px] font-mono text-slate-400">{liveSelected.listing.listingNumber}</div>}
             {liveSelected.agent && <div className="text-[10px] text-slate-500 pt-0.5">{T.saleAgent}: <span className="font-semibold text-slate-700">{liveSelected.agent.fullName}</span></div>}
+            {usesAdvocates && liveSelected.advocate && <div className="text-[10px] text-slate-500 pt-0.5">{T.saleAdvocate}: <span className="font-semibold text-slate-700">{liveSelected.advocate.fullName}</span></div>}
+            {liveSelected.paymentPlan && (
+              <span className="mt-1 inline-block w-fit border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-500">
+                {PAYMENT_PLAN_LABEL[liveSelected.paymentPlan] || fmtLabel(liveSelected.paymentPlan)}
+              </span>
+            )}
           </div>
 
           {/* Financial summary */}
@@ -1279,6 +1272,7 @@ const SaleDeals = () => {
           buyerOptions={buyerOptions}
           agentFormOptions={agentFormOptions}
           agents={agents}
+          advocateFormOptions={advocateFormOptions}
           onClose={() => setDealModal(null)}
           onSubmit={handleSave}
         />

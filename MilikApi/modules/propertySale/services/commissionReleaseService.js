@@ -44,6 +44,67 @@ export const newlyCrossedTiers = (commission, previousPctPaid, newPctPaid) => {
   });
 };
 
+// Folds a fresh settings tier list into a commission's stored releaseSchedule without disturbing
+// anything already accrued: a tier whose thresholdPct is already in tierReleases is kept EXACTLY as it
+// was recognized (its thresholdPct/releasePct from the schedule at accrual time), never silently
+// rewritten by a later settings edit — that would risk newlyCrossedTiers no longer recognizing it as
+// "already done" (it matches by thresholdPct) and re-accruing it. Every other tier — not yet fired —
+// always reflects the current settings, so a newly-added later tier (or an edit to one not yet reached)
+// takes effect immediately instead of being frozen at whatever existed when the commission was created.
+export const foldScheduleUpdate = (existingSchedule, tierReleases, newTiers) => {
+  const accruedThresholds = new Set((tierReleases || []).map((t) => t.thresholdPct));
+  const frozen = (existingSchedule || []).filter((t) => accruedThresholds.has(t.thresholdPct));
+  const fresh  = (newTiers || []).filter((t) => !accruedThresholds.has(t.thresholdPct))
+    .map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) }));
+  return [...frozen, ...fresh].sort((a, b) => a.thresholdPct - b.thresholdPct);
+};
+
+// Brings every still-open (pending/approved) STAGED commission's releaseSchedule up to date with the
+// company's current settings — called right after Settings > Commission Release is saved, so a tier
+// added/edited there takes effect on in-flight commissions immediately instead of only on commissions
+// created from now on. Commissions with an EMPTY releaseSchedule (created while staging was off, or
+// never staged) are deliberately left untouched — converting an immediate-release commission into a
+// staged one retroactively is a different, much bigger change than keeping an already-staged one in
+// sync, and isn't what this is for.
+export const resyncOpenCommissionReleaseSchedules = async ({ businessId, ownerCommissionTiers, brokerCommissionTiers }) => {
+  const [brokerCommissions, ownerCommissions] = await Promise.all([
+    SaleCommission.find({ business: businessId, status: { $in: ["pending", "approved"] }, "releaseSchedule.0": { $exists: true } }),
+    SaleOwnerCommission.find({ business: businessId, status: { $in: ["pending", "approved"] }, "releaseSchedule.0": { $exists: true } }),
+  ]);
+
+  // Only actually write (and count) a record whose folded schedule genuinely differs — most commissions
+  // on a resync pass are already in sync (nothing in settings changed for their side), and writing them
+  // unconditionally would just be a no-op save plus a misleading "updated" count.
+  const changedBroker = brokerCommissions.filter((c) => {
+    const next = foldScheduleUpdate(c.releaseSchedule, c.tierReleases, brokerCommissionTiers);
+    if (JSON.stringify(next) === JSON.stringify(c.releaseSchedule)) return false;
+    c.releaseSchedule = next;
+    return true;
+  });
+  const changedOwner = ownerCommissions.filter((c) => {
+    const next = foldScheduleUpdate(c.releaseSchedule, c.tierReleases, ownerCommissionTiers);
+    if (JSON.stringify(next) === JSON.stringify(c.releaseSchedule)) return false;
+    c.releaseSchedule = next;
+    return true;
+  });
+
+  await Promise.all([...changedBroker.map((c) => c.save()), ...changedOwner.map((c) => c.save())]);
+
+  return { brokerUpdated: changedBroker.length, ownerUpdated: changedOwner.length };
+};
+
+// An owner (agency) commission has no manual approval step at all — unlike the broker's, "approved" here
+// never means a human decided something, only "fully recognized." An immediate (non-staged) commission is
+// auto-approved in full at deal creation; a staged one must get the same treatment the instant its last
+// tier crosses, or it stays stuck showing "pending" (displayed as "Accruing") forever even once 100%
+// released — nothing else ever flips it. Shared by applyTierCrossings (the live payment path) and
+// commissionRecalculateService.js's recalculateOwnerCommission (the rate-resync path) so both stay in sync.
+export const maybeAutoApproveOwnerCommission = (ownerCommission) => {
+  if (ownerCommission.status !== "pending") return;
+  const fullyReleased = Number(ownerCommission.releasedAmount || 0) >= Number(ownerCommission.commissionAmount || 0) - 0.01;
+  if (fullyReleased) ownerCommission.status = "approved";
+};
+
 // Applies newly-crossed tiers for both the broker commission and the company's own commission on a deal,
 // posting the GL for each. No-ops entirely when a commission's releaseSchedule is empty (today's exact
 // immediate-release behavior is untouched; tiers are only ever consulted when a commission was created
@@ -76,6 +137,9 @@ export const applyTierCrossings = async ({ businessId, dealId, previousPctPaid, 
       ownerCommission.releasedAmount = round2(Number(ownerCommission.releasedAmount || 0) + tier.amount);
       await postPropertySaleOwnerCommissionTierRelease({ businessId, ownerCommission, tierRelease: pushed, userId });
     }
-    if (crossed.length) await ownerCommission.save();
+    if (crossed.length) {
+      maybeAutoApproveOwnerCommission(ownerCommission);
+      await ownerCommission.save();
+    }
   }
 };

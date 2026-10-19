@@ -13,6 +13,7 @@ import { nextInvoiceNumber } from "../services/clientSequenceService.js";
 import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailService.js";
 import { postClientInvoiceLedger, postClientPaymentLedger } from "../services/clientAccountingService.js";
 import { postReversal } from "../../../services/ledgerPostingService.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
@@ -241,6 +242,13 @@ export const recordPayment = async (req, res, next) => {
     });
 
     try {
+      await claimPaymentReference({ business, reference: paymentReference, sourceModel: "ClientPayment", sourceId: payment._id });
+    } catch (refErr) {
+      await ClientPayment.deleteOne({ _id: payment._id }).catch(() => {});
+      return next(refErr);
+    }
+
+    try {
       const ledgerEntries = await postClientPaymentLedger({ payment, invoice, userId });
       payment.ledgerEntries = ledgerEntries.map((e) => e._id);
       await payment.save();
@@ -251,6 +259,7 @@ export const recordPayment = async (req, res, next) => {
           sourceTransactionType: "client_payment",
           sourceTransactionId: String(payment._id),
         }).catch(() => {}),
+        releasePaymentReference({ business, reference: paymentReference, sourceModel: "ClientPayment", sourceId: payment._id }).catch(() => {}),
       ]);
       throw glError;
     }
@@ -346,6 +355,7 @@ export const reversePayment = async (req, res, next) => {
     invoice.paidAmount = newPaidAmount;
     invoice.status = newPaidAmount <= 0 ? "sent" : "partial";
     await invoice.save();
+    await releasePaymentReference({ business, reference: payment.paymentReference, sourceModel: "ClientPayment", sourceId: payment._id }).catch(() => {});
 
     res.status(200).json({ success: true, data: { invoice, payment }, invoice, payment, message: "Payment reversed" });
   } catch (error) {

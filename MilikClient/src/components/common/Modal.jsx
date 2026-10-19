@@ -25,8 +25,12 @@ const SIZE_CLASSES = {
 const Modal = ({ title, icon, onClose, children, footer, size, wide, extraWide }) => {
   const resolvedSize = size || (extraWide ? "extraWide" : wide ? "wide" : "md");
   return (
-    <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+    <div
+      className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center"
+      onClick={onClose}
+    >
       <div
+        onClick={(e) => e.stopPropagation()}
         className={`w-full border border-slate-200 bg-white shadow-2xl ${SIZE_CLASSES[resolvedSize] || SIZE_CLASSES.md}`}
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">

@@ -13,6 +13,7 @@ import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationSer
 import { postCarWashTopupLedger, reverseCarWashTopupLedger, postCarWashPaymentLedger } from "../services/carwashAccountingService.js";
 import { resolveCarWashSmsBody } from "../services/carwashSmsService.js";
 import { accrueCommissionForJob, markJobCommissionsPayable } from "../services/commissionService.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 
 // â”€â”€â”€ Number generators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -939,6 +940,16 @@ export const recordAccountTopup = async (req, res, next) => {
       business, account: account._id, amount, method, reference, cashbookAccount, paymentDate, notes, createdBy: userId,
     });
 
+    // Manual, staff-entered top-up only — never claimed for the M-Pesa-webhook-created topups
+    // elsewhere in this module, which deliberately reuse their originating payment's own
+    // transaction code (one real transaction split into a job-payment leg and an overpayment leg).
+    try {
+      await claimPaymentReference({ business, reference: topup.reference, sourceModel: "CarWashAccountTopup", sourceId: topup._id });
+    } catch (refErr) {
+      await CarWashAccountTopup.deleteOne({ _id: topup._id });
+      return next(refErr);
+    }
+
     // Credit the account balance atomically to prevent concurrent topup races
     await CarWashCreditAccount.findByIdAndUpdate(
       account._id,
@@ -1012,6 +1023,8 @@ export const voidTopupDirect = async (req, res, next) => {
     topup.voidedBy   = userId;
     topup.voidReason = reason;
     await topup.save();
+    // No-op if this topup's reference was never independently claimed (e.g. the M-Pesa-linked path).
+    await releasePaymentReference({ business, reference: topup.reference, sourceModel: "CarWashAccountTopup", sourceId: topup._id }).catch(() => {});
     res.json({ success: true, message: "Top-up voided and ledger reversed", data: topup });
   } catch (err) { next(err); }
 };
@@ -1050,6 +1063,7 @@ export const voidTopup = async (req, res, next) => {
     topup.voidedBy  = userId;
     topup.voidReason = reason;
     await topup.save();
+    await releasePaymentReference({ business, reference: topup.reference, sourceModel: "CarWashAccountTopup", sourceId: topup._id }).catch(() => {});
 
     res.json({ success: true, message: "Top-up voided and ledger reversed", data: topup });
   } catch (err) {

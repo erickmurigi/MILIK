@@ -4,6 +4,7 @@
 // nothing about commissions changes. See modules/propertySale/services/propertySaleAccountingService.js
 // (1314 Advocate Trust Receivable, postSaleAdvocateRemittance) and middleware/advocateScope.js.
 import { describe, it, expect } from "vitest";
+import mongoose from "mongoose";
 import { callController } from "../../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../../test/factories.js";
 import { getAccountByCode } from "../../../test/factories.financial.js";
@@ -13,12 +14,20 @@ import SaleProject from "../models/SaleProject.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleCommission from "../models/SaleCommission.js";
+import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import Company from "../../../models/Company.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { createDeal, getDeal, listDeals } from "./dealsController.js";
 import { createPayment } from "./paymentsController.js";
 import { createRemittance, getAdvocateTrustBalance, getRemittance, listRemittances } from "./advocateRemittancesController.js";
 import { getAdvocate, listAdvocates } from "./advocatesController.js";
+import { getBuyer, listBuyers } from "./buyersController.js";
+import { createOffer, getOffer, listOffers } from "./offersController.js";
+import { getCommission, listCommissions } from "./commissionsController.js";
+import { getProject, listProjects, listProjectUnits } from "./projectsController.js";
+import { getListing, listListings } from "./listingsController.js";
+import { getDashboardStats } from "./reportsController.js";
+import { getOverdueSchedule } from "./scheduleController.js";
 import { updateCommissionReleaseSchedule } from "./settingsController.js";
 import { attachAdvocateScope } from "../middleware/advocateScope.js";
 import { hasCompanyActionPermission } from "../../../utils/permissionControl.js";
@@ -249,6 +258,270 @@ describe("advocate scoping — the advocates directory and remittances ledger", 
     const ownBalance = await asAdvocate(getAdvocateTrustBalance, { params: { advocateId: String(advocate._id) } });
     expect(ownBalance.statusCode).toBe(200);
     await expect(asAdvocate(getAdvocateTrustBalance, { params: { advocateId: String(otherAdvocate._id) } })).rejects.toThrow();
+  });
+});
+
+describe("advocate scoping — deal-level override and standalone-listing fallback", () => {
+  it("a deal's own advocate overrides the project default in both directions", async () => {
+    const { business, call, project, makeDeal } = await setup();
+    const otherAdvocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-2", fullName: "Other Advocate", phone: "0733000444" });
+
+    // In the project's own default-advocate's project, but explicitly reassigned to a different advocate.
+    const n = ++seq;
+    const listing = await SaleListing.create({ business, listingNumber: `L-${n}`, title: `Plot ${n}`, askingPrice: 1_000_000, project: project._id, unitNumber: `U${n}` });
+    const buyer = await SaleBuyer.create({ business, buyerNumber: `B-${n}`, fullName: `Buyer ${n}`, phone: `0700${n}`, email: `b${n}@example.com` });
+    const overriddenRes = await call(createDeal, { body: { listing: String(listing._id), buyer: String(buyer._id), agreedPrice: 1_000_000, advocate: String(otherAdvocate._id) } });
+    expect(overriddenRes.statusCode).toBe(201);
+    expect(String(overriddenRes.payload.advocate?._id || overriddenRes.payload.advocate)).toBe(String(otherAdvocate._id));
+    const overriddenDeal = overriddenRes.payload;
+
+    const ownDeal = await makeDeal(project); // ordinary deal, no override, uses the project's default
+
+    const asAdvocate = async (advocateUser, advocateId, fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      expect(req.saleAdvocateId).toBe(String(advocateId));
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const projectAdvocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: projectAdvocateUser._id });
+    const otherAdvocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: otherAdvocate._id }, { userId: otherAdvocateUser._id });
+
+    // The project's own default advocate: sees the ordinary deal, but NOT the one explicitly
+    // reassigned away from them, even though it sits in their own project.
+    const projectAdvList = await asAdvocate(projectAdvocateUser, project.assignedAdvocate, listDeals, {});
+    const projectAdvIds = projectAdvList.payload.data.map((d) => String(d._id));
+    expect(projectAdvIds).toContain(String(ownDeal._id));
+    expect(projectAdvIds).not.toContain(String(overriddenDeal._id));
+
+    // The reassigned advocate: sees ONLY the overridden deal, not the project's other deals.
+    const otherAdvList = await asAdvocate(otherAdvocateUser, otherAdvocate._id, listDeals, {});
+    const otherAdvIds = otherAdvList.payload.data.map((d) => String(d._id));
+    expect(otherAdvIds).toEqual([String(overriddenDeal._id)]);
+  });
+
+  it("a standalone listing (no project) falls back to its own assignedAdvocate", async () => {
+    const { business, call } = await setup();
+    const standaloneAdvocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-3", fullName: "Standalone Advocate", phone: "0733000555" });
+
+    const n = ++seq;
+    const listing = await SaleListing.create({ business, listingNumber: `L-${n}`, title: `Standalone Plot`, askingPrice: 500_000, assignedAdvocate: standaloneAdvocate._id });
+    const buyer = await SaleBuyer.create({ business, buyerNumber: `B-${n}`, fullName: `Buyer ${n}`, phone: `0700${n}`, email: `b${n}@example.com` });
+    const dealRes = await call(createDeal, { body: { listing: String(listing._id), buyer: String(buyer._id), agreedPrice: 500_000 } });
+    expect(dealRes.statusCode).toBe(201);
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: standaloneAdvocate._id }, { userId: advocateUser._id });
+
+    const req = { user: advocateUser, query: {}, body: {}, params: {}, headers: {} };
+    await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+    expect(req.saleAdvocateId).toBe(String(standaloneAdvocate._id));
+
+    const listRes = await callController(listDeals, { user: advocateUser, query: {}, saleAdvocateId: req.saleAdvocateId });
+    expect(listRes.payload.data.map((d) => String(d._id))).toContain(String(dealRes.payload._id));
+  });
+
+  it("createDeal rejects an advocate id that doesn't belong to this business", async () => {
+    const { business, call, makeDeal } = await setup();
+    void (await makeDeal()); // just to exercise setup fully; not otherwise used
+    const n = ++seq;
+    const listing = await SaleListing.create({ business, listingNumber: `L-${n}`, title: `Plot ${n}`, askingPrice: 1_000_000 });
+    const buyer = await SaleBuyer.create({ business, buyerNumber: `B-${n}`, fullName: `Buyer ${n}`, phone: `0700${n}`, email: `b${n}@example.com` });
+    await expect(
+      call(createDeal, { body: { listing: String(listing._id), buyer: String(buyer._id), agreedPrice: 1_000_000, advocate: new mongoose.Types.ObjectId().toString() } })
+    ).rejects.toThrow(/advocate not found/i);
+  });
+});
+
+describe("advocate scoping — buyers, offers and commissions", () => {
+  it("an advocate-scoped user only sees buyers reachable through their own deals", async () => {
+    const { business, call, project, makeDeal } = await setup();
+    const ownDeal = await makeDeal(project);
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-BUY", name: "Buyer Scope Estate" });
+    const otherDeal = await makeDeal(otherProject);
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    const asAdvocate = async (fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const listRes = await asAdvocate(listBuyers, {});
+    const ids = listRes.payload.data.map((b) => String(b._id));
+    expect(ids).toContain(String(ownDeal.buyer?._id || ownDeal.buyer));
+    expect(ids).not.toContain(String(otherDeal.buyer?._id || otherDeal.buyer));
+
+    const getOwnRes = await asAdvocate(getBuyer, { params: { id: String(ownDeal.buyer?._id || ownDeal.buyer) } });
+    expect(getOwnRes.statusCode).toBe(200);
+    await expect(asAdvocate(getBuyer, { params: { id: String(otherDeal.buyer?._id || otherDeal.buyer) } })).rejects.toThrow();
+  });
+
+  it("an advocate-scoped user only sees offers on listings they're the default advocate for", async () => {
+    const { business, call, project } = await setup();
+    const n1 = ++seq;
+    const ownListing = await SaleListing.create({ business, listingNumber: `L-${n1}`, title: `Offer Plot ${n1}`, askingPrice: 800_000, project: project._id, unitNumber: `U${n1}` });
+    const buyer1 = await SaleBuyer.create({ business, buyerNumber: `B-${n1}`, fullName: `Buyer ${n1}`, phone: `0700${n1}`, email: `b${n1}@example.com` });
+    const ownOffer = await call(createOffer, { body: { listing: String(ownListing._id), buyer: String(buyer1._id), offerAmount: 780_000 } });
+    expect(ownOffer.statusCode).toBe(201);
+
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-OFR", name: "Offer Scope Estate" });
+    const n2 = ++seq;
+    const otherListing = await SaleListing.create({ business, listingNumber: `L-${n2}`, title: `Offer Plot ${n2}`, askingPrice: 500_000, project: otherProject._id, unitNumber: `U${n2}` });
+    const buyer2 = await SaleBuyer.create({ business, buyerNumber: `B-${n2}`, fullName: `Buyer ${n2}`, phone: `0700${n2}`, email: `b${n2}@example.com` });
+    const otherOffer = await call(createOffer, { body: { listing: String(otherListing._id), buyer: String(buyer2._id), offerAmount: 480_000 } });
+    expect(otherOffer.statusCode).toBe(201);
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    const asAdvocate = async (fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const listRes = await asAdvocate(listOffers, {});
+    const ids = listRes.payload.data.map((o) => String(o._id));
+    expect(ids).toContain(String(ownOffer.payload._id));
+    expect(ids).not.toContain(String(otherOffer.payload._id));
+
+    const getOwnRes = await asAdvocate(getOffer, { params: { id: String(ownOffer.payload._id) } });
+    expect(getOwnRes.statusCode).toBe(200);
+    await expect(asAdvocate(getOffer, { params: { id: String(otherOffer.payload._id) } })).rejects.toThrow();
+  });
+
+  it("an advocate-scoped user only sees commissions on their own deals, including in the summary stats", async () => {
+    const { business, call, project, makeDeal } = await setup();
+    const ownDeal = await makeDeal(project);
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-COM", name: "Commission Scope Estate" });
+    const otherDeal = await makeDeal(otherProject);
+
+    const ownCommission = await SaleCommission.findOne({ business, deal: ownDeal._id }).lean();
+    const otherCommission = await SaleCommission.findOne({ business, deal: otherDeal._id }).lean();
+    expect(ownCommission).toBeTruthy();
+    expect(otherCommission).toBeTruthy();
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    const asAdvocate = async (fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const listRes = await asAdvocate(listCommissions, {});
+    const ids = listRes.payload.data.map((c) => String(c._id));
+    expect(ids).toContain(String(ownCommission._id));
+    expect(ids).not.toContain(String(otherCommission._id));
+    // The summary tiles must stay scoped too — not leak the other project's commission into the totals.
+    const totalTiles = Object.values(listRes.payload.stats).reduce((sum, s) => sum + s.count, 0);
+    expect(totalTiles).toBe(1);
+
+    const getOwnRes = await asAdvocate(getCommission, { params: { id: String(ownCommission._id) } });
+    expect(getOwnRes.statusCode).toBe(200);
+    await expect(asAdvocate(getCommission, { params: { id: String(otherCommission._id) } })).rejects.toThrow();
+  });
+});
+
+describe("advocate scoping — projects, units and listings", () => {
+  it("an advocate-scoped user only sees the project(s) they're the default advocate for", async () => {
+    const { business, project } = await setup();
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-SCOPE", name: "Unrelated Estate" });
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    const asAdvocate = async (fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const listRes = await asAdvocate(listProjects, {});
+    const ids = listRes.payload.data.map((p) => String(p._id));
+    expect(ids).toContain(String(project._id));
+    expect(ids).not.toContain(String(otherProject._id));
+
+    const getOwnRes = await asAdvocate(getProject, { params: { id: String(project._id) } });
+    expect(getOwnRes.statusCode).toBe(200);
+    await expect(asAdvocate(getProject, { params: { id: String(otherProject._id) } })).rejects.toThrow();
+    await expect(asAdvocate(listProjectUnits, { params: { id: String(otherProject._id) } })).rejects.toThrow();
+
+    const ownUnitsRes = await asAdvocate(listProjectUnits, { params: { id: String(project._id) } });
+    expect(ownUnitsRes.statusCode).toBe(200);
+  });
+
+  it("an advocate-scoped user only sees listings/units they're the default advocate for (project or standalone)", async () => {
+    const { business, project } = await setup();
+    const n1 = ++seq;
+    const ownUnit = await SaleListing.create({ business, listingNumber: `L-${n1}`, title: `Scope Unit ${n1}`, askingPrice: 900_000, project: project._id, unitNumber: `U${n1}` });
+
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-LST", name: "Listing Scope Estate" });
+    const n2 = ++seq;
+    const otherUnit = await SaleListing.create({ business, listingNumber: `L-${n2}`, title: `Scope Unit ${n2}`, askingPrice: 400_000, project: otherProject._id, unitNumber: `U${n2}` });
+
+    const standaloneAdvocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-STANDALONE", fullName: "Standalone Advocate", phone: "0733000999" });
+    const n3 = ++seq;
+    const otherStandalone = await SaleListing.create({ business, listingNumber: `L-${n3}`, title: "Other Standalone Plot", askingPrice: 300_000, assignedAdvocate: standaloneAdvocate._id });
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    const asAdvocate = async (fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const listRes = await asAdvocate(listListings, {});
+    const ids = listRes.payload.data.map((l) => String(l._id));
+    expect(ids).toContain(String(ownUnit._id));
+    expect(ids).not.toContain(String(otherUnit._id));
+    expect(ids).not.toContain(String(otherStandalone._id));
+    // Stats tiles must stay scoped too
+    const totalTiles = Object.values(listRes.payload.stats).reduce((sum, s) => sum + s.count, 0);
+    expect(totalTiles).toBe(1);
+
+    const getOwnRes = await asAdvocate(getListing, { params: { id: String(ownUnit._id) } });
+    expect(getOwnRes.statusCode).toBe(200);
+    await expect(asAdvocate(getListing, { params: { id: String(otherUnit._id) } })).rejects.toThrow();
+    await expect(asAdvocate(getListing, { params: { id: String(otherStandalone._id) } })).rejects.toThrow();
+  });
+});
+
+describe("advocate scoping — dashboard and overdue schedule", () => {
+  it("getDashboardStats and getOverdueSchedule only reflect the advocate's own listings, deals and schedule items", async () => {
+    const { business, project, makeDeal } = await setup();
+    const ownDeal = await makeDeal(project);
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-DASH", name: "Dashboard Scope Estate" });
+    const otherDeal = await makeDeal(otherProject);
+
+    const overdueDate = new Date(Date.now() - 5 * 86_400_000);
+    await SalePaymentSchedule.create([
+      { business, deal: ownDeal._id, installmentNumber: 1, dueDate: overdueDate, expectedAmount: 100_000, status: "overdue" },
+      { business, deal: otherDeal._id, installmentNumber: 1, dueDate: overdueDate, expectedAmount: 50_000, status: "overdue" },
+    ]);
+
+    const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    const asAdvocate = async (fn, opts = {}) => {
+      const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
+      await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
+      return callController(fn, { user: advocateUser, query: req.query, body: req.body, params: req.params, saleAdvocateId: req.saleAdvocateId });
+    };
+
+    const dashRes = await asAdvocate(getDashboardStats, {});
+    expect(dashRes.statusCode).toBe(200);
+    expect(dashRes.payload.deals.active).toBe(1); // only ownDeal, not otherDeal
+    const dealNumbers = dashRes.payload.recentDeals.map((d) => d.dealNumber);
+    expect(dealNumbers).toContain(ownDeal.dealNumber);
+    expect(dealNumbers).not.toContain(otherDeal.dealNumber);
+
+    const overdueRes = await asAdvocate(getOverdueSchedule, {});
+    expect(overdueRes.statusCode).toBe(200);
+    expect(overdueRes.payload.total).toBe(1);
+    expect(String(overdueRes.payload.data[0].deal?._id || overdueRes.payload.data[0].deal)).toBe(String(ownDeal._id));
   });
 });
 

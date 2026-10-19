@@ -82,8 +82,8 @@ export default function SaleEmailModal({ title, subtitle, emailForm, setEmailFor
   const allTemplates = [...builtins, ...apiTemplates.map((t) => ({ label: t.name, subject: t.subject, body: t.body }))];
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 rounded-t-2xl sm:rounded-none">
+    <div className="fixed inset-0 z-[140] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="flex w-full max-w-md flex-col bg-white shadow-2xl sm:border sm:border-slate-200 rounded-t-2xl sm:rounded-none">
         {/* Header */}
         <div className="flex-shrink-0 flex items-start justify-between gap-3 border-b border-slate-200 bg-[#1a4069] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <div>

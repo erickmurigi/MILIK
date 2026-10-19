@@ -47,6 +47,8 @@ export const saleApi = {
   bulkImportBuyers: async (rows) => (await adminRequests.post("/sale/buyers/bulk", rows))?.data,
   sendBuyerSms:   async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/sms`,   payload)),
   sendBuyerEmail: async (id, payload) => unwrap(await adminRequests.post(`/sale/buyers/${id}/email`, payload)),
+  uploadBuyerDocuments: async (id, formData) => (await adminRequests.post(`/sale/buyers/${id}/documents`, formData))?.data,
+  deleteBuyerDocument:  async (id, url) => (await adminRequests.delete(`/sale/buyers/${id}/documents`, { data: { url } }))?.data,
 
   // Agents
   listAgents: async (params = {}) => unwrapPage(await adminRequests.get("/sale/agents", { params })),
@@ -67,6 +69,13 @@ export const saleApi = {
   getOwnerStatement: async (id) => unwrap(await adminRequests.get(`/sale/owner-statements/${id}`)),
   createOwnerStatementDraft: async (payload) => unwrap(await adminRequests.post("/sale/owner-statements/draft", payload)),
   approveOwnerStatement: async (id) => unwrap(await adminRequests.post(`/sale/owner-statements/${id}/approve`)),
+  reverseOwnerStatementApproval: async (id) => unwrap(await adminRequests.post(`/sale/owner-statements/${id}/reverse`)),
+  deleteOwnerStatementDraft: async (id) => (await adminRequests.delete(`/sale/owner-statements/${id}`))?.data,
+
+  // Owner Payouts
+  listOwnerPayouts: async (params = {}) => unwrapPage(await adminRequests.get("/sale/owner-payouts", { params })),
+  createOwnerPayout: async (payload) => unwrap(await adminRequests.post("/sale/owner-payouts", payload)),
+  getOwnerOutstandingBalance: async (ownerId) => unwrap(await adminRequests.get(`/sale/owner-payouts/balance/${ownerId}`)),
 
   // Advocates (conveyancing advocates who collect buyer payments into their own trust account)
   listAdvocates: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocates", { params })),
@@ -122,7 +131,18 @@ export const saleApi = {
   listCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions", { params })),
   getCommission: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/commissions/${id}`, { params })),
   updateCommissionStatus: async (id, payload) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/status`, payload)),
+  // An agent's rate change auto-resyncs every open commission server-side — this is a manual fallback
+  // for retrying one specific commission, not a normal-workflow action (no UI button calls it).
   recalculateCommission: async (id, params = {}) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/recalculate`, params)),
+  // One row per actual disbursement (a commission can have several partial payouts) — not one per commission.
+  listCommissionPayouts: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions/payouts", { params })),
+
+  // Agency (owner) commissions — no manual approve/pay/reverse action exists for these (recognized
+  // revenue, not a disbursement). A rate change in Settings auto-resyncs every open one server-side;
+  // recalculateOwnerCommission below is a manual fallback for one record, not a normal-workflow action.
+  listOwnerCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/owner-commissions", { params })),
+  getOwnerCommission: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/owner-commissions/${id}`, { params })),
+  recalculateOwnerCommission: async (id, params = {}) => unwrap(await adminRequests.patch(`/sale/owner-commissions/${id}/recalculate`, params)),
 
   // Cashbook accounts (for payment recording)
   listCashbookAccounts: async (params = {}) => {
@@ -145,6 +165,8 @@ export const saleApi = {
   getOverdueInstallments:  async (params = {}) => unwrapPage(await adminRequests.get("/sale/reports/overdue-installments", { params })),
   getSalesRegister:        async (params = {}) => unwrapPage(await adminRequests.get("/sale/reports/register",             { params })),
   getAgentsPerformance: async (params = {}) => unwrap(await adminRequests.get("/sale/reports/agents-performance", { params })),
+  // Reports Center: fetches a real rendered PDF (Puppeteer, server-side) as a blob for in-browser preview.
+  getReportPdf: async (reportId, params = {}) => (await adminRequests.get(`/sale/reports/pdf/${reportId}`, { params, responseType: "blob" }))?.data,
 
   // CRM — Leads
   listLeads:           async (params = {}) => unwrapPage(await adminRequests.get("/sale/leads",                   { params })),

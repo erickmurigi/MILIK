@@ -78,7 +78,8 @@ const runWorkedExample = async (whtHandledBy) => {
     commissionRate: 2, commissionAmount: 20_000, whtRate: 5, whtAmount: 1_000, netAmount: 19_000,
     status: "approved", payoutSource: "advocate_trust",
   });
-  await postPropertySaleCommissionPayout({ businessId: business, commission, userId, source: "advocate_trust", whtHandledBy });
+  const commissionPayout = { _id: oid(), amount: 20_000, whtAmount: 1_000, netAmount: 19_000, method: "bank_transfer", date: new Date(), source: "advocate_trust" };
+  await postPropertySaleCommissionPayout({ businessId: business, commission, userId, payout: commissionPayout, whtHandledBy });
 
   // D. Simulates the company having already paid a recoverable owner expense (15,000) on the owner's
   // behalf — i.e. the GL state a "sale_owner_expense" PaymentVoucher leaves behind (Dr 1313 / Cr cashbook),
@@ -112,12 +113,12 @@ const runWorkedExample = async (whtHandledBy) => {
   });
   await postSaleOwnerPayout({ businessId: business, payout, userId });
 
-  return { business, deal, owner, commission, remittance, payout, remittanceAmount };
+  return { business, deal, owner, commission, commissionPayout, remittance, payout, remittanceAmount };
 };
 
 describe("advocate trust settlement — full worked example (Plot 10 / Jane / Kamau & Co)", () => {
   it.each(["agent", "advocate"])("whtHandledBy=%s — 1314/1313/2180 reach true zero; 2185 closes at the deal's agreedPrice; the WHT leg is present only for the agent variant", async (whtHandledBy) => {
-    const { business, commission, remittance, payout } = await runWorkedExample(whtHandledBy);
+    const { business, commission, commissionPayout, remittance, payout } = await runWorkedExample(whtHandledBy);
 
     // 2180 Agent Commission Payable: accrued 20,000 (credit) by the accrual, cleared 20,000 (debit) by
     // the payout, regardless of source/whtHandledBy — the payable's debit side is always the full gross
@@ -129,7 +130,7 @@ describe("advocate trust settlement — full worked example (Plot 10 / Jane / Ka
     expect(await netBalanceOf(business, "1313")).toBe(0);
 
     // The commission payout's own 3 (agent) or 2 (advocate) legs balance on their own.
-    const payoutLegs = await legsFor(business, "property_sale_commission_payout", commission._id);
+    const payoutLegs = await legsFor(business, "property_sale_commission_payout", `${commission._id}:payout:${commissionPayout._id}`);
     const wht = await getAccountByCode(business, "2141").catch(() => null);
     if (whtHandledBy === "agent") {
       expect(payoutLegs).toHaveLength(3);
@@ -256,9 +257,10 @@ describe("advocate trust settlement — full worked example (Plot 10 / Jane / Ka
       commissionRate: 2, commissionAmount: 20_000, whtRate: 5, whtAmount: 1_000, netAmount: 19_000, status: "approved",
     });
     // No source/whtHandledBy passed at all — defaults must reproduce today's exact posting.
-    await postPropertySaleCommissionPayout({ businessId: business, commission, userId, cashbookAccountId: bank._id });
+    const commissionPayout = { _id: oid(), amount: 20_000, whtAmount: 1_000, netAmount: 19_000, method: "bank_transfer", date: new Date(), cashbook: bank._id };
+    await postPropertySaleCommissionPayout({ businessId: business, commission, userId, payout: commissionPayout });
 
-    const legs = await legsFor(business, "property_sale_commission_payout", commission._id);
+    const legs = await legsFor(business, "property_sale_commission_payout", `${commission._id}:payout:${commissionPayout._id}`);
     expect(legs).toHaveLength(3);
     const wht = await getAccountByCode(business, "2141");
     expect(legs.find((l) => String(l.accountId) === String(bank._id))).toMatchObject({ direction: "credit", credit: 19_000 });

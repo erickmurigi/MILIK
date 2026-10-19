@@ -4,6 +4,7 @@ import SaleDeal from "../models/SaleDeal.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleOffer from "../models/SaleOffer.js";
 import SalePayment from "../models/SalePayment.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
@@ -132,8 +133,13 @@ const createOwnerCommissionForDeal = async ({ business, dealId, ownerId, listing
 const sanitizeDealBody = (body) => {
   const out = { ...body };
   if ("agent" in out)               out.agent               = out.agent || null;
+  if ("advocate" in out)            out.advocate            = out.advocate || null;
   if ("offer" in out)               out.offer               = out.offer || null;
   if ("agreedPrice" in out)         out.agreedPrice         = out.agreedPrice         !== "" && out.agreedPrice         != null ? Number(out.agreedPrice)         : 0;
+  if ("paymentPlan" in out)         out.paymentPlan         = out.paymentPlan || "installment";
+  // A cash deal has no drawn-out timeline to project — clear any expected closing date it might have
+  // carried over from before the payment plan was switched to "cash" on an edit.
+  if (out.paymentPlan === "cash")   out.expectedClosingDate = null;
   if ("stampDutyAmount" in out)     out.stampDutyAmount     = out.stampDutyAmount     !== "" && out.stampDutyAmount     != null ? Number(out.stampDutyAmount)     : 0;
   if ("dealDate" in out)            out.dealDate            = out.dealDate            || null;
   if ("expectedClosingDate" in out) out.expectedClosingDate = out.expectedClosingDate || null;
@@ -146,6 +152,7 @@ const populateDeal = (query) =>
     .populate("listing", "title listingNumber propertyType askingPrice location town county size sizeUnit status")
     .populate("buyer", "fullName buyerNumber phone email")
     .populate("agent", "fullName agentNumber phone commissionRate commissionType")
+    .populate("advocate", "fullName advocateNumber firm phone")
     .populate("offer", "offerNumber offerAmount");
 
 const computeTotals = (business, dealId) => sumPaidForDeal(business, dealId);
@@ -295,16 +302,19 @@ export const createDeal = async (req, res, next) => {
     const { listing: listingId, buyer: buyerId, offer: offerId } = req.body;
     // Agent-scoped users can only create deals assigned to themselves
     const agentId = req.saleAgentId || req.body.agent;
+    const advocateId = req.body.advocate;
 
     if (!isIdString(listingId)) return next(createError(400, "Listing not found"));
     if (!isIdString(buyerId))   return next(createError(400, "Buyer not found"));
     if (agentId && !isIdString(agentId)) return next(createError(400, "Agent not found"));
+    if (advocateId && !isIdString(advocateId)) return next(createError(400, "Advocate not found"));
     if (offerId && !isIdString(offerId)) return next(createError(400, "Offer not found"));
 
-    const [listing, buyer, agent, offer] = await Promise.all([
+    const [listing, buyer, agent, advocate, offer] = await Promise.all([
       SaleListing.findOne({ _id: listingId, business }).lean(),
       SaleBuyer.findOne({ _id: buyerId, business }).lean(),
       agentId ? SaleAgent.findOne({ _id: agentId, business }).lean() : Promise.resolve(null),
+      advocateId ? SaleAdvocate.findOne({ _id: advocateId, business }).lean() : Promise.resolve(null),
       offerId ? SaleOffer.findOne({ _id: offerId, business }).select("_id listing status").lean() : Promise.resolve(null),
     ]);
     if (!listing) return next(createError(400, "Listing not found"));
@@ -312,6 +322,7 @@ export const createDeal = async (req, res, next) => {
     if (listing.status === "under_contract") return next(createError(400, "This listing already has an active deal"));
     if (!buyer) return next(createError(400, "Buyer not found"));
     if (agentId && !agent) return next(createError(400, "Agent not found"));
+    if (advocateId && !advocate) return next(createError(400, "Advocate not found"));
     if (offerId) {
       if (!offer) return next(createError(400, "Offer not found"));
       if (TERMINAL_OFFER_STATUSES.includes(offer.status)) return next(createError(400, `Cannot create a deal from a ${offer.status} offer`));
@@ -335,6 +346,7 @@ export const createDeal = async (req, res, next) => {
       listing: listing._id,
       buyer: buyer._id,
       agent: agent?._id ?? null,
+      advocate: advocate?._id ?? null,
       offer: offer?._id ?? null,
       createdBy: userId,
       updatedBy: userId,
@@ -366,10 +378,15 @@ export const updateDeal = async (req, res, next) => {
 
     // Agent-scoped users cannot reassign a deal to another agent
     if (req.saleAgentId) delete updates.agent;
+    // Advocate-scoped users cannot reassign a deal to another advocate (or away from themselves)
+    if (req.saleAdvocateId) delete updates.advocate;
 
     // Agent id comes from the body — must belong to this business
     if (updates.agent && (!isIdString(updates.agent) || !(await SaleAgent.exists({ _id: updates.agent, business })))) {
       return next(createError(400, "Agent not found"));
+    }
+    if (updates.advocate && (!isIdString(updates.advocate) || !(await SaleAdvocate.exists({ _id: updates.advocate, business })))) {
+      return next(createError(400, "Advocate not found"));
     }
 
     // agreedPrice changes must be reconciled with payments already taken and any payment schedule
@@ -748,6 +765,25 @@ export const createDealFromOffer = async (req, res, next) => {
 
     const agreedPrice = Number(req.body.agreedPrice ?? offer.counterOfferAmount ?? offer.offerAmount);
     const { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate, ...rest } = req.body;
+    const sanitized = sanitizeDealBody(rest);
+
+    // The offer may already carry its own agent (set when the offer was first created) — the convert
+    // form can still assign a different agent for this specific deal, same as a plain (non-offer) deal
+    // lets you pick any agent. Omitting "agent" entirely (older callers) keeps today's exact behavior —
+    // always the offer's own agent.
+    let agentDoc = offer.agent || null;
+    if (sanitized.agent) {
+      agentDoc = await SaleAgent.findOne({ _id: sanitized.agent, business }).lean();
+      if (!agentDoc) return next(createError(400, "Agent not found"));
+    }
+
+    // Unlike agent, an offer carries no advocate of its own to fall back to — omitted means "use the
+    // listing/project's default resolution at query time" (advocateScope.js), not "keep some prior value".
+    let advocateDoc = null;
+    if (sanitized.advocate) {
+      advocateDoc = await SaleAdvocate.findOne({ _id: sanitized.advocate, business }).lean();
+      if (!advocateDoc) return next(createError(400, "Advocate not found"));
+    }
 
     const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
     const dealDoc = new SaleDeal({
@@ -755,18 +791,20 @@ export const createDealFromOffer = async (req, res, next) => {
       offer:    offer._id,
       listing:  offer.listing._id,
       buyer:    offer.buyer._id,
-      agent:    offer.agent?._id ?? null,
+      agent:    agentDoc?._id ?? null,
+      advocate: advocateDoc?._id ?? null,
       agreedPrice,
-      dealDate:            rest.dealDate            || new Date(),
-      expectedClosingDate: rest.expectedClosingDate || null,
-      notes:               rest.notes               || offer.notes || "",
+      paymentPlan:         sanitized.paymentPlan || "installment",
+      dealDate:            sanitized.dealDate            || new Date(),
+      expectedClosingDate: sanitized.expectedClosingDate || null,
+      notes:               sanitized.notes               || offer.notes || "",
       createdBy: userId,
       updatedBy: userId,
     });
 
     await persistNewDeal({
       business, userId, dealDoc, listing,
-      agent: offer.agent || null,
+      agent: agentDoc,
       offer: { _id: offer._id, status: offer.status },
       commissionArgs: {
         listingId: offer.listing._id, buyerId: offer.buyer._id,

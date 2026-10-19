@@ -9,6 +9,8 @@ import { currentUserId, escapeRegex, parseDateRange, resolveActiveBusinessId, re
 import { postEntry } from "../../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 import { resolveExpenseAccountForCategory, reverseCarWashExpenseLedger } from "../services/carwashAccountingService.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
+import { voucherReferenceKey } from "../../../utils/voucherReference.js";
 
 const METHODS  = new Set(["cash", "mpesa", "bank", "card", "other"]);
 const STATUSES = new Set(["draft", "approved", "paid", "cancelled"]);
@@ -247,6 +249,13 @@ export const createExpense = async (req, res, next) => {
         throw err;
       }
     }
+    try {
+      await claimPaymentReference({ business, reference: expense.reference, sourceModel: "CarWashExpense", sourceId: expense._id });
+    } catch (refErr) {
+      await CarWashExpense.deleteOne({ _id: expense._id });
+      return next(refErr);
+    }
+
     if (status === "paid" && cashbookAccount) {
       await postCwExpenseLedger({ business, expense, cashbookAccountId: cashbookAccount, userId });
     }
@@ -273,6 +282,17 @@ export const updateExpense = async (req, res, next) => {
     const cashbookAccount = await resolveCashbookAccount(business, req.body.cashbookAccount ?? expense.cashbookAccount, false);
     const userId = currentUserId(req);
 
+    const newReference     = String(req.body.reference ?? expense.reference ?? "").trim();
+    const oldReference     = expense.reference;
+    const referenceChanged = voucherReferenceKey(newReference) !== voucherReferenceKey(oldReference);
+    if (referenceChanged) {
+      try {
+        await claimPaymentReference({ business, reference: newReference, sourceModel: "CarWashExpense", sourceId: expense._id });
+      } catch (refErr) {
+        return next(refErr);
+      }
+    }
+
     expense.expenseDate     = req.body.expenseDate ? new Date(req.body.expenseDate) : expense.expenseDate;
     expense.payee           = String(req.body.payee        ?? expense.payee        ?? "").trim();
     expense.category        = category;
@@ -281,10 +301,13 @@ export const updateExpense = async (req, res, next) => {
     expense.amount          = amount;
     expense.method          = method;
     expense.cashbookAccount = cashbookAccount;
-    expense.reference       = String(req.body.reference    ?? expense.reference    ?? "").trim();
+    expense.reference       = newReference;
     expense.notes           = String(req.body.notes        ?? expense.notes        ?? "").trim();
     expense.updatedBy       = userId;
     await expense.save();
+    if (referenceChanged) {
+      await releasePaymentReference({ business, reference: oldReference, sourceModel: "CarWashExpense", sourceId: expense._id }).catch(() => {});
+    }
 
     const populated = await populateExpense(CarWashExpense.findById(expense._id)).lean();
     res.json({ success: true, data: populated, expense: populated, message: "Expense updated" });
@@ -298,6 +321,7 @@ export const deleteExpense = async (req, res, next) => {
     if (!expense) return next(createError(404, "Expense not found"));
     if (expense.status !== "draft") return next(createError(400, "Only draft expenses can be deleted"));
     await expense.deleteOne();
+    await releasePaymentReference({ business, reference: expense.reference, sourceModel: "CarWashExpense", sourceId: expense._id }).catch(() => {});
     res.json({ success: true, message: "Expense deleted" });
   } catch (error) { next(error); }
 };
@@ -458,6 +482,9 @@ export const updateExpenseStatus = async (req, res, next) => {
     }
     if (status === "cancelled" && wasPaid) {
       await reverseCarWashExpenseLedger({ businessId: business, expense, req });
+    }
+    if (status === "cancelled") {
+      await releasePaymentReference({ business, reference: expense.reference, sourceModel: "CarWashExpense", sourceId: expense._id }).catch(() => {});
     }
 
     const populated = await populateExpense(CarWashExpense.findById(expense._id)).lean();

@@ -1,9 +1,9 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import {
-  FaCalendarAlt, FaClipboardList, FaCommentAlt, FaEdit, FaEnvelope, FaExchangeAlt,
-  FaPhone, FaPlus, FaTimes, FaTrash, FaUserFriends,
+  FaCalendarAlt, FaChevronDown, FaClipboardList, FaCommentAlt, FaEdit, FaEnvelope, FaExchangeAlt,
+  FaFilter, FaPhone, FaPlus, FaTimes, FaTrash, FaUserFriends,
 } from "react-icons/fa";
 import CwSmsModal from "../CarWash/CwSmsModal";
 import SaleEmailModal from "./SaleEmailModal";
@@ -18,13 +18,17 @@ import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
-import { labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
+import SaleActivityFormModal, { blankActivityForm } from "./SaleActivityFormModal";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch, shortDate } from "./salePrint";
 
-const ACTIVITY_TYPES = ["call", "email", "meeting", "site_visit", "whatsapp", "note", "follow_up"];
-const OUTCOMES       = ["positive", "neutral", "negative", "no_answer", "not_applicable"];
-const ACTIVITY_TYPE_OPTIONS = ACTIVITY_TYPES.map((t) => ({ value: t, label: t.replace(/_/g, " ") }));
-const OUTCOME_OPTIONS       = OUTCOMES.map((o) => ({ value: o, label: o.replace(/_/g, " ") }));
+// Local override, not the shared utils/formStyles.js — that file's labelClass/inputClass predate the
+// bold-value-matches-label-weight convention now standard across PropertySale forms (see
+// SaleActivityFormModal.jsx / AppSelect.jsx's label and selected-value weight).
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
 
 const nameToValue = (name) => String(name || "").toLowerCase().replace(/\s+/g, "_");
 
@@ -48,7 +52,6 @@ const OUTCOME_COLORS = {
 const ACT_ICONS = { call: "📞", email: "✉️", meeting: "🤝", site_visit: "🏠", whatsapp: "💬", note: "📝", follow_up: "🔔" };
 
 const blankLead      = { fullName: "", phone: "", email: "", source: "walk_in", status: "new", assignedAgent: "", budgetMin: "", budgetMax: "", notes: "", lostReason: "", nextFollowUpDate: "" };
-const blankAct       = { type: "call", subject: "", notes: "", date: "", durationMinutes: "", outcome: "not_applicable", nextAction: "", nextActionDate: "" };
 const blankOfferForm = { listing: "", offerAmount: "", validityDate: "", agent: "", notes: "" };
 
 // "walk_in" -> "Walk In" (matches the placeholder catalog's examples)
@@ -69,7 +72,7 @@ const leadTableCols = (T) => [
   { label: "Next Follow-up" },
 ];
 
-const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-[#0B3B2E] focus:outline-none";
+const modalInputCls = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none";
 
 const rowClassName = (row) => isOld(row.nextFollowUpDate, row.status) ? "border-l-2 border-l-rose-400" : "";
 
@@ -80,8 +83,8 @@ function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOption
   const T = useTerms("saleLead", "saleAgent");
   const [form, setForm] = useState(initial);
   return (
-    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
             <FaUserFriends />{editingId ? `Edit ${T.saleLead}` : `Add ${T.saleLead}`}
@@ -90,7 +93,7 @@ function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOption
         </div>
         <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className={labelClass}>Full Name *</label>
+            <label className={labelClass}>Full Name<Required /></label>
             <input value={form.fullName} onChange={(e) => setForm((f) => ({ ...f, fullName: e.target.value }))} className={`${modalInputCls} h-8`} />
           </div>
           <div>
@@ -165,81 +168,12 @@ function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOption
   );
 }
 
-function ActivityModal({ leadName, editingAct, initial, saving, onClose, onSubmit }) {
-  const [actForm, setActForm] = useState(initial);
-  return (
-    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
-        <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
-          <div>
-            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
-              <FaCalendarAlt />{editingAct ? "Edit Activity" : "Log Activity"}
-            </h3>
-            <div className="text-[10px] text-white/60 mt-0.5">for {leadName}</div>
-          </div>
-          <button onClick={onClose} className="p-1 text-white/70 hover:bg-white/10 hover:text-white"><FaTimes /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>Type *</label>
-            <AppSelect
-              value={actForm.type}
-              onChange={(v) => setActForm((f) => ({ ...f, type: v ?? "" }))}
-              options={ACTIVITY_TYPE_OPTIONS}
-              size="md"
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Date & Time</label>
-            <input type="datetime-local" value={actForm.date} onChange={(e) => setActForm((f) => ({ ...f, date: e.target.value }))} className={`${modalInputCls} h-8`} />
-          </div>
-          <div className="col-span-2">
-            <label className={labelClass}>Subject</label>
-            <input value={actForm.subject} onChange={(e) => setActForm((f) => ({ ...f, subject: e.target.value }))} placeholder="e.g. Site visit — Westlands plot" className={`${modalInputCls} h-8`} />
-          </div>
-          <div>
-            <label className={labelClass}>Duration (min)</label>
-            <input type="number" value={actForm.durationMinutes} onChange={(e) => setActForm((f) => ({ ...f, durationMinutes: e.target.value }))} className={`${modalInputCls} h-8`} />
-          </div>
-          <div>
-            <label className={labelClass}>Outcome</label>
-            <AppSelect
-              value={actForm.outcome}
-              onChange={(v) => setActForm((f) => ({ ...f, outcome: v ?? "" }))}
-              options={OUTCOME_OPTIONS}
-              size="md"
-            />
-          </div>
-          <div className="col-span-2">
-            <label className={labelClass}>Notes</label>
-            <textarea rows={3} value={actForm.notes} onChange={(e) => setActForm((f) => ({ ...f, notes: e.target.value }))} className={`${modalInputCls} resize-none`} />
-          </div>
-          <div className="col-span-2">
-            <label className={labelClass}>Next Action</label>
-            <input value={actForm.nextAction} onChange={(e) => setActForm((f) => ({ ...f, nextAction: e.target.value }))} placeholder="e.g. Send site plan brochure" className={`${modalInputCls} h-8`} />
-          </div>
-          <div>
-            <label className={labelClass}>Next Action Date</label>
-            <input type="date" value={actForm.nextActionDate} onChange={(e) => setActForm((f) => ({ ...f, nextActionDate: e.target.value }))} className={`${modalInputCls} h-8`} />
-          </div>
-        </div>
-        <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-          <button onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-          <button onClick={() => onSubmit(actForm)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
-            {saving ? "Saving…" : editingAct ? "Update" : "Log Activity"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ConvertBuyerModal({ leadName, converting, onClose, onConfirm }) {
   const T = useTerms("saleBuyer");
   const [convertId, setConvertId] = useState("");
   return (
-    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <div className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
         <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
             <FaExchangeAlt />Convert to {T.saleBuyer}
@@ -270,8 +204,8 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
   const T = useTerms("saleLead", "saleOffer", "saleListing", "saleAgent");
   const [offerForm, setOfferForm] = useState(blankOfferForm);
   return (
-    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit(offerForm); }} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+    <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(offerForm); }} onClick={(e) => e.stopPropagation()} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-md sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
         <div className="flex flex-shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
           <div>
             <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
@@ -283,7 +217,7 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
         </div>
         <div className="flex-1 overflow-y-auto bg-white px-5 py-4 grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <label className={labelClass}>{T.saleListing} *</label>
+            <label className={labelClass}>{T.saleListing}<Required /></label>
             <AppSelect
               value={offerForm.listing}
               onChange={(v) => setOfferForm((f) => ({ ...f, listing: v ?? "" }))}
@@ -294,7 +228,7 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
             />
           </div>
           <div>
-            <label className={labelClass}>{T.saleOffer} Amount (KES) *</label>
+            <label className={labelClass}>{T.saleOffer} Amount (KES)<Required /></label>
             <input type="number" min="0" step="1" value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} className={`${modalInputCls} h-8`} />
           </div>
           <div>
@@ -380,6 +314,9 @@ export default function SaleLeads() {
 
   const [leadModal,    setLeadModal]  = useState(null);   // { editingId, initial } while the lead form is open
   const [saving,       setSaving]     = useState(false);
+
+  const [showPipeline, setShowPipeline] = useState(false); // Pipeline/status dropdown open state
+  const pipelineBtnRef = useRef(null);
 
   const [selected,     setSelected]   = useTabState("/sale/crm/leads:selected", null);
   const [actModal,     setActModal]   = useState(null);   // { editing, initial } while the activity form is open
@@ -537,7 +474,7 @@ export default function SaleLeads() {
   const editingAct = actModal?.editing ?? null;
   const openLogAct = useCallback((lead) => {
     setSelected(lead);
-    setActModal({ editing: null, initial: { ...blankAct, date: new Date().toISOString().slice(0, 16) } });
+    setActModal({ editing: null, initial: { ...blankActivityForm, date: new Date().toISOString().slice(0, 16) } });
   }, [setSelected]);
   const openEditAct = (act) => {
     setActModal({
@@ -715,6 +652,53 @@ export default function SaleLeads() {
     </div>
   ), [openSms, openLogAct, openEdit, handleDelete]);
 
+  const buildReportFilters = () => ({
+    business: biz, search, status: statusFilter, source: sourceFilter, agent: agentFilter,
+    overdueOnly: overdueOnly ? "1" : "", createdFrom, createdTo,
+  });
+  const reportColumns = [
+    { label: T.saleLead + " No.", value: (r) => r.leadNumber },
+    { label: "Name", value: (r) => r.fullName },
+    { label: "Phone", value: (r) => r.phone || "—" },
+    { label: "Email", value: (r) => r.email || "—" },
+    { label: "Source", value: (r) => (r.source || "").replace(/_/g, " ") },
+    { label: "Status", value: (r) => (r.status || "").replace(/_/g, " ") },
+    { label: T.saleAgent, value: (r) => r.assignedAgent?.fullName || "—" },
+    { label: "Budget", value: (r) => (r.budgetMin || r.budgetMax ? `${r.budgetMin ? fmtKES(r.budgetMin) : "?"} – ${r.budgetMax ? fmtKES(r.budgetMax) : "?"}` : "—") },
+    { label: "Next Follow-up", value: (r) => (r.nextFollowUpDate ? shortDate(r.nextFollowUpDate) : "—") },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilter && `Stage: ${LEAD_STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label || statusFilter}`,
+      sourceFilter && `Source: ${sourceFilter.replace(/_/g, " ")}`,
+      agentFilter && agentOptions.find((o) => o.value === agentFilter)?.label,
+      overdueOnly && "Overdue only",
+      search && `Search: ${search}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listLeads, buildReportFilters()), ({ rows }) => ({
+      title: T.saleLeads,
+      subtitle: described.join(" · ") || `All ${T.saleLeads.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listLeads, buildReportFilters()), ({ rows }) => ({
+      filename: "leads",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <PropertySaleShell>
@@ -723,38 +707,21 @@ export default function SaleLeads() {
         {/* ── Main panel ──────────────────────────────────────────────────────── */}
         <div className={`flex-1 flex flex-col min-h-0 overflow-hidden ${selected ? "mr-[352px]" : ""}`}>
 
-          {/* Pipeline funnel */}
-          {pipeline.length > 0 && (
-            <div className="flex flex-shrink-0 gap-1 px-2 py-1.5 bg-white border-b border-slate-200 overflow-x-auto">
-              {LEAD_STATUS_OPTIONS.map(({ value: s, label: stageLabel }) => {
-                const count = pipeline.find((p) => p._id === s)?.count ?? 0;
-                return (
-                  <button
-                    key={s}
-                    onClick={() => { setStatus(statusFilter === s ? "" : s); setPage(1); }}
-                    className={`flex-shrink-0 text-center border px-3 py-1 text-xs transition-colors ${
-                      statusFilter === s
-                        ? `${STATUS_COLORS[s] ?? "border-[#0B3B2E] bg-[#0B3B2E] text-white"} font-black`
-                        : "border-slate-200 bg-white text-slate-600 hover:bg-[#F1F6F3] hover:border-[#B7C9C0]"
-                    }`}
-                  >
-                    <div className="font-black text-sm leading-tight">{count}</div>
-                    <div className="text-[9px] capitalize leading-tight">{stageLabel}</div>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Filter bar */}
+          {/* Filter bar — stage pipeline counts live inside one "Pipeline" dropdown button instead of a
+              chip per stage, which was still too wide once Qualified/Site Visited/Proposal Sent/
+              Negotiating/Converted/Lost all sat at 0. Replaces the plain "All Statuses" select — same
+              filter, just with live counts attached. */}
           <SaleFilterBar
-            leading={<span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} {(total === 1 ? T.saleLead : T.saleLeads).toLowerCase()}</span>}
             onReset={() => { setSearch(""); setStatus(""); setSource(""); setAgent(""); setOverdue(false); setCreatedFrom(""); setCreatedTo(""); setPage(1); }}
             activeCount={[search, statusFilter, sourceFilter, agentFilter, overdueOnly ? "1" : "", createdFrom, createdTo].filter(Boolean).length}
             trailing={
-              <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
-                Add {T.saleLead}
-              </ListToolbar.Button>
+              <>
+                <SalePrintButton onClick={printReport} busy={printing} disabled={isLoading || total === 0} />
+                <SaleExportButton onClick={exportReport} busy={exporting} disabled={isLoading || total === 0} />
+                <ListToolbar.Button icon={FaPlus} onClick={openCreate}>
+                  Add {T.saleLead}
+                </ListToolbar.Button>
+              </>
             }
           >
             <FilterSearch
@@ -762,7 +729,36 @@ export default function SaleLeads() {
               onChange={(e) => { setSearch(e.target.value); setPage(1); }}
               placeholder={`Search ${T.saleLeads.toLowerCase()}…`}
             />
-            <AppSelect value={statusFilter} onChange={(v) => { setStatus(v ?? ""); setPage(1); }} options={LEAD_STATUS_OPTIONS} placeholder="All Statuses" clearable compact />
+            <div className="relative shrink-0">
+              <ListToolbar.Button
+                ref={pipelineBtnRef}
+                icon={FaFilter}
+                variant={statusFilter ? "dark" : "outline"}
+                onClick={() => setShowPipeline((o) => !o)}
+              >
+                {statusFilter ? `${LEAD_STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? "Stage"}: ${pipeline.find((p) => p._id === statusFilter)?.count ?? 0}` : "All Statuses"}
+                <FaChevronDown size={7} />
+              </ListToolbar.Button>
+              <ListToolbar.Menu open={showPipeline} onClose={() => setShowPipeline(false)} anchorRef={pipelineBtnRef} width="w-48">
+                <ListToolbar.MenuItem onClick={() => { setStatus(""); setPage(1); setShowPipeline(false); }} className={!statusFilter ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}>
+                  All Statuses
+                </ListToolbar.MenuItem>
+                {LEAD_STATUS_OPTIONS.map(({ value: s, label: stageLabel }) => {
+                  const count = pipeline.find((p) => p._id === s)?.count ?? 0;
+                  const active = statusFilter === s;
+                  return (
+                    <ListToolbar.MenuItem
+                      key={s}
+                      onClick={() => { setStatus(s); setPage(1); setShowPipeline(false); }}
+                      className={`justify-between capitalize ${active ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}`}
+                    >
+                      <span>{stageLabel}</span>
+                      <span className="font-mono text-slate-400">{count}</span>
+                    </ListToolbar.MenuItem>
+                  );
+                })}
+              </ListToolbar.Menu>
+            </div>
             <AppSelect value={sourceFilter} onChange={(v) => { setSource(v ?? ""); setPage(1); }} options={LEAD_SOURCE_OPTIONS} placeholder="All Sources" clearable compact />
             <AppSelect value={agentFilter} onChange={(v) => { setAgent(v ?? ""); setPage(1); }} options={agentOptions} placeholder={`All ${T.saleAgents}`} searchable clearable compact />
             <label className="flex shrink-0 items-center gap-1.5 text-[9px] font-semibold text-slate-600 cursor-pointer select-none whitespace-nowrap">
@@ -794,10 +790,12 @@ export default function SaleLeads() {
             <PaginationBar
               page={page}
               pages={totalPages}
+              total={total}
               pageSize={pageSize}
               onPageChange={setPage}
               onPageSizeChange={(s) => { setPageSize(s); setPage(1); }}
               loading={isFetching}
+              label={T.saleLeads.toLowerCase()}
             />
           </div>
         </div>
@@ -968,7 +966,7 @@ export default function SaleLeads() {
 
       {/* ── Log / Edit Activity Modal ─────────────────────────────────────────── */}
       {actModal && selected && (
-        <ActivityModal leadName={selected.fullName} editingAct={actModal.editing} initial={actModal.initial} saving={savingAct} onClose={() => setActModal(null)} onSubmit={handleSaveAct} />
+        <SaleActivityFormModal leadName={selected.fullName} editingAct={actModal.editing} initial={actModal.initial} saving={savingAct} onClose={() => setActModal(null)} onSubmit={handleSaveAct} />
       )}
 
       {/* ── Convert to Buyer Modal ─────────────────────────────────────────────── */}

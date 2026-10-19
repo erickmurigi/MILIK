@@ -5,6 +5,8 @@ import SaleDeal from "../models/SaleDeal.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleOffer from "../models/SaleOffer.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { recalculateCommissionsForAgent } from "../services/commissionRecalculateService.js";
+import { defaultWhtRate } from "./dealsController.js";
 
 const sanitizeAgentBody = (body) => {
   const out = { ...body };
@@ -89,12 +91,30 @@ export const updateAgent = async (req, res, next) => {
     const userId = currentUserId(req);
     const { business: _b, agentNumber: _n, createdBy: _c, ...rawUpdates } = req.body;
     const updates = sanitizeAgentBody(rawUpdates);
+
+    const before = await SaleAgent.findOne({ _id: req.params.id, business }).select("commissionRate commissionType").lean();
+    if (!before) return next(createError(404, "Agent not found"));
+
     const agent = await SaleAgent.findOneAndUpdate(
       { _id: req.params.id, business },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
     ).lean();
     if (!agent) return next(createError(404, "Agent not found"));
+
+    // Every one of this agent's still-open commissions picks up the new rate immediately — otherwise a
+    // commission created before this correction stays stuck at the old figures forever (the manual
+    // Recalculate action on the Commissions page is only a fallback now, not the normal way this happens).
+    const rateChanged = ("commissionRate" in updates && before.commissionRate !== agent.commissionRate)
+      || ("commissionType" in updates && before.commissionType !== agent.commissionType);
+    if (rateChanged) {
+      const whtRate = await defaultWhtRate(business);
+      await recalculateCommissionsForAgent({
+        businessId: business, agentId: agent._id, userId, whtRate,
+        commissionRate: agent.commissionRate, commissionType: agent.commissionType,
+      });
+    }
+
     res.status(200).json(agent);
   } catch (err) {
     next(err);

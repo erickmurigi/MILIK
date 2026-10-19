@@ -13,6 +13,7 @@ import { deductSavingsForPayout, getStaffSavingsBalance, disburseSavings, eatTod
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
 import { holdDamagesForPayout, releaseDamagesForPayout, getStaffDamagesSummary } from "../services/damagesService.js";
 import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 
 const ruleTypes = new Set(["fixed", "percentage"]);
 const payoutMethods = new Set(["cash", "mpesa", "bank", "card", "other"]);
@@ -235,6 +236,10 @@ export const createCommissionPayout = async (req, res, next) => {
     let damagesHeld = 0;
     let netCash = commissionAmount;
     try {
+      // Claimed first — a duplicate here throws straight into the catch below, which deletes the
+      // just-created payout and (via the outer catch) reverts the commission status flip.
+      await claimPaymentReference({ business, reference: payout.reference, sourceModel: "CarWashCommissionPayout", sourceId: payout._id });
+
       // Deduct savings for days elapsed since last deduction
       savingsHeld = await deductSavingsForPayout({
         businessId:         business,
@@ -503,6 +508,7 @@ export const reverseCommissionPayout = async (req, res, next) => {
     payout.reversedBy    = userId;
     payout.reversalNotes = reason;
     await payout.save();
+    await releasePaymentReference({ business, reference: payout.reference, sourceModel: "CarWashCommissionPayout", sourceId: payout._id }).catch(() => {});
 
     res.json({
       success: true,

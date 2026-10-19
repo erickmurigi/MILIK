@@ -63,15 +63,26 @@ describe("owner payouts — create / list / get", () => {
     await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment" } });
     // outstanding = 970,000; ask for more
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 980_000 } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 980_000, reference: "EFT-2" } })
     ).rejects.toThrow(/outstanding balance/i);
   });
 
   it("rejects with no activity at all for the owner (outstanding balance is 0)", async () => {
     const { call, owner } = await setup();
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 1 } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 1, reference: "EFT-3" } })
     ).rejects.toThrow(/outstanding balance/i);
+  });
+
+  it("rejects a blank reference", async () => {
+    const { call, owner, deal } = await setup();
+    await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment" } });
+    await expect(
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000 } })
+    ).rejects.toThrow(/reference number is required/i);
+    await expect(
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000, reference: "   " } })
+    ).rejects.toThrow(/reference number is required/i);
   });
 });
 
@@ -81,7 +92,7 @@ describe("owner payouts — GL posting", () => {
     await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment" } });
     const bank = await getAccountByCode(business, "1100");
 
-    const created = await call(createOwnerPayout, { body: { owner: String(owner._id), amount: 400_000, cashbook: String(bank._id) } });
+    const created = await call(createOwnerPayout, { body: { owner: String(owner._id), amount: 400_000, cashbook: String(bank._id), reference: "EFT-4" } });
     const legs = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_owner_payout", sourceTransactionId: String(created.payload._id) }).lean();
     expect(legs).toHaveLength(2);
     const clearingAcc = await getAccountByCode(business, "2185");
@@ -94,7 +105,7 @@ describe("owner payouts — GL posting", () => {
     await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment", collectionMethod: "advocate_trust" } });
 
     const created = await call(createOwnerPayout, {
-      body: { owner: String(owner._id), deal: String(deal._id), amount: 400_000, source: "advocate_trust", advocate: String(advocate._id) },
+      body: { owner: String(owner._id), deal: String(deal._id), amount: 400_000, source: "advocate_trust", advocate: String(advocate._id), reference: "TR-1" },
     });
     expect(created.statusCode).toBe(201);
     expect(created.payload.source).toBe("advocate_trust");
@@ -107,7 +118,7 @@ describe("owner payouts — GL posting", () => {
   it("advocate_trust without a deal is rejected", async () => {
     const { call, owner } = await setup();
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 1, source: "advocate_trust" } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 1, source: "advocate_trust", reference: "TR-2" } })
     ).rejects.toThrow(/deal is required/i);
   });
 
@@ -116,7 +127,7 @@ describe("owner payouts — GL posting", () => {
     // Paid directly, not into trust — deal's advocate trust balance is 0.
     await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment" } });
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), deal: String(deal._id), amount: 400_000, source: "advocate_trust" } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), deal: String(deal._id), amount: 400_000, source: "advocate_trust", reference: "TR-3" } })
     ).rejects.toThrow(/trust balance/i);
   });
 
@@ -126,7 +137,7 @@ describe("owner payouts — GL posting", () => {
 
     // Owner's outstanding is 970,000; paying 900,000 cash + 70,000 CGT = 970,000 total claim, exactly at the limit.
     const created = await call(createOwnerPayout, {
-      body: { owner: String(owner._id), deal: String(deal._id), amount: 900_000, cgtAmount: 70_000, cgtReference: "KRA-CGT-001", source: "advocate_trust", advocate: String(advocate._id) },
+      body: { owner: String(owner._id), deal: String(deal._id), amount: 900_000, cgtAmount: 70_000, cgtReference: "KRA-CGT-001", source: "advocate_trust", advocate: String(advocate._id), reference: "TR-4" },
     });
     expect(created.statusCode).toBe(201);
     expect(created.payload.cgtAmount).toBe(70_000);
@@ -144,7 +155,7 @@ describe("owner payouts — GL posting", () => {
     await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment" } });
     // outstanding = 970,000; amount alone (900,000) fits, but +80,000 CGT does not.
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 900_000, cgtAmount: 80_000 } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 900_000, cgtAmount: 80_000, reference: "EFT-5" } })
     ).rejects.toThrow(/outstanding balance/i);
   });
 
@@ -155,7 +166,7 @@ describe("owner payouts — GL posting", () => {
     await call(createPayment, { body: { deal: String(deal._id), amount: 400_000, paymentType: "installment", collectionMethod: "advocate_trust" } });
     await call(createPayment, { body: { deal: String(deal._id), amount: 600_000, paymentType: "installment" } });
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), deal: String(deal._id), amount: 350_000, cgtAmount: 80_000, source: "advocate_trust", advocate: String(advocate._id) } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), deal: String(deal._id), amount: 350_000, cgtAmount: 80_000, source: "advocate_trust", advocate: String(advocate._id), reference: "TR-5" } })
     ).rejects.toThrow(/trust balance/i);
   });
 
@@ -163,7 +174,7 @@ describe("owner payouts — GL posting", () => {
     const { call, owner, deal } = await setup();
     await call(createPayment, { body: { deal: String(deal._id), amount: 1_000_000, paymentType: "installment" } });
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000, cgtAmount: -5 } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000, cgtAmount: -5, reference: "EFT-6" } })
     ).rejects.toThrow(/cgt amount/i);
   });
 
@@ -178,7 +189,7 @@ describe("owner payouts — GL posting", () => {
     await ChartOfAccount.updateOne({ business, code: "2185" }, { $set: { isPosting: false } });
 
     await expect(
-      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000 } })
+      call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000, reference: "EFT-7" } })
     ).rejects.toThrow();
     expect(await SaleOwnerPayout.countDocuments({ business })).toBe(0);
   });

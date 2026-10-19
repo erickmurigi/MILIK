@@ -57,7 +57,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
       business: businessId, deal: { $in: dealIds }, status: "paid",
       paymentDate: { $gte: start, $lte: end },
     }).select("amount paymentDate deal paymentNumber").lean(),
-    SaleOwnerCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionRate commissionType deal").lean(),
+    SaleOwnerCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionRate commissionType status deal").lean(),
     SaleCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionAmount commissionRate commissionType releaseSchedule status updatedAt deal").lean(),
     // saleProject is optional on the voucher (an owner-level recharge — e.g. a legal fee covering the
     // relationship generally, not one plot — has no project at all) — when the statement isn't scoped
@@ -96,6 +96,11 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
   }
 
   for (const oc of ownerCommissions) {
+    // A cancelled deal's commission keeps its tierReleases array for audit history on the commission
+    // record itself (dealsController.cancelDeal deliberately doesn't clear it), but the GL impact of
+    // every one of those tiers has already been reversed — so none of them are a real cost to the owner
+    // any more, and must not leak back into a statement as if they still were.
+    if (oc.status === "cancelled") continue;
     for (const tier of oc.tierReleases || []) {
       if (!inPeriod(tier.accruedAt, start, end)) continue;
       rawLines.push({
@@ -118,6 +123,12 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
   // the single moment it was manually approved (status >= "approved", the point postPropertySaleCommissionAccrual
   // actually posts the full amount) IS its one release event.
   for (const bc of brokerCommissions) {
+    // Same reasoning as the owner-commission loop above: "cancelled" means every tier's GL impact was
+    // already reversed on cancellation, even though the tierReleases array itself is kept for history.
+    // "reversed" is a different, narrower case (a mistaken PAYOUT corrected after the fact) where the
+    // accrual itself deliberately stays live — see reversePropertySaleCommissionPayout — so it is NOT
+    // excluded here.
+    if (bc.status === "cancelled") continue;
     if (bc.releaseSchedule?.length) {
       for (const tier of bc.tierReleases || []) {
         if (!inPeriod(tier.accruedAt, start, end)) continue;

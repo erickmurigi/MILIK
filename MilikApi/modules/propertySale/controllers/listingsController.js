@@ -2,14 +2,17 @@ import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleListing from "../models/SaleListing.js";
 import SaleAgent from "../models/SaleAgent.js";
+import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleDeal from "../models/SaleDeal.js";
 import SaleProject from "../models/SaleProject.js";
 import SaleSettings from "../models/SaleSettings.js";
 import { cleanAttributes, typeValue } from "../services/listingAttributes.js";
 import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
+import { PROJECT_WITH_ADVOCATE, withEffectiveAdvocate } from "../services/listingAdvocate.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 import { andInto, wordsSearchFilter } from "../services/saleSearch.js";
+import { ownListingIds } from "../middleware/advocateScope.js";
 
 const CREATE_STATUSES = ["available", "withdrawn"];
 
@@ -47,6 +50,7 @@ const duplicateUnitError = (err) =>
 const sanitizeListingBody = (body) => {
   const out = { ...body };
   if ("assignedAgent" in out) out.assignedAgent = out.assignedAgent || null;
+  if ("assignedAdvocate" in out) out.assignedAdvocate = out.assignedAdvocate || null;
   if ("askingPrice" in out)   out.askingPrice   = out.askingPrice   !== "" && out.askingPrice   != null ? Number(out.askingPrice)   : 0;
   if ("size" in out)          out.size          = out.size          !== "" && out.size          != null ? Number(out.size)          : null;
   if ("listedDate" in out)    out.listedDate    = out.listedDate    || null;
@@ -94,17 +98,28 @@ export const listListings = async (req, res, next) => {
 
     // Substring search over what a person remembers about a listing: title, number, unit, location, type, title deed
     andInto(filter, wordsSearchFilter(search, ["title", "listingNumber", "unitNumber", "location", "town", "county", "propertyType", "titleDeedNumber"]));
+
+    // advocate-scoped user (mandatory, ungated) can only see listings they're the default advocate for
+    const scopedListingIds = req.saleAdvocateId ? await ownListingIds(req, business) : null;
+    if (scopedListingIds) andInto(filter, { _id: { $in: scopedListingIds } });
+
     const [listings, total, statsRaw] = await Promise.all([
       withUnitOrdering(SaleListing.find(filter), Boolean(projectId))
         .populate("assignedAgent", "fullName agentNumber phone")
+        .populate("assignedAdvocate", "fullName advocateNumber firm phone")
         .populate(PROJECT_WITH_AGENT)
+      .populate(PROJECT_WITH_ADVOCATE)
         .sort(projectId ? { block: 1, unitNumber: 1 } : { createdAt: -1 })
         .skip((pageNum - 1) * limitNum)
         .limit(limitNum)
         .lean(),
       SaleListing.countDocuments(filter),
       SaleListing.aggregate([
-        { $match: { business: bId, ...aggScope } },
+        { $match: { $and: [
+          { business: bId },
+          ...(Object.keys(aggScope).length ? [aggScope] : []),
+          ...(scopedListingIds ? [{ _id: { $in: scopedListingIds } }] : []),
+        ] } },
         { $group: { _id: "$status", count: { $sum: 1 }, totalValue: { $sum: "$askingPrice" } } },
       ]),
     ]);
@@ -116,7 +131,7 @@ export const listListings = async (req, res, next) => {
       sold:          statsMap.sold          || { count: 0, totalValue: 0 },
       withdrawn:     statsMap.withdrawn     || { count: 0, totalValue: 0 },
     };
-    res.status(200).json({ data: listings.map(withEffectiveAgent), total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
+    res.status(200).json({ data: listings.map((l) => withEffectiveAdvocate(withEffectiveAgent(l))), total, page: pageNum, pages: Math.ceil(total / limitNum) || 1, stats });
   } catch (err) {
     next(err);
   }
@@ -125,12 +140,16 @@ export const listListings = async (req, res, next) => {
 export const getListing = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const listing = await SaleListing.findOne({ _id: req.params.id, business })
+    const filter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(filter, { _id: { $in: await ownListingIds(req, business) } });
+    const listing = await SaleListing.findOne(filter)
       .populate("assignedAgent", "fullName agentNumber phone email commissionRate commissionType")
+      .populate("assignedAdvocate", "fullName advocateNumber firm phone email")
       .populate(PROJECT_WITH_AGENT)
+      .populate(PROJECT_WITH_ADVOCATE)
       .lean();
     if (!listing) return next(createError(404, "Listing not found"));
-    res.status(200).json(withEffectiveAgent(listing));
+    res.status(200).json(withEffectiveAdvocate(withEffectiveAgent(listing)));
   } catch (err) {
     next(err);
   }
@@ -153,6 +172,10 @@ export const createListing = async (req, res, next) => {
       const agent = await SaleAgent.findOne({ _id: body.assignedAgent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
     }
+    if (body.assignedAdvocate) {
+      const advocate = await SaleAdvocate.findOne({ _id: body.assignedAdvocate, business, status: "active" }).lean();
+      if (!advocate) return next(createError(400, "Assigned advocate not found or inactive"));
+    }
     const unitError = await checkUnitFields(body, business);
     if (unitError) return next(unitError);
     const cleaned = cleanAttributes(await typeFields(business, body.propertyType ?? "plot"), body.attributes);
@@ -169,9 +192,11 @@ export const createListing = async (req, res, next) => {
     });
     const populated = await SaleListing.findById(listing._id)
       .populate("assignedAgent", "fullName agentNumber phone")
+      .populate("assignedAdvocate", "fullName advocateNumber firm phone")
       .populate(PROJECT_WITH_AGENT)
+      .populate(PROJECT_WITH_ADVOCATE)
       .lean();
-    res.status(201).json(withEffectiveAgent(populated));
+    res.status(201).json(withEffectiveAdvocate(withEffectiveAgent(populated)));
   } catch (err) {
     next(duplicateUnitError(err) || err);
   }
@@ -192,6 +217,10 @@ export const updateListing = async (req, res, next) => {
     if (updates.assignedAgent) {
       const agent = await SaleAgent.findOne({ _id: updates.assignedAgent, business, status: "active" }).lean();
       if (!agent) return next(createError(400, "Assigned agent not found or inactive"));
+    }
+    if (updates.assignedAdvocate) {
+      const advocate = await SaleAdvocate.findOne({ _id: updates.assignedAdvocate, business, status: "active" }).lean();
+      if (!advocate) return next(createError(400, "Assigned advocate not found or inactive"));
     }
 
     // Custom field values are checked against the (possibly new) property type. Changing the type without sending
@@ -231,10 +260,12 @@ export const updateListing = async (req, res, next) => {
       { new: true, runValidators: true }
     )
       .populate("assignedAgent", "fullName agentNumber phone")
+      .populate("assignedAdvocate", "fullName advocateNumber firm phone")
       .populate(PROJECT_WITH_AGENT)
+      .populate(PROJECT_WITH_ADVOCATE)
       .lean();
     if (!listing) return next(createError(404, "Listing not found"));
-    res.status(200).json(withEffectiveAgent(listing));
+    res.status(200).json(withEffectiveAdvocate(withEffectiveAgent(listing)));
   } catch (err) {
     next(duplicateUnitError(err) || err);
   }

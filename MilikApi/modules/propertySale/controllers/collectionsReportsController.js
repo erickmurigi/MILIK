@@ -13,14 +13,16 @@ import SalePayment from "../models/SalePayment.js";
 import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import SaleProject from "../models/SaleProject.js";
 import { escapeRegex, resolveActiveBusinessId } from "../services/businessScope.js";
+import { advocateProjectFilter } from "../middleware/advocateScope.js";
+import { andInto } from "../services/saleSearch.js";
 import { createError } from "../../../utils/error.js";
 
 const DAY = 86_400_000;
 const MAX_EXPORT = 5000;
-const OPEN_INSTALLMENT = ["upcoming", "overdue"];
-const BUCKETS = ["notDue", "d1_30", "d31_60", "d61_90", "d90plus"];
-const cents = (n) => Math.round(Number(n || 0) * 100);
-const money = (c) => c / 100;
+export const OPEN_INSTALLMENT = ["upcoming", "overdue"];
+export const BUCKETS = ["notDue", "d1_30", "d31_60", "d61_90", "d90plus"];
+export const cents = (n) => Math.round(Number(n || 0) * 100);
+export const money = (c) => c / 100;
 const oid = (v) => new mongoose.Types.ObjectId(String(v));
 const isId = (v) => mongoose.Types.ObjectId.isValid(String(v ?? ""));
 
@@ -30,7 +32,12 @@ const paging = (req) => {
   return { page, limit };
 };
 
-const asOfDate = (req) => {
+// Exported alongside buildDealFilter/loadNames/dealLabels/paidByDeal/bucketExpr below — the Reports
+// Center PDF generator (saleReportPdfData.js) reuses these exact same helpers to rebuild the identical
+// rows a report's own on-screen/JSON endpoint would show, rather than re-deriving the aggregation logic
+// a second time. Each one already takes the real Express `req` it's handed, so the PDF route's own req
+// (same query shape: projectId/agentId/asOf/dateFrom/dateTo/status) passes through unchanged.
+export const asOfDate = (req) => {
   if (!req.query.asOf) return new Date();
   const d = new Date(req.query.asOf);
   if (Number.isNaN(d.getTime())) throw createError(400, "Invalid asOf date.");
@@ -39,7 +46,7 @@ const asOfDate = (req) => {
 };
 
 // Filter on deals from the query string: project, agent, status, deal-date window, and the agent-visibility scope.
-const buildDealFilter = async (req, business, { statuses } = {}) => {
+export const buildDealFilter = async (req, business, { statuses } = {}) => {
   const { projectId, agentId, status, dateFrom, dateTo } = req.query;
   const filter = { business: oid(business) };
   if (statuses) filter.status = { $in: statuses };
@@ -49,6 +56,8 @@ const buildDealFilter = async (req, business, { statuses } = {}) => {
     if (!isId(agentId)) throw createError(400, "Invalid agent.");
     filter.agent = oid(agentId);
   }
+  // advocate-scoped user (mandatory, ungated) only sees their own deals here too
+  if (req.saleAdvocateId) andInto(filter, await advocateProjectFilter(req, business, "listing"));
   if (projectId) {
     if (!isId(projectId)) throw createError(400, "Invalid project.");
     filter.listing = { $in: await SaleListing.distinct("_id", { business, project: projectId }) };
@@ -62,7 +71,7 @@ const buildDealFilter = async (req, business, { statuses } = {}) => {
 };
 
 // Names for the ids on a set of deals, fetched once each (no per-row lookups)
-const loadNames = async (business, deals) => {
+export const loadNames = async (business, deals) => {
   const ids = (key) => [...new Set(deals.map((d) => d[key]).filter(Boolean).map(String))];
   const [buyers, listings, agents] = await Promise.all([
     SaleBuyer.find({ business, _id: { $in: ids("buyer") } }).select("fullName phone buyerNumber").lean(),
@@ -75,7 +84,7 @@ const loadNames = async (business, deals) => {
   return { buyers: by(buyers), listings: by(listings), agents: by(agents), projects: by(projects) };
 };
 
-const dealLabels = (deal, names) => {
+export const dealLabels = (deal, names) => {
   const listing = names.listings.get(String(deal.listing));
   const project = listing?.project ? names.projects.get(String(listing.project)) : null;
   const buyer = names.buyers.get(String(deal.buyer));
@@ -89,7 +98,7 @@ const dealLabels = (deal, names) => {
   };
 };
 
-const paidByDeal = async (business, dealIds) => {
+export const paidByDeal = async (business, dealIds) => {
   if (!dealIds.length) return new Map();
   const rows = await SalePayment.aggregate([
     { $match: { business: oid(business), deal: { $in: dealIds }, status: "paid" } },
@@ -104,7 +113,7 @@ const bucketOf = (daysLate) =>
 
 // Same buckets as bucketOf, expressed as plain date comparisons against thresholds worked out once here:
 // floor((asOf - due) / day) <= N  <=>  due > asOf - (N + 1) days.
-const bucketExpr = (asOf) => {
+export const bucketExpr = (asOf) => {
   const after = (days) => new Date(asOf.getTime() - days * DAY);
   return {
     $switch: {

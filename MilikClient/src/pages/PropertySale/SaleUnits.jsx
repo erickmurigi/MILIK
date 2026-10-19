@@ -9,6 +9,8 @@ import SaleFilterBar, { FilterSearch } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
 import SaleListingFormModal from "./SaleListingFormModal";
 import SaleListingAgent from "./SaleListingAgent";
+import SaleListingAdvocate from "./SaleListingAdvocate";
+import { listingAdvocateText } from "../../utils/saleAdvocate";
 import SaleListingPanel from "./SaleListingPanel";
 import { printSaleListing } from "../../utils/printSaleListing";
 import { listingAgentText } from "../../utils/saleAgent";
@@ -24,6 +26,9 @@ import { customFieldRows, listingFormFromRow, typeDefOf } from "../../utils/sale
 import useDebounce from "../../hooks/useDebounce";
 import { useTerms } from "../../hooks/useTerm";
 import { useTabState } from "../../hooks/useTabState";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
 
 const PAGE_SIZE = 50;
 
@@ -37,7 +42,7 @@ const STAT_TONES = [
   { key: "sold",           tone: "text-slate-700" },
 ];
 
-const unitTableCols = (T) => [
+const unitTableCols = (T, withAdvocate) => [
   { label: `${T.saleUnit} No.` },
   { label: T.saleProject },
   { label: "Block" },
@@ -45,6 +50,7 @@ const unitTableCols = (T) => [
   { label: "Size" },
   { label: "Asking Price", align: "right" },
   { label: T.saleAgent },
+  ...(withAdvocate ? [{ label: T.saleAdvocate }] : []),
   { label: "Status" },
 ];
 
@@ -52,7 +58,7 @@ const unitTableCols = (T) => [
 const stopRowClick = (e) => e.stopPropagation();
 
 // Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent render.
-const renderUnitRow = (row) => (
+const renderUnitRow = (row, withAdvocate) => (
   <>
     <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.unitNumber || "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100 max-w-[180px]">
@@ -77,6 +83,11 @@ const renderUnitRow = (row) => (
     <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
       <SaleListingAgent row={row} />
     </td>
+    {withAdvocate && (
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">
+        <SaleListingAdvocate row={row} />
+      </td>
+    )}
     <td className="px-3 py-1.5">
       <StatusBadge status={row.status} map={LISTING_STATUS_MAP} />
     </td>
@@ -84,8 +95,7 @@ const renderUnitRow = (row) => (
 );
 
 const SaleUnits = () => {
-  const T = useTerms("saleListing", "saleProject", "saleProjects", "saleUnit", "saleUnits", "saleAgent", "saleAgents");
-  const UNIT_TABLE_COLS = useMemo(() => unitTableCols(T), [T]);
+  const T = useTerms("saleListing", "saleProject", "saleProjects", "saleUnit", "saleUnits", "saleAgent", "saleAgents", "saleAdvocate");
   const queryClient = useQueryClient();
   const navigate    = useNavigate();
   const biz         = useSelector((s) => s.company?.currentCompany?._id);
@@ -129,7 +139,10 @@ const SaleUnits = () => {
     staleTime: 5 * 60_000,
   });
 
-  const { propertyTypeOptions, propertyTypeDefs, agentFormOptions, agentFilterOptions } = useSaleFormOptions(biz);
+  const { propertyTypeOptions, propertyTypeDefs, agentFormOptions, agentFilterOptions, advocateFormOptions, saleSettings } = useSaleFormOptions(biz);
+  const usesAdvocates = !!saleSettings?.useAdvocates;
+  const UNIT_TABLE_COLS = useMemo(() => unitTableCols(T, usesAdvocates), [T, usesAdvocates]);
+  const renderRow = useCallback((row) => renderUnitRow(row, usesAdvocates), [usesAdvocates]);
 
   const units      = useMemo(() => unitsData?.data ?? [], [unitsData?.data]);
   const total      = unitsData?.total ?? 0;
@@ -208,7 +221,6 @@ const SaleUnits = () => {
 
   const statsStrip = useMemo(() => (
     <div className="flex shrink-0 items-baseline gap-2">
-      <span className="font-mono text-[9px] font-black text-slate-500">{total} {(total === 1 ? T.saleUnit : T.saleUnits).toLowerCase()}</span>
       {STAT_TONES.map(({ key, tone }) => (
         <div key={key} className="flex shrink-0 items-baseline gap-1">
           <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">{STATUS_LABEL[key]}</span>
@@ -217,9 +229,60 @@ const SaleUnits = () => {
         </div>
       ))}
     </div>
-  ), [total, stats, T.saleUnit, T.saleUnits]);
+  ), [stats]);
 
   const resetFilters = () => { setSearch(""); setProjectFilt(""); setStatusFilt(""); setBlockFilt(""); setAgentFilt(""); setPage(1); };
+
+  const buildReportFilters = () => ({
+    business: biz,
+    project: projectFilt ? undefined : "any",
+    projectId: projectFilt || undefined,
+    status: statusFilt || undefined,
+    block: (projectFilt && debouncedBlock) || undefined,
+    search: debouncedSearch || undefined,
+    agentId: agentFilt || undefined,
+  });
+  const reportColumns = [
+    { label: `${T.saleUnit} No.`, value: (r) => r.unitNumber || "—" },
+    { label: T.saleProject, value: (r) => r.project?.name || "—" },
+    { label: "Block", value: (r) => r.block || "—" },
+    { label: "Type", value: (r) => (r.propertyType || "—").replace(/_/g, " ") },
+    { label: "Size", value: (r) => (r.size ? `${r.size} ${r.sizeUnit ?? ""}`.trim() : "—") },
+    { label: "Asking Price (KES)", align: "right", value: (r) => fmtKES(r.askingPrice) },
+    { label: T.saleAgent, value: (r) => r.assignedAgent?.fullName || "—" },
+    ...(usesAdvocates ? [{ label: T.saleAdvocate, value: (r) => r.assignedAdvocate?.fullName || "—" }] : []),
+    { label: "Status", value: (r) => r.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      projectFilt && projectOptions.find((o) => o.value === projectFilt)?.label,
+      statusFilt && `Status: ${statusFilt.replace(/_/g, " ")}`,
+      agentFilt && agentFilterOptions.find((o) => o.value === agentFilt)?.label,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listListings, buildReportFilters()), ({ rows }) => ({
+      title: T.saleUnits,
+      subtitle: described.join(" · ") || `All ${T.saleUnits.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listListings, buildReportFilters()), ({ rows }) => ({
+      filename: "units",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
 
   return (
     <PropertySaleShell>
@@ -228,12 +291,16 @@ const SaleUnits = () => {
         onReset={resetFilters}
         activeCount={[search, projectFilt, statusFilt, blockFilt, agentFilt].filter(Boolean).length}
         trailing={
-          <ListToolbar.Button
-            variant="outline"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
-          >
-            <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </ListToolbar.Button>
+          <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
+            <ListToolbar.Button
+              variant="outline"
+              onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-listings", biz] })}
+            >
+              <FaRedoAlt size={7} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </ListToolbar.Button>
+          </>
         }
       >
         <FilterSearch
@@ -272,11 +339,11 @@ const SaleUnits = () => {
             minWidth={820}
             onRowClick={handleRowClick}
             isSelected={isRowSelected}
-            renderRow={renderUnitRow}
+            renderRow={renderRow}
             renderActions={renderUnitActions}
           />
 
-          <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
+          <PaginationBar page={page} pages={totalPages} total={total} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} label={T.saleUnits.toLowerCase()} />
         </div>
 
         {/* Dismiss overlay — clicking outside the panel closes it */}
@@ -301,6 +368,7 @@ const SaleUnits = () => {
               ["Size", selected.size ? `${selected.size} ${selected.sizeUnit ?? ""}`.trim() : null],
               ["Location", [selected.town, selected.county].filter(Boolean).join(", ") || selected.location],
               [T.saleAgent, listingAgentText(selected, T.saleProject.toLowerCase())],
+              ...(usesAdvocates ? [[T.saleAdvocate, listingAdvocateText(selected, T.saleProject.toLowerCase())]] : []),
               ...customFieldRows(selected, typeDefOf(propertyTypeDefs, selected).fields),
             ]}
             editLabel={`Edit ${T.saleUnit}`}
@@ -324,6 +392,7 @@ const SaleUnits = () => {
           biz={biz}
           propertyTypeOptions={propertyTypeOptions}
           agentFormOptions={agentFormOptions}
+          advocateFormOptions={advocateFormOptions}
           invalidate={invalidate}
           onClose={() => setUnitModal(null)}
         />

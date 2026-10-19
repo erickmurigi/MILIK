@@ -9,16 +9,21 @@ import SalePhotosField from "./SalePhotosField";
 import AmountInput from "./AmountInput";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import { SIZE_UNIT_OPTIONS } from "../../utils/saleListingConstants";
 
+// Local override, not the shared utils/formStyles.js — that file's labelClass/inputClass predate the
+// bold-value-matches-label-weight convention now standard across PropertySale forms (see
+// SaleActivityFormModal.jsx / AppSelect.jsx's label and selected-value weight).
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "w-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const textareaClass = "w-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none";
 
 const NO_TYPE_DEF = { fields: [], hiddenFields: [] };
 
 // `project` ({ _id, name }) marks the listing as a unit inside that project: the form then asks for a unit number and
 // block, and a new unit is created inside the project. Without it this is an ordinary standalone listing.
-export default function SaleListingFormModal({ initialEditingId, initialForm, listings, biz, propertyTypeOptions, agentFormOptions, invalidate, onClose, project = null }) {
-  const T = useTerms("saleListing", "saleAgent", "saleUnit", "saleProject");
+export default function SaleListingFormModal({ initialEditingId, initialForm, listings, biz, propertyTypeOptions, agentFormOptions, advocateFormOptions, invalidate, onClose, project = null }) {
+  const T = useTerms("saleListing", "saleAgent", "saleAdvocate", "saleUnit", "saleProject");
   const [editingId,   setEditingId]   = useState(initialEditingId);
   const [justCreated, setJustCreated] = useState(false);
   const [form,        setForm]        = useState(initialForm);
@@ -58,6 +63,7 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
         size: form.size ? Number(form.size) : null,
         amenities: form.amenities ? form.amenities.split(",").map((s) => s.trim()).filter(Boolean) : [],
         assignedAgent: form.assignedAgent || undefined,
+        assignedAdvocate: form.assignedAdvocate || undefined,
         // A new unit is created inside its project; the server ignores `project` on edits
         ...(project && { project: project._id }),
       };
@@ -132,7 +138,7 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
         <div>
           <label className={labelClass}>Size</label>
           <div className="flex gap-1.5">
-            <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
+            <input type="number" value={form.size} onChange={(e) => setForm((p) => ({ ...p, size: e.target.value }))} className="h-8 flex-1 border border-slate-200 bg-white px-3 text-xs font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 50" />
             <AppSelect value={form.sizeUnit} onChange={(v) => setForm((p) => ({ ...p, sizeUnit: v ?? "" }))} options={SIZE_UNIT_OPTIONS} size="md" />
           </div>
         </div>
@@ -140,6 +146,14 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
         <div>
           <AppSelect label={`Assigned ${T.saleAgent}`} value={form.assignedAgent} onChange={(v) => setForm((p) => ({ ...p, assignedAgent: v ?? "" }))} options={agentFormOptions} placeholder={project?.assignedAgent?.fullName ? `Inherited: ${project.assignedAgent.fullName}` : "Unassigned"} size="md" searchable clearable />
         </div>
+        {/* Only meaningful for a standalone listing — a listing inside a project always uses the
+            project's own assignedAdvocate (conveyancing is handled per-development, not per-unit); this
+            field would silently have no effect there, so it's hidden rather than shown-but-broken. */}
+        {!project && (
+          <div>
+            <AppSelect label={`Default ${T.saleAdvocate}`} value={form.assignedAdvocate} onChange={(v) => setForm((p) => ({ ...p, assignedAdvocate: v ?? "" }))} options={advocateFormOptions} placeholder="Unassigned" size="md" searchable clearable />
+          </div>
+        )}
         {!hides("location") && (
         <>
         <div>
@@ -196,11 +210,11 @@ export default function SaleListingFormModal({ initialEditingId, initialForm, li
         )}
         <div className="md:col-span-2 xl:col-span-3">
           <label className={labelClass}>Description</label>
-          <textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <textarea rows={3} value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className={textareaClass} />
         </div>
         <div className="md:col-span-2 xl:col-span-3">
           <label className={labelClass}>Internal Notes</label>
-          <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <textarea rows={2} value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className={textareaClass} />
         </div>
         {/* Photos — shown for both Add and Edit */}
         <div className="md:col-span-2 xl:col-span-3">

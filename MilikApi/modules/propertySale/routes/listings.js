@@ -6,11 +6,12 @@ import {
 } from "../controllers/listingsController.js";
 import { bulkImportListings } from "../controllers/bulkImportController.js";
 import { listingImageUpload } from "../middleware/listingImageUpload.js";
+import { attachAdvocateScope } from "../middleware/advocateScope.js";
 import { createError } from "../../../utils/error.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"));
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAdvocateScope);
 router.get("/",    requireCompanyPermission("sale-listings", "view",   "propertySale"), listListings);
 router.get("/:id", requireCompanyPermission("sale-listings", "view",   "propertySale"), getListing);
 router.post("/",      requireCompanyPermission("sale-listings", "create", "propertySale"), createListing);

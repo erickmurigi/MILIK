@@ -32,14 +32,16 @@ const SaleProjectUnitPanel = React.memo(function SaleProjectUnitPanel({ unit, te
         <div className="mt-2"><StatusBadge status={unit.status} map={LISTING_STATUS_MAP} /></div>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto px-4 py-3">
-        {rows.map(([label, val]) => (
-          <div key={label} className="flex items-baseline gap-2">
-            <span className="w-[76px] shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-            <span className="min-w-0 break-words text-xs capitalize text-slate-800">{val}</span>
-          </div>
-        ))}
-        <Link to="/sale/offers" className="mt-3 inline-flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-2.5">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          {rows.map(([label, val]) => (
+            <div key={label} className="min-w-0">
+              <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</div>
+              <div className="truncate text-xs font-semibold capitalize text-slate-800">{val}</div>
+            </div>
+          ))}
+        </div>
+        <Link to="/sale/offers" className="mt-2.5 inline-flex items-center gap-1 text-[11px] font-bold text-[#0B3B2E] hover:underline">
           <FaExternalLinkAlt size={9} /> View {terms.saleOffers.toLowerCase()}
         </Link>
       </div>

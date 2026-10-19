@@ -6,6 +6,9 @@ import SaleOffer from "../models/SaleOffer.js";
 import Company from "../../../models/Company.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+import { deleteDocumentFile } from "../middleware/buyerDocumentUpload.js";
+import { ownAdvocateBuyerIds } from "../middleware/advocateScope.js";
+import { andInto } from "../services/saleSearch.js";
 
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
@@ -22,6 +25,8 @@ export const listBuyers = async (req, res, next) => {
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }
+    // advocate-scoped user (mandatory, ungated) can only see buyers reachable through their own deals
+    if (req.saleAdvocateId) andInto(filter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
     const [buyers, total] = await Promise.all([
       SaleBuyer.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
       SaleBuyer.countDocuments(filter),
@@ -35,7 +40,9 @@ export const listBuyers = async (req, res, next) => {
 export const getBuyer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business }).lean();
+    const filter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(filter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
+    const buyer = await SaleBuyer.findOne(filter).lean();
     if (!buyer) return next(createError(404, "Buyer not found"));
     res.status(200).json(buyer);
   } catch (err) {
@@ -152,6 +159,57 @@ export const sendBuyerEmail = async (req, res, next) => {
     };
     await sendAdHocEmail({ businessId: business, to, subject: fillPlaceholders(subject, vars), bodyText: fillPlaceholders(body, vars) });
     res.json({ success: true, message: "Email sent" });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── KYC document upload (real files, unlike the legacy free-text kycDocuments labels) ──────────────
+
+export const uploadBuyerDocuments = async (req, res, next) => {
+  let attached = false;
+  const discardUploads = () => req.files?.forEach((f) => deleteDocumentFile(f.filename));
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    if (!req.files?.length) return next(createError(400, "No valid documents uploaded"));
+    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business });
+    if (!buyer) {
+      discardUploads();
+      return next(createError(404, "Buyer not found"));
+    }
+    const newFiles = req.files.map((f) => ({
+      url: `/uploads/sale-buyers/${f.filename}`,
+      name: f.originalname,
+      size: f.size,
+      uploadedAt: new Date(),
+    }));
+    buyer.kycFiles.push(...newFiles);
+    buyer.updatedBy = userId;
+    await buyer.save();
+    attached = true;
+    res.status(200).json({ documents: buyer.kycFiles });
+  } catch (err) {
+    if (!attached) discardUploads();
+    next(err);
+  }
+};
+
+export const removeBuyerDocument = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const { url } = req.body;
+    if (!url) return next(createError(400, "Document URL required"));
+    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business });
+    if (!buyer) return next(createError(404, "Buyer not found"));
+    const before = buyer.kycFiles.length;
+    buyer.kycFiles = buyer.kycFiles.filter((f) => f.url !== url);
+    if (buyer.kycFiles.length === before) return next(createError(404, "Document not found on this buyer"));
+    buyer.updatedBy = userId;
+    await buyer.save();
+    deleteDocumentFile(url);
+    res.status(200).json({ documents: buyer.kycFiles });
   } catch (err) {
     next(err);
   }

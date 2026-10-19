@@ -100,35 +100,6 @@ const PropertySaleDashboard = () => {
     <PropertySaleShell>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
 
-        {/* ── Overdue Schedule Alert ─────────────────────────────────────── */}
-        {overdueTotal > 0 && (
-          <div className="flex items-start gap-3 border border-rose-200 bg-rose-50 px-4 py-3">
-            <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-rose-600" size={14} />
-            <div className="flex-1 min-w-0">
-              <div className="text-xs font-black text-rose-800">
-                {overdueTotal} overdue installment{overdueTotal !== 1 ? "s" : ""}
-              </div>
-              <div className="mt-1 space-y-0.5">
-                {overdueInstallments.slice(0, 5).map((item) => (
-                  <div key={item._id} className="flex items-center gap-2 text-[11px] text-rose-700">
-                    <span className="font-mono font-black">{item.deal?.dealNumber || "—"}</span>
-                    <span>·</span>
-                    <span>{fmtKES(item.expectedAmount)}</span>
-                    <span>·</span>
-                    <span>Due: {item.dueDate ? new Date(item.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}</span>
-                  </div>
-                ))}
-                {overdueTotal > 5 && (
-                  <div className="text-[10px] text-rose-500">…and {overdueTotal - 5} more</div>
-                )}
-              </div>
-            </div>
-            <button type="button" onClick={() => navigate("/sale/deals")} className="flex-shrink-0 border border-rose-300 bg-white px-3 py-1 text-[11px] font-bold text-rose-700 hover:bg-rose-50">
-              View {T.saleDeals}
-            </button>
-          </div>
-        )}
-
         {/* ── KPI stat cards ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
           <StatCard compact label={`Available ${T.saleListings}`} value={loading ? "…" : (s.listings?.available ?? 0)} icon={FaBuilding}      tone="green"  sub="Ready to sell" />
@@ -327,6 +298,37 @@ const PropertySaleDashboard = () => {
 
           {/* Right sidebar */}
           <div className="flex flex-col gap-1.5">
+
+            {/* Overdue Schedule Alert */}
+            {overdueTotal > 0 && (
+              <Card title={
+                <span className="flex items-center gap-1.5 text-rose-700">
+                  <FaExclamationTriangle size={11} />
+                  {overdueTotal} Overdue Installment{overdueTotal !== 1 ? "s" : ""}
+                </span>
+              } right={
+                <button type="button" onClick={() => navigate("/sale/deals")} className="text-[10px] font-extrabold uppercase tracking-wide text-rose-700 hover:text-rose-900">
+                  View {T.saleDeals} →
+                </button>
+              }>
+                <div className="divide-y divide-slate-100">
+                  {overdueInstallments.slice(0, 3).map((item) => (
+                    <div key={item._id} className="px-3 py-1.5 text-[11px] text-rose-700">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-black">{item.deal?.dealNumber || "—"}</span>
+                        <span className="font-extrabold tabular-nums">{fmtKES(item.expectedAmount)}</span>
+                      </div>
+                      <div className="text-rose-500">
+                        Due: {item.dueDate ? new Date(item.dueDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" }) : "—"}
+                      </div>
+                    </div>
+                  ))}
+                  {overdueTotal > 3 && (
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-rose-500">…and {overdueTotal - 3} more</div>
+                  )}
+                </div>
+              </Card>
+            )}
 
             {/* Portfolio Summary */}
             <Card title="Portfolio Summary">

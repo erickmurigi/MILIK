@@ -11,7 +11,8 @@ import { fmtDate } from "../../utils/dates";
 import { listingAgentName } from "../../utils/saleAgent";
 import { useTerms } from "../../hooks/useTerm";
 import { printTabularList } from "../../utils/printKit";
-import { POPUP_BLOCKED, money } from "./salePrint";
+import { POPUP_BLOCKED, exportToExcel, money } from "./salePrint";
+import SaleExportButton from "./SaleExportButton";
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
 const METHOD_BADGE = {
@@ -140,17 +141,93 @@ const SaleMonthlyDetail = () => {
     if (!printed) toast.error(POPUP_BLOCKED);
   }, [currentCompany, monthName, year, payments, deals, commissions, summary, T]);
 
+  const [exporting, setExporting] = React.useState(false);
+  const exportReport = useCallback(async () => {
+    setExporting(true);
+    const exportSpecs = {
+      payments: {
+        rows: payments,
+        columns: [
+          { label: "Receipt No.", value: (p) => p.paymentNumber },
+          { label: T.saleDeal, value: (p) => p.deal?.dealNumber || "—" },
+          { label: T.saleListing, value: (p) => p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—" },
+          { label: T.saleBuyer, value: (p) => p.deal?.buyer?.fullName || "—" },
+          { label: "Type", value: (p) => fmtLabel(p.paymentType) },
+          { label: "Method", value: (p) => fmtLabel(p.paymentMethod) },
+          { label: "Amount (KES)", value: (p) => money(p.amount) },
+          { label: "Date", value: (p) => fmtDate(p.paymentDate) },
+          { label: "Reference", value: (p) => p.reference || "—" },
+        ],
+      },
+      deals: {
+        rows: deals,
+        columns: [
+          { label: `${T.saleDeal} No.`, value: (d) => d.dealNumber },
+          { label: T.saleListing, value: (d) => d.listing?.title || "—" },
+          { label: T.saleBuyer, value: (d) => d.buyer?.fullName || "—" },
+          { label: T.saleAgent, value: (d) => d.agent?.fullName || "—" },
+          { label: "Agreed Price (KES)", value: (d) => money(d.agreedPrice) },
+          { label: "Status", value: (d) => d.status },
+          { label: `${T.saleDeal} Date`, value: (d) => (d.dealDate ? fmtDate(d.dealDate) : "—") },
+        ],
+      },
+      offers: {
+        rows: offers,
+        columns: [
+          { label: `${T.saleOffer} No.`, value: (o) => o.offerNumber },
+          { label: T.saleListing, value: (o) => o.listing?.title || o.listing?.listingNumber || "—" },
+          { label: T.saleBuyer, value: (o) => o.buyer?.fullName || "—" },
+          { label: T.saleAgent, value: (o) => o.agent?.fullName || "—" },
+          { label: `${T.saleOffer} Amount (KES)`, value: (o) => money(o.offerAmount) },
+          { label: `Counter ${T.saleOffer} (KES)`, value: (o) => (o.counterOfferAmount ? money(o.counterOfferAmount) : "—") },
+          { label: "Status", value: (o) => o.status },
+          { label: "Date", value: (o) => (o.createdAt ? fmtDate(o.createdAt) : "—") },
+        ],
+      },
+      listings: {
+        rows: listings,
+        columns: [
+          { label: `${T.saleListing} No.`, value: (l) => l.listingNumber },
+          { label: "Title", value: (l) => l.title || "—" },
+          { label: "Type", value: (l) => l.propertyType || "—" },
+          { label: "Asking Price (KES)", value: (l) => money(l.askingPrice) },
+          { label: "Status", value: (l) => l.status },
+          { label: T.saleAgent, value: (l) => listingAgentName(l) || "—" },
+          { label: "Listed On", value: (l) => (l.createdAt ? fmtDate(l.createdAt) : "—") },
+        ],
+      },
+      commissions: {
+        rows: commissions,
+        columns: [
+          { label: "Comm. No.", value: (c) => c.commissionNumber },
+          { label: T.saleAgent, value: (c) => c.agent?.fullName || "—" },
+          { label: T.saleDeal, value: (c) => c.deal?.dealNumber || "—" },
+          { label: T.saleListing, value: (c) => c.deal?.listing?.title || "—" },
+          { label: "Rate", value: (c) => `${c.commissionRate}${c.commissionType === "percentage" ? "%" : " KES"}` },
+          { label: "Amount (KES)", value: (c) => money(c.commissionAmount) },
+          { label: "Status", value: (c) => c.status },
+        ],
+      },
+    };
+    const spec = exportSpecs[activeTab];
+    await exportToExcel(spec.columns, spec.rows, `${activeTab}-${monthName}-${year}`);
+    setExporting(false);
+  }, [activeTab, payments, deals, offers, listings, commissions, monthName, year, T]);
+
   return (
     <PropertySaleShell
       title={`${monthName} ${year} — Monthly Detail`}
       subtitle={loading ? "Loading..." : `${summary.payments ?? 0} payment(s) · ${summary.deals ?? 0} deal(s) · ${fmtKES(summary.totalRevenue || 0)} revenue`}
       action={
-        <button
-          onClick={printReport}
-          className="flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-        >
-          <FaPrint /> Print
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={printReport}
+            className="flex h-7 items-center gap-1.5 border border-[#B7C9C0] bg-white px-3 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
+          >
+            <FaPrint /> Print
+          </button>
+          <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading} />
+        </div>
       }
     >
       <div className="flex h-full flex-col gap-2">

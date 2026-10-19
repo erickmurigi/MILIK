@@ -12,6 +12,9 @@ import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
 
 const PAGE_SIZE = 50;
 
@@ -108,14 +111,52 @@ const SaleAdvocateRemittances = () => {
     }
   };
 
+  const reportColumns = [
+    { label: "Remittance No.", value: (r) => r.remittanceNumber },
+    { label: "Date", value: (r) => (r.date ? new Date(r.date).toLocaleDateString() : "—") },
+    { label: "Amount (KES)", align: "right", value: (r) => fmtKES(r.amount) },
+    { label: "Cashbook", value: (r) => r.cashbook?.name || "—" },
+    { label: "Reference", value: (r) => r.reference || "—" },
+  ];
+  const advocateLabel = advocateOptions.find((o) => o.value === advocateId)?.label || "";
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    await printAfterFetch(() => fetchAllPages(saleApi.listAdvocateRemittances, { business: biz, advocate: advocateId }), ({ rows }) => ({
+      title: "Advocate Trust Remittances",
+      subtitle: advocateLabel,
+      company: currentCompany,
+      summaryItems: [["Collected", fmtKES(balance?.collected ?? 0)], ["Remitted", fmtKES(balance?.remitted ?? 0)], ["Outstanding", fmtKES(balance?.outstanding ?? 0)]],
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listAdvocateRemittances, { business: biz, advocate: advocateId }), ({ rows }) => ({
+      filename: "advocate-remittances",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
       <SaleFilterBar
         leading={<span className="shrink-0 font-mono text-[10px] font-black text-slate-500">Trust Remittances</span>}
         trailing={
-          <button type="button" onClick={invalidate} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
-            <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
-          </button>
+          <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={!advocateId || loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={!advocateId || loading || total === 0} />
+            <button type="button" onClick={invalidate} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
+              <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
+            </button>
+          </>
         }
       >
         <AppSelect

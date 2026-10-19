@@ -16,6 +16,9 @@ import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
 
 const PAGE_SIZE = 50;
 
@@ -217,6 +220,43 @@ const SaleOwners = () => {
     </div>
   ), [printOwner, openEdit, handleDelete]);
 
+  const reportColumns = [
+    { label: `${T.saleOwner} No.`, value: (r) => r.ownerNumber },
+    { label: "Name", value: (r) => r.fullName },
+    { label: "Phone", value: (r) => r.phone || "—" },
+    { label: "Email", value: (r) => r.email || "—" },
+    { label: T.saleProjects, value: (r) => r.projectCount ?? 0 },
+    { label: "Status", value: (r) => r.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilter && `Status: ${statusFilter}`,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listOwners, { business: biz, search: debouncedSearch, status: statusFilter || undefined }), ({ rows }) => ({
+      title: T.saleOwners,
+      subtitle: described.join(" · ") || `All ${T.saleOwners.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listOwners, { business: biz, search: debouncedSearch, status: statusFilter || undefined }), ({ rows }) => ({
+      filename: "owners",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
       <SaleFilterBar
@@ -225,6 +265,8 @@ const SaleOwners = () => {
         activeCount={[search, statusFilter].filter(Boolean).length}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-owners", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
             </button>

@@ -10,6 +10,9 @@ import AppSelect from "../../components/common/AppSelect";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportToExcel, printNow } from "./salePrint";
 
 const contextOptions = (T) => [
   { value: "buyer", label: T.saleBuyer },
@@ -102,7 +105,8 @@ const blankForm = { name: "", channel: "email", context: "buyer", subject: "", b
 export default function SaleTemplates() {
   const T = useTerms("saleBuyer", "saleDeal", "saleLead", "saleAgent", "saleListing");
   const queryClient = useQueryClient();
-  const biz     = useSelector((s) => s.company?.currentCompany?._id);
+  const currentCompany = useSelector((s) => s.company?.currentCompany);
+  const biz     = currentCompany?._id;
   const [showInactive, setShowInactive] = useState(false);
   const [showModal,    setShowModal]    = useState(false);
   const [editingId,    setEditingId]    = useState(null);
@@ -183,6 +187,32 @@ export default function SaleTemplates() {
   const placeholders = allPlaceholders[form.context] ?? [];
   const insertPlaceholder = (key) => setForm((f) => ({ ...f, body: f.body + key }));
 
+  const reportColumns = [
+    { label: "Name", value: (t) => t.name },
+    { label: "Channel", value: (t) => CHANNEL_LABELS[t.channel] ?? t.channel },
+    { label: "Context", value: (t) => CONTEXT_LABELS[t.context] ?? t.context },
+    { label: "Subject", value: (t) => t.subject || "—" },
+    { label: "Body", value: (t) => t.body },
+    { label: "Status", value: (t) => (t.isActive !== false ? "Active" : "Archived") },
+  ];
+
+  const printReport = () => {
+    printNow({
+      title: "SMS & Email Templates",
+      company: currentCompany,
+      summaryItems: [["Active", String(active)], ["Archived", String(archived)]],
+      columns: reportColumns,
+      rows: visible,
+    });
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportToExcel(reportColumns, visible, "message-templates");
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell title="SMS & Email Templates">
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
@@ -196,12 +226,16 @@ export default function SaleTemplates() {
               Show archived
             </label>
           </div>
-          <button
-            onClick={openCreate}
-            className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]"
-          >
-            <FaPlus className="text-[10px]" /> Add Template
-          </button>
+          <div className="flex items-center gap-1.5">
+            <SalePrintButton onClick={printReport} disabled={loading || visible.length === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || visible.length === 0} />
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-1.5 bg-[#0B3B2E] px-3 py-1.5 text-[11px] font-bold text-white hover:bg-[#0A3127]"
+            >
+              <FaPlus className="text-[10px]" /> Add Template
+            </button>
+          </div>
         </div>
 
         {/* Table */}

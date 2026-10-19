@@ -7,9 +7,11 @@ import { round2 } from "../../../utils/math.js";
 import { currentUserId, parseLimit, parsePagination, resolveActiveBusinessId } from "../services/businessScope.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { agentFilter, ownDealIds } from "../middleware/agentScope.js";
+import { ownAdvocateDealIds } from "../middleware/advocateScope.js";
 
-// Agent-scoped users only see schedule items on their own deals (query fragment; empty for everyone else)
+// Agent- or advocate-scoped users only see schedule items on their own deals (query fragment; empty for everyone else)
 const dealScope = async (req, business) => {
+  if (req.saleAdvocateId) return { deal: { $in: await ownAdvocateDealIds(req, business) } };
   const ids = await ownDealIds(req, business);
   return ids ? { deal: { $in: ids } } : {};
 };
@@ -45,6 +47,7 @@ export const listSchedule = async (req, res, next) => {
     // Check the deal is the caller's (and exists in this business) before touching its rows
     if (!mongoose.isValidObjectId(String(dealId))) return next(createError(400, "Invalid deal"));
     if (req.saleAgentId && !(await SaleDeal.exists({ _id: dealId, business, agent: req.saleAgentId }))) return next(createError(404, "Deal not found"));
+    if (req.saleAdvocateId && !(await SaleDeal.exists({ _id: dealId, business, ...(await dealScope(req, business)) }))) return next(createError(404, "Deal not found"));
 
     await recomputeStatuses(business, dealId);
 
@@ -189,7 +192,7 @@ export const listAllSchedule = async (req, res, next) => {
     const filter = { business };
     if (status)  filter.status = status;
     if (dealId)  filter.deal   = dealId;
-    const ownDeals = await ownDealIds(req, business);
+    const ownDeals = req.saleAdvocateId ? await ownAdvocateDealIds(req, business) : await ownDealIds(req, business);
     if (ownDeals) filter.$and = [{ deal: { $in: ownDeals } }];
     if (dateFrom || dateTo) {
       filter.dueDate = {};
@@ -231,7 +234,7 @@ export const getScheduleSummary = async (req, res, next) => {
 
     const now = new Date();
     const cutoff = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const ownDeals = await ownDealIds(req, business);
+    const ownDeals = req.saleAdvocateId ? await ownAdvocateDealIds(req, business) : await ownDealIds(req, business);
     const rows = await SalePaymentSchedule.aggregate([
       { $match: { business: new mongoose.Types.ObjectId(String(business)), status: { $in: ["overdue", "upcoming"] }, ...(ownDeals && { deal: { $in: ownDeals } }) } },
       {

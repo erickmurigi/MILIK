@@ -52,6 +52,7 @@ import {
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
 import { createError } from "../../utils/error.js";
+import { round2 } from "../../utils/math.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
@@ -1517,6 +1518,80 @@ export const getPropertyTenants = async (req, res, next) => {
       .lean();
 
     res.status(200).json(tenants);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Collection summary for a single property — invoiced/collected this month plus total
+// arrears, for the mobile Tenants list's per-property stats strip. Arrears is summed
+// straight from Tenant.balance (the same authoritative, denormalized field the tenant
+// list and profile already use), not recomputed from scratch, so it can never disagree
+// with what the rest of the app already shows for these tenants.
+export const getPropertyCollectionSummary = async (req, res, next) => {
+  try {
+    const property = await Property.findById(req.params.id).select("_id business").lean();
+    if (!property) return next(createError(404, "Property not found"));
+
+    const propertyBusinessId = String(property.business?._id || property.business);
+    if (!req.user.isSystemAdmin) {
+      const userBusinessId = req.user?.company;
+      if (propertyBusinessId !== String(userBusinessId)) {
+        return next(createError(403, "Not authorized to access this property"));
+      }
+    }
+
+    const units = await Unit.find({ property: req.params.id }).distinct("_id");
+    const tenantIds = await Tenant.find({
+      business: propertyBusinessId,
+      $or: [{ unit: { $in: units } }, { additionalUnits: { $in: units } }],
+    }).distinct("_id");
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const [invoicedAgg, collectedAgg, arrearsAgg] = await Promise.all([
+      TenantInvoice.aggregate([
+        {
+          $match: {
+            tenant: { $in: tenantIds },
+            status: { $nin: ["cancelled", "reversed"] },
+            invoiceDate: { $gte: monthStart, $lt: monthEnd },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      RentPayment.aggregate([
+        {
+          $match: {
+            tenant: { $in: tenantIds },
+            isConfirmed: true,
+            isCancelled: { $ne: true },
+            isReversed: { $ne: true },
+            reversalOf: null,
+            paymentDate: { $gte: monthStart, $lt: monthEnd },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]),
+      Tenant.aggregate([
+        { $match: { _id: { $in: tenantIds }, balance: { $gt: 0.009 } } },
+        { $group: { _id: null, total: { $sum: "$balance" } } },
+      ]),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        invoiced:  round2(invoicedAgg[0]?.total || 0),
+        collected: round2(collectedAgg[0]?.total || 0),
+        arrears:   round2(arrearsAgg[0]?.total || 0),
+        tenantCount: tenantIds.length,
+        periodStart: monthStart,
+        periodEnd: monthEnd,
+      },
+    });
   } catch (err) {
     next(err);
   }

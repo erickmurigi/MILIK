@@ -38,6 +38,7 @@ import { escapeRegex } from "../../utils/escapeRegex.js";
 import { matchTenantIds, matchUnitIds } from "../../utils/listSearch.js";
 import { createError } from "../../utils/error.js";
 import { round2 } from "../../utils/math.js";
+import { claimPaymentReference, releasePaymentReference } from "../../services/paymentReferenceGuard.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -2611,6 +2612,17 @@ export const createPayment = async (req, res, next) => {
 
     const savedPayment = await payment.save();
 
+    // System-wide guard — the schema's own unique index already prevents a duplicate referenceNumber
+    // WITHIN RentPayment; this additionally blocks reuse of a reference already claimed by any other
+    // money-transaction model for this business. Claimed before any GL work, so a duplicate rolls back
+    // with nothing else to unwind.
+    try {
+      await claimPaymentReference({ business: businessId, reference: savedPayment.referenceNumber, sourceModel: "RentPayment", sourceId: savedPayment._id });
+    } catch (refErr) {
+      await RentPayment.deleteOne({ _id: savedPayment._id });
+      return next(refErr);
+    }
+
     if (savedPayment.isConfirmed) {
       let posting;
       try {
@@ -2919,6 +2931,11 @@ export const batchCreatePayments = async (req, res, next) => {
 
         savedPayment = await payment.save();
         usedRefSet.add(refNumber); // prevent subsequent items in the same batch from reusing it
+
+        // System-wide guard — a throw here is caught by this item's own catch below, exactly like a
+        // GL-posting failure: the item is recorded as failed (postingStatus "failed"), not deleted,
+        // and the rest of the batch continues unaffected.
+        await claimPaymentReference({ business: businessId, reference: savedPayment.referenceNumber, sourceModel: "RentPayment", sourceId: savedPayment._id });
 
         if (savedPayment.isConfirmed) {
           const posting = itemPaidDirectToLandlord
@@ -3815,9 +3832,24 @@ export const updatePayment = async (req, res, next) => {
     delete safeUpdate.confirmedAt;
     delete safeUpdate.isConfirmed;
 
+    // System-wide guard — only unconfirmed/unposted receipts reach this code path at all (confirmed
+    // ones are blocked above), so this is the only place a RentPayment reference can ever change.
+    const oldReferenceNumber = payment.referenceNumber;
+    const referenceChanged   = referenceNumber !== oldReferenceNumber;
+    if (referenceChanged) {
+      try {
+        await claimPaymentReference({ business: payment.business, reference: referenceNumber, sourceModel: "RentPayment", sourceId: payment._id });
+      } catch (refErr) {
+        return next(refErr);
+      }
+    }
+
     const updatedPayment = await populateReceiptQuery(
       RentPayment.findByIdAndUpdate(req.params.id, { $set: safeUpdate }, { new: true })
     );
+    if (referenceChanged) {
+      await releasePaymentReference({ business: payment.business, reference: oldReferenceNumber, sourceModel: "RentPayment", sourceId: payment._id }).catch(() => {});
+    }
 
     return res.status(200).json(updatedPayment);
   } catch (err) {
@@ -4118,6 +4150,7 @@ export const deletePayment = async (req, res, next) => {
       // Recompute tenant balance after voiding both sets of entries
       await recomputeTenantBalance(payment.tenant, payment.business);
       await RentPayment.findByIdAndDelete(req.params.id);
+      await releasePaymentReference({ business: payment.business, reference: payment.referenceNumber, sourceModel: "RentPayment", sourceId: payment._id }).catch(() => {});
       await logAuditEvent({
         req,
         company: payment.business,
@@ -4142,6 +4175,7 @@ export const deletePayment = async (req, res, next) => {
     }
 
     await RentPayment.findByIdAndDelete(req.params.id);
+    await releasePaymentReference({ business: payment.business, reference: payment.referenceNumber, sourceModel: "RentPayment", sourceId: payment._id }).catch(() => {});
     await recomputeInvoiceStatusesForTenant({
       businessId: payment.business,
       tenantId: payment.tenant,
@@ -4606,6 +4640,10 @@ export const createAutoReceipt = async ({
   const saved = await payment.save();
 
   try {
+    // Claimed first — a duplicate here is handled exactly like a GL posting failure below (the
+    // receipt is kept with postingStatus "failed" for review, never silently dropped).
+    await claimPaymentReference({ business: businessId, reference: saved.referenceNumber, sourceModel: "RentPayment", sourceId: saved._id });
+
     const posting = await postReceiptJournal(saved, String(actorUser._id));
     await applyIncrementalBalanceDelta({
       tenantId: saved.tenant,

@@ -92,6 +92,9 @@ const getMonthBounds = () => {
 
 const statuses = ["waiting", "washing", "drying", "ready", "done", "paid", "cancelled"];
 const paymentMethods = ["cash", "mpesa", "bank", "card", "other"];
+// Methods with a real external reference (M-Pesa code, bank ref, card auth code) require it — traceable
+// for reconciliation, and needed since the system-wide duplicate-reference guard keys on it.
+const REFERENCE_REQUIRED_METHODS = ["mpesa", "bank", "card"];
 const DEFAULT_PAGE_SIZE = 50;
 const EMPTY_ARRAY = [];
 
@@ -603,8 +606,8 @@ const CarWashJobs = () => {
   const recordPayment = async (event) => {
     event.preventDefault();
     if (submittingPayment) return;
-    if (paymentForm.method === "mpesa" && !paymentForm.reference?.trim()) {
-      toast.error("M-Pesa transaction code is required");
+    if (REFERENCE_REQUIRED_METHODS.includes(paymentForm.method) && !paymentForm.reference?.trim()) {
+      toast.error(`A reference number is required for ${paymentForm.method.toUpperCase()} payments`);
       return;
     }
     setSubmittingPayment(true);
@@ -1564,18 +1567,18 @@ const CarWashJobs = () => {
             </div>
             <div className={paymentForm.method === "mpesa" ? "" : "md:col-span-2"}>
               <label className={labelClass}>
-                {paymentForm.method === "mpesa" ? "M-Pesa Transaction Code" : "Reference"}
-                {paymentForm.method === "mpesa" && <span className="ml-1 font-bold text-red-500">*</span>}
+                {paymentForm.method === "mpesa" ? "M-Pesa Transaction Code" : paymentForm.method === "bank" ? "Bank Reference" : paymentForm.method === "card" ? "Card Auth Code" : "Reference"}
+                {REFERENCE_REQUIRED_METHODS.includes(paymentForm.method) && <span className="ml-1 font-bold text-red-500">*</span>}
               </label>
               <input
-                className={`${inputClass} ${paymentForm.method === "mpesa" && !paymentForm.reference?.trim() ? "border-red-300 focus:border-red-500" : ""}`}
+                className={`${inputClass} ${REFERENCE_REQUIRED_METHODS.includes(paymentForm.method) && !paymentForm.reference?.trim() ? "border-red-300 focus:border-red-500" : ""}`}
                 value={paymentForm.reference}
                 onChange={(event) => setPaymentForm((prev) => ({ ...prev, reference: event.target.value }))}
                 placeholder={paymentForm.method === "mpesa" ? "e.g. QJK1234ABC" : paymentForm.method === "cash" ? "Optional cash receipt note" : "Bank ref, card ref..."}
-                required={paymentForm.method === "mpesa"}
+                required={REFERENCE_REQUIRED_METHODS.includes(paymentForm.method)}
               />
-              {paymentForm.method === "mpesa" && !paymentForm.reference?.trim() && (
-                <p className="mt-0.5 text-[10px] font-bold text-red-500">Required for M-Pesa payments</p>
+              {REFERENCE_REQUIRED_METHODS.includes(paymentForm.method) && !paymentForm.reference?.trim() && (
+                <p className="mt-0.5 text-[10px] font-bold text-red-500">Required for {paymentForm.method.toUpperCase()} payments — must be unique</p>
               )}
             </div>
             {paymentForm.method === "mpesa" && (

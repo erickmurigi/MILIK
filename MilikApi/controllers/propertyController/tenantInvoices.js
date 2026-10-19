@@ -4654,7 +4654,16 @@ export const createTenantInvoicesBatch = async (req, res, next) => {
             ? runTasksInChunks(
                 tenantRecomputeIds,
                 async (tenantId) => {
-                  await recomputeTenantFinancialState({ businessId, tenantId });
+                  // One tenant's recompute failing (bad data, transient DB error, etc.)
+                  // must never abort the rest of the batch — runTasksInChunks awaits
+                  // Promise.all per chunk, so an uncaught error here would silently
+                  // skip every remaining chunk's tenants, leaving their balance
+                  // permanently stale even though their invoice was created fine.
+                  try {
+                    await recomputeTenantFinancialState({ businessId, tenantId });
+                  } catch (err) {
+                    console.error(`Batch invoice recompute failed for tenant=${tenantId}:`, err?.message);
+                  }
                 },
                 12
               )

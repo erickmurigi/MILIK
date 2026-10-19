@@ -64,6 +64,7 @@ export default function NewCarWashJobScreen() {
   const [services,       setServices]       = useState<Service[]>([]);
   const [svcSearch,      setSvcSearch]      = useState('');
   const [selectedSvcIds, setSelectedSvcIds] = useState<Set<string>>(new Set());
+  const [showServicePicker, setShowServicePicker] = useState(false);
   const [staffList,       setStaffList]       = useState<Staff[]>([]);
   const [selectedStaff,   setSelectedStaff]   = useState<string[]>([]);
   const [showStaffPicker, setShowStaffPicker] = useState(false);
@@ -343,47 +344,80 @@ export default function NewCarWashJobScreen() {
             {/* ── Services ── */}
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>SERVICES <Text style={{ color: '#DC2626' }}>*</Text></Text>
-              {services.length > 8 ? (
-                <TextInput
-                  style={styles.input}
-                  placeholder="Search services"
-                  placeholderTextColor="#94A3B8"
-                  value={svcSearch}
-                  onChangeText={setSvcSearch}
-                  autoCorrect={false}
-                />
-              ) : null}
+
               {services.length === 0 ? (
                 <Text style={styles.hint}>No active services are set up yet. Add them in Car Wash → Services on the web.</Text>
-              ) : shownServices.length === 0 ? (
-                <Text style={styles.hint}>No service matches “{svcSearch}”.</Text>
               ) : (
-                <View style={styles.servicesGrid}>
-                  {shownServices.map(svc => {
-                    const sel = selectedSvcIds.has(svc._id);
-                    const tiered = hasTiers(svc);
-                    const tierHit = !!vehicleType && !!svc.pricingTiers?.some(t => t.vehicleType === vehicleType);
-                    return (
-                      <TouchableOpacity
-                        key={svc._id}
-                        style={[styles.svcCard, sel && styles.svcCardActive]}
-                        onPress={() => toggleService(svc._id)}
-                        activeOpacity={0.75}
-                      >
-                        {sel && (
-                          <View style={styles.svcCheck}>
-                            <Ionicons name="checkmark" size={10} color="#fff" />
+                <>
+                  <TouchableOpacity style={styles.pickerBtn} onPress={() => setShowServicePicker(v => !v)}>
+                    <Ionicons name="list-outline" size={16} color={chosen.length ? CW : '#94A3B8'} />
+                    <Text style={[styles.pickerBtnTxt, chosen.length > 0 && { color: '#0F172A' }]} numberOfLines={1}>
+                      {chosen.length > 0 ? chosen.map(s => s.name).join(', ') : 'Search services'}
+                    </Text>
+                    <Ionicons name={showServicePicker ? 'chevron-up' : 'chevron-down'} size={16} color="#94A3B8" />
+                  </TouchableOpacity>
+
+                  {showServicePicker && (
+                    <View style={styles.dropPanel}>
+                      <TextInput
+                        style={styles.svcSearchInput}
+                        placeholder="Search services"
+                        placeholderTextColor="#94A3B8"
+                        value={svcSearch}
+                        onChangeText={setSvcSearch}
+                        autoCorrect={false}
+                        autoFocus
+                      />
+                      <ScrollView style={styles.svcList} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                        {shownServices.length === 0 ? (
+                          <Text style={[styles.hint, { padding: 14 }]}>No service matches “{svcSearch}”.</Text>
+                        ) : shownServices.map(svc => {
+                          const sel = selectedSvcIds.has(svc._id);
+                          const tiered = hasTiers(svc);
+                          const tierHit = !!vehicleType && !!svc.pricingTiers?.some(t => t.vehicleType === vehicleType);
+                          return (
+                            <TouchableOpacity
+                              key={svc._id}
+                              style={[styles.dropItem, sel && styles.dropItemActive]}
+                              onPress={() => toggleService(svc._id)}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={[styles.dropItemTxt, sel && { color: CW, fontWeight: '700' }]}>{svc.name}</Text>
+                                {tierHit ? <Text style={styles.tierBadge}>{vehicleType}</Text> : null}
+                              </View>
+                              <Text style={[styles.svcPriceInline, sel && { color: CW }]}>
+                                {tiered && !vehicleType ? 'By vehicle' : fmtKES(servicePrice(svc, vehicleType))}
+                              </Text>
+                              {sel && <Ionicons name="checkmark" size={14} color={CW} style={{ marginLeft: 10 }} />}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Compact summary of what's actually chosen — the long list above is for picking, not reviewing */}
+                  {chosen.length > 0 ? (
+                    <View style={styles.selectedList}>
+                      {chosen.map(svc => {
+                        const tiered = hasTiers(svc);
+                        return (
+                          <View key={svc._id} style={styles.selectedRow}>
+                            <Text style={styles.selectedName} numberOfLines={1}>{svc.name}</Text>
+                            <Text style={styles.selectedPrice}>
+                              {tiered && !vehicleType ? 'Priced by vehicle' : fmtKES(servicePrice(svc, vehicleType))}
+                            </Text>
+                            <TouchableOpacity onPress={() => toggleService(svc._id)} hitSlop={8} accessibilityLabel={`Remove ${svc.name}`}>
+                              <Ionicons name="close-circle" size={18} color="#CBD5E1" />
+                            </TouchableOpacity>
                           </View>
-                        )}
-                        <Text style={[styles.svcName, sel && { color: CW }]} numberOfLines={2}>{svc.name}</Text>
-                        <Text style={[styles.svcPrice, sel && { color: CW }]}>
-                          {tiered && !vehicleType ? 'Priced by vehicle' : fmtKES(servicePrice(svc, vehicleType))}
-                        </Text>
-                        {tierHit ? <Text style={styles.tierBadge}>{vehicleType}</Text> : null}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                        );
+                      })}
+                    </View>
+                  ) : (
+                    <Text style={styles.hint}>No services selected yet.</Text>
+                  )}
+                </>
               )}
             </View>
 
@@ -554,22 +588,23 @@ const styles = StyleSheet.create({
   textarea:    { minHeight: 90, paddingTop: 13 },
   row2:        { flexDirection: 'row', gap: 10 },
 
-  servicesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  svcCard: {
-    width: '47.5%', backgroundColor: '#fff',
-    borderRadius: 12, borderWidth: 1.5, borderColor: '#E2E8F0',
-    padding: 12, gap: 4, position: 'relative',
-    minHeight: 64,
+  svcSearchInput: {
+    paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: '#0F172A',
+    borderBottomWidth: 1, borderBottomColor: '#F1F5F9',
   },
-  svcCardActive: { borderColor: CW, backgroundColor: CWL },
-  svcCheck: {
-    position: 'absolute', top: 8, right: 8,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: CW, alignItems: 'center', justifyContent: 'center',
-  },
-  svcName:   { fontSize: 12, fontWeight: '700', color: '#0F172A', paddingRight: 20 },
-  svcPrice:  { fontSize: 12, fontWeight: '800', color: '#64748B' },
+  svcList: { maxHeight: 280 },
+  svcPriceInline: { fontSize: 12, fontWeight: '800', color: '#64748B' },
   tierBadge: { fontSize: 9, color: CW, fontWeight: '700', marginTop: 2 },
+
+  selectedList: { gap: 6 },
+  selectedRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: CWL, borderRadius: 10,
+    borderWidth: 1, borderColor: '#E2E8F0',
+    paddingHorizontal: 12, paddingVertical: 10,
+  },
+  selectedName:  { flex: 1, fontSize: 13, fontWeight: '700', color: '#0F172A' },
+  selectedPrice: { fontSize: 13, fontWeight: '800', color: CW },
 
   staffAvatar: {
     width: 28, height: 28, borderRadius: 14,

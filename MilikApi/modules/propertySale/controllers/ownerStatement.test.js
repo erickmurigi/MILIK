@@ -11,11 +11,12 @@ import SaleListing from "../models/SaleListing.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleOwnerStatement from "../models/SaleOwnerStatement.js";
 import SaleOwnerStatementLine from "../models/SaleOwnerStatementLine.js";
-import { createDeal } from "./dealsController.js";
-import { createPayment } from "./paymentsController.js";
+import { createDeal, cancelDeal } from "./dealsController.js";
+import { createPayment, voidPayment } from "./paymentsController.js";
 import { updateCommissionStatus } from "./commissionsController.js";
-import { approveStatement, createDraftStatement, getStatement } from "./ownerStatementsController.js";
-import { createOwnerPayout } from "./ownerPayoutsController.js";
+import { updateCommissionReleaseSchedule } from "./settingsController.js";
+import { approveStatement, createDraftStatement, deleteDraftStatement, getStatement, listStatements, reverseStatementApproval } from "./ownerStatementsController.js";
+import { createOwnerPayout, getOwnerOutstandingBalance } from "./ownerPayoutsController.js";
 import { createPaymentVoucher } from "../../../controllers/propertyController/paymentVoucher.js";
 import { getAccountByCode } from "../../../test/factories.financial.js";
 
@@ -50,7 +51,7 @@ const setup = async () => {
   const brokerCommission = await SaleCommission.findOne({ business, deal: deal._id }).lean();
   await call(updateCommissionStatus, { params: { id: String(brokerCommission._id) }, body: { status: "approved" } });
 
-  return { business, call, owner, project, deal };
+  return { business, call, owner, project, deal, agent };
 };
 
 describe("owner statement — generation and totals (immediate-release, no staging)", () => {
@@ -159,7 +160,7 @@ describe("owner statement — generation and totals (immediate-release, no stagi
 
   it("an owner payout in the period shows as its own deduction and generation doesn't throw (LINE_CATEGORIES must include owner_payout)", async () => {
     const { owner, project, call } = await setup();
-    const payoutRes = await call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000 } });
+    const payoutRes = await call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000, reference: "EFT-OS-1" } });
     expect(payoutRes.statusCode).toBe(201);
 
     const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
@@ -174,9 +175,188 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     expect(payoutLine).toMatchObject({ amount: 100_000, direction: "debit" });
   });
 
+  it("a cancelled deal's commission tiers never show on the statement, even though tierReleases stays on the record for history", async () => {
+    const { business, call, owner, project, agent } = await setup();
+    await call(updateCommissionReleaseSchedule, {
+      body: { enabled: true, ownerCommissionTiers: [{ thresholdPct: 30, releasePct: 100 }], brokerCommissionTiers: [{ thresholdPct: 30, releasePct: 100 }] },
+    });
+
+    // A second deal on the same owner/project — crosses the 30% tier (so both commissions accrue real
+    // tierReleases), then gets cancelled. cancelDeal reverses the GL and flips status to "cancelled" but
+    // deliberately leaves tierReleases on the record (see dealsController.cancelDeal) — the statement
+    // generator must not mistake that leftover history for a still-live cost.
+    const n = Math.random();
+    const listing = await SaleListing.create({ business, listingNumber: `LC-${n}`, title: `Cancelled Plot`, askingPrice: 1_000_000, project: project._id, unitNumber: `UC-${n}` });
+    const buyer = await SaleBuyer.create({ business, buyerNumber: `BC-${n}`, fullName: `Cancelled Buyer`, phone: `0799${n}`, email: `bc${n}@example.com` });
+    const dealRes = await call(createDeal, { body: { listing: String(listing._id), buyer: String(buyer._id), agent: String(agent._id), agreedPrice: 1_000_000 } });
+    const cancelledDeal = dealRes.payload;
+
+    const paymentRes = await call(createPayment, { body: { deal: String(cancelledDeal._id), amount: 300_000, paymentType: "installment" } }); // 30% -> tier fires on both
+    // Tier release is a one-way ratchet — voiding doesn't claw the accrued tier back, it only clears
+    // cancelDeal's unrelated "non-deposit payments must be voided first" guard (see dealCancelWithTiers.test.js).
+    await call(voidPayment, { params: { id: String(paymentRes.payload._id) } });
+    await call(cancelDeal, { params: { id: String(cancelledDeal._id) }, body: {} });
+
+    const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    const full = await call(getStatement, { params: { id: String(res.payload._id) } });
+
+    const cancelledDealLines = full.payload.lines.filter((l) => String(l.deal) === String(cancelledDeal._id));
+    expect(cancelledDealLines.filter((l) => l.category === "broker_commission")).toHaveLength(0);
+    expect(cancelledDealLines.filter((l) => l.category === "company_commission")).toHaveLength(0);
+
+    // The original, un-cancelled deal from setup() still shows its commissions as normal — this isn't a
+    // blanket "staged commissions never show" regression, only cancelled ones are excluded.
+    expect(res.payload.companyCommission).toBe(30_000);
+    expect(res.payload.brokerCommission).toBe(20_000);
+  });
+
   it("a period with no activity for the owner returns a zeroed statement, not an error", async () => {
     const { owner, call } = await setup();
     const res = await call(createDraftStatement, { body: { owner: String(owner._id), periodStart: "2020-01-01", periodEnd: "2020-01-31" } });
     expect(res.payload).toMatchObject({ grossProceeds: 0, companyCommission: 0, brokerCommission: 0, rechargedExpenses: 0, netBalance: 0 });
+  });
+});
+
+const nextPeriodStart = () => { const d = new Date(); d.setMonth(d.getMonth() + 1, 1); d.setHours(0, 0, 0, 0); return d.toISOString(); };
+const nextPeriodEnd = () => { const d = new Date(); d.setMonth(d.getMonth() + 2, 0); d.setHours(23, 59, 59, 999); return d.toISOString(); };
+const midPeriodStart = () => { const d = new Date(); d.setDate(15); d.setHours(0, 0, 0, 0); return d.toISOString(); };
+
+describe("owner statement — overlap guard", () => {
+  it("rejects a new period that starts on or before an already-approved statement's end", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await call(approveStatement, { params: { id: String(draft.payload._id) } });
+
+    await expect(
+      call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: midPeriodStart(), periodEnd: nextPeriodEnd() } })
+    ).rejects.toThrow(/overlaps the already-approved statement/);
+  });
+
+  it("allows a new period that starts strictly after the approved one's end", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await call(approveStatement, { params: { id: String(draft.payload._id) } });
+
+    const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: nextPeriodStart(), periodEnd: nextPeriodEnd() } });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it("is scoped per-owner, not per-owner+project — an approved all-projects statement also blocks a later per-project one", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), periodStart: periodStart(), periodEnd: periodEnd() } }); // no project = all projects
+    await call(approveStatement, { params: { id: String(draft.payload._id) } });
+
+    await expect(
+      call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: midPeriodStart(), periodEnd: nextPeriodEnd() } })
+    ).rejects.toThrow(/overlaps the already-approved statement/);
+  });
+});
+
+describe("owner statement — draft replacement and discard", () => {
+  it("generating a draft for a different period replaces the owner+project's prior unapproved draft instead of piling up", async () => {
+    const { owner, project, call, business } = await setup();
+    const first = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: midPeriodStart() } });
+    const second = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: nextPeriodStart(), periodEnd: nextPeriodEnd() } });
+    expect(second.statusCode).toBe(201);
+    expect(String(second.payload._id)).not.toBe(String(first.payload._id));
+
+    const stillThere = await SaleOwnerStatement.findById(first.payload._id).lean();
+    expect(stillThere).toBeNull();
+    const oldLines = await SaleOwnerStatementLine.find({ statement: first.payload._id }).lean();
+    expect(oldLines).toHaveLength(0);
+
+    const list = await call(listStatements, { query: { owner: String(owner._id) } });
+    expect(list.payload.data.map((s) => String(s._id))).toEqual([String(second.payload._id)]);
+  });
+
+  it("an approved statement is never touched by a sibling draft's replacement cleanup", async () => {
+    const { owner, project, call } = await setup();
+    const approvedDraft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await call(approveStatement, { params: { id: String(approvedDraft.payload._id) } });
+
+    await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: nextPeriodStart(), periodEnd: nextPeriodEnd() } });
+
+    const stillApproved = await SaleOwnerStatement.findById(approvedDraft.payload._id).lean();
+    expect(stillApproved?.status).toBe("approved");
+  });
+
+  it("deletes a draft on request, but refuses to delete an approved one", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+
+    const del = await call(deleteDraftStatement, { params: { id: String(draft.payload._id) } });
+    expect(del.payload).toMatchObject({ success: true });
+    expect(await SaleOwnerStatement.findById(draft.payload._id).lean()).toBeNull();
+    expect(await SaleOwnerStatementLine.find({ statement: draft.payload._id }).lean()).toHaveLength(0);
+
+    const draft2 = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await call(approveStatement, { params: { id: String(draft2.payload._id) } });
+    await expect(call(deleteDraftStatement, { params: { id: String(draft2.payload._id) } })).rejects.toThrow(/cannot be deleted/);
+  });
+});
+
+describe("owner statement — reversing an approval", () => {
+  it("flips an approved statement back to draft, preserving its frozen figures, and allows re-approval", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    const approved = await call(approveStatement, { params: { id: String(draft.payload._id) } });
+    expect(approved.payload.status).toBe("approved");
+
+    const reversed = await call(reverseStatementApproval, { params: { id: String(draft.payload._id) } });
+    expect(reversed.payload).toMatchObject({
+      status: "draft",
+      grossProceeds: approved.payload.grossProceeds,
+      companyCommission: approved.payload.companyCommission,
+      netBalance: approved.payload.netBalance,
+    });
+    expect(reversed.payload.reversedAt).toBeTruthy();
+
+    // Re-approving the reversed draft must work cleanly (it's a normal draft again)
+    const reapproved = await call(approveStatement, { params: { id: String(draft.payload._id) } });
+    expect(reapproved.payload.status).toBe("approved");
+  });
+
+  it("rejects reversing a statement that was never approved", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await expect(call(reverseStatementApproval, { params: { id: String(draft.payload._id) } })).rejects.toThrow(/Only an approved statement can be reversed/);
+  });
+
+  it("a reversed statement no longer blocks a later overlapping period under the overlap guard", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await call(approveStatement, { params: { id: String(draft.payload._id) } });
+
+    await expect(
+      call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: midPeriodStart(), periodEnd: nextPeriodEnd() } })
+    ).rejects.toThrow(/overlaps the already-approved statement/);
+
+    await call(reverseStatementApproval, { params: { id: String(draft.payload._id) } });
+
+    const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: midPeriodStart(), periodEnd: nextPeriodEnd() } });
+    expect(res.statusCode).toBe(201);
+  });
+
+  it("the model guard still rejects a reversal save that also sneaks in a change to a frozen field", async () => {
+    const { owner, project, call } = await setup();
+    const draft = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    await call(approveStatement, { params: { id: String(draft.payload._id) } });
+
+    const doc = await SaleOwnerStatement.findById(draft.payload._id);
+    doc.status = "draft";
+    doc.netBalance = 999_999; // attempting to also edit a frozen figure during the reversal
+    await expect(doc.save()).rejects.toThrow(/cannot be modified/i);
+  });
+});
+
+describe("owner outstanding balance", () => {
+  it("reflects proceeds minus commissions minus payouts, live — independent of any one statement", async () => {
+    const { owner, call } = await setup();
+    const before = await call(getOwnerOutstandingBalance, { params: { ownerId: String(owner._id) } });
+    expect(before.payload.outstanding).toBe(1_000_000 - 30_000 - 20_000);
+
+    await call(createOwnerPayout, { body: { owner: String(owner._id), amount: 100_000, reference: "EFT-OS-1" } });
+    const after = await call(getOwnerOutstandingBalance, { params: { ownerId: String(owner._id) } });
+    expect(after.payload.outstanding).toBe(1_000_000 - 30_000 - 20_000 - 100_000);
   });
 });

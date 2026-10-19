@@ -28,6 +28,11 @@ const saleListingSchema = new mongoose.Schema(
     attributes: { type: mongoose.Schema.Types.Mixed, default: {} },
     images: [{ type: String, trim: true }],
     assignedAgent: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
+    // Default conveyancing advocate for a standalone listing (no project) — mirrors assignedAgent's
+    // role exactly. Ignored when this listing belongs to a project: the project's own assignedAdvocate
+    // is the default in that case (see middleware/advocateScope.js), since conveyancing is normally
+    // handled per-development, not per-unit.
+    assignedAdvocate: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAdvocate", default: null },
     // Optional: a unit sold independently inside a project (SaleProject). Standalone listings leave these empty.
     project: { type: mongoose.Schema.Types.ObjectId, ref: "SaleProject", default: null },
     unitNumber: { type: String, trim: true, default: "" },
@@ -47,6 +52,7 @@ saleListingSchema.index({ business: 1, listingNumber: 1 }, { unique: true });
 saleListingSchema.index({ business: 1, status: 1, createdAt: -1 });
 saleListingSchema.index({ business: 1, createdAt: -1 });
 saleListingSchema.index({ business: 1, assignedAgent: 1 });
+saleListingSchema.index({ business: 1, assignedAdvocate: 1 });
 saleListingSchema.index({ business: 1, project: 1, status: 1 });
 // A unit number is unique inside its project; standalone listings (project null) are exempt
 saleListingSchema.index(

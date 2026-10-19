@@ -109,9 +109,9 @@ export default function SalesDashboardScreen() {
     { label: 'Follow-ups overdue', value: String(n(leads.overdue)), sub: `${T.saleLeads} to call back`,
       icon: 'alarm-outline', color: '#DC2626', to: '/sales/leads?overdue=1' },
     { label: 'Overdue instalments', value: overdue ? String(overdue.count) : '—', sub: overdue ? fmtKES(overdue.amount) : 'Not available',
-      icon: 'alert-circle-outline', color: '#B91C1C' },
+      icon: 'alert-circle-outline', color: '#B91C1C', to: '/sales/overdue-instalments' },
     { label: 'Commissions due', value: fmtKES(commissionsDue), sub: 'Pending payout',
-      icon: 'ribbon-outline', color: '#7C3AED' },
+      icon: 'ribbon-outline', color: '#7C3AED', to: '/sales/commissions' },
   ];
 
   const portfolio: { label: string; value: number; to: string }[] = [

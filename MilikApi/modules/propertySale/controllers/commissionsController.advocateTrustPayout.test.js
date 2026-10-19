@@ -40,7 +40,15 @@ const setup = async () => {
   const payAdvocateTrust = (deal, amount) =>
     call(createPayment, { body: { deal: String(deal._id), amount, paymentType: "installment", collectionMethod: "advocate_trust" } });
 
-  const legs = (id, type) => FinancialLedgerEntry.find({ business, sourceTransactionType: type, sourceTransactionId: String(id) }).lean();
+  // Payout entries are keyed per-payout (`${commissionId}:payout:${payoutId}`), not by the bare
+  // commission id — resolve the commission's actual payout ids first, exactly like
+  // reversePropertySaleCommissionPayout's own lookup does.
+  const legs = async (id, type) => {
+    if (type !== "property_sale_commission_payout") return FinancialLedgerEntry.find({ business, sourceTransactionType: type, sourceTransactionId: String(id) }).lean();
+    const comm = await SaleCommission.findById(id).lean();
+    const ids = comm?.payouts?.length ? comm.payouts.map((p) => `${id}:payout:${p._id}`) : [String(id)];
+    return FinancialLedgerEntry.find({ business, sourceTransactionType: type, sourceTransactionId: { $in: ids } }).lean();
+  };
 
   return { business, call, advocate, project, makeDeal, payAdvocateTrust, legs };
 };
@@ -139,7 +147,8 @@ describe("commission payout — company_cashbook regression (source omitted)", (
     expect(res.statusCode).toBe(200);
     expect(res.payload.payoutSource).toBe("company_cashbook");
 
-    const rows = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_commission_payout", sourceTransactionId: String(commission._id) }).lean();
+    const paidCommission = await SaleCommission.findById(commission._id).lean();
+    const rows = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_commission_payout", sourceTransactionId: { $in: paidCommission.payouts.map((p) => `${commission._id}:payout:${p._id}`) } }).lean();
     const fallbackAcc = await getAccountByCode(business, "5321");
     expect(rows.find((r) => r.direction === "credit")).toMatchObject({ accountId: fallbackAcc._id, credit: 19_000 });
   });

@@ -548,7 +548,7 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
 
     // Cache hit — same statement already fetched
     if (blobCacheRef.current.id === statementId && blobCacheRef.current.url) {
-      setBlobUrl(blobCacheRef.current.url);
+      setBlobUrl(`${blobCacheRef.current.url}#zoom=125`);
       setFilename(blobCacheRef.current.filename);
       setPhase("ready");
       setIframeLoaded(false);
@@ -570,7 +570,10 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
         const period = (periodStart || "").slice(0, 7);
         const fname = `Statement-${(propertyLabel || "Property").replace(/\s+/g, "_")}-${period}.pdf`;
         blobCacheRef.current = { id: statementId, url, filename: fname };
-        setBlobUrl(url);
+        // #zoom=125 is display-only — forces the preview legible by default instead of
+        // leaving the initial zoom to whatever auto-fit the browser's PDF viewer picks.
+        // Kept off the cached/download URL (blobCacheRef.current.url stays the raw blob).
+        setBlobUrl(`${url}#zoom=125`);
         setFilename(fname);
         setPhase("ready");
       })
@@ -612,14 +615,15 @@ const PdfPreviewModal = React.memo(function PdfPreviewModal({
 
   const handlePrint    = useCallback(() => iframeRef.current?.contentWindow?.print(), []);
   const handleDownload = useCallback(() => {
-    if (!blobUrl) return;
+    const rawUrl = blobCacheRef.current.url;
+    if (!rawUrl) return;
     const a = document.createElement("a");
-    a.href = blobUrl;
+    a.href = rawUrl;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }, [blobUrl, filename]);
+  }, [filename]);
 
   const periodLabel = useMemo(
     () =>

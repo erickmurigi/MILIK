@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-import { FaBell, FaExternalLinkAlt, FaTimes } from "react-icons/fa";
+import { FaBell, FaChevronDown, FaExternalLinkAlt, FaFilter, FaTimes } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -11,9 +11,11 @@ import PaginationBar from "../../components/PaginationBar";
 import { fmtKES, saleApi } from "../../services/propertySaleApi";
 import { useTabState } from "../../hooks/useTabState";
 import { useTerms } from "../../hooks/useTerm";
-import AppSelect from "../../components/common/AppSelect";
 import { fmtDate } from "../../utils/dates";
 import MilikTable from "../../components/common/MilikTable";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, money, printAfterFetch } from "./salePrint";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -25,7 +27,6 @@ const STATUS_BADGE = {
 };
 
 const STATUS_OPTS = [
-  { value: "",         label: "All Statuses" },
   { value: "overdue",  label: "Overdue" },
   { value: "upcoming", label: "Upcoming" },
   { value: "paid",     label: "Paid" },
@@ -50,11 +51,13 @@ const SaleSchedule = () => {
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const biz            = currentCompany?._id;
 
-  const [statusFilter, setStatusFilter] = useTabState("/sale/schedule:status", "overdue");
+  const [statusFilter, setStatusFilter] = useTabState("/sale/schedule:status", "");
   const [dateFrom,     setDateFrom]     = useTabState("/sale/schedule:dateFrom", "");
   const [dateTo,       setDateTo]       = useTabState("/sale/schedule:dateTo", "");
   const [page,     setPage]     = useTabState("/sale/schedule:page", 1);
   const [pageSize, setPageSize] = useTabState("/sale/schedule:pageSize", DEFAULT_PAGE_SIZE);
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const statusBtnRef = useRef(null);
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ["sale-all-schedule", biz, statusFilter, dateFrom, dateTo, page, pageSize],
@@ -124,54 +127,125 @@ const SaleSchedule = () => {
   };
 
   const resetFilters = () => {
-    setStatusFilter("overdue");
+    setStatusFilter("");
     setDateFrom("");
     setDateTo("");
     setPage(1);
   };
 
+  const due30Cutoff = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const applyDue30Filter = () => {
+    setStatusFilter("upcoming");
+    setDateFrom("");
+    setDateTo(due30Cutoff);
+    setPage(1);
+    setShowStatusMenu(false);
+  };
+
+  const buildReportFilters = () => ({
+    ...(statusFilter && { status: statusFilter }),
+    ...(dateFrom     && { dateFrom }),
+    ...(dateTo       && { dateTo }),
+  });
+  const reportColumns = [
+    { label: "#", value: (i) => i.installmentNumber },
+    { label: T.saleDeal, value: (i) => i.deal?.dealNumber || "—" },
+    { label: "Property", value: (i) => i.deal?.listing?.title || i.deal?.listing?.listingNumber || "—" },
+    { label: T.saleBuyer, value: (i) => i.deal?.buyer?.fullName || "—" },
+    { label: "Description", value: (i) => i.description || `Installment ${i.installmentNumber}` },
+    { label: "Due Date", value: (i) => fmtDate(i.dueDate) },
+    { label: "Amount (KES)", align: "right", value: (i) => money(i.expectedAmount) },
+    { label: "Status", value: (i) => i.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilter && STATUS_OPTS.find((o) => o.value === statusFilter)?.label,
+      (dateFrom || dateTo) && `${dateFrom ? fmtDate(dateFrom) : "…"} – ${dateTo ? fmtDate(dateTo) : "…"}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listAllSchedule, buildReportFilters()), ({ rows }) => ({
+      title: "Payment Schedule",
+      subtitle: described.join(" · ") || "All schedule entries",
+      company: currentCompany,
+      summaryItems: [["Overdue", money(overdueAmt)], ["Due within 30 days", money(due30Amt)], ["Upcoming", money(upcomingAmt)]],
+      columns: reportColumns,
+      rows,
+      totalsRow: ["", "TOTAL", "", "", "", "", money(rows.reduce((s, i) => s + Number(i.expectedAmount || 0), 0)), ""],
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listAllSchedule, buildReportFilters()), ({ rows }) => ({
+      filename: "payment-schedule",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
+      <div className="flex h-full flex-col gap-1.5">
       {/* Filters */}
       <SaleFilterBar
-        leading={
-          <>
-            <span className="shrink-0 font-mono text-[9px] font-black text-rose-600">{fmtKES(overdueAmt)}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">overdue</span>
-            <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-blue-600">{fmtKES(due30Amt)}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">due 30d</span>
-            <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{fmtKES(upcomingAmt)}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">upcoming</span>
-            <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">showing</span>
-          </>
-        }
         onReset={resetFilters}
         activeCount={activeFilterCount}
         trailing={
-          selectedIds.size > 0 && (
-            <ListToolbar.Button
-              icon={FaBell}
-              className="!border-amber-300 !bg-amber-50 !text-amber-700 hover:!bg-amber-100"
-              variant="outline"
-              onClick={() => setShowReminderModal(true)}
-            >
-              Remind ({selectedIds.size})
-            </ListToolbar.Button>
-          )
+          <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={isLoading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={isLoading || total === 0} />
+            {selectedIds.size > 0 && (
+              <ListToolbar.Button
+                icon={FaBell}
+                className="!border-amber-300 !bg-amber-50 !text-amber-700 hover:!bg-amber-100"
+                variant="outline"
+                onClick={() => setShowReminderModal(true)}
+              >
+                Remind ({selectedIds.size})
+              </ListToolbar.Button>
+            )}
+          </>
         }
       >
-        <AppSelect
-          value={statusFilter}
-          onChange={(v) => { setStatusFilter(v ?? ""); setPage(1); }}
-          options={STATUS_OPTS}
-          placeholder="All Statuses"
-          clearable
-          compact
-        />
+        <div className="relative">
+          <ListToolbar.Button
+            ref={statusBtnRef}
+            icon={FaFilter}
+            variant={statusFilter ? "dark" : "outline"}
+            onClick={() => setShowStatusMenu((o) => !o)}
+          >
+            {statusFilter ? STATUS_OPTS.find((o) => o.value === statusFilter)?.label : "All Statuses"}
+            <FaChevronDown size={7} />
+          </ListToolbar.Button>
+          <ListToolbar.Menu open={showStatusMenu} onClose={() => setShowStatusMenu(false)} anchorRef={statusBtnRef} width="w-56">
+            <ListToolbar.MenuItem onClick={() => { setStatusFilter(""); setPage(1); setShowStatusMenu(false); }} className={!statusFilter ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}>
+              All Statuses
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem onClick={() => { setStatusFilter("overdue"); setPage(1); setShowStatusMenu(false); }} className={`justify-between ${statusFilter === "overdue" ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}`}>
+              <span>Overdue</span>
+              <span className="font-mono text-rose-600">{fmtKES(overdueAmt)}</span>
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem onClick={applyDue30Filter} className="justify-between">
+              <span>Due within 30 days</span>
+              <span className="font-mono text-blue-600">{fmtKES(due30Amt)}</span>
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem onClick={() => { setStatusFilter("upcoming"); setDateFrom(""); setDateTo(""); setPage(1); setShowStatusMenu(false); }} className={`justify-between ${statusFilter === "upcoming" ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}`}>
+              <span>Upcoming</span>
+              <span className="font-mono text-slate-500">{fmtKES(upcomingAmt)}</span>
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem onClick={() => { setStatusFilter("paid"); setPage(1); setShowStatusMenu(false); }} className={statusFilter === "paid" ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}>
+              Paid
+            </ListToolbar.MenuItem>
+            <ListToolbar.MenuItem onClick={() => { setStatusFilter("waived"); setPage(1); setShowStatusMenu(false); }} className={statusFilter === "waived" ? "bg-[#F1F6F3] font-bold text-[#0B3B2E]" : ""}>
+              Waived
+            </ListToolbar.MenuItem>
+          </ListToolbar.Menu>
+        </div>
         <FilterDateRange
           from={dateFrom}
           to={dateTo}
@@ -181,7 +255,7 @@ const SaleSchedule = () => {
       </SaleFilterBar>
 
       {/* Table */}
-      <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
         <MilikTable
           columns={scheduleCols}
           rows={items}
@@ -217,22 +291,23 @@ const SaleSchedule = () => {
             </button>
           ) : null}
         />
-      </div>
 
-      <PaginationBar
-        page={page}
-        pages={totalPages}
-        total={total}
-        pageSize={pageSize}
-        onPageChange={setPage}
-        onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
-        loading={isFetching}
-        label="schedule entries"
-      />
+        <PaginationBar
+          page={page}
+          pages={totalPages}
+          total={total}
+          pageSize={pageSize}
+          onPageChange={setPage}
+          onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
+          loading={isFetching}
+          label="schedule entries"
+        />
+      </div>
+      </div>
       {/* ── Send Reminders Modal ─────────────────────────────────────────────── */}
       {showReminderModal && (
-        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4">
-          <form onSubmit={handleSendReminders} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
+        <div className="fixed inset-0 z-[130] flex items-end justify-center bg-slate-950/45 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={() => setShowReminderModal(false)}>
+          <form onSubmit={handleSendReminders} onClick={(e) => e.stopPropagation()} className="flex w-full flex-col bg-white shadow-2xl sm:max-w-sm sm:border sm:border-slate-200 max-h-[92dvh] sm:max-h-[90vh] rounded-t-2xl sm:rounded-none">
             <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white rounded-t-2xl sm:rounded-none">
               <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">
                 <FaBell />Send Reminders

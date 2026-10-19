@@ -19,6 +19,9 @@ import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms, TERM_DEFAULTS } from "../../hooks/useTerm";
 import { getUsers } from "../../redux/apiCalls";
 import { selectAllUsers } from "../../redux/selectors";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
 
 const PAGE_SIZE = 50;
 
@@ -237,6 +240,45 @@ const SaleAgents = () => {
     </div>
   ), [handlePerformance, printAgent, openEdit, handleDelete]);
 
+  const reportColumns = [
+    { label: `${T.saleAgent} No.`, value: (r) => r.agentNumber },
+    { label: "Name", value: (r) => r.fullName },
+    { label: "Phone", value: (r) => r.phone || "—" },
+    { label: "Email", value: (r) => r.email || "—" },
+    { label: "Commission", value: (r) => (r.commissionType === "percentage" ? `${r.commissionRate}%` : fmtKES(r.commissionRate)) },
+    { label: T.saleDeals, value: (r) => r.dealCount ?? 0 },
+    { label: "Status", value: (r) => r.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      statusFilter && `Status: ${statusFilter}`,
+      commTypeFilt && `Commission: ${commTypeFilt}`,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listAgents, { business: biz, search: debouncedSearch, status: statusFilter || undefined, commissionType: commTypeFilt }), ({ rows }) => ({
+      title: T.saleAgents,
+      subtitle: described.join(" · ") || `All ${T.saleAgents.toLowerCase()}`,
+      company: currentCompany,
+      columns: reportColumns,
+      rows,
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listAgents, { business: biz, search: debouncedSearch, status: statusFilter || undefined, commissionType: commTypeFilt }), ({ rows }) => ({
+      filename: "agents",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   return (
     <PropertySaleShell>
       <SaleFilterBar
@@ -245,6 +287,8 @@ const SaleAgents = () => {
         activeCount={[search, statusFilter, commTypeFilt].filter(Boolean).length}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <button type="button" onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] })} className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]">
               <FaRedoAlt size={8} className={isFetching ? "animate-spin" : ""} /> Refresh
             </button>

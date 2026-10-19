@@ -7,6 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import MilikLoader from '../../../../components/ui/MilikLoader';
+import DropdownFilter from '../../../../components/ui/DropdownFilter';
 import { ErrorBanner, ErrorState } from '../../../../components/ui/PmsStates';
 import { useDebounced, usePmsList, useReloadOnFocus } from '../../../../hooks/usePmsList';
 import { fmtDate, fmtKES, todayISO } from '../../../../utils/pmsFormat';
@@ -57,14 +58,6 @@ const parse = (data: any) => {
   const p = paginationOf(data);
   return { rows: listOf<Job>(data, 'jobs'), pages: p.pages, total: p.total };
 };
-
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  return (
-    <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress} activeOpacity={0.8}>
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
-    </TouchableOpacity>
-  );
-}
 
 export default function CarWashJobsScreen() {
   const router = useRouter();
@@ -168,33 +161,27 @@ export default function CarWashJobsScreen() {
       </View>
 
       {/* Filters */}
-      <View style={styles.filters}>
-        <FlatList
-          horizontal
-          data={dayFromDashboard ? [{ key: 'day', label: fmtDate(dayFromDashboard) }, ...RANGE_CHIPS] : RANGE_CHIPS}
-          keyExtractor={c => c.key}
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={styles.chipsRow}
-          renderItem={({ item: c }) => <Chip label={c.label} active={range === c.key} onPress={() => setRange(c.key as Range | 'day')} />}
+      <View style={styles.filtersRow}>
+        <DropdownFilter
+          title="Date range"
+          value={range}
+          options={dayFromDashboard ? [{ key: 'day', label: fmtDate(dayFromDashboard) }, ...RANGE_CHIPS] : RANGE_CHIPS}
+          onChange={k => setRange(k as Range | 'day')}
+          style={{ flex: 1 }}
         />
-        <FlatList
-          horizontal
-          data={STATUS_TABS as unknown as { key: string; label: string }[]}
-          keyExtractor={t => t.key || 'all'}
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={styles.chipsRow}
-          renderItem={({ item: t }) => <Chip label={t.label} active={statusFilter === t.key} onPress={() => setStatusFilter(t.key)} />}
+        <DropdownFilter
+          title="Status"
+          value={statusFilter}
+          options={STATUS_TABS as unknown as { key: string; label: string }[]}
+          onChange={setStatusFilter}
+          style={{ flex: 1 }}
         />
-        <FlatList
-          horizontal
-          data={PAY_TABS as unknown as { key: string; label: string }[]}
-          keyExtractor={t => t.key || 'any'}
-          showsHorizontalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          contentContainerStyle={styles.chipsRow}
-          renderItem={({ item: t }) => <Chip label={t.label} active={payFilter === t.key} onPress={() => setPayFilter(t.key)} />}
+        <DropdownFilter
+          title="Payment"
+          value={payFilter}
+          options={PAY_TABS as unknown as { key: string; label: string }[]}
+          onChange={setPayFilter}
+          style={{ flex: 1 }}
         />
       </View>
 
@@ -258,16 +245,7 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, fontSize: 15, color: '#0F172A' },
 
-  filters:  { gap: 6, paddingBottom: 6 },
-  chipsRow: { paddingHorizontal: 16, gap: 8 },
-  chip: {
-    paddingHorizontal: 13, paddingVertical: 6,
-    borderRadius: 20, backgroundColor: '#fff',
-    borderWidth: 1, borderColor: '#E2E8F0',
-  },
-  chipActive:     { backgroundColor: CW, borderColor: CW },
-  chipText:       { fontSize: 12, fontWeight: '600', color: '#475569' },
-  chipTextActive: { color: '#fff' },
+  filtersRow: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingBottom: 10 },
 
   list:      { paddingHorizontal: 16, paddingBottom: 100 },
   count:     { fontSize: 11, fontWeight: '700', color: '#64748B', marginBottom: 8, marginTop: 2 },

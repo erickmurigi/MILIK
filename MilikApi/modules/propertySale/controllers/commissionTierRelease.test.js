@@ -81,9 +81,12 @@ describe("staged commission release — tier crossings on payment", () => {
     expect(oc.releasedAmount).toBe(7500); // unchanged — no owner tier between 30 and 100
   });
 
-  it("releases the owner's remaining 75% at full payment, with no stray rounding", async () => {
+  it("releases the owner's remaining 75% at full payment, with no stray rounding, and auto-approves — no manual approval step exists for this commission", async () => {
     const { pay, ownerCommission } = await setup();
     await pay(300_000);
+    const partial = await ownerCommission();
+    expect(partial.status).toBe("pending"); // only 25% released so far — not auto-approved yet
+
     await pay(200_000);
     await pay(500_000); // cumulative 1,000,000 = 100%
 
@@ -93,6 +96,7 @@ describe("staged commission release — tier crossings on payment", () => {
       { thresholdPct: 30, releasePct: 25, amount: 7500 },
       { thresholdPct: 100, releasePct: 100, amount: 22500 },
     ]);
+    expect(oc.status).toBe("approved"); // flipped automatically the instant the last tier crossed
   });
 
   it("jumping straight to 100% in one payment releases both owner tiers correctly in one call", async () => {

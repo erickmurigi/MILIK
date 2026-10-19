@@ -25,6 +25,10 @@ const PAYMENT_METHODS = [
   { value: 'other',         label: 'Other' },
 ];
 
+// Methods with a real external reference require it — traceable for reconciliation, and needed
+// since the system-wide duplicate-reference guard keys on it. Cash/other stay optional.
+const REFERENCE_REQUIRED_METHODS = ['bank_transfer', 'mobile_money', 'check', 'credit_card'];
+
 const CASHBOOK_PATTERN = /cash|bank|m-?pesa|mobile money|wallet|petty|till|collection/i;
 const isCashbookLikeAccount = (account = {}) =>
   String(account?.type || '').toLowerCase() === 'asset' &&
@@ -76,6 +80,10 @@ const RecordClientPaymentModal = ({ invoice, onClose, onRecorded }) => {
     }
     if (!form.cashbookAccountId) {
       toast.error('Select which cashbook/bank account received this payment');
+      return;
+    }
+    if (REFERENCE_REQUIRED_METHODS.includes(form.paymentMethod) && !form.paymentReference.trim()) {
+      toast.error('A reference number is required for this payment method');
       return;
     }
     setSaving(true);
@@ -152,7 +160,7 @@ const RecordClientPaymentModal = ({ invoice, onClose, onRecorded }) => {
               options={PAYMENT_METHODS}
             />
           </FormField>
-          <FormField label="Reference">
+          <FormField label="Reference" required={REFERENCE_REQUIRED_METHODS.includes(form.paymentMethod)}>
             <input type="text" value={form.paymentReference}
               placeholder="Transaction / cheque / transfer ref"
               onChange={(e) => set('paymentReference', e.target.value)} className={inputCls} />

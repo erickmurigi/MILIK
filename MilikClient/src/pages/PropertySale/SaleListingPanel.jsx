@@ -66,13 +66,13 @@ export default function SaleListingPanel({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="border-b border-slate-100 px-4 py-3">
-          <div className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">{detailsTitle}</div>
-          <div className="space-y-1.5">
+        <div className="border-b border-slate-100 px-4 py-2.5">
+          <div className="mb-1.5 text-[9px] font-black uppercase tracking-widest text-slate-400">{detailsTitle}</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
             {detailRows.filter(([, v]) => v).map(([label, val]) => (
-              <div key={label} className="flex items-baseline gap-2">
-                <span className="w-[80px] flex-shrink-0 text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</span>
-                <span className="text-xs capitalize text-slate-800">{val}</span>
+              <div key={label} className="min-w-0">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</div>
+                <div className="truncate text-xs font-semibold capitalize text-slate-800">{val}</div>
               </div>
             ))}
           </div>

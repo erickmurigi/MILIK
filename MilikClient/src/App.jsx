@@ -41,6 +41,7 @@ const PageLoader = () => (
 const NotFound          = lazy(() => import("./pages/NotFound/NotFound"));
 const Home              = lazy(() => import("./pages/Home/Home"));
 const RentalListings    = lazy(() => import("./pages/Listings/RentalListings"));
+const PrivacyPolicy     = lazy(() => import("./pages/Public/PrivacyPolicy"));
 // Module landing pages (public, SEO-indexed)
 const PropertyPage      = lazy(() => import("./pages/Modules/PropertyPage"));
 const CarWashPage       = lazy(() => import("./pages/Modules/CarWashPage"));
@@ -262,12 +263,16 @@ const SaleBuyers            = lazy(() => import("./pages/PropertySale/SaleBuyers
 const SaleAgents            = lazy(() => import("./pages/PropertySale/SaleAgents"));
 const SaleOwners            = lazy(() => import("./pages/PropertySale/SaleOwners"));
 const SaleOwnerStatements   = lazy(() => import("./pages/PropertySale/SaleOwnerStatements"));
+const SaleOwnerStatementsApproved = lazy(() => import("./pages/PropertySale/SaleOwnerStatementsApproved"));
+const SaleOwnerPayouts      = lazy(() => import("./pages/PropertySale/SaleOwnerPayouts"));
 const SaleAdvocates         = lazy(() => import("./pages/PropertySale/SaleAdvocates"));
 const SaleAdvocateRemittances = lazy(() => import("./pages/PropertySale/SaleAdvocateRemittances"));
 const SaleOffers            = lazy(() => import("./pages/PropertySale/SaleOffers"));
 const SaleDeals             = lazy(() => import("./pages/PropertySale/SaleDeals"));
 const SalePayments          = lazy(() => import("./pages/PropertySale/SalePayments"));
 const SaleCommissions       = lazy(() => import("./pages/PropertySale/SaleCommissions"));
+const SaleAgencyCommissions = lazy(() => import("./pages/PropertySale/SaleAgencyCommissions"));
+const SaleCommissionPayouts = lazy(() => import("./pages/PropertySale/SaleCommissionPayouts"));
 const SaleReports           = lazy(() => import("./pages/PropertySale/SaleReports"));
 const SaleReportsHub        = lazy(() => import("./pages/PropertySale/SaleReportsHub"));
 const SaleMonthlyDetail     = lazy(() => import("./pages/PropertySale/SaleMonthlyDetail"));
@@ -684,6 +689,7 @@ function App() {
             {/* ── Public display screens (no auth) ─────────────────────── */}
             <Route path="/display/carwash/:businessId" element={<CarWashQueueDisplay />} />
             <Route path="/listings/:businessId" element={<RentalListings />} />
+            <Route path="/privacy" element={<PrivacyPolicy />} />
 
             {/* ── Public ────────────────────────────────────────────────── */}
             <Route path="/" element={<PublicEntryRoute />} />
@@ -825,34 +831,38 @@ function App() {
 
             {/* ── Property Sale module ──────────────────────────────────── */}
             <Route path="/sale/dashboard"                    element={<Guard moduleKey="propertySale"><PropertySaleDashboard /></Guard>} />
-            <Route path="/sale/listings"                     element={<Guard moduleKey="propertySale" resource="saleListings"><SaleListings /></Guard>} />
-            <Route path="/sale/projects"                     element={<Guard moduleKey="propertySale" resource="saleListings"><SaleProjects /></Guard>} />
-            <Route path="/sale/projects/:id"                 element={<Guard moduleKey="propertySale" resource="saleListings"><SaleProjectDetail /></Guard>} />
-            <Route path="/sale/units"                        element={<Guard moduleKey="propertySale" resource="saleListings"><SaleUnits /></Guard>} />
-            <Route path="/sale/buyers"                       element={<Guard moduleKey="propertySale" resource="saleBuyers"><SaleBuyers /></Guard>} />
-            <Route path="/sale/agents"                       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgents /></Guard>} />
-            <Route path="/sale/owners"                       element={<Guard moduleKey="propertySale" resource="saleOwners"><SaleOwners /></Guard>} />
-            <Route path="/sale/owner-statements"             element={<Guard moduleKey="propertySale" resource="saleOwnerStatements"><SaleOwnerStatements /></Guard>} />
-            <Route path="/sale/advocates"                    element={<Guard moduleKey="propertySale" resource="saleAdvocates"><SaleAdvocates /></Guard>} />
-            <Route path="/sale/advocate-remittances"         element={<Guard moduleKey="propertySale" resource="saleAdvocates"><SaleAdvocateRemittances /></Guard>} />
-            <Route path="/sale/offers"                       element={<Guard moduleKey="propertySale" resource="saleOffers"><SaleOffers /></Guard>} />
-            <Route path="/sale/deals"                        element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDeals /></Guard>} />
-            <Route path="/sale/payments"                     element={<Guard moduleKey="propertySale" resource="salePayments"><SalePayments /></Guard>} />
-            <Route path="/sale/commissions"                  element={<Guard moduleKey="propertySale" resource="saleCommissions"><SaleCommissions /></Guard>} />
-            <Route path="/sale/reports"                      element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReportsHub /></Guard>} />
-            <Route path="/sale/reports/sales"                element={<Guard moduleKey="propertySale" resource="saleReports"><SaleReports /></Guard>} />
-            <Route path="/sale/reports/monthly/:year/:month" element={<Guard moduleKey="propertySale" resource="saleReports"><SaleMonthlyDetail /></Guard>} />
-            <Route path="/sale/reports/cash-flow"            element={<Guard moduleKey="propertySale" resource="saleReports"><SaleCashFlow /></Guard>} />
-            <Route path="/sale/reports/funnel"               element={<Guard moduleKey="propertySale" resource="saleReports"><SaleConversionFunnel /></Guard>} />
-            <Route path="/sale/crm/leads"                    element={<Guard moduleKey="propertySale" resource="saleLeads"><SaleLeads /></Guard>} />
-            <Route path="/sale/crm/activities"               element={<Guard moduleKey="propertySale" resource="saleActivities"><SaleActivities /></Guard>} />
-            <Route path="/sale/payments/:id/receipt"         element={<Guard moduleKey="propertySale" resource="salePayments"><SalePaymentReceipt /></Guard>} />
-            <Route path="/sale/deals/:id/statement"          element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDealStatement /></Guard>} />
-            <Route path="/sale/commissions/:id/statement"    element={<Guard moduleKey="propertySale" resource="saleCommissions"><SaleCommissionStatement /></Guard>} />
-            <Route path="/sale/deals/:id/summary"            element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleDealSummary /></Guard>} />
-            <Route path="/sale/agents/performance"           element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentsPerformance /></Guard>} />
-            <Route path="/sale/agents/:id/performance"       element={<Guard moduleKey="propertySale" resource="saleAgents"><SaleAgentPerformance /></Guard>} />
-            <Route path="/sale/schedule"                     element={<Guard moduleKey="propertySale" resource="saleDeals"><SaleSchedule /></Guard>} />
+            <Route path="/sale/listings"                     element={<Guard moduleKey="propertySale" resource="sale-listings"><SaleListings /></Guard>} />
+            <Route path="/sale/projects"                     element={<Guard moduleKey="propertySale" resource="sale-listings"><SaleProjects /></Guard>} />
+            <Route path="/sale/projects/:id"                 element={<Guard moduleKey="propertySale" resource="sale-listings"><SaleProjectDetail /></Guard>} />
+            <Route path="/sale/units"                        element={<Guard moduleKey="propertySale" resource="sale-listings"><SaleUnits /></Guard>} />
+            <Route path="/sale/buyers"                       element={<Guard moduleKey="propertySale" resource="sale-buyers"><SaleBuyers /></Guard>} />
+            <Route path="/sale/agents"                       element={<Guard moduleKey="propertySale" resource="sale-agents"><SaleAgents /></Guard>} />
+            <Route path="/sale/owners"                       element={<Guard moduleKey="propertySale" resource="sale-owners"><SaleOwners /></Guard>} />
+            <Route path="/sale/owner-statements"             element={<Guard moduleKey="propertySale" resource="sale-owner-statements"><SaleOwnerStatements /></Guard>} />
+            <Route path="/sale/owner-statements/approved"    element={<Guard moduleKey="propertySale" resource="sale-owner-statements"><SaleOwnerStatementsApproved /></Guard>} />
+            <Route path="/sale/owner-payouts"                element={<Guard moduleKey="propertySale" resource="sale-owners"><SaleOwnerPayouts /></Guard>} />
+            <Route path="/sale/advocates"                    element={<Guard moduleKey="propertySale" resource="sale-advocates"><SaleAdvocates /></Guard>} />
+            <Route path="/sale/advocate-remittances"         element={<Guard moduleKey="propertySale" resource="sale-advocates"><SaleAdvocateRemittances /></Guard>} />
+            <Route path="/sale/offers"                       element={<Guard moduleKey="propertySale" resource="sale-offers"><SaleOffers /></Guard>} />
+            <Route path="/sale/deals"                        element={<Guard moduleKey="propertySale" resource="sale-deals"><SaleDeals /></Guard>} />
+            <Route path="/sale/payments"                     element={<Guard moduleKey="propertySale" resource="sale-payments"><SalePayments /></Guard>} />
+            <Route path="/sale/commissions"                  element={<Guard moduleKey="propertySale" resource="sale-commissions"><SaleCommissions /></Guard>} />
+            <Route path="/sale/agency-commissions"           element={<Guard moduleKey="propertySale" resource="sale-commissions"><SaleAgencyCommissions /></Guard>} />
+            <Route path="/sale/commission-payouts"           element={<Guard moduleKey="propertySale" resource="sale-commissions"><SaleCommissionPayouts /></Guard>} />
+            <Route path="/sale/reports"                      element={<Guard moduleKey="propertySale" resource="sale-reports"><SaleReportsHub /></Guard>} />
+            <Route path="/sale/reports/sales"                element={<Guard moduleKey="propertySale" resource="sale-reports"><SaleReports /></Guard>} />
+            <Route path="/sale/reports/monthly/:year/:month" element={<Guard moduleKey="propertySale" resource="sale-reports"><SaleMonthlyDetail /></Guard>} />
+            <Route path="/sale/reports/cash-flow"            element={<Guard moduleKey="propertySale" resource="sale-reports"><SaleCashFlow /></Guard>} />
+            <Route path="/sale/reports/funnel"               element={<Guard moduleKey="propertySale" resource="sale-reports"><SaleConversionFunnel /></Guard>} />
+            <Route path="/sale/crm/leads"                    element={<Guard moduleKey="propertySale" resource="sale-crm-leads"><SaleLeads /></Guard>} />
+            <Route path="/sale/crm/activities"               element={<Guard moduleKey="propertySale" resource="sale-crm-activities"><SaleActivities /></Guard>} />
+            <Route path="/sale/payments/:id/receipt"         element={<Guard moduleKey="propertySale" resource="sale-payments"><SalePaymentReceipt /></Guard>} />
+            <Route path="/sale/deals/:id/statement"          element={<Guard moduleKey="propertySale" resource="sale-deals"><SaleDealStatement /></Guard>} />
+            <Route path="/sale/commissions/:id/statement"    element={<Guard moduleKey="propertySale" resource="sale-commissions"><SaleCommissionStatement /></Guard>} />
+            <Route path="/sale/deals/:id/summary"            element={<Guard moduleKey="propertySale" resource="sale-deals"><SaleDealSummary /></Guard>} />
+            <Route path="/sale/agents/performance"           element={<Guard moduleKey="propertySale" resource="sale-agents"><SaleAgentsPerformance /></Guard>} />
+            <Route path="/sale/agents/:id/performance"       element={<Guard moduleKey="propertySale" resource="sale-agents"><SaleAgentPerformance /></Guard>} />
+            <Route path="/sale/schedule"                     element={<Guard moduleKey="propertySale" resource="sale-deals"><SaleSchedule /></Guard>} />
             <Route path="/sale/templates"                    element={<Guard moduleKey="propertySale"><SaleTemplates /></Guard>} />
             <Route path="/sale/chart-of-accounts"            element={<Guard moduleKey={GL_ACCESS_MODULES} resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/sale/chart-of-accounts/:accountId/activity" element={<Guard moduleKey="propertySale" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />

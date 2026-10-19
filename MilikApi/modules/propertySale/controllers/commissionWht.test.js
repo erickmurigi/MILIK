@@ -33,7 +33,15 @@ const setup = async () => {
   };
   const setStatus = (id, body) => call(updateCommissionStatus, { params: { id: String(id) }, body });
   const payout = (id) => setStatus(id, { status: "paid", payoutDate: "2026-09-25", payoutMethod: "bank_transfer", cashbook: String(bank._id) });
-  const legs = (id, type) => FinancialLedgerEntry.find({ business, sourceTransactionType: type, sourceTransactionId: String(id) }).lean();
+  // Payout entries are keyed per-payout (`${commissionId}:payout:${payoutId}`), not by the bare
+  // commission id — resolve the commission's actual payout ids first, exactly like
+  // reversePropertySaleCommissionPayout's own lookup does.
+  const legs = async (id, type) => {
+    if (type !== "property_sale_commission_payout") return FinancialLedgerEntry.find({ business, sourceTransactionType: type, sourceTransactionId: String(id) }).lean();
+    const comm = await SaleCommission.findById(id).lean();
+    const ids = comm?.payouts?.length ? comm.payouts.map((p) => `${id}:payout:${p._id}`) : [String(id)];
+    return FinancialLedgerEntry.find({ business, sourceTransactionType: type, sourceTransactionId: { $in: ids } }).lean();
+  };
   return { business, call, bank, newDeal, setStatus, payout, legs };
 };
 

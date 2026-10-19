@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  Linking, Alert, RefreshControl,
+  Linking, Alert, RefreshControl, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -83,6 +83,7 @@ export default function TenantProfileScreen() {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError,  setLoadError]  = useState<string | null>(null);
+  const [smsLoading, setSmsLoading] = useState(false);
 
   const loadAll = useCallback(async () => {
     // The tenant itself is essential; balance / invoices / receipts degrade gracefully on their own.
@@ -154,6 +155,39 @@ export default function TenantProfileScreen() {
   const propertyName   = tenant.unit?.property?.propertyName || '';
   const balanceColor   = owes ? Colors.danger : Colors.success;
 
+  // Pre-fills the device's own SMS app with a balance message and lets the PM
+  // send or edit it themselves — never sent via the company's SMS gateway.
+  // The message comes from the "Overdue Reminder" template admins already
+  // configure under Company Settings > Communication, rendered server-side
+  // against this tenant's real (now-authoritative) balance; if that template
+  // isn't set up for this company, a plain default is used instead so the
+  // button always works.
+  const openSms = async () => {
+    if (!tenant?.phone || smsLoading) return;
+    setSmsLoading(true);
+    let phone = tenant.phone;
+    let body = `Dear ${tenantName}, your balance for Unit ${unitNumber}${propertyName ? ` (${propertyName})` : ''} is ${owes ? fmt(currentBalance) : 'settled'}. - ${tenant.tenantCode || ''}`.trim();
+    try {
+      const { data } = await api.post('/communications/preview', {
+        contextType: 'tenant_bulk',
+        channel: 'sms',
+        templateKey: 'overdue_reminder_tenant',
+        recordIds: [id],
+      });
+      const preview = data?.previews?.[0];
+      if (preview?.body) body = preview.body;
+      if (preview?.recipientPhone) phone = preview.recipientPhone;
+    } catch (_) {
+      // Fall back to the default message built above.
+    } finally {
+      setSmsLoading(false);
+    }
+    const digits = phone.replace(/[^\d+]/g, '');
+    const sep = Platform.OS === 'ios' ? '&' : '?';
+    Linking.openURL(`sms:${digits}${sep}body=${encodeURIComponent(body)}`)
+      .catch(() => Alert.alert('SMS', 'Could not open the messaging app.'));
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: tenantName }} />
@@ -188,6 +222,12 @@ export default function TenantProfileScreen() {
                 <TouchableOpacity style={[styles.actionBtn, styles.actionBtnWhatsApp]} onPress={openWhatsApp}>
                   <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
                   <Text style={[styles.actionBtnLabel, { color: '#25D366' }]}>WhatsApp</Text>
+                </TouchableOpacity>
+              ) : null}
+              {tenant.phone ? (
+                <TouchableOpacity style={styles.actionBtn} onPress={openSms} disabled={smsLoading}>
+                  <Ionicons name="chatbubble-ellipses-outline" size={20} color={Colors.primary} />
+                  <Text style={styles.actionBtnLabel}>{smsLoading ? '...' : 'SMS'}</Text>
                 </TouchableOpacity>
               ) : null}
               <TouchableOpacity

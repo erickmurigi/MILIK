@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleSettings from "../models/SaleSettings.js";
-import { resolveActiveBusinessId } from "../services/businessScope.js";
+import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import { invalidateAgentVisibilityCache } from "../middleware/agentScope.js";
 import { sanitizeTypeConfig } from "../services/listingAttributes.js";
 import { WHT_MAX_RATE } from "../../../utils/withholdingTax.js";
+import { resyncOpenCommissionReleaseSchedules } from "../services/commissionReleaseService.js";
+import { recalculateOwnerCommissionsForBusiness } from "../services/commissionRecalculateService.js";
 
 const ensureSettings = async (business) => {
   let s = await SaleSettings.findOne({ business });
@@ -153,11 +155,26 @@ export const updateCommissionDefaults = async (req, res, next) => {
 export const updateOwnerCommissionDefaults = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
     const settings = await ensureSettings(business);
     const { rate, commissionType } = req.body;
+    const before = { rate: settings.ownerCommissionDefaults.rate, commissionType: settings.ownerCommissionDefaults.commissionType };
     if (rate           != null) settings.ownerCommissionDefaults.rate           = Number(rate);
     if (commissionType != null) settings.ownerCommissionDefaults.commissionType = commissionType;
     await settings.save();
+
+    // Every still-open agency commission picks up the new rate immediately — otherwise a commission
+    // created before this correction stays stuck at the old figures forever (the manual Recalculate
+    // action is only a fallback now, not the normal way this happens).
+    const changed = before.rate !== settings.ownerCommissionDefaults.rate || before.commissionType !== settings.ownerCommissionDefaults.commissionType;
+    if (changed) {
+      await recalculateOwnerCommissionsForBusiness({
+        businessId: business, userId,
+        rate: settings.ownerCommissionDefaults.rate,
+        commissionType: settings.ownerCommissionDefaults.commissionType,
+      });
+    }
+
     res.json({ settings });
   } catch (err) { next(err); }
 };
@@ -204,6 +221,16 @@ export const updateCommissionReleaseSchedule = async (req, res, next) => {
       brokerCommissionTiers: brokerCommissionTiers.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) })),
     };
     await settings.save();
+
+    // Every still-open staged commission picks up this new schedule immediately — a tier added/edited
+    // here shouldn't only apply to commissions created from now on. Already-accrued tiers are never
+    // disturbed (see foldScheduleUpdate); this only affects what's still eligible to fire later.
+    await resyncOpenCommissionReleaseSchedules({
+      businessId: business,
+      ownerCommissionTiers: settings.commissionReleaseSchedule.ownerCommissionTiers,
+      brokerCommissionTiers: settings.commissionReleaseSchedule.brokerCommissionTiers,
+    });
+
     res.json({ settings });
   } catch (err) { next(err); }
 };

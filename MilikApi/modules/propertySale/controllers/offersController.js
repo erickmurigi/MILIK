@@ -6,6 +6,8 @@ import SaleBuyer from "../models/SaleBuyer.js";
 import SaleAgent from "../models/SaleAgent.js";
 import { currentUserId, escapeRegex, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { agentFilter } from "../middleware/agentScope.js";
+import { ownListingIds } from "../middleware/advocateScope.js";
+import { andInto } from "../services/saleSearch.js";
 
 const populateOffer = (query) =>
   query
@@ -37,6 +39,9 @@ export const listOffers = async (req, res, next) => {
       const rx = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ offerNumber: rx }];
     }
+    // advocate-scoped user (mandatory, ungated) can only see offers on listings they're the default for —
+    // offers predate deal creation, so there's no deal-level override to honor yet
+    if (req.saleAdvocateId) andInto(filter, { listing: { $in: await ownListingIds(req, business) } });
     const [offers, total] = await Promise.all([
       populateOffer(SaleOffer.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
       SaleOffer.countDocuments(filter),
@@ -50,7 +55,9 @@ export const listOffers = async (req, res, next) => {
 export const getOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const offer = await populateOffer(SaleOffer.findOne({ _id: req.params.id, business, ...agentFilter(req) })).lean();
+    const filter = { _id: req.params.id, business, ...agentFilter(req) };
+    if (req.saleAdvocateId) andInto(filter, { listing: { $in: await ownListingIds(req, business) } });
+    const offer = await populateOffer(SaleOffer.findOne(filter)).lean();
     if (!offer) return next(createError(404, "Offer not found"));
     res.status(200).json(offer);
   } catch (err) {

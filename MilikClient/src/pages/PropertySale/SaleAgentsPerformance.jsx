@@ -12,7 +12,8 @@ import AppSelect from "../../components/common/AppSelect";
 import SaleFilterBar from "./SaleFilterBar";
 import { useTerms } from "../../hooks/useTerm";
 import SalePrintButton from "./SalePrintButton";
-import { money, printNow, shortDate } from "./salePrint";
+import SaleExportButton from "./SaleExportButton";
+import { exportToExcel, money, printNow, shortDate } from "./salePrint";
 
 const statusOpts = (T) => [
   { value: "",         label: `All ${T.saleAgents}` },
@@ -93,6 +94,18 @@ const SaleAgentsPerformance = () => {
     closedAll:    rows.reduce((s, r) => s + r.closedDeals, 0),
   }), [rows]);
 
+  const perfColumns = [
+    { label: "#", value: (r) => sorted.indexOf(r) + 1 },
+    { label: T.saleAgent, value: (r) => `${r.agent.fullName}${r.agent.agentNumber ? ` (${r.agent.agentNumber})` : ""}` },
+    { label: "Status", value: (r) => r.agent.status },
+    { label: "Total", align: "right", value: (r) => r.totalDeals },
+    { label: "Closed", align: "right", value: (r) => r.closedDeals },
+    { label: "Active", align: "right", value: (r) => r.activeDeals },
+    { label: "Close %", align: "right", value: (r) => (r.totalDeals > 0 ? `${r.closeRate}%` : "—") },
+    { label: "Revenue (KES)", align: "right", value: (r) => money(r.totalRevenue) },
+    { label: "Comm. Paid (KES)", align: "right", value: (r) => money(r.commPaid) },
+    { label: "Pending (KES)", align: "right", value: (r) => (r.commPending > 0 ? money(r.commPending) : "—") },
+  ];
   const printReport = () => {
     const status = STATUS_OPTS.find((o) => o.value === statusFilter)?.label;
     printNow({
@@ -105,21 +118,17 @@ const SaleAgentsPerformance = () => {
         ["Revenue", money(totalRevAll)],
         ["Commission paid", money(totalCommAll)],
       ],
-      columns: [
-        { label: "#", value: (r) => sorted.indexOf(r) + 1 },
-        { label: T.saleAgent, value: (r) => `${r.agent.fullName}${r.agent.agentNumber ? ` (${r.agent.agentNumber})` : ""}` },
-        { label: "Status", value: (r) => r.agent.status },
-        { label: "Total", align: "right", value: (r) => r.totalDeals },
-        { label: "Closed", align: "right", value: (r) => r.closedDeals },
-        { label: "Active", align: "right", value: (r) => r.activeDeals },
-        { label: "Close %", align: "right", value: (r) => (r.totalDeals > 0 ? `${r.closeRate}%` : "—") },
-        { label: "Revenue (KES)", align: "right", value: (r) => money(r.totalRevenue) },
-        { label: "Comm. Paid (KES)", align: "right", value: (r) => money(r.commPaid) },
-        { label: "Pending (KES)", align: "right", value: (r) => (r.commPending > 0 ? money(r.commPending) : "—") },
-      ],
+      columns: perfColumns,
       rows: sorted,
       totalsRow: ["", "TOTAL", "", String(rows.reduce((s, r) => s + r.totalDeals, 0)), String(closedAll), String(rows.reduce((s, r) => s + r.activeDeals, 0)), "", money(totalRevAll), money(totalCommAll), money(rows.reduce((s, r) => s + r.commPending, 0))],
     });
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportToExcel(perfColumns, sorted, "agent-performance");
+    setExporting(false);
   };
 
   return (
@@ -127,21 +136,26 @@ const SaleAgentsPerformance = () => {
       {/* Filter */}
       <SaleFilterBar
         leading={
-          <>
-            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{agents.length} {(agents.length === 1 ? T.saleAgent : T.saleAgents).toLowerCase()}</span>
-            <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-emerald-700">{closedAll}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">closed</span>
-            <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-slate-700">{fmtKES(totalRevAll)}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">revenue</span>
-            <span className="shrink-0 select-none text-slate-200">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-slate-700">{fmtKES(totalCommAll)}</span>
-            <span className="shrink-0 text-[9px] text-slate-400">comm. paid</span>
-          </>
+          <div className="flex flex-wrap items-center gap-2">
+            {[
+              [T.saleAgents, agents.length],
+              ["Closed", closedAll],
+              ["Revenue", fmtKES(totalRevAll)],
+              ["Comm. Paid", fmtKES(totalCommAll)],
+            ].map(([lbl, val]) => (
+              <span key={lbl} className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                {lbl}: <span className="text-slate-900">{val}</span>
+              </span>
+            ))}
+          </div>
         }
         onReset={() => setStatusFilter("active")}
-        trailing={<SalePrintButton onClick={printReport} disabled={isLoading || !sorted.length} />}
+        trailing={
+          <>
+            <SalePrintButton onClick={printReport} disabled={isLoading || !sorted.length} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={isLoading || !sorted.length} />
+          </>
+        }
         activeCount={statusFilter && statusFilter !== "active" ? 1 : 0}
       >
         <AppSelect
@@ -178,7 +192,7 @@ const SaleAgentsPerformance = () => {
             <>
               <td className="px-3 py-1.5 border-r border-gray-100">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-[#0B3B2E]/10 text-[10px] font-black text-[#0B3B2E]">{idx + 1}</div>
+                  <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center bg-[#0B3B2E]/10 text-[10px] font-black text-[#0B3B2E]">{idx + 1}</div>
                   <div>
                     <div className="font-black text-slate-800">{agent.fullName}</div>
                     <div className="font-mono text-[10px] text-slate-400">{agent.agentNumber}</div>
@@ -194,8 +208,8 @@ const SaleAgentsPerformance = () => {
               <td className="px-3 py-1.5 border-r border-gray-100 font-mono tabular-nums text-slate-700">
                 {totalDeals > 0 ? (
                   <div className="flex items-center gap-1.5">
-                    <div className="h-1.5 w-16 rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-[#0B3B2E]" style={{ width: `${closeRate}%` }} />
+                    <div className="h-1.5 w-16 bg-slate-100">
+                      <div className="h-full bg-[#0B3B2E]" style={{ width: `${closeRate}%` }} />
                     </div>
                     <span>{closeRate}%</span>
                   </div>
@@ -209,8 +223,8 @@ const SaleAgentsPerformance = () => {
             </>
           )}
           renderActions={({ agent }) => (
-            <button onClick={() => navigate(`/sale/agents/${agent._id}/performance`)} className="flex items-center gap-1 border border-[#0B3B2E]/30 bg-[#0B3B2E]/5 px-2.5 py-1 text-[10px] font-black text-[#0B3B2E] hover:bg-[#0B3B2E]/10" title="View full performance report">
-              <FaChartLine className="text-[9px]" /> Report
+            <button onClick={() => navigate(`/sale/agents/${agent._id}/performance`)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="View full performance report">
+              <FaChartLine size={12} />
             </button>
           )}
         />

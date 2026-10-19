@@ -47,7 +47,23 @@ const saleCommissionSchema = new mongoose.Schema(
       default: [],
     },
     releasedAmount: { type: Number, default: 0, min: 0 },
+    // Running total of commissionAmount (gross) retired via `payouts` below — a commission only reaches
+    // status "paid" once this equals commissionAmount. Partial payouts are the norm for a large commission
+    // paid out over several cashbook movements, not an edge case.
     paidOutAmount: { type: Number, default: 0, min: 0 },
+    payouts: [{
+      _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
+      amount:    { type: Number, required: true, min: 0 }, // gross slice of commissionAmount retired this time
+      whtAmount: { type: Number, default: 0, min: 0 },      // this slice's proportional share of whtAmount
+      netAmount: { type: Number, default: 0, min: 0 },      // amount - whtAmount actually disbursed
+      method:    { type: String, enum: PAYOUT_METHODS, required: true },
+      date:      { type: Date, required: true },
+      reference: { type: String, trim: true, default: "" },
+      cashbook:  { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
+      source:    { type: String, enum: ["company_cashbook", "advocate_trust"], default: "company_cashbook" },
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      createdAt: { type: Date, default: Date.now },
+    }],
     tierReleases: [{
       _id: { type: mongoose.Schema.Types.ObjectId, default: () => new mongoose.Types.ObjectId() },
       thresholdPct: Number,

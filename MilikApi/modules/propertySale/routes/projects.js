@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 import { attachAgentScope } from "../middleware/agentScope.js";
+import { attachAdvocateScope } from "../middleware/advocateScope.js";
 import { listingImageUpload } from "../middleware/listingImageUpload.js";
 import { createError } from "../../../utils/error.js";
 import {
@@ -13,7 +14,7 @@ const router = express.Router();
 
 // Projects are managed with the same permission as listings ("sale-listings"): whoever manages listings manages
 // the projects and units they belong to. attachAgentScope only affects the money figures on GET /:id.
-router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope, attachAdvocateScope);
 
 const view   = requireCompanyPermission("sale-listings", "view",   "propertySale");
 const create = requireCompanyPermission("sale-listings", "create", "propertySale");

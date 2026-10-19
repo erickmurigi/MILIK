@@ -407,26 +407,34 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
 //   pool in one leg (Dr 2180 / Cr 1314, both for the full amount) — this keeps the journal balanced
 //   and matches dealAdvocateTrustBalance's own treatment of an advocate-trust-sourced commission's
 //   gross commissionAmount as what left the trust pool (see dealProgress.js).
-export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payoutDate, cashbookAccountId, source = "company_cashbook", whtHandledBy = "agent" }) => {
+// `payout` is one entry already pushed onto commission.payouts — its own slice of commissionAmount
+// (gross), with whtAmount already computed proportionally by the caller (commissionsController.js).
+// Keyed per-payout (`${commission._id}:payout:${payout._id}`) so a commission paid off across several
+// partial disbursements posts — and can be reversed — one clean journal per disbursement, not one
+// shared idempotency guard that only ever allowed a single lump-sum payout.
+export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payout, whtHandledBy = "agent" }) => {
   await postPropertySaleCommissionAccrual({ businessId, commission, userId });
 
-  const amount = round2(Number(commission.commissionAmount || 0));
+  const amount = round2(Number(payout.amount || 0));
   if (amount <= 0) return;
 
-  const existingPayout = await FinancialLedgerEntry.countDocuments({
+  const sourceTransactionType = "property_sale_commission_payout";
+  const sourceTransactionId = `${commission._id}:payout:${payout._id}`;
+
+  const existing = await FinancialLedgerEntry.countDocuments({
     business: businessId,
-    sourceTransactionType: "property_sale_commission_payout",
-    sourceTransactionId: String(commission._id),
+    sourceTransactionType,
+    sourceTransactionId,
     status: { $ne: "reversed" },
     category: { $ne: "REVERSAL" },
   });
-  if (existingPayout > 0) return;
+  if (existing > 0) return;
 
-  const effectiveDate = payoutDate ? new Date(payoutDate) : new Date();
+  const effectiveDate = payout.date ? new Date(payout.date) : new Date();
   const { start, end } = dayRange(effectiveDate);
   const journalGroupId = new mongoose.Types.ObjectId();
 
-  const isAdvocateTrust = source === "advocate_trust";
+  const isAdvocateTrust = payout.source === "advocate_trust";
   // Self-remitting WHT only changes anything when the advocate is the one physically disbursing the
   // cash — a company_cashbook payout always remits via 2141, same as before, regardless of this flag.
   const advocateSelfRemitsWht = isAdvocateTrust && whtHandledBy === "advocate";
@@ -435,16 +443,17 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
     resolvePSAccount(businessId, "2180"),
     isAdvocateTrust
       ? resolvePSAccount(businessId, "1314")
-      : cashbookAccountId
-        ? ChartOfAccount.findById(cashbookAccountId).lean()
+      : payout.cashbook
+        ? ChartOfAccount.findById(payout.cashbook).lean()
         : resolvePSAccount(businessId, "5321"),
   ]);
 
   if (!creditAcc) throw new Error("Commission payout cashbook account not found — GL posting aborted");
 
-  // The agent is paid the commission less the tax withheld: the cashbook only loses the net, and the tax is owed to KRA (2141).
-  const whtAmount = round2(Number(commission.whtAmount || 0));
-  if (whtAmount >= amount) throw new Error("Withholding tax must be less than the commission — GL posting aborted");
+  // This slice's own proportional WHT, already computed by the caller — the cashbook only loses the
+  // net, and the tax owed to KRA (2141) is this slice's share, not the whole commission's.
+  const whtAmount = round2(Number(payout.whtAmount || 0));
+  if (whtAmount >= amount) throw new Error("Withholding tax must be less than the payout amount — GL posting aborted");
   const whtAcc = whtAmount > 0 && !advocateSelfRemitsWht ? await resolveWhtPayableAccount({ businessId }) : null;
   const creditAmount = whtAcc ? round2(amount - whtAmount) : amount;
 
@@ -452,8 +461,8 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
 
   const base = {
     business: businessId,
-    sourceTransactionType: "property_sale_commission_payout",
-    sourceTransactionId: String(commission._id),
+    sourceTransactionType,
+    sourceTransactionId,
     transactionDate: effectiveDate,
     statementPeriodStart: start,
     statementPeriodEnd: end,
@@ -490,11 +499,19 @@ export const reversePropertySaleCommissionAccrual = async ({ businessId, commiss
 
 // ─── Commission payout reversal ───────────────────────────────────────────────
 
+// Reverses every payout journal for the commission — only reachable once status is "paid" (fully
+// disbursed), so this is still an all-or-nothing undo, not a per-partial-payout correction. Falls back
+// to the bare commission id for a commission paid off in one shot before partial payouts existed, whose
+// entries were keyed that way (no `payouts` array to derive per-payout ids from).
 export const reversePropertySaleCommissionPayout = async ({ businessId, commission, userId, reason }) => {
+  const sourceTransactionIds = commission.payouts?.length
+    ? commission.payouts.map((p) => `${commission._id}:payout:${p._id}`)
+    : [String(commission._id)];
+
   const payoutEntries = await FinancialLedgerEntry.find({
     business: businessId,
     sourceTransactionType: "property_sale_commission_payout",
-    sourceTransactionId: String(commission._id),
+    sourceTransactionId: { $in: sourceTransactionIds },
     status: { $nin: ["reversed", "void"] },
   }).lean();
 

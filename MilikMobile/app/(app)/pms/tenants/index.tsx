@@ -11,7 +11,7 @@ import api from '../../../../services/api';
 import MilikLoader from '../../../../components/ui/MilikLoader';
 import ListErrorState from '../../../../components/ui/ListErrorState';
 import { usePagedList, useDebounced, Page } from '../../../../hooks/usePagedList';
-import { fmtMoney } from '../../../../utils/pmsFormat';
+import { fmtMoney, fmtKES } from '../../../../utils/pmsFormat';
 
 type Tenant = {
   _id:         string;
@@ -24,6 +24,8 @@ type Tenant = {
 };
 
 type Property = { _id: string; propertyName: string };
+
+type CollectionSummary = { invoiced: number; collected: number; arrears: number };
 
 // Server tenant status is computed: active | inactive | evicted | terminated.
 const STATUS_COLOR: Record<string, string> = {
@@ -54,6 +56,8 @@ export default function TenantSearchScreen() {
   const [statusFilter,   setStatusFilter]   = useState<FilterKey>(propertyParam ? 'all' : 'active');
   const [propertyFilter, setPropertyFilter] = useState(propertyParam ?? '');
   const [properties,     setProperties]     = useState<Property[]>([]);
+  const [propSummary,    setPropSummary]    = useState<CollectionSummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
   const q = useDebounced(query.trim(), 400);
 
   // Load properties once for the filter chips
@@ -62,6 +66,19 @@ export default function TenantSearchScreen() {
       .then(({ data }) => setProperties(Array.isArray(data?.data) ? data.data : []))
       .catch(() => {});
   }, []);
+
+  // This-month invoiced/collected + total arrears for whichever single property is
+  // selected — gives a quick operational read without opening each tenant.
+  useEffect(() => {
+    if (!propertyFilter) { setPropSummary(null); return; }
+    let cancelled = false;
+    setSummaryLoading(true);
+    api.get(`/properties/collection-summary/${propertyFilter}`)
+      .then(({ data }) => { if (!cancelled) setPropSummary(data?.data ?? null); })
+      .catch(() => { if (!cancelled) setPropSummary(null); })
+      .finally(() => { if (!cancelled) setSummaryLoading(false); });
+    return () => { cancelled = true; };
+  }, [propertyFilter]);
 
   const fetchPage = useCallback(async (page: number): Promise<Page<Tenant>> => {
     const params: Record<string, string | number> = { page, limit: LIMIT };
@@ -211,6 +228,34 @@ export default function TenantSearchScreen() {
           </View>
         ) : null}
 
+        {/* Per-property collection summary — this month's invoiced vs collected, plus total arrears */}
+        {propertyFilter ? (
+          <View style={styles.summaryBar}>
+            {summaryLoading ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : propSummary ? (
+              <>
+                <View style={styles.summaryStat}>
+                  <Text style={styles.summaryLabel}>INVOICED (MTD)</Text>
+                  <Text style={[styles.summaryValue, { color: Colors.text }]}>{fmtKES(propSummary.invoiced)}</Text>
+                </View>
+                <View style={[styles.summaryStat, styles.summaryStatBorder]}>
+                  <Text style={styles.summaryLabel}>COLLECTED (MTD)</Text>
+                  <Text style={[styles.summaryValue, { color: Colors.success }]}>{fmtKES(propSummary.collected)}</Text>
+                </View>
+                <View style={styles.summaryStat}>
+                  <Text style={styles.summaryLabel}>ARREARS</Text>
+                  <Text style={[styles.summaryValue, { color: propSummary.arrears > 0.009 ? Colors.danger : Colors.success }]}>
+                    {fmtKES(propSummary.arrears)}
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <Text style={styles.summaryError}>Could not load collection summary</Text>
+            )}
+          </View>
+        ) : null}
+
         {loading ? (
           <MilikLoader fullscreen />
         ) : (
@@ -300,6 +345,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.primary + '30',
   },
   activePropText: { flex: 1, fontSize: 12, fontWeight: '600', color: Colors.primary },
+
+  // Per-property collection summary
+  summaryBar: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    marginHorizontal: 16, marginBottom: 10, minHeight: 44,
+    backgroundColor: Colors.white, borderRadius: 12,
+    borderWidth: 1, borderColor: Colors.border,
+    paddingVertical: 8,
+  },
+  summaryStat:       { flex: 1, alignItems: 'center', gap: 2 },
+  summaryStatBorder: { borderLeftWidth: 1, borderRightWidth: 1, borderColor: Colors.border },
+  summaryLabel:      { fontSize: 8, fontWeight: '700', letterSpacing: 0.6, color: Colors.textMuted },
+  summaryValue:      { fontSize: 12, fontWeight: '800' },
+  summaryError:      { fontSize: 11, color: Colors.textMuted, paddingVertical: 4 },
 
   list: { paddingHorizontal: 16, paddingBottom: 32 },
 

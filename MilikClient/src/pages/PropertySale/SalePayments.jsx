@@ -16,8 +16,11 @@ import { useTerms } from "../../hooks/useTerm";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
-import { printSaleDocument } from "./salePrint";
+import { exportAfterFetch, fetchAllPages, money, printAfterFetch, printSaleDocument } from "./salePrint";
 import { printPaymentReceiptById } from "./SalePaymentReceipt";
+import SalePrintButton from "./SalePrintButton";
+import SaleExportButton from "./SaleExportButton";
+import { fmtDate } from "../../utils/dates";
 import useSaleFormOptions from "../../hooks/useSaleFormOptions";
 
 const STATUS_BADGE = {
@@ -40,20 +43,25 @@ const TYPE_BADGE = {
 };
 
 const paymentTableCols = (T) => [
-  { label: "Receipt No." },
-  { label: T.saleDeal },
-  { label: `Property / ${T.saleBuyer}` },
-  { label: "Type" },
-  { label: "Method" },
-  { label: "Reference" },
-  { label: "Amount", align: "right" },
-  { label: "Date" },
-  { label: "Status" },
+  { label: "Receipt No.", width: "9%" },
+  { label: T.saleDeal, width: "8%" },
+  { label: "Property", width: "14%" },
+  { label: T.saleBuyer, width: "13%" },
+  { label: "Type", width: "9%" },
+  { label: "Method", width: "10%" },
+  { label: "Reference", width: "10%" },
+  { label: "Amount", align: "right", width: "11%" },
+  { label: "Date", width: "8%" },
+  { label: "Status", width: "8%" },
 ];
 
 const PAYMENT_TYPES   = ["deposit", "installment", "final_payment", "other"];
 const PAYMENT_METHODS = ["cash", "mpesa", "bank_transfer", "cheque", "other"];
 const PAGE_SIZE       = 50;
+// Methods with a real external reference (M-Pesa code, cheque no., EFT ref) require it — needed both to
+// trace/reconcile the transaction and because the system-wide duplicate-reference guard needs something
+// to key on. Cash/other have no such external record, so stay optional.
+const REFERENCE_REQUIRED_METHODS = ["mpesa", "bank_transfer", "cheque"];
 
 const fmtLabel = (s) => (s || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
@@ -74,15 +82,10 @@ const paymentRowClassName = (p) => p.status === "cancelled" ? "opacity-60 !bg-ro
 
 const renderPaymentRow = (p) => (
   <>
-    <td className="px-3 py-1.5 font-mono font-black text-[#0B3B2E] border-r border-gray-100">
-      {p.paymentNumber}
-      {p.status === "cancelled" && <div className="text-[9px] font-black uppercase text-rose-500">voided</div>}
-    </td>
+    <td className="px-3 py-1.5 font-mono font-black text-[#0B3B2E] border-r border-gray-100">{p.paymentNumber}</td>
     <td className="px-3 py-1.5 font-bold text-slate-700 border-r border-gray-100">{p.deal?.dealNumber || "—"}</td>
-    <td className="px-3 py-1.5 border-r border-gray-100">
-      <div className="font-semibold text-slate-700">{p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—"}</div>
-      <div className="text-[10px] text-slate-400">{p.deal?.buyer?.fullName || "—"}</div>
-    </td>
+    <td className="px-3 py-1.5 font-semibold text-slate-700 border-r border-gray-100">{p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—"}</td>
+    <td className="px-3 py-1.5 text-slate-600 border-r border-gray-100">{p.deal?.buyer?.fullName || "—"}</td>
     <td className="px-3 py-1.5 border-r border-gray-100">
       <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${TYPE_BADGE[p.paymentType] || "border-slate-200 bg-slate-50 text-slate-600"}`}>{fmtLabel(p.paymentType)}</span>
     </td>
@@ -100,6 +103,11 @@ const renderPaymentRow = (p) => (
 
 // Modals below own their form state so keystrokes never re-render the page or its table.
 // Submit handlers stay in the page (they own the in-flight `saving` guards).
+
+const labelClass    = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass     = "h-7 w-full border border-slate-200 bg-white px-2.5 text-sm font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const textareaClass = "w-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
 
 function EditPaymentModal({ target, cashbookOptions, hasCashbooks, saving, onClose, onSubmit }) {
   const [editForm, setEditForm] = useState(() => ({
@@ -127,36 +135,36 @@ function EditPaymentModal({ target, cashbookOptions, hasCashbooks, saving, onClo
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <AppSelect label="Type" value={editForm.paymentType} onChange={(v) => setEditForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
+            <AppSelect label="Type" value={editForm.paymentType} onChange={(v) => setEditForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="sm" />
           </div>
           <div>
-            <AppSelect label="Method" value={editForm.paymentMethod} onChange={(v) => setEditForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
+            <AppSelect label="Method" value={editForm.paymentMethod} onChange={(v) => setEditForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="sm" />
           </div>
         </div>
         {/* Cashbook — determines which bank/cash GL account is debited */}
         <div>
-          <AppSelect label="Receiving Cashbook *" value={editForm.cashbook} onChange={(v) => setEditForm((f) => ({ ...f, cashbook: v ?? "" }))} options={cashbookOptions} placeholder="— Select cashbook —" size="md" searchable />
+          <AppSelect label="Receiving Cashbook" required value={editForm.cashbook} onChange={(v) => setEditForm((f) => ({ ...f, cashbook: v ?? "" }))} options={cashbookOptions} placeholder="— Select cashbook —" size="sm" searchable />
           {!hasCashbooks && (
             <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
           )}
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Amount (KES) *</label>
-            <AmountInput value={editForm.amount} onChange={(v) => setEditForm((f) => ({ ...f, amount: v }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            <label className={labelClass}>Amount (KES)<Required /></label>
+            <AmountInput value={editForm.amount} onChange={(v) => setEditForm((f) => ({ ...f, amount: v }))} className={inputClass} />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Date *</label>
-            <input type="date" value={editForm.paymentDate} onChange={(e) => setEditForm((f) => ({ ...f, paymentDate: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+            <label className={labelClass}>Date<Required /></label>
+            <input type="date" value={editForm.paymentDate} onChange={(e) => setEditForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} />
           </div>
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Reference</label>
-          <input type="text" value={editForm.reference} onChange={(e) => setEditForm((f) => ({ ...f, reference: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs font-mono focus:border-[#0B3B2E] focus:outline-none" />
+          <label className={labelClass}>Reference{REFERENCE_REQUIRED_METHODS.includes(editForm.paymentMethod) && <Required />}</label>
+          <input type="text" value={editForm.reference} onChange={(e) => setEditForm((f) => ({ ...f, reference: e.target.value }))} className={`${inputClass} font-mono`} />
         </div>
         <div>
-          <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Notes</label>
-          <textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <label className={labelClass}>Notes</label>
+          <textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} className={textareaClass} />
         </div>
       </div>
     </Modal>
@@ -190,7 +198,7 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
       <div className="flex flex-col gap-3">
         {/* Deal selector */}
         <div>
-          <AppSelect label={`${T.saleDeal} *`} value={form.deal} onChange={(v) => handleDealSelect(v ?? "")} options={activeDealOptions} placeholder={`Select active ${T.saleDeal.toLowerCase()}…`} size="md" searchable />
+          <AppSelect label={T.saleDeal} required value={form.deal} onChange={(v) => handleDealSelect(v ?? "")} options={activeDealOptions} placeholder={`Select active ${T.saleDeal.toLowerCase()}…`} size="sm" searchable />
         </div>
 
         {/* Deal balance summary */}
@@ -231,19 +239,11 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
         {/* Type + Method */}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <AppSelect label="Type *" value={form.paymentType} onChange={(v) => setForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="md" />
+            <AppSelect label="Type" required value={form.paymentType} onChange={(v) => setForm((f) => ({ ...f, paymentType: v ?? "" }))} options={PAYMENT_TYPE_OPTIONS} size="sm" />
           </div>
           <div>
-            <AppSelect label="Method *" value={form.paymentMethod} onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="md" />
+            <AppSelect label="Method" required value={form.paymentMethod} onChange={(v) => setForm((f) => ({ ...f, paymentMethod: v ?? "" }))} options={PAYMENT_METHOD_OPTIONS} size="sm" />
           </div>
-        </div>
-
-        {/* Cashbook — determines which bank/cash GL account is debited */}
-        <div>
-          <AppSelect label="Receiving Cashbook *" value={form.cashbook} onChange={(v) => setForm((f) => ({ ...f, cashbook: v ?? "" }))} options={cashbookOptions} placeholder="— Select cashbook —" size="md" searchable />
-          {!hasCashbooks && (
-            <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
-          )}
         </div>
 
         {/* Collection method — was it received directly, or did a conveyancing advocate collect it
@@ -254,63 +254,76 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
               <AppSelect
                 label="Collected"
                 value={form.collectionMethod}
-                onChange={(v) => setForm((f) => ({ ...f, collectionMethod: v ?? "direct", advocate: v === "advocate_trust" ? f.advocate : "" }))}
+                onChange={(v) => setForm((f) => ({ ...f, collectionMethod: v ?? "direct", advocate: v === "advocate_trust" ? f.advocate : "", cashbook: v === "advocate_trust" ? "" : f.cashbook }))}
                 options={[{ value: "direct", label: "Direct to company" }, { value: "advocate_trust", label: "Via advocate trust account" }]}
-                size="md"
+                size="sm"
               />
             </div>
             {form.collectionMethod === "advocate_trust" && (
               <div>
                 <AppSelect
-                  label="Advocate *"
+                  label="Advocate"
+                  required
                   value={form.advocate}
                   onChange={(v) => setForm((f) => ({ ...f, advocate: v ?? "" }))}
                   options={advocateFormOptions}
                   placeholder="Select advocate…"
-                  size="md"
+                  size="sm"
                   searchable
                 />
               </div>
             )}
           </div>
         )}
+
+        {/* Cashbook — determines which bank/cash GL account is debited. Hidden when the advocate's
+            trust account receives the money directly — the GL debits the trust receivable instead. */}
+        {form.collectionMethod !== "advocate_trust" && (
+          <div>
+            <AppSelect label="Receiving Cashbook" required value={form.cashbook} onChange={(v) => setForm((f) => ({ ...f, cashbook: v ?? "" }))} options={cashbookOptions} placeholder="— Select cashbook —" size="sm" searchable />
+            {!hasCashbooks && (
+              <p className="mt-1 text-[10px] text-amber-600">No cashbook accounts found — set up bank/cash accounts in Chart of Accounts first.</p>
+            )}
+          </div>
+        )}
         {form.collectionMethod === "advocate_trust" && (
-          <p className="-mt-2 text-[10px] text-slate-500">This money sits in the advocate's trust account until they remit it — record that remittance separately from Trust Remittances once it arrives.</p>
+          <p className="-mt-1 text-[10px] text-slate-500">This money sits in the advocate's trust account until they remit it — record that remittance separately from Trust Remittances once it arrives.</p>
         )}
 
         {/* Amount + Date */}
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Amount (KES) *</label>
-            <AmountInput value={form.amount} onChange={(v) => setForm((f) => ({ ...f, amount: v }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" placeholder="e.g. 500,000" required />
+            <label className={labelClass}>Amount (KES)<Required /></label>
+            <AmountInput value={form.amount} onChange={(v) => setForm((f) => ({ ...f, amount: v }))} className={inputClass} placeholder="e.g. 500,000" required />
           </div>
           <div>
-            <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Date *</label>
-            <input type="date" value={form.paymentDate} onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))} className="h-8 w-full border border-slate-200 bg-white px-2 text-xs focus:border-[#0B3B2E] focus:outline-none" required />
+            <label className={labelClass}>Date<Required /></label>
+            <input type="date" value={form.paymentDate} onChange={(e) => setForm((f) => ({ ...f, paymentDate: e.target.value }))} className={inputClass} required />
           </div>
         </div>
 
         {/* Reference */}
         <div>
-          <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+          <label className={labelClass}>
             {form.paymentMethod === "mpesa" ? "M-Pesa Transaction Code" : form.paymentMethod === "cheque" ? "Cheque No." : form.paymentMethod === "bank_transfer" ? "EFT / Reference No." : "Reference"}
+            {REFERENCE_REQUIRED_METHODS.includes(form.paymentMethod) && <Required />}
           </label>
           <input
             type="text"
             value={form.reference}
             onChange={(e) => setForm((f) => ({ ...f, reference: e.target.value }))}
             placeholder={form.paymentMethod === "mpesa" ? "e.g. QJ1X23ABC4D" : form.paymentMethod === "bank_transfer" ? "e.g. RTGS/001/2026" : "Optional…"}
-            className={`h-8 w-full border px-2 text-xs font-mono focus:outline-none ${["mpesa","cheque","bank_transfer"].includes(form.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : "border-slate-200 bg-white focus:border-[#0B3B2E]"}`}
+            className={`${inputClass} font-mono ${REFERENCE_REQUIRED_METHODS.includes(form.paymentMethod) ? "border-amber-300 bg-amber-50 focus:border-amber-500" : ""}`}
           />
-          {["mpesa","cheque","bank_transfer"].includes(form.paymentMethod) && (
-            <div className="mt-1 text-[10px] font-semibold text-amber-600">Recommended for {fmtLabel(form.paymentMethod)} — used for reconciliation</div>
+          {REFERENCE_REQUIRED_METHODS.includes(form.paymentMethod) && (
+            <div className="mt-1 text-[10px] font-semibold text-amber-600">Required for {fmtLabel(form.paymentMethod)} — used for reconciliation and must be unique</div>
           )}
         </div>
 
         {/* Notes */}
         <div>
-          <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">Notes</label>
-          <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className="w-full border border-slate-200 bg-white px-2 py-1.5 text-xs focus:border-[#0B3B2E] focus:outline-none" />
+          <label className={labelClass}>Notes</label>
+          <textarea rows={2} value={form.notes} onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))} className={textareaClass} />
         </div>
       </div>
     </Modal>
@@ -318,7 +331,7 @@ function RecordPaymentModal({ deals, activeDealOptions, cashbookOptions, hasCash
 }
 
 const SalePayments = () => {
-  const T = useTerms("saleDeal", "saleDeals");
+  const T = useTerms("saleDeal", "saleDeals", "saleBuyer");
   const paymentCols = useMemo(() => paymentTableCols(T), [T]);
   const confirm        = useConfirm();
   const queryClient    = useQueryClient();
@@ -392,7 +405,11 @@ const SalePayments = () => {
       toast.warn(`${T.saleDeal}, amount and date are required`);
       return;
     }
-    if (!form.cashbook && cashbookAccounts.length > 0) {
+    if (REFERENCE_REQUIRED_METHODS.includes(form.paymentMethod) && !form.reference.trim()) {
+      toast.warn(`A reference number is required for ${fmtLabel(form.paymentMethod)} payments`);
+      return;
+    }
+    if (form.collectionMethod !== "advocate_trust" && !form.cashbook && cashbookAccounts.length > 0) {
       toast.warn("Please select a receiving cashbook");
       return;
     }
@@ -418,6 +435,10 @@ const SalePayments = () => {
   const handleEditSave = async (editForm) => {
     if (!editForm.amount || !editForm.paymentDate) {
       toast.warn("Amount and date are required");
+      return;
+    }
+    if (REFERENCE_REQUIRED_METHODS.includes(editForm.paymentMethod) && !editForm.reference.trim()) {
+      toast.warn(`A reference number is required for ${fmtLabel(editForm.paymentMethod)} payments`);
       return;
     }
     setEditSaving(true);
@@ -488,6 +509,63 @@ const SalePayments = () => {
     </div>
   ), [handleVoid, handleDelete, voiding, deletingId, currentCompany, T]);
 
+  const buildReportFilters = () => ({
+    business: biz,
+    ...(dealFilter   && { deal: dealFilter }),
+    ...(typeFilter   && { paymentType: typeFilter }),
+    ...(methodFilter && { paymentMethod: methodFilter }),
+    ...(statusFilter && { status: statusFilter }),
+    ...(debouncedSearch && { search: debouncedSearch }),
+    ...(dateFrom     && { dateFrom }),
+    ...(dateTo       && { dateTo }),
+  });
+  const reportColumns = [
+    { label: "Receipt No.", value: (p) => p.paymentNumber },
+    { label: T.saleDeal, value: (p) => p.deal?.dealNumber || "—" },
+    { label: "Property", value: (p) => p.deal?.listing?.title || p.deal?.listing?.listingNumber || "—" },
+    { label: T.saleBuyer, value: (p) => p.deal?.buyer?.fullName || "—" },
+    { label: "Type", value: (p) => fmtLabel(p.paymentType) },
+    { label: "Method", value: (p) => fmtLabel(p.paymentMethod) },
+    { label: "Reference", value: (p) => p.reference || "—" },
+    { label: "Amount (KES)", align: "right", value: (p) => money(p.amount) },
+    { label: "Date", value: (p) => (p.paymentDate ? fmtDate(p.paymentDate) : "—") },
+    { label: "Status", value: (p) => p.status },
+  ];
+
+  const [printing, setPrinting] = useState(false);
+  const printReport = async () => {
+    setPrinting(true);
+    const described = [
+      dealFilter && dealFilterOptions.find((o) => o.value === dealFilter)?.label,
+      typeFilter && fmtLabel(typeFilter),
+      methodFilter && fmtLabel(methodFilter),
+      statusFilter && `Status: ${fmtLabel(statusFilter)}`,
+      (dateFrom || dateTo) && `${dateFrom ? fmtDate(dateFrom) : "…"} – ${dateTo ? fmtDate(dateTo) : "…"}`,
+      debouncedSearch && `Search: ${debouncedSearch}`,
+    ].filter(Boolean);
+    await printAfterFetch(() => fetchAllPages(saleApi.listPayments, buildReportFilters()), ({ rows }) => ({
+      title: "Payments",
+      subtitle: described.join(" · ") || "All payments",
+      company: currentCompany,
+      summaryItems: [["Collected", money(totalCollected)], ["Showing", `${rows.length} payments`]],
+      columns: reportColumns,
+      rows,
+      totalsRow: ["TOTAL", "", "", "", "", "", "", money(rows.reduce((s, p) => s + Number(p.amount || 0), 0)), "", ""],
+    }));
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const exportReport = async () => {
+    setExporting(true);
+    await exportAfterFetch(() => fetchAllPages(saleApi.listPayments, buildReportFilters()), ({ rows }) => ({
+      filename: "payments",
+      columns: reportColumns,
+      rows,
+    }));
+    setExporting(false);
+  };
+
   const hasFilters     = dealFilter || typeFilter || methodFilter || statusFilter || search;
   const resetFilters   = () => { setDealFilter(""); setTypeFilter(""); setMethodFilter(""); setStatusFilter(""); setSearch(""); setDateFrom(""); setDateTo(""); setPage(1); };
   return (
@@ -495,16 +573,14 @@ const SalePayments = () => {
       {/* Filter bar */}
       <SaleFilterBar
         leading={
-          <>
-            <span className="shrink-0 font-mono text-[9px] font-black text-emerald-700">{fmtKES(totalCollected)}</span>
-            <span className="shrink-0 select-none text-slate-300">|</span>
-            <span className="shrink-0 font-mono text-[9px] font-black text-slate-500">{total} payment{total !== 1 ? "s" : ""}</span>
-          </>
+          <span className="shrink-0 font-mono text-[9px] font-black text-emerald-700">{fmtKES(totalCollected)} collected</span>
         }
         onReset={resetFilters}
         activeCount={[search, dealFilter, typeFilter, methodFilter, statusFilter, dateFrom, dateTo].filter(Boolean).length}
         trailing={
           <>
+            <SalePrintButton onClick={printReport} busy={printing} disabled={loading || total === 0} />
+            <SaleExportButton onClick={exportReport} busy={exporting} disabled={loading || total === 0} />
             <ListToolbar.Button
               variant="outline"
               onClick={() => queryClient.invalidateQueries({ queryKey: ["sale-payments", biz] })}
@@ -547,7 +623,7 @@ const SalePayments = () => {
           renderActions={renderPaymentActions}
         />
 
-        <PaginationBar page={page} pages={totalPages} pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
+        <PaginationBar page={page} pages={totalPages} total={total} label="payments" pageSize={pageSize} onPageChange={setPage} onPageSizeChange={(s) => { setPageSize(s); setPage(1); }} loading={isFetching} />
       </div>
 
       {/* Edit Payment Modal */}

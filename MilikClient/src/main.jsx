@@ -12,6 +12,10 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
+      // Longer than the longest per-query staleTime in the app (10 min) — otherwise a query's cache
+      // entry gets garbage-collected from disuse before its own staleTime would've required a refetch
+      // anyway, silently defeating the point of setting a long staleTime at all.
+      gcTime: 15 * 60_000,
       retry: 1,
       refetchOnWindowFocus: false,
     },
