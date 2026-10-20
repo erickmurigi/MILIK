@@ -35,6 +35,11 @@ const saleAdvocateRemittanceSchema = new mongoose.Schema(
     },
     reference: { type: String, trim: true, default: "" },
     notes: { type: String, trim: true, default: "" },
+    // No correction path existed before this field — a remittance entered with the wrong amount or
+    // against the wrong advocate had no way to be corrected, even though the reversal GL logic
+    // (reverseSaleAdvocateRemittance) was already built and tested. Same voided/audit-trail pattern as
+    // SalePayment — the record stays, the GL is reversed, and every trust-balance aggregate excludes it.
+    status: { type: String, enum: ["posted", "cancelled"], default: "posted" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },

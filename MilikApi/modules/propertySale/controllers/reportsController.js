@@ -9,6 +9,7 @@ import SalePaymentSchedule from "../models/SalePaymentSchedule.js";
 import { resolveActiveBusinessId } from "../services/businessScope.js";
 import { ownDealIds } from "../middleware/agentScope.js";
 import { advocateProjectFilter, ownAdvocateDealIds, ownListingIds } from "../middleware/advocateScope.js";
+import { andInto } from "../services/saleSearch.js";
 import { PROJECT_WITH_AGENT, withEffectiveAgent } from "../services/listingAgent.js";
 
 // Filter fragments restricting each report figure to the caller's own records when the company keeps agents to
@@ -179,23 +180,28 @@ export const getSalesReport = async (req, res, next) => {
       { $bucket: { groupBy: dateExpr, boundaries, default: "out", output: { count: { $sum: 1 } } } },
     ];
 
+    // Built separately (not as a literal `$or:` key inside the match object below) because sc.deal can
+    // itself carry a top-level `$or` (advocate scoping) — a second literal `$or:` key in the same object
+    // would silently overwrite it via plain JS object-key collision, not a Mongo-level merge.
+    const dealWindowOr = {
+      $or: [
+        { dealDate: { $gte: yearStart, $lt: yearEnd } },
+        { createdAt: { $gte: yearStart, $lt: yearEnd } },
+        // Deals closed in-window even if created/dated earlier. The second
+        // branch covers legacy closed deals without actualClosingDate, which
+        // are classified by updatedAt below.
+        { actualClosingDate: { $gte: yearStart, $lt: yearEnd } },
+        { status: "closed", actualClosingDate: null, updatedAt: { $gte: yearStart, $lt: yearEnd } },
+      ],
+    };
+    const dealWindowMatch = andInto({ business: bId, ...sc.deal }, dealWindowOr);
+
     const [listingRows, offerRows, dealRows, paymentRows, commissionRows] = await Promise.all([
-      bucketByMonth(SaleListing, { business: bId, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
+      bucketByMonth(SaleListing, { business: bId, ...sc.listing, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
       bucketByMonth(SaleOffer, { business: bId, ...sc.offer, createdAt: { $gte: yearStart, $lt: yearEnd } }, "$createdAt"),
       SaleDeal.aggregate([
         {
-          $match: {
-            business: bId, ...sc.deal,
-            $or: [
-              { dealDate: { $gte: yearStart, $lt: yearEnd } },
-              { createdAt: { $gte: yearStart, $lt: yearEnd } },
-              // Deals closed in-window even if created/dated earlier. The second
-              // branch covers legacy closed deals without actualClosingDate, which
-              // are classified by updatedAt below.
-              { actualClosingDate: { $gte: yearStart, $lt: yearEnd } },
-              { status: "closed", actualClosingDate: null, updatedAt: { $gte: yearStart, $lt: yearEnd } },
-            ],
-          },
+          $match: dealWindowMatch,
         },
         {
           $facet: {
@@ -411,8 +417,21 @@ export const getMonthlyDetail = async (req, res, next) => {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 1);
 
+    // Same object-key-collision hazard as getSalesReport — sc.deal's own $or (advocate scoping) must not
+    // sit in the same literal object as another $or key, so it's composed via andInto instead.
+    const monthDealMatch = andInto({ business, ...sc.deal }, {
+      $or: [
+        { dealDate: { $gte: monthStart, $lt: monthEnd } },
+        { createdAt: { $gte: monthStart, $lt: monthEnd } },
+        // Deals closed in this month even if created/dated earlier (legacy
+        // closed deals without actualClosingDate fall back to updatedAt)
+        { actualClosingDate: { $gte: monthStart, $lt: monthEnd } },
+        { status: "closed", actualClosingDate: null, updatedAt: { $gte: monthStart, $lt: monthEnd } },
+      ],
+    });
+
     const [listings, offers, deals, payments, commissions] = await Promise.all([
-      SaleListing.find({ business, createdAt: { $gte: monthStart, $lt: monthEnd } })
+      SaleListing.find({ business, ...sc.listing, createdAt: { $gte: monthStart, $lt: monthEnd } })
         .populate("assignedAgent", "fullName agentNumber")
         .populate(PROJECT_WITH_AGENT)
         .select("listingNumber title propertyType askingPrice status location createdAt")
@@ -427,17 +446,7 @@ export const getMonthlyDetail = async (req, res, next) => {
         .sort({ createdAt: -1 })
         .lean(),
 
-      SaleDeal.find({
-        business, ...sc.deal,
-        $or: [
-          { dealDate: { $gte: monthStart, $lt: monthEnd } },
-          { createdAt: { $gte: monthStart, $lt: monthEnd } },
-          // Deals closed in this month even if created/dated earlier (legacy
-          // closed deals without actualClosingDate fall back to updatedAt)
-          { actualClosingDate: { $gte: monthStart, $lt: monthEnd } },
-          { status: "closed", actualClosingDate: null, updatedAt: { $gte: monthStart, $lt: monthEnd } },
-        ],
-      })
+      SaleDeal.find(monthDealMatch)
         .populate("listing", "title listingNumber propertyType")
         .populate("buyer", "fullName buyerNumber phone")
         .populate("agent", "fullName agentNumber")
@@ -509,10 +518,14 @@ export const getAgentsPerformance = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const bId = new mongoose.Types.ObjectId(String(business));
     const agentMatch = req.saleAgentId ? new mongoose.Types.ObjectId(String(req.saleAgentId)) : { $ne: null };
+    // This file's other reports all go through reportScope for advocate restriction — this one
+    // was written independently and must too, or an advocate-scoped caller sees company-wide
+    // agent commission figures (the exact exposure hideCommissionFields exists to prevent).
+    const sc = await reportScope(req, business);
 
     const [dealRows, commRows] = await Promise.all([
       SaleDeal.aggregate([
-        { $match: { business: bId, agent: agentMatch } },
+        { $match: { business: bId, agent: agentMatch, ...sc.deal } },
         {
           $group: {
             _id: "$agent",
@@ -524,7 +537,7 @@ export const getAgentsPerformance = async (req, res, next) => {
         },
       ]),
       SaleCommission.aggregate([
-        { $match: { business: bId, agent: agentMatch } },
+        { $match: { business: bId, agent: agentMatch, ...sc.commission } },
         {
           $group: {
             _id: "$agent",

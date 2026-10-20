@@ -4,6 +4,8 @@ import { round2 } from "../../../utils/math.js";
 import {
   postPropertySaleCommissionTierRelease,
   postPropertySaleOwnerCommissionTierRelease,
+  reversePropertySaleCommissionTierRelease,
+  reversePropertySaleOwnerCommissionTierRelease,
 } from "./propertySaleAccountingService.js";
 
 // Tier release is a one-way ratchet keyed off the buyer's own cumulative payment progress: once a
@@ -119,27 +121,53 @@ export const applyTierCrossings = async ({ businessId, dealId, previousPctPaid, 
 
   if (brokerCommission?.releaseSchedule?.length) {
     const crossed = newlyCrossedTiers(brokerCommission, previousPctPaid, newPctPaid);
+    const posted = [];
     for (const tier of crossed) {
       const tierRelease = { _id: undefined, ...tier, status: "accrued", accruedAt: new Date(), paidAt: null };
       brokerCommission.tierReleases.push(tierRelease);
       const pushed = brokerCommission.tierReleases[brokerCommission.tierReleases.length - 1];
       brokerCommission.releasedAmount = round2(Number(brokerCommission.releasedAmount || 0) + tier.amount);
       await postPropertySaleCommissionTierRelease({ businessId, commission: brokerCommission, tierRelease: pushed, userId });
+      posted.push(pushed);
     }
-    if (crossed.length) await brokerCommission.save();
+    if (crossed.length) {
+      try {
+        await brokerCommission.save();
+      } catch (saveErr) {
+        // The tierRelease subdocument ids above are generated client-side at push() time, before this
+        // save ever reaches the DB — if it fails (e.g. a concurrent payment crossing the same tier at
+        // the same moment hits a version conflict), every GL entry already posted above is now orphaned:
+        // not reflected in the persisted commission at all, and invisible to the next crossing's
+        // idempotency check (which keys off these same not-yet-persisted ids). Reverse them before
+        // propagating, so a failed save never leaves stranded GL behind.
+        await Promise.all(posted.map((tierRelease) =>
+          reversePropertySaleCommissionTierRelease({ businessId, commission: brokerCommission, tierRelease, userId, reason: "Tier release save failed — compensating reversal" })
+        ));
+        throw saveErr;
+      }
+    }
   }
 
   if (ownerCommission?.releaseSchedule?.length) {
     const crossed = newlyCrossedTiers(ownerCommission, previousPctPaid, newPctPaid);
+    const posted = [];
     for (const tier of crossed) {
       ownerCommission.tierReleases.push({ _id: undefined, ...tier, accruedAt: new Date() });
       const pushed = ownerCommission.tierReleases[ownerCommission.tierReleases.length - 1];
       ownerCommission.releasedAmount = round2(Number(ownerCommission.releasedAmount || 0) + tier.amount);
       await postPropertySaleOwnerCommissionTierRelease({ businessId, ownerCommission, tierRelease: pushed, userId });
+      posted.push(pushed);
     }
     if (crossed.length) {
       maybeAutoApproveOwnerCommission(ownerCommission);
-      await ownerCommission.save();
+      try {
+        await ownerCommission.save();
+      } catch (saveErr) {
+        await Promise.all(posted.map((tierRelease) =>
+          reversePropertySaleOwnerCommissionTierRelease({ businessId, ownerCommission, tierRelease, userId, reason: "Tier release save failed — compensating reversal" })
+        ));
+        throw saveErr;
+      }
     }
   }
 };

@@ -206,6 +206,11 @@ export const updateListing = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
+    // Resolved once and ANDed into each lookup below via andInto — never spread as a second literal
+    // `_id:` key, since that would silently overwrite the existing `_id: req.params.id` instead of
+    // ANDing with it (plain JS object-key collision, not a Mongo-level merge).
+    const allowedListingIds = req.saleAdvocateId ? await ownListingIds(req, business) : null;
+    const scopeListing = (filter) => (allowedListingIds ? andInto(filter, { _id: { $in: allowedListingIds } }) : filter);
     // status is stripped: every status change must go through updateListingStatus (deal/offer guards).
     // acceptedOffer is server-managed by the offer workflow.
     // images are managed only through the upload/delete image endpoints (a generic edit must not overwrite them).
@@ -226,7 +231,7 @@ export const updateListing = async (req, res, next) => {
     // Custom field values are checked against the (possibly new) property type. Changing the type without sending
     // values clears them, since the old type's fields no longer apply.
     if ("attributes" in updates || "propertyType" in updates) {
-      const current = await SaleListing.findOne({ _id: req.params.id, business }).select("propertyType").lean();
+      const current = await SaleListing.findOne(scopeListing({ _id: req.params.id, business })).select("propertyType").lean();
       if (!current) return next(createError(404, "Listing not found"));
       const nextType = updates.propertyType ?? current.propertyType;
       if ("attributes" in updates) {
@@ -240,7 +245,7 @@ export const updateListing = async (req, res, next) => {
 
     // unitNumber / block only make sense on a unit, and a unit must keep its number (looked up only when they change)
     if ("unitNumber" in updates || "block" in updates) {
-      const existing = await SaleListing.findOne({ _id: req.params.id, business }).select("project").lean();
+      const existing = await SaleListing.findOne(scopeListing({ _id: req.params.id, business })).select("project").lean();
       if (!existing) return next(createError(404, "Listing not found"));
       if (existing.project) {
         if ("unitNumber" in updates) {
@@ -255,7 +260,7 @@ export const updateListing = async (req, res, next) => {
     }
 
     const listing = await SaleListing.findOneAndUpdate(
-      { _id: req.params.id, business },
+      scopeListing({ _id: req.params.id, business }),
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
     )
@@ -274,7 +279,9 @@ export const updateListing = async (req, res, next) => {
 export const deleteListing = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const listing = await SaleListing.findOne({ _id: req.params.id, business });
+    const filter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(filter, { _id: { $in: await ownListingIds(req, business) } });
+    const listing = await SaleListing.findOne(filter);
     if (!listing) return next(createError(404, "Listing not found"));
     if (["under_contract", "sold"].includes(listing.status)) {
       return next(createError(400, "Cannot delete a listing that is under contract or sold"));
@@ -296,7 +303,9 @@ export const uploadListingImages = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     if (!req.files?.length) return next(createError(400, "No valid images uploaded"));
-    const listing = await SaleListing.findOne({ _id: req.params.id, business });
+    const imageFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(imageFilter, { _id: { $in: await ownListingIds(req, business) } });
+    const listing = await SaleListing.findOne(imageFilter);
     if (!listing) {
       discardUploads();
       return next(createError(404, "Listing not found"));
@@ -319,7 +328,9 @@ export const removeListingImage = async (req, res, next) => {
     const userId = currentUserId(req);
     const { url } = req.body;
     if (!url) return next(createError(400, "Image URL required"));
-    const listing = await SaleListing.findOne({ _id: req.params.id, business });
+    const removeFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(removeFilter, { _id: { $in: await ownListingIds(req, business) } });
+    const listing = await SaleListing.findOne(removeFilter);
     if (!listing) return next(createError(404, "Listing not found"));
     // Only a photo that is on this listing may be removed (and its file deleted): the URL comes from the client
     if (!listing.images.includes(url)) return next(createError(404, "Image not found on this listing"));
@@ -341,7 +352,9 @@ export const updateListingStatus = async (req, res, next) => {
     const { status } = req.body;
     if (!VALID.includes(status)) return next(createError(400, "Invalid listing status"));
 
-    const existing = await SaleListing.findOne({ _id: req.params.id, business }).lean();
+    const statusFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(statusFilter, { _id: { $in: await ownListingIds(req, business) } });
+    const existing = await SaleListing.findOne(statusFilter).lean();
     if (!existing) return next(createError(404, "Listing not found"));
     if (existing.status === "sold") {
       return next(createError(400, "A sold listing cannot be manually re-listed — cancel the deal instead"));

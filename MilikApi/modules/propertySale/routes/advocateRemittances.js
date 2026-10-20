@@ -2,7 +2,7 @@ import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 import { attachAdvocateScope } from "../middleware/advocateScope.js";
 import {
-  createRemittance, getAdvocateTrustBalance, getRemittance, listRemittances,
+  createRemittance, getAdvocateTrustBalance, getRemittance, listRemittances, voidRemittance,
 } from "../controllers/advocateRemittancesController.js";
 
 const router = express.Router();
@@ -25,5 +25,6 @@ router.get("/", viewPermission, listRemittances);
 router.get("/balance/:advocateId", viewPermission, getAdvocateTrustBalance);
 router.get("/:id", viewPermission, getRemittance);
 router.post("/", createPermission, createRemittance);
+router.patch("/:id/void", requireCompanyPermission("sale-advocates", "manage", "propertySale"), voidRemittance);
 
 export default router;

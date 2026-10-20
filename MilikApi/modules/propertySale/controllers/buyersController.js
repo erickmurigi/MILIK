@@ -73,8 +73,10 @@ export const updateBuyer = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     const { business: _b, buyerNumber: _n, createdBy: _c, ...updates } = req.body;
+    const updateFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(updateFilter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
     const buyer = await SaleBuyer.findOneAndUpdate(
-      { _id: req.params.id, business },
+      updateFilter,
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
     ).lean();
@@ -88,7 +90,9 @@ export const updateBuyer = async (req, res, next) => {
 export const deleteBuyer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business });
+    const deleteFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(deleteFilter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
+    const buyer = await SaleBuyer.findOne(deleteFilter);
     if (!buyer) return next(createError(404, "Buyer not found"));
 
     const [deals, offers] = await Promise.all([
@@ -116,7 +120,9 @@ export const deleteBuyer = async (req, res, next) => {
 export const sendBuyerSms = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business }).lean();
+    const smsFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(smsFilter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
+    const buyer = await SaleBuyer.findOne(smsFilter).lean();
     if (!buyer) return next(createError(404, "Buyer not found"));
     const phone = String(req.body.phone || buyer.phone || "").trim();
     const body  = String(req.body.body || "").trim();
@@ -132,8 +138,10 @@ export const sendBuyerSms = async (req, res, next) => {
 export const sendBuyerEmail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const emailFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(emailFilter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
     const [buyer, company] = await Promise.all([
-      SaleBuyer.findOne({ _id: req.params.id, business }).lean(),
+      SaleBuyer.findOne(emailFilter).lean(),
       Company.findById(business).select("companyName name phoneNo email").lean(),
     ]);
     if (!buyer) return next(createError(404, "Buyer not found"));
@@ -173,7 +181,9 @@ export const uploadBuyerDocuments = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
     if (!req.files?.length) return next(createError(400, "No valid documents uploaded"));
-    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business });
+    const docFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(docFilter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
+    const buyer = await SaleBuyer.findOne(docFilter);
     if (!buyer) {
       discardUploads();
       return next(createError(404, "Buyer not found"));
@@ -201,7 +211,9 @@ export const removeBuyerDocument = async (req, res, next) => {
     const userId = currentUserId(req);
     const { url } = req.body;
     if (!url) return next(createError(400, "Document URL required"));
-    const buyer = await SaleBuyer.findOne({ _id: req.params.id, business });
+    const removeDocFilter = { _id: req.params.id, business };
+    if (req.saleAdvocateId) andInto(removeDocFilter, { _id: { $in: await ownAdvocateBuyerIds(req, business) } });
+    const buyer = await SaleBuyer.findOne(removeDocFilter);
     if (!buyer) return next(createError(404, "Buyer not found"));
     const before = buyer.kycFiles.length;
     buyer.kycFiles = buyer.kycFiles.filter((f) => f.url !== url);

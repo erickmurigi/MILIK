@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useDispatch, useSelector } from "react-redux";
-import { FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTrash } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
+import { useSelector } from "react-redux";
+import { FaArrowRight, FaEdit, FaPlus, FaPrint, FaRedoAlt, FaTrash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { printDocument } from "../../utils/printKit";
 import PropertySaleShell from "./PropertySaleShell";
@@ -16,8 +17,6 @@ import Modal from "../../components/common/Modal";
 import MilikTable from "../../components/common/MilikTable";
 import { inputClass, labelClass } from "../../utils/formStyles";
 import { useTerms } from "../../hooks/useTerm";
-import { getUsers } from "../../redux/apiCalls";
-import { selectAllUsers } from "../../redux/selectors";
 import SalePrintButton from "./SalePrintButton";
 import SaleExportButton from "./SaleExportButton";
 import { exportAfterFetch, fetchAllPages, printAfterFetch } from "./salePrint";
@@ -26,7 +25,7 @@ const PAGE_SIZE = 50;
 
 // No payeeBank block here, deliberately — unlike SaleOwner, an advocate is never paid a recharge through
 // this record: the buyer pays their own legal fee directly (see SaleAdvocate.js model comment).
-const blankForm = { fullName: "", firm: "", phone: "", email: "", idNumber: "", status: "active", notes: "", userId: "" };
+const blankForm = { fullName: "", firm: "", phone: "", email: "", idNumber: "", status: "active", notes: "" };
 
 const STATUS_OPTIONS = [{ value: "active", label: "Active" }, { value: "inactive", label: "Inactive" }];
 const advocateColumns = (T) => [{ label: `${T.saleAdvocate} No.` }, { label: "Name" }, { label: "Firm" }, { label: "Phone" }, { label: T.saleProjects, align: "right" }, { label: "Status" }];
@@ -48,18 +47,12 @@ const renderAdvocateRow = (row) => (
 );
 
 // Modal owns its form state so keystrokes never re-render the page or its rows.
-function AdvocateFormModal({ editingId, initial, saving, onClose, onSubmit, companyId }) {
+function AdvocateFormModal({ editingId, initial, saving, onClose, onSubmit }) {
   const T = useTerms("saleAdvocate");
-  const dispatch = useDispatch();
-  const users = useSelector(selectAllUsers);
+  const navigate = useNavigate();
   const [form, setForm] = useState(initial);
   const f = (key) => (e) => setForm((p) => ({ ...p, [key]: e.target.value }));
 
-  useEffect(() => { if (companyId) dispatch(getUsers(companyId)); }, [companyId, dispatch]);
-  const userOptions = useMemo(
-    () => (Array.isArray(users) ? users : []).map((u) => ({ value: u._id, label: `${u.otherNames || ""} ${u.surname || ""}`.trim() || u.email || u._id })),
-    [users]
-  );
   return (
     <Modal
       title={editingId ? `Edit ${T.saleAdvocate}` : `New ${T.saleAdvocate}`}
@@ -98,10 +91,22 @@ function AdvocateFormModal({ editingId, initial, saving, onClose, onSubmit, comp
           <AppSelect label="Status" value={form.status} onChange={(v) => setForm((p) => ({ ...p, status: v ?? "" }))} options={STATUS_OPTIONS} size="md" />
         </div>
 
-        <div className="md:col-span-2">
-          <AppSelect label="Link to user account" value={form.userId} onChange={(v) => setForm((p) => ({ ...p, userId: v ?? "" }))} options={userOptions} size="md" clearable placeholder="Not linked" />
-          <p className="mt-1 text-[10px] text-slate-400">Optional — link this record to a user's login so they can sign in and see only their own assigned work.</p>
-        </div>
+        {editingId && (
+          <div className="md:col-span-2">
+            <label className={labelClass}>Portal Access</label>
+            <button
+              type="button"
+              onClick={() => navigate("/portal-users/advocates")}
+              className="flex w-full items-center justify-between border border-[#B7C9C0] bg-[#F1F6F3] px-3 py-2 text-xs font-bold text-[#0B3B2E] hover:bg-[#E3EDE8]"
+            >
+              Manage portal users for this firm
+              <FaArrowRight size={10} />
+            </button>
+            <p className="mt-1 text-[10px] text-slate-400">
+              A firm can have several people with their own logins — invite, reset or lock their access from the Advocates Portal page.
+            </p>
+          </div>
+        )}
 
         <div className="md:col-span-2">
           <label className={labelClass}>Notes</label>
@@ -155,7 +160,6 @@ const SaleAdvocates = () => {
       initial: {
         fullName: row.fullName || "", firm: row.firm || "", phone: row.phone || "", email: row.email || "",
         idNumber: row.idNumber || "", status: row.status || "active", notes: row.notes || "",
-        userId: row.userId || row.user?._id || "",
       },
     });
   }, []);
@@ -286,7 +290,13 @@ const SaleAdvocates = () => {
 
       {/* New / Edit Advocate Modal */}
       {advocateModal && (
-        <AdvocateFormModal editingId={advocateModal.editingId} initial={advocateModal.initial} saving={saving} onClose={() => setAdvocateModal(null)} onSubmit={handleSave} companyId={biz} />
+        <AdvocateFormModal
+          editingId={advocateModal.editingId}
+          initial={advocateModal.initial}
+          saving={saving}
+          onClose={() => setAdvocateModal(null)}
+          onSubmit={handleSave}
+        />
       )}
     </PropertySaleShell>
   );

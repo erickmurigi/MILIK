@@ -731,16 +731,24 @@ export const MODULE_ROLE_PRESETS = {
         ],
       },
       // Scoped automatically by the backend (advocateScope.js) to only their own assigned-project
-      // deals/payments/remittances — these grants are deliberately on the narrower
-      // sale-advocate-payments/sale-advocate-remittances resources (not the general sale-payments),
-      // matching exactly which permission the routes check for an advocate-linked caller. They never
-      // get owners/owner-statements/commissions visibility, and never get update/void/delete on
-      // anything — only view + create on their own records.
+      // deals/listings/payments/owners/commissions/remittances — view-only everywhere except their own
+      // deal payments and trust remittances, which they can also record (narrower
+      // sale-advocate-payments/sale-advocate-remittances resources, matching exactly what the routes
+      // check for an advocate-linked caller). They never get CRM (leads/activities — no advocate
+      // concept there) or buyers, and never get update/void/delete on anything.
       advocate: {
         label: 'Advocate',
-        description: "View their own assigned deals, record payments on them, and record trust remittances (payouts) — all automatically scoped to their own assigned project(s) by the backend",
+        description: "View their own assigned deals, listings/units, owners and owner statements, and commissions; record payments and trust remittances (payouts) — all automatically scoped to their own assigned project(s) by the backend",
         grants: [
           { resource: 'sale-deals',                action: 'view'   },
+          { resource: 'sale-listings',              action: 'view'   },
+          { resource: 'sale-owners',                action: 'view'   },
+          { resource: 'sale-owner-statements',      action: 'view'   },
+          // Generating the draft is a direct prerequisite to their own trust-remittance step (it's how
+          // they know how much to remit) — approving/finalizing a statement stays a managerial action.
+          { resource: 'sale-owner-statements',      action: 'create' },
+          { resource: 'sale-commissions',           action: 'view'   },
+          { resource: 'sale-payments',              action: 'view'   },
           { resource: 'sale-advocates',             action: 'view'   },
           { resource: 'sale-advocate-payments',     action: 'view'   },
           { resource: 'sale-advocate-payments',     action: 'create' },

@@ -168,10 +168,10 @@ describe("advocate scoping — visibility and commission hiding", () => {
     const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-2", name: "Other Estate" });
     const otherDeal = await makeDeal(otherProject);
 
-    // Link a company user to the advocate record (what SaleAdvocate.userId means). adminAccess:false and
+    // Link a company user to the advocate record (what being listed in SaleAdvocate.userIds means). adminAccess:false and
     // no explicit permission grants, so hasCompanyActionPermission below reflects a real narrow account.
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: advocate._id }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: advocate._id }, { userIds: [advocateUser._id] });
 
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
@@ -211,17 +211,27 @@ describe("advocate scoping — visibility and commission hiding", () => {
 
 describe("advocate scoping — the advocates directory and remittances ledger", () => {
   it("an advocate-scoped user sees only their own record and remittances, never another advocate's", async () => {
-    const { business, call, advocate, cashbook } = await setup();
+    const { business, call, advocate, cashbook, makeDeal } = await setup();
 
-    // A second, unrelated advocate with their own remittance history.
+    // An ad-hoc (no-deal) remittance is now balance-checked against the advocate's own whole-book
+    // outstanding trust (collected minus already-remitted) — give both advocates real trust collections
+    // to remit against, instead of the unbacked KES 1 this test used before that check existed.
+    const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-2", name: "Other Estate", assignedAdvocate: null });
     const otherAdvocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-2", fullName: "Other Advocate", phone: "0733000444" });
+    await SaleProject.updateOne({ _id: otherProject._id }, { assignedAdvocate: otherAdvocate._id });
+    const otherDeal = await makeDeal(otherProject);
+    await call(createPayment, { body: { deal: String(otherDeal._id), amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", cashbook: String(cashbook._id) } });
+
+    const ownDeal = await makeDeal();
+    await call(createPayment, { body: { deal: String(ownDeal._id), amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", cashbook: String(cashbook._id) } });
+
     await call(createRemittance, { body: { advocate: String(otherAdvocate._id), amount: 1, cashbook: String(cashbook._id), reference: "OTHER-1" } });
 
     const ownRemit = await call(createRemittance, { body: { advocate: String(advocate._id), amount: 1, cashbook: String(cashbook._id), reference: "OWN-1" } });
     expect(ownRemit.statusCode).toBe(201);
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: advocate._id }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: advocate._id }, { userIds: [advocateUser._id] });
 
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
@@ -285,9 +295,9 @@ describe("advocate scoping — deal-level override and standalone-listing fallba
     };
 
     const projectAdvocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: projectAdvocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [projectAdvocateUser._id] });
     const otherAdvocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: otherAdvocate._id }, { userId: otherAdvocateUser._id });
+    await SaleAdvocate.updateOne({ _id: otherAdvocate._id }, { userIds: [otherAdvocateUser._id] });
 
     // The project's own default advocate: sees the ordinary deal, but NOT the one explicitly
     // reassigned away from them, even though it sits in their own project.
@@ -313,7 +323,7 @@ describe("advocate scoping — deal-level override and standalone-listing fallba
     expect(dealRes.statusCode).toBe(201);
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: standaloneAdvocate._id }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: standaloneAdvocate._id }, { userIds: [advocateUser._id] });
 
     const req = { user: advocateUser, query: {}, body: {}, params: {}, headers: {} };
     await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
@@ -343,7 +353,7 @@ describe("advocate scoping — buyers, offers and commissions", () => {
     const otherDeal = await makeDeal(otherProject);
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [advocateUser._id] });
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
       await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
@@ -376,7 +386,7 @@ describe("advocate scoping — buyers, offers and commissions", () => {
     expect(otherOffer.statusCode).toBe(201);
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [advocateUser._id] });
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
       await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
@@ -405,7 +415,7 @@ describe("advocate scoping — buyers, offers and commissions", () => {
     expect(otherCommission).toBeTruthy();
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [advocateUser._id] });
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
       await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
@@ -432,7 +442,7 @@ describe("advocate scoping — projects, units and listings", () => {
     const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-SCOPE", name: "Unrelated Estate" });
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [advocateUser._id] });
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
       await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
@@ -467,7 +477,7 @@ describe("advocate scoping — projects, units and listings", () => {
     const otherStandalone = await SaleListing.create({ business, listingNumber: `L-${n3}`, title: "Other Standalone Plot", askingPrice: 300_000, assignedAdvocate: standaloneAdvocate._id });
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [advocateUser._id] });
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
       await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });
@@ -504,7 +514,7 @@ describe("advocate scoping — dashboard and overdue schedule", () => {
     ]);
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
-    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userId: advocateUser._id });
+    await SaleAdvocate.updateOne({ _id: project.assignedAdvocate }, { userIds: [advocateUser._id] });
     const asAdvocate = async (fn, opts = {}) => {
       const req = { user: advocateUser, query: opts.query || {}, body: opts.body || {}, params: opts.params || {}, headers: {} };
       await attachAdvocateScope(req, {}, (err) => { if (err) throw err; });

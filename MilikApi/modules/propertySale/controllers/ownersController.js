@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import SaleOwner from "../models/SaleOwner.js";
 import SaleProject from "../models/SaleProject.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
+import { ownAdvocateProjectIds } from "../middleware/advocateScope.js";
 
 const sanitizeOwnerBody = (body) => {
   const out = { ...body };
@@ -22,11 +23,16 @@ export const listOwners = async (req, res, next) => {
     if (search.trim()) {
       filter.$text = { $search: search.trim() };
     }
+    // advocate-scoped user (mandatory, ungated): only owners with at least one project assigned to them
+    if (req.saleAdvocateId) {
+      const projectIds = await ownAdvocateProjectIds(req, business);
+      filter._id = { $in: await SaleProject.distinct("owner", { business: bId, _id: { $in: projectIds } }) };
+    }
     const [owners, total, statsRaw] = await Promise.all([
       SaleOwner.find(filter).sort({ createdAt: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
       SaleOwner.countDocuments(filter),
       SaleOwner.aggregate([
-        { $match: { business: bId } },
+        { $match: { business: bId, ...(filter._id ? { _id: filter._id } : {}) } },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
     ]);
@@ -49,7 +55,12 @@ export const listOwners = async (req, res, next) => {
 export const getOwner = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const owner = await SaleOwner.findOne({ _id: req.params.id, business }).lean();
+    const idFilter = { $eq: req.params.id };
+    if (req.saleAdvocateId) {
+      const projectIds = await ownAdvocateProjectIds(req, business);
+      idFilter.$in = await SaleProject.distinct("owner", { business, _id: { $in: projectIds } });
+    }
+    const owner = await SaleOwner.findOne({ _id: idFilter, business }).lean();
     if (!owner) return next(createError(404, "Owner not found"));
     res.status(200).json(owner);
   } catch (err) {

@@ -104,11 +104,25 @@ describe("advocate remittance — auto-allocation against outstanding recoverabl
     expect(settlementRows.length).toBe(0);
   });
 
-  it("legacy call with deal omitted entirely is completely unaffected — no deal, no appliedTo, no trust-balance check", async () => {
+  it("legacy call with deal omitted entirely still has no deal/appliedTo split, but IS now checked against the advocate's whole-book trust balance", async () => {
     const { call, advocate } = await setup();
-    const res = await call(createRemittance, { body: { advocate: String(advocate._id), amount: 999_999_999 } }); // would fail any trust check
+    // setup() already collected 1,000,000 advocate_trust for this advocate (across its one deal) —
+    // an ad-hoc remittance within that whole-book balance succeeds with no deal/appliedTo split, same
+    // as the legacy behavior this test always asserted.
+    const res = await call(createRemittance, { body: { advocate: String(advocate._id), amount: 500_000 } });
     expect(res.statusCode).toBe(201);
     expect(res.payload.deal).toBeFalsy();
     expect(res.payload.appliedTo).toEqual([]);
+  });
+
+  it("rejects an ad-hoc (no-deal) remittance exceeding the advocate's whole-book outstanding trust balance", async () => {
+    const { call, advocate } = await setup();
+    // Only 1,000,000 was ever collected into this advocate's trust (setup()'s one deal) — asking for
+    // far more than that, with no deal to scope it to, must be rejected. This is exactly the gap that
+    // used to let an advocate with nothing in trust get an arbitrary ad-hoc remittance posted against
+    // them (amount > 0 was the only check).
+    await expect(
+      call(createRemittance, { body: { advocate: String(advocate._id), amount: 999_999_999 } })
+    ).rejects.toThrow(/outstanding trust balance/i);
   });
 });

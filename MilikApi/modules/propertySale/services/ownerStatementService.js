@@ -72,7 +72,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     }).select("amount narration payeeName dueDate paidDate voucherNo saleProject").lean(),
     // Money actually paid out to the owner (company cashbook or advocate trust) — so a statement run
     // after a payout reflects what's really still outstanding, not the full gross balance forever.
-    SaleOwnerPayout.find({ business: businessId, owner: ownerId }).select("amount cgtAmount date payoutNumber deal").lean(),
+    SaleOwnerPayout.find({ business: businessId, owner: ownerId, status: { $ne: "cancelled" } }).select("amount cgtAmount date payoutNumber deal").lean(),
   ]);
 
   const rawLines = [];

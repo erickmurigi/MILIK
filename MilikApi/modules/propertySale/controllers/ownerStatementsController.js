@@ -3,8 +3,10 @@ import { createError } from "../../../utils/error.js";
 import SaleOwnerStatement from "../models/SaleOwnerStatement.js";
 import SaleOwnerStatementLine from "../models/SaleOwnerStatementLine.js";
 import SaleOwner from "../models/SaleOwner.js";
+import SaleProject from "../models/SaleProject.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { generateOwnerStatementData } from "../services/ownerStatementService.js";
+import { ownAdvocateProjectIds } from "../middleware/advocateScope.js";
 
 const OWNER_FIELDS = "fullName ownerNumber phone email";
 
@@ -21,6 +23,25 @@ export const createDraftStatement = async (req, res, next) => {
     const { owner: ownerId, project: projectId = null, periodStart, periodEnd } = req.body || {};
 
     if (!mongoose.isValidObjectId(String(ownerId))) return next(createError(400, "Owner is required"));
+    // advocate-scoped user (mandatory, ungated): can only generate a statement scoped to one of their
+    // own projects — never a company-wide "all projects" statement (which would span data outside
+    // their scope by definition), and never for a project they're not connected to.
+    if (req.saleAdvocateId) {
+      if (!projectId || !mongoose.isValidObjectId(String(projectId))) {
+        return next(createError(400, "A project is required"));
+      }
+      const projectIds = await ownAdvocateProjectIds(req, business);
+      if (!projectIds.some((id) => String(id) === String(projectId))) {
+        return next(createError(404, "Project not found"));
+      }
+      // Defense in depth: the project id alone proves scope, but the owner id is a separate field on
+      // the request — confirm it's actually that project's owner, not an unrelated owner smuggled in
+      // alongside a legitimately in-scope projectId.
+      const scopedProject = await SaleProject.findOne({ _id: projectId, business }).select("owner").lean();
+      if (String(scopedProject?.owner || "") !== String(ownerId)) {
+        return next(createError(404, "Owner not found"));
+      }
+    }
     if (!periodStart || !periodEnd) return next(createError(400, "periodStart and periodEnd are required"));
     const start = new Date(periodStart);
     const end = new Date(periodEnd);
@@ -100,7 +121,10 @@ export const createDraftStatement = async (req, res, next) => {
 export const getStatement = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const statement = await populateStatement(SaleOwnerStatement.findOne({ _id: req.params.id, business })).lean();
+    // A statement isn't attributable to any one advocate unless it's scoped to one of their own
+    // projects — a company-wide statement (project: null) stays out of scope, deny-by-default.
+    const advocateFilter = req.saleAdvocateId ? { project: { $in: await ownAdvocateProjectIds(req, business) } } : {};
+    const statement = await populateStatement(SaleOwnerStatement.findOne({ _id: req.params.id, business, ...advocateFilter })).lean();
     if (!statement) return next(createError(404, "Statement not found"));
     const lines = await SaleOwnerStatementLine.find({ statement: statement._id }).sort({ lineNumber: 1 }).lean();
     res.status(200).json({ ...statement, lines });
@@ -119,6 +143,7 @@ export const listStatements = async (req, res, next) => {
     const filter = { business };
     if (ownerId) filter.owner = ownerId;
     if (status) filter.status = status;
+    if (req.saleAdvocateId) filter.project = { $in: await ownAdvocateProjectIds(req, business) };
 
     const [data, total] = await Promise.all([
       populateStatement(SaleOwnerStatement.find(filter).sort({ periodStart: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
@@ -136,7 +161,8 @@ export const listStatements = async (req, res, next) => {
 export const deleteDraftStatement = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const statement = await SaleOwnerStatement.findOne({ _id: req.params.id, business });
+    const advocateFilter = req.saleAdvocateId ? { project: { $in: await ownAdvocateProjectIds(req, business) } } : {};
+    const statement = await SaleOwnerStatement.findOne({ _id: req.params.id, business, ...advocateFilter });
     if (!statement) return next(createError(404, "Statement not found"));
     if (statement.status === "approved") return next(createError(400, "Approved statements cannot be deleted"));
 

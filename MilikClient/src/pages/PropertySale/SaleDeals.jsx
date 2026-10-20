@@ -71,10 +71,8 @@ const blankPayForm    = { amount: "", paymentType: "installment", paymentMethod:
 
 const dealTableCols = (T, withAdvocate) => [
   { label: `${T.saleDeal} No.`, width: "8%" },
-  { label: "Property", width: "14%" },
-  { label: `${T.saleListing} No.`, width: "9%" },
-  { label: T.saleBuyer, width: "13%" },
-  { label: `${T.saleBuyer} No.`, width: "9%" },
+  { label: "Property", width: "20%" },
+  { label: T.saleBuyer, width: "20%" },
   { label: T.saleAgent, width: "11%" },
   ...(withAdvocate ? [{ label: T.saleAdvocate, width: "11%" }] : []),
   { label: "Agreed Price", align: "right", width: "13%" },
@@ -97,13 +95,11 @@ const renderDealRow = (row, withAdvocate) => {
   return (
     <>
       <td className="px-3 py-1.5 font-mono font-bold text-[#0B3B2E] border-r border-gray-100">{row.dealNumber}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 max-w-[160px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{row.listing?.listingNumber || "—"}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800">{row.buyer?.fullName || "—"}</td>
-      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{row.buyer?.buyerNumber || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 max-w-[220px] truncate font-semibold text-slate-800">{row.listing?.title || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 max-w-[220px] truncate font-semibold text-slate-800" title={row.buyer?.fullName || ""}>{row.buyer?.fullName || "—"}</td>
       <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.agent?.fullName || <span className="italic text-slate-400">None</span>}</td>
       {withAdvocate && (
-        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{row.advocate?.fullName || <span className="italic text-slate-400">None</span>}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 max-w-[160px] truncate text-slate-600" title={row.advocate?.fullName || ""}>{row.advocate?.fullName || <span className="italic text-slate-400">None</span>}</td>
       )}
       <td className="px-3 py-1.5 border-r border-gray-100 text-right">
         <div className="font-bold text-slate-900">{fmtKES(row.agreedPrice)}</div>

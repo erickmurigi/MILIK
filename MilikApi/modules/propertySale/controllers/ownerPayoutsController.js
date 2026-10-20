@@ -7,10 +7,11 @@ import SaleDeal from "../models/SaleDeal.js";
 import SaleAdvocate from "../models/SaleAdvocate.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
-import { postSaleOwnerPayout } from "../services/propertySaleAccountingService.js";
+import { postSaleOwnerPayout, reverseSaleOwnerPayout } from "../services/propertySaleAccountingService.js";
 import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
 import { generateOwnerStatementData } from "../services/ownerStatementService.js";
 import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
+import { ownAdvocateDealIds } from "../middleware/advocateScope.js";
 
 const resolveCashbook = async (businessId, cashbookId) => {
   if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
@@ -65,6 +66,16 @@ export const listOwnerPayouts = async (req, res, next) => {
     const filter = { business };
     if (owner && mongoose.isValidObjectId(String(owner))) filter.owner = owner;
     if (deal && mongoose.isValidObjectId(String(deal))) filter.deal = deal;
+    // advocate-scoped user (mandatory, ungated): a payout isn't attributable to any one advocate
+    // unless it's tied to one of their own deals — payouts with no deal (pure cashbook draws against
+    // the owner's overall balance) stay out of scope for them entirely, deny-by-default. Intersect
+    // with (not overwrite) an explicit ?deal= filter, so that still narrows correctly too.
+    if (req.saleAdvocateId) {
+      const dealIds = await ownAdvocateDealIds(req, business);
+      filter.deal = filter.deal
+        ? { $eq: new mongoose.Types.ObjectId(String(filter.deal)), $in: dealIds }
+        : { $in: dealIds };
+    }
 
     const [data, total] = await Promise.all([
       populatePayout(SaleOwnerPayout.find(filter).sort({ date: -1 }).skip((pageNum - 1) * limitNum).limit(limitNum)).lean(),
@@ -79,7 +90,8 @@ export const listOwnerPayouts = async (req, res, next) => {
 export const getOwnerPayout = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const payout = await populatePayout(SaleOwnerPayout.findOne({ _id: req.params.id, business })).lean();
+    const advocateFilter = req.saleAdvocateId ? { deal: { $in: await ownAdvocateDealIds(req, business) } } : {};
+    const payout = await populatePayout(SaleOwnerPayout.findOne({ _id: req.params.id, business, ...advocateFilter })).lean();
     if (!payout) return next(createError(404, "Owner payout not found"));
     res.status(200).json(payout);
   } catch (err) {
@@ -120,7 +132,10 @@ export const createOwnerPayout = async (req, res, next) => {
       if (!req.body.deal || !mongoose.isValidObjectId(String(req.body.deal))) {
         return next(createError(400, "A deal is required for an advocate_trust owner payout"));
       }
-      dealDoc = await SaleDeal.findOne({ _id: req.body.deal, business }).select("_id").lean();
+      // advocate-scoped caller: defense-in-depth — a trust payout can only be claimed against a deal
+      // that is actually theirs, even though the default shipped Advocate role has no create grant here.
+      const dealScope = req.saleAdvocateId ? { _id: { $in: await ownAdvocateDealIds(req, business) } } : {};
+      dealDoc = await SaleDeal.findOne({ _id: req.body.deal, business, ...dealScope }).select("_id").lean();
       if (!dealDoc) return next(createError(400, "Deal not found"));
 
       const trust = await dealAdvocateTrustBalance(business, dealDoc._id);
@@ -193,6 +208,42 @@ export const createOwnerPayout = async (req, res, next) => {
 
     const populated = await populatePayout(SaleOwnerPayout.findById(payout._id)).lean();
     res.status(201).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Corrects a mis-entered payout (wrong owner, wrong amount, etc.) — previously there was no way to do
+// this at all: resolveOwnerOutstandingBalance subtracts every SaleOwnerPayout with no way to exclude a
+// bad one, permanently corrupting the owner's balance. Same voided/audit-trail pattern as
+// paymentsController.js's voidPayment — the record stays (status: "cancelled"), only the GL and the
+// claimed reference are released.
+export const voidOwnerPayout = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const advocateFilter = req.saleAdvocateId ? { deal: { $in: await ownAdvocateDealIds(req, business) } } : {};
+    const payout = await SaleOwnerPayout.findOne({ _id: req.params.id, business, ...advocateFilter });
+    if (!payout) return next(createError(404, "Owner payout not found"));
+    if (payout.status === "cancelled") return next(createError(400, "Payout is already voided"));
+
+    payout.status = "cancelled";
+    payout.updatedBy = userId;
+    await payout.save();
+
+    try {
+      await reverseSaleOwnerPayout({ businessId: business, payout, userId, reason: req.body.reason });
+    } catch (glErr) {
+      payout.status = "paid";
+      await payout.save();
+      return next(createError(422, `GL reversal failed: ${glErr.message}. Payout void has been rolled back.`));
+    }
+
+    await releasePaymentReference({ business, reference: payout.reference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});
+    await releasePaymentReference({ business, reference: payout.cgtReference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});
+
+    const populated = await populatePayout(SaleOwnerPayout.findById(payout._id)).lean();
+    res.status(200).json(populated);
   } catch (err) {
     next(err);
   }

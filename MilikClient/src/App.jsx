@@ -69,6 +69,7 @@ const MyAccount         = lazy(() => import("./pages/Account/MyAccount"));
 const SmsManager        = lazy(() => import("./pages/Communications/SmsManager"));
 const EmailManager      = lazy(() => import("./pages/Communications/EmailManager"));
 const CompanySetupPage  = lazy(() => import("./pages/companySetup/CompanySetupPage"));
+const PortalUsersPage   = lazy(() => import("./pages/companySetup/PortalUsersPage"));
 const SystemSetupPage   = lazy(() => import("./pages/SystemSetup/SystemSetup"));
 const AddCompanyWizard  = lazy(() => import("./pages/SystemSetup/AddCompanyWizard"));
 const AddUserPage       = lazy(() => import("./pages/SystemSetup/AddUsers"));
@@ -998,6 +999,7 @@ function App() {
             {/* ── Company & settings ────────────────────────────────────── */}
             <Route path="/company-setup" element={<Guard resource="companySettings" action="update"><CompanySetupPage /></Guard>} />
             <Route path="/settings"      element={<Guard resource="companySettings" action="update"><CompanySettings /></Guard>} />
+            <Route path="/portal-users/:portalKey" element={<Guard resource="companySettings" action="update"><PortalUsersPage /></Guard>} />
 
             {/* ── Help ──────────────────────────────────────────────────── */}
             <Route path="/help/documentation" element={<Guard><SupportDocumentation /></Guard>} />

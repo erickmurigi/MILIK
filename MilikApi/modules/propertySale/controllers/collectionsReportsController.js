@@ -134,7 +134,16 @@ export const getReceivables = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const asOf = asOfDate(req);
     const { page, limit } = paging(req);
-    const deals = await SaleDeal.find(await buildDealFilter(req, business, { statuses: ["active", "closed"] }))
+    const dealFilter = await buildDealFilter(req, business, { statuses: ["active", "closed"] });
+    // The aging/sort below needs every matching deal in memory (balance/overdue aren't stored fields to
+    // $sort on directly) — this cap is what the PDF sibling report (saleReportPdfData.js) already
+    // enforces before its own equivalent fetch; this JSON endpoint had no equivalent guard at all, so an
+    // unfiltered call on a company with a very large deal history loaded everything into Node memory.
+    const dealCount = await SaleDeal.countDocuments(dealFilter);
+    if (dealCount > MAX_EXPORT) {
+      return next(createError(400, `${dealCount.toLocaleString()} deals match these filters — narrow by project, agent, or status before viewing receivables (limit ${MAX_EXPORT.toLocaleString()}).`));
+    }
+    const deals = await SaleDeal.find(dealFilter)
       .select("dealNumber buyer listing agent agreedPrice dealDate status").lean();
     const dealIds = deals.map((d) => d._id);
 

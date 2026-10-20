@@ -35,16 +35,24 @@ export const dealAdvocateTrustBalance = async (business, dealId) => {
       { $match: { business: bId, deal: dId, collectionMethod: "advocate_trust", status: "paid" } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
+    // A commission's top-level `payoutSource` only ever reflects its MOST RECENT payout tranche
+    // (commissionsController.js's updateCommissionStatus overwrites it on every partial payout) — a
+    // commission settled partly from trust and partly from the company cashbook would be invisible here
+    // (or, the other way round, double-counted) if we matched/summed at the commission level. Unwind to
+    // the actual `payouts[]` tranches and sum only the ones whose OWN `source` is "advocate_trust" —
+    // that's the only amount that genuinely left this deal's trust pool, regardless of commission status.
     SaleCommission.aggregate([
-      { $match: { business: bId, deal: dId, payoutSource: "advocate_trust", status: "paid" } },
-      { $group: { _id: null, total: { $sum: "$commissionAmount" } } }, // gross — this is what left the trust pool, net-to-broker + withheld both came out of it
+      { $match: { business: bId, deal: dId } },
+      { $unwind: "$payouts" },
+      { $match: { "payouts.source": "advocate_trust" } },
+      { $group: { _id: null, total: { $sum: "$payouts.amount" } } }, // gross — this is what left the trust pool, net-to-broker + withheld both came out of it
     ]),
     SaleAdvocateRemittance.aggregate([
-      { $match: { business: bId, deal: dId } },
+      { $match: { business: bId, deal: dId, status: { $ne: "cancelled" } } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     SaleOwnerPayout.aggregate([
-      { $match: { business: bId, deal: dId, source: "advocate_trust" } },
+      { $match: { business: bId, deal: dId, source: "advocate_trust", status: { $ne: "cancelled" } } },
       // amount + cgtAmount — CGT withheld at completion still leaves the trust (paid to KRA on the
       // owner's behalf), even though the owner only receives `amount` in cash.
       { $group: { _id: null, total: { $sum: { $add: ["$amount", { $ifNull: ["$cgtAmount", 0] }] } } } },

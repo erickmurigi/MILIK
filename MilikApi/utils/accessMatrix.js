@@ -60,14 +60,26 @@ const DEFINITIONS = [
   { resource: 'coopCollections',  moduleKey: 'propertyManagement',  actions: ['view', 'create', 'delete'] },
 
   // ─── Property Sales ───────────────────────────────────────────────────────
-  { resource: 'saleListings',     moduleKey: 'propertySale',        actions: ['view', 'create', 'update', 'delete'] },
-  { resource: 'saleBuyers',       moduleKey: 'propertySale',        actions: ['view', 'create', 'update'] },
-  { resource: 'saleAgents',       moduleKey: 'propertySale',        actions: ['view', 'manage'] },
-  { resource: 'saleOffers',       moduleKey: 'propertySale',        actions: ['view', 'create', 'approve'] },
-  { resource: 'saleDeals',        moduleKey: 'propertySale',        actions: ['view', 'create', 'close'] },
-  { resource: 'salePayments',     moduleKey: 'propertySale',        actions: ['view', 'record'] },
-  { resource: 'saleCommissions',  moduleKey: 'propertySale',        actions: ['view', 'pay'] },
-  { resource: 'saleReports',      moduleKey: 'propertySale',        actions: ['view', 'export'] },
+  // Resource keys match the actual `requireCompanyPermission("sale-X", action, "propertySale")` calls
+  // across modules/propertySale/routes/*.js (and the frontend's own `SALE` constant in
+  // moduleRolePresets.js) — NOT the earlier camelCase placeholder this replaced, which never matched
+  // any real route and silently stripped every Property Sales permission grant on every user save.
+  { resource: 'sale-dashboard',            moduleKey: 'propertySale', actions: ['view'] },
+  { resource: 'sale-listings',             moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-buyers',               moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-agents',               moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-owners',               moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-owner-statements',     moduleKey: 'propertySale', actions: ['view', 'create', 'approve'] },
+  { resource: 'sale-advocates',            moduleKey: 'propertySale', actions: ['view', 'create', 'update', 'manage'] },
+  { resource: 'sale-advocate-payments',    moduleKey: 'propertySale', actions: ['view', 'create'] },
+  { resource: 'sale-advocate-remittances', moduleKey: 'propertySale', actions: ['view', 'create'] },
+  { resource: 'sale-offers',               moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-deals',                moduleKey: 'propertySale', actions: ['view', 'create', 'update', 'process', 'delete'] },
+  { resource: 'sale-payments',             moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-commissions',          moduleKey: 'propertySale', actions: ['view', 'process'] },
+  { resource: 'sale-crm-leads',            moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-crm-activities',       moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
+  { resource: 'sale-reports',              moduleKey: 'propertySale', actions: ['view'] },
 
   // ─── Human Resource ───────────────────────────────────────────────────────
   { resource: 'hrEmployees',      moduleKey: 'hr',                  actions: ['view', 'create', 'update', 'terminate'] },

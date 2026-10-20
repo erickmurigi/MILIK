@@ -4,6 +4,8 @@ import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
 import SaleSettings from "../models/SaleSettings.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import { recalculateOwnerCommission, RECALC_ELIGIBLE_STATUSES } from "../services/commissionRecalculateService.js";
+import { advocateDealScopeFilter } from "../middleware/advocateScope.js";
+import { andInto } from "../services/saleSearch.js";
 
 const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 
@@ -38,12 +40,18 @@ export const listOwnerCommissions = async (req, res, next) => {
       if (dateFrom) filter.createdAt.$gte = new Date(dateFrom);
       if (dateTo)   filter.createdAt.$lte = new Date(dateTo + "T23:59:59.999Z");
     }
+    // advocate-scoped user (mandatory, ungated) can only see agency commissions on their own deals
+    const advocateFilter = req.saleAdvocateId ? await advocateDealScopeFilter(req, business) : null;
+    if (advocateFilter) andInto(filter, advocateFilter);
+
+    const statsMatch = { business: toObjectId(business), ...(filter.owner && { owner: toObjectId(filter.owner) }), ...(filter.deal && { deal: toObjectId(filter.deal) }) };
+    if (advocateFilter) andInto(statsMatch, advocateFilter);
 
     const [commissions, total, statsRaw] = await Promise.all([
       populateOwnerCommission(SaleOwnerCommission.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit)).lean(),
       SaleOwnerCommission.countDocuments(filter),
       SaleOwnerCommission.aggregate([
-        { $match: { business: toObjectId(business), ...(filter.owner && { owner: toObjectId(filter.owner) }), ...(filter.deal && { deal: toObjectId(filter.deal) }) } },
+        { $match: statsMatch },
         { $group: { _id: "$status", count: { $sum: 1 }, totalAmount: { $sum: "$commissionAmount" } } },
       ]),
     ]);
@@ -64,7 +72,8 @@ export const listOwnerCommissions = async (req, res, next) => {
 export const getOwnerCommission = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const commission = await populateOwnerCommission(SaleOwnerCommission.findOne({ _id: req.params.id, business })).lean();
+    const advocateFilter = req.saleAdvocateId ? await advocateDealScopeFilter(req, business) : {};
+    const commission = await populateOwnerCommission(SaleOwnerCommission.findOne({ _id: req.params.id, business, ...advocateFilter })).lean();
     if (!commission) return next(createError(404, "Agency commission not found"));
     res.status(200).json(commission);
   } catch (err) {
@@ -83,7 +92,8 @@ export const recalculateOwnerCommissionRate = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
 
-    const commission = await SaleOwnerCommission.findOne({ _id: req.params.id, business });
+    const advocateFilter = req.saleAdvocateId ? await advocateDealScopeFilter(req, business) : {};
+    const commission = await SaleOwnerCommission.findOne({ _id: req.params.id, business, ...advocateFilter });
     if (!commission) return next(createError(404, "Agency commission not found"));
     if (!RECALC_ELIGIBLE_STATUSES.has(commission.status)) {
       return next(createError(400, `Only a pending or approved agency commission can be recalculated (this one is "${commission.status}")`));

@@ -113,9 +113,11 @@ export const updateOffer = async (req, res, next) => {
     const updates = sanitizeOfferBody(rawUpdates);
     // A scoped agent cannot hand their offer to someone else
     if (req.saleAgentId) delete updates.agent;
+    const updateOfferFilter = { _id: req.params.id, business, ...agentFilter(req) };
+    if (req.saleAdvocateId) andInto(updateOfferFilter, { listing: { $in: await ownListingIds(req, business) } });
     const offer = await populateOffer(
       SaleOffer.findOneAndUpdate(
-        { _id: req.params.id, business, ...agentFilter(req) },
+        updateOfferFilter,
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
@@ -192,7 +194,10 @@ export const updateOfferStatus = async (req, res, next) => {
     const userId = currentUserId(req);
     const { status, counterOfferAmount, negotiationNotes } = req.body;
 
-    existingOffer = await SaleOffer.findOne({ _id: req.params.id, business, ...agentFilter(req) }).lean();
+    const statusAdvocateScope = req.saleAdvocateId ? { listing: { $in: await ownListingIds(req, business) } } : null;
+    const existingFilter = { _id: req.params.id, business, ...agentFilter(req) };
+    if (statusAdvocateScope) andInto(existingFilter, statusAdvocateScope);
+    existingOffer = await SaleOffer.findOne(existingFilter).lean();
     if (!existingOffer) return next(createError(404, "Offer not found"));
 
     const allowed = OFFER_TRANSITIONS[existingOffer.status] ?? [];
@@ -230,8 +235,10 @@ export const updateOfferStatus = async (req, res, next) => {
     }
 
     // Compare-and-set on the current status so a concurrent transition can't be silently overwritten
+    const casFilter = { _id: req.params.id, business, ...agentFilter(req), status: existingOffer.status };
+    if (statusAdvocateScope) andInto(casFilter, statusAdvocateScope);
     const offer = await SaleOffer.findOneAndUpdate(
-      { _id: req.params.id, business, ...agentFilter(req), status: existingOffer.status },
+      casFilter,
       update,
       { new: true }
     ).populate("listing buyer agent").lean();
@@ -293,7 +300,9 @@ export const updateOfferStatus = async (req, res, next) => {
 export const deleteOffer = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const offer = await SaleOffer.findOne({ _id: req.params.id, business, ...agentFilter(req) });
+    const deleteOfferFilter = { _id: req.params.id, business, ...agentFilter(req) };
+    if (req.saleAdvocateId) andInto(deleteOfferFilter, { listing: { $in: await ownListingIds(req, business) } });
+    const offer = await SaleOffer.findOne(deleteOfferFilter);
     if (!offer) return next(createError(404, "Offer not found"));
     if (offer.status === "accepted") return next(createError(400, "Cannot delete an accepted offer — cancel the deal instead"));
 

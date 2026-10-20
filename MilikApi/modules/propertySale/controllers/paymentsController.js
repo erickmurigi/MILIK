@@ -115,11 +115,11 @@ export const listPayments = async (req, res, next) => {
       if (dateTo)   filter.paymentDate.$lte = new Date(dateTo + "T23:59:59.999Z");
     }
 
-    const ownDeals = await ownDealIds(req, business);
-    if (ownDeals) filter.$and = [{ deal: { $in: ownDeals } }];
+    const scopedDealFilter = await dealScope(req, business);
+    if (scopedDealFilter.deal) filter.$and = [scopedDealFilter];
 
     const collectedMatch = { business: bId, status: "paid" };
-    if (ownDeals) collectedMatch.$and = [{ deal: { $in: ownDeals } }];
+    if (scopedDealFilter.deal) collectedMatch.$and = [scopedDealFilter];
     if (deal) collectedMatch.deal = new mongoose.Types.ObjectId(String(deal));
 
     const [payments, total, [agg]] = await Promise.all([
@@ -261,7 +261,11 @@ export const updatePayment = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
 
-    const old = await SalePayment.findOne({ _id: req.params.id, business, ...(await dealScope(req, business)) }).lean();
+    // Computed once and reused below — for an advocate-scoped caller this resolves through
+    // ownAdvocateDealIds -> ownListingIds (3 queries); resolving it twice in the same request (once per
+    // SalePayment lookup) doubled that for no reason, since nothing in between changes the caller's scope.
+    const scope = await dealScope(req, business);
+    const old = await SalePayment.findOne({ _id: req.params.id, business, ...scope }).lean();
     if (!old) return next(createError(404, "Payment not found"));
     if (old.status === "cancelled") return next(createError(400, "Cannot edit a voided payment"));
 
@@ -335,13 +339,21 @@ export const updatePayment = async (req, res, next) => {
 
     const payment = await populatePayment(
       SalePayment.findOneAndUpdate(
-        { _id: req.params.id, business, ...(await dealScope(req, business)) },
+        { _id: req.params.id, business, ...scope },
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
     ).lean();
     if (!payment) {
       if (referenceChanged) await releasePaymentReference({ business, reference: newReference, sourceModel: SOURCE_MODEL, sourceId: old._id }).catch(() => {});
+      if (glCorrectionNeeded) {
+        // The old GL was already reversed above (line ~329) before this update ran — if the payment
+        // vanished out from under us in between (concurrently voided/deleted/scoped out), that reversal
+        // must be undone too, or the ledger is left with no entry for a payment that still exists.
+        await postPropertySalePaymentLedger({
+          businessId: business, payment: old, userId, cashbookAccountId: old.cashbook || null,
+        }).catch(() => {});
+      }
       return next(createError(404, "Payment not found"));
     }
     if (referenceChanged) {

@@ -17,7 +17,11 @@ const saleAdvocateSchema = new mongoose.Schema(
     email: { type: String, trim: true, lowercase: true, default: "" },
     idNumber: { type: String, trim: true, default: "" },
     status: { type: String, enum: ADVOCATE_STATUSES, default: "active", index: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null, index: true },
+    // A firm can have several people with their own logins (partners, conveyancing clerks) — all scoped
+    // identically, since every scoping helper in advocateScope.js keys off the advocate (firm) id, never
+    // the user id. See scripts/migrateAdvocateUserIds.js for the one-time migration off the old singular
+    // `userId` field.
+    userIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }], default: [], index: true },
     // Who withholds/remits WHT when this advocate physically pays out a broker's commission from
     // trust funds: "advocate" = self-remits to KRA under their own registration (no 2141 leg on our
     // books); "agent" = forwards the withheld amount to the company, which remits via the existing

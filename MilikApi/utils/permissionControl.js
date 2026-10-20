@@ -155,11 +155,16 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
     return hasSetupCapability(user, normalizedAction);
   }
 
+  // Module must at least be enabled/reachable for this company — a hard floor no explicit grant can
+  // bypass (a disabled module, or one the admin set to "Not allowed", has no working routes/data for it
+  // regardless of any one-off permission someone was given). Checked at requireWrite:false deliberately:
+  // whether a specific WRITE action is allowed is decided below, by the explicit grant / access-level
+  // logic — not here, otherwise a role meant to be "View only + one explicit create grant" (e.g. the
+  // Advocate role, explicitly allowed to create their own payments/remittances) could never act on that
+  // grant, since this check used to run before the explicit grant was ever consulted.
   if (
     moduleKey &&
-    !hasModuleAccess(user, company || { _id: companyId, modules: user?.company?.modules || {} }, moduleKey, {
-      requireWrite: !["view", "export"].includes(normalizedAction),
-    })
+    !hasModuleAccess(user, company || { _id: companyId, modules: user?.company?.modules || {} }, moduleKey, { requireWrite: false })
   ) {
     return false;
   }
@@ -170,13 +175,16 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
 
   if (user?.adminAccess) return true;
 
+  // An explicit denial always wins over a coarse module-level grant — otherwise flipping someone to
+  // "Full access" silently erases any permission an admin deliberately turned off for them, which is
+  // exactly backwards: the whole point of an explicit false is to narrow a broad role.
+  if (explicit === false) return false;
+
   const scopedLevel = moduleKey ? String(getScopedModuleAccess(user, moduleKey, companyId) || "") : "";
   const lower = scopedLevel.toLowerCase();
 
-  // Full access at module level overrides any explicit false from unset granular permissions
+  // Full access at module level grants anything still unset
   if (moduleKey && lower === "full access") return true;
-
-  if (explicit === false) return false;
 
   if (!moduleKey) {
     return normalizedAction === "view" || normalizedAction === "export";

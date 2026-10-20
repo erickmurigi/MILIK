@@ -194,7 +194,9 @@ export const getWorkspaceFromRoute = (pathname = '') => {
     pathname === '/company-setup' ||
     pathname.startsWith('/company-setup/') ||
     pathname === '/settings' ||
-    pathname.startsWith('/settings/')
+    pathname.startsWith('/settings/') ||
+    pathname === '/portal-users' ||
+    pathname.startsWith('/portal-users/')
   ) {
     return WORKSPACE_IDS.COMPANY_SETUP;
   }

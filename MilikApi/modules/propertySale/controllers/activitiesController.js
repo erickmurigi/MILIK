@@ -7,9 +7,21 @@ import SaleDeal     from "../models/SaleDeal.js";
 import SaleListing  from "../models/SaleListing.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { ownDealIds, ownLeadIds } from "../middleware/agentScope.js";
+import { ownAdvocateDealIds, ownAdvocateBuyerIds, ownListingIds } from "../middleware/advocateScope.js";
 
-// A scoped agent sees activities they logged themselves plus any on their own leads/deals; empty for everyone else
+// A scoped agent sees activities they logged themselves plus any on their own leads/deals. A scoped
+// advocate (mandatory, ungated) sees only activities tied to their own deals/listings/buyers — leads
+// stay out of scope entirely (leads have no advocate concept, same as reportsController.js's
+// reportScope). Empty (business-wide) for everyone else.
 const activityScope = async (req, business) => {
+  if (req.saleAdvocateId) {
+    const [deals, listings, buyers] = await Promise.all([
+      ownAdvocateDealIds(req, business),
+      ownListingIds(req, business),
+      ownAdvocateBuyerIds(req, business),
+    ]);
+    return { $or: [{ relatedDeal: { $in: deals } }, { relatedListing: { $in: listings } }, { relatedBuyer: { $in: buyers } }] };
+  }
   if (!req.saleAgentId) return {};
   const [leads, deals] = await Promise.all([ownLeadIds(req, business), ownDealIds(req, business)]);
   return { $or: [{ createdBy: currentUserId(req) }, { relatedLead: { $in: leads } }, { relatedDeal: { $in: deals } }] };
@@ -85,6 +97,16 @@ const RELATED_MODELS = {
 // active business, so an activity can never link to (or later populate data
 // from) another tenant's records. Returns an error or null.
 const validateRelatedRefs = async (body, business, req) => {
+  // advocate-scoped caller: precompute their own deal/listing/buyer ids once, so a create/update can
+  // never link an activity to another firm's deal (mirrors the read-side restriction in activityScope).
+  const advocateIdSets = req.saleAdvocateId
+    ? {
+        relatedDeal:    await ownAdvocateDealIds(req, business),
+        relatedListing: await ownListingIds(req, business),
+        relatedBuyer:   await ownAdvocateBuyerIds(req, business),
+      }
+    : null;
+
   const checks = [];
   for (const [key, { Model, label }] of Object.entries(RELATED_MODELS)) {
     const value = body[key];
@@ -93,9 +115,12 @@ const validateRelatedRefs = async (body, business, req) => {
     if (!id || !mongoose.Types.ObjectId.isValid(id)) {
       return createError(400, `Invalid ${label} id`);
     }
-    // scoped agents may only link to their own leads/deals
-    const own = !req.saleAgentId ? {} : key === "relatedLead" ? { assignedAgent: req.saleAgentId } : key === "relatedDeal" ? { agent: req.saleAgentId } : {};
-    checks.push(Model.exists({ _id: id, business, ...own }).then((found) => (found ? null : label)));
+    // scoped agents may only link to their own leads/deals; scoped advocates to their own deals/listings/buyers
+    const idFilter = advocateIdSets && advocateIdSets[key] ? { $eq: id, $in: advocateIdSets[key] } : id;
+    const own = (!advocateIdSets && req.saleAgentId)
+      ? (key === "relatedLead" ? { assignedAgent: req.saleAgentId } : key === "relatedDeal" ? { agent: req.saleAgentId } : {})
+      : {};
+    checks.push(Model.exists({ _id: idFilter, business, ...own }).then((found) => (found ? null : label)));
   }
   const missing = (await Promise.all(checks)).find(Boolean);
   return missing ? createError(404, `Related ${missing} not found`) : null;

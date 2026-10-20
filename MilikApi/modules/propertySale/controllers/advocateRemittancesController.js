@@ -9,7 +9,7 @@ import SaleListing from "../models/SaleListing.js";
 import SaleProject from "../models/SaleProject.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
-import { postSaleAdvocateRemittance } from "../services/propertySaleAccountingService.js";
+import { postSaleAdvocateRemittance, reverseSaleAdvocateRemittance } from "../services/propertySaleAccountingService.js";
 import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
 import { advocateProjectFilter } from "../middleware/advocateScope.js";
 import { outstandingRecoverableExpenseVouchers } from "../services/recoverableExpense.js";
@@ -49,7 +49,7 @@ export const advocateTrustBalance = async (business, advocateId) => {
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     SaleAdvocateRemittance.aggregate([
-      { $match: { business: bId, advocate: aId } },
+      { $match: { business: bId, advocate: aId, status: { $ne: "cancelled" } } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
   ]);
@@ -164,6 +164,15 @@ export const createRemittance = async (req, res, next) => {
         }
       }
       if (remaining > 0) appliedTo.push({ category: "owner_commission_cash", refId: null, amount: remaining });
+    } else {
+      // Ad-hoc (no-deal) remittance: the only balance that can ever bound it is the advocate's whole-book
+      // outstanding trust (collected minus already-remitted, across every deal) — without this check,
+      // amount > 0 was the ONLY validation, letting an advocate with nothing in trust get an arbitrary
+      // remittance posted against them.
+      const advocateBalance = await advocateTrustBalance(business, advocate._id);
+      if (amount > advocateBalance.outstanding + 0.01) {
+        return next(createError(400, `This advocate's outstanding trust balance is only KES ${advocateBalance.outstanding.toLocaleString()} — cannot remit KES ${amount.toLocaleString()}.`));
+      }
     }
 
     const remittanceNumber = await generateSequentialNumber(SaleAdvocateRemittance, business, "ADR");
@@ -207,6 +216,42 @@ export const createRemittance = async (req, res, next) => {
 
     const populated = await populateRemittance(SaleAdvocateRemittance.findById(remittance._id)).lean();
     res.status(201).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Corrects a remittance entered with the wrong amount or against the wrong advocate — previously there
+// was no way to do this at all despite reverseSaleAdvocateRemittance already existing and being tested;
+// it just wasn't wired to anything. Same voided/audit-trail pattern as paymentsController.js's
+// voidPayment — the record stays (status: "cancelled"), only the GL (including any recoverable-expense
+// settlement entries, handled internally by reverseSaleAdvocateRemittance) and the claimed reference are
+// released. Staff-only: a scoped advocate can create their own remittances but not correct them after
+// the fact (matches the "never get update/void/delete" rule this role is built on everywhere else).
+export const voidRemittance = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+    const remittance = await SaleAdvocateRemittance.findOne({ _id: req.params.id, business });
+    if (!remittance) return next(createError(404, "Remittance not found"));
+    if (remittance.status === "cancelled") return next(createError(400, "Remittance is already voided"));
+
+    remittance.status = "cancelled";
+    remittance.updatedBy = userId;
+    await remittance.save();
+
+    try {
+      await reverseSaleAdvocateRemittance({ businessId: business, remittance, userId, reason: req.body.reason });
+    } catch (glErr) {
+      remittance.status = "posted";
+      await remittance.save();
+      return next(createError(422, `GL reversal failed: ${glErr.message}. Remittance void has been rolled back.`));
+    }
+
+    await releasePaymentReference({ business, reference: remittance.reference, sourceModel: "SaleAdvocateRemittance", sourceId: remittance._id }).catch(() => {});
+
+    const populated = await populateRemittance(SaleAdvocateRemittance.findById(remittance._id)).lean();
+    res.status(200).json(populated);
   } catch (err) {
     next(err);
   }

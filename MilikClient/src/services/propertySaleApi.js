@@ -83,6 +83,8 @@ export const saleApi = {
   createAdvocate: async (payload) => unwrap(await adminRequests.post("/sale/advocates", payload)),
   updateAdvocate: async (id, payload) => unwrap(await adminRequests.put(`/sale/advocates/${id}`, payload)),
   deleteAdvocate: async (id) => unwrap(await adminRequests.delete(`/sale/advocates/${id}`)),
+  linkAdvocateUser: async (id, userId) => unwrap(await adminRequests.post(`/sale/advocates/${id}/users`, { userId })),
+  unlinkAdvocateUser: async (id, userId) => unwrap(await adminRequests.delete(`/sale/advocates/${id}/users/${userId}`)),
 
   // Advocate Trust Remittances
   listAdvocateRemittances: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocate-remittances", { params })),

@@ -30,12 +30,17 @@ import { createUser, updateUser } from '../../redux/apiCalls';
 import { getEnabledCompanyModuleKeys, MODULE_LABELS } from '../../utils/companyModules';
 import {
   ACCESS_SECTIONS,
-  buildEmptyPermissionMap,
   isPermissionKeyPresent,
   normalizePermissionMap,
   setPermissionGroupValue,
 } from '../../utils/accessMatrix';
 import { MODULE_ROLE_PRESETS, applyModuleRole, detectModuleRole } from '../../utils/moduleRolePresets';
+import {
+  PROFILE_MODULE_ROLES,
+  MODULE_KEY_MAP,
+  makeDefaultAssignment,
+  applyProfileToAssignment,
+} from '../../utils/userProfileAssignment';
 
 const PROFILE_OPTIONS = [
   { value: 'Administrator',  label: 'Administrator',  description: 'Full access across all modules — can manage users, settings & all operations' },
@@ -48,44 +53,6 @@ const PROFILE_OPTIONS = [
   { value: 'HR Officer',     label: 'HR Officer',     description: 'Employee management, leave applications & payroll viewing' },
   { value: 'Viewer',         label: 'Viewer',         description: 'Read-only access across all assigned modules — no create or edit actions' },
 ];
-
-const PROFILE_MODULE_ROLES = {
-  'Administrator':  { propertyManagement: 'admin',           accounts: 'admin',         propertySale: 'admin',        hr: 'admin',      inventory: 'admin',           carwash: 'admin'   },
-  'Manager':        { propertyManagement: 'propertyManager', accounts: 'financeManager', propertySale: 'salesManager', hr: 'hrManager',  inventory: 'inventoryManager', carwash: 'manager' },
-  'Accountant':     { propertyManagement: 'agent',           accounts: 'accountant',    propertySale: null,           hr: null,         inventory: null,              carwash: null      },
-  'Property Agent': { propertyManagement: 'agent',           accounts: 'clerk',         propertySale: null,           hr: null,         inventory: null,              carwash: null      },
-  'Field Officer':  { propertyManagement: 'fieldOfficer',    accounts: null,            propertySale: null,           hr: null,         inventory: null,              carwash: null      },
-  'Sales Agent':    { propertyManagement: null,              accounts: null,            propertySale: 'salesAgent',   hr: null,         inventory: null,              carwash: null      },
-  'Advocate':       { propertyManagement: null,              accounts: null,            propertySale: 'advocate',     hr: null,         inventory: null,              carwash: null      },
-  'HR Officer':     { propertyManagement: null,              accounts: null,            propertySale: null,           hr: 'hrOfficer',  inventory: null,              carwash: null      },
-  'Viewer':         {},
-  // Legacy backward-compat
-  'Agent':          { propertyManagement: 'agent',           accounts: 'clerk',         propertySale: null,           hr: null,         inventory: null,              carwash: null      },
-};
-
-const emptyPermissionMap = () => buildEmptyPermissionMap();
-
-const MODULE_KEY_MAP = {
-  propertyManagement: 'propertyMgmt',
-  accounts:           'accounts',
-  inventory:          'inventory',
-  procurement:        'procurement',
-  hr:                 'humanResource',
-  propertySale:       'propertySale',
-  facilityManagement: 'facilityManagement',
-  hotelManagement:    'hotelManagement',
-  telcoDealership:    'telcoDealership',
-  dms:                'dms',
-  academics:          'academics',
-  projectManagement:  'projectManagement',
-  assetValuation:     'assetValuation',
-  revenueRecognition: 'revenueRecognition',
-  crm:                'crm',
-  incidentManagement: 'incidentManagement',
-  sacco:              'sacco',
-  billing:            'billing',
-  pos:                'inventory',
-};
 
 const SECTION_META = {
   workspace:      { bar: 'bg-indigo-500'  },
@@ -107,53 +74,6 @@ const SECTION_META = {
 const DANGER_ACTIONS = new Set(['delete', 'reverse', 'lock', 'approve', 'pay', 'process', 'repair', 'close', 'dispose']);
 
 const PROFILE_SELECT_OPTIONS = PROFILE_OPTIONS.map(({ value, label }) => ({ value, label }));
-
-const makeDefaultAssignment = (company) => {
-  const moduleAccess = {};
-  getEnabledCompanyModuleKeys(company).forEach((key) => {
-    const accessKey = MODULE_KEY_MAP[key] || key;
-    moduleAccess[accessKey] = 'View only';
-  });
-  return {
-    company: company?._id,
-    moduleAccess,
-    permissions: emptyPermissionMap(),
-    rights: [],
-    carwashBranch: null,
-  };
-};
-
-// Property Sales' granular permission grants (moduleRolePresets.js / accessMatrix.js) now use
-// kebab-case resource keys matching exactly what the API routes check (e.g. "sale-deals"), so an
-// explicit grant like the Advocate role's does take effect on its own — hasCompanyActionPermission
-// returns true immediately on an explicit match, regardless of moduleAccess level (see
-// utils/permissions.js). 'View only' is kept here anyway, deliberately, as defense-in-depth specific
-// to the Advocate role: it's meant for an external third party, so anything NOT in its short explicit
-// grant list (create/update/delete/approve/pay on the rest of the module) should stay blocked even if
-// that grant list is ever extended carelessly — 'Full access' would remove that backstop entirely.
-// Other profiles (Sales Agent etc.) don't get this treatment because their explicit grants are already
-// the complete, intended scope of what they need; there's no "rest of the module" they should be
-// defended against the way an external advocate's account should be.
-const VIEW_ONLY_PROPERTY_SALE_ROLES = new Set(['advocate']);
-
-const applyProfileToAssignment = (profile, assignment, company) => {
-  const roleMap = PROFILE_MODULE_ROLES[profile] || {};
-  const enabledModuleKeys = getEnabledCompanyModuleKeys(company);
-  let newPermissions = emptyPermissionMap();
-  const newModuleAccess = {};
-  for (const moduleKey of enabledModuleKeys) {
-    const accessKey = MODULE_KEY_MAP[moduleKey] || moduleKey;
-    const roleKey = roleMap[moduleKey];
-    if (roleKey) {
-      const forceViewOnly = moduleKey === 'propertySale' && VIEW_ONLY_PROPERTY_SALE_ROLES.has(roleKey);
-      newModuleAccess[accessKey] = forceViewOnly ? 'View only' : 'Full access';
-      newPermissions = applyModuleRole(newPermissions, moduleKey, roleKey);
-    } else {
-      newModuleAccess[accessKey] = 'View only';
-    }
-  }
-  return { ...assignment, permissions: newPermissions, moduleAccess: newModuleAccess };
-};
 
 const normalizeUserToForm = (user, companies) => {
   const selectedCompanies = Array.isArray(user?.accessibleCompanies) && user.accessibleCompanies.length > 0

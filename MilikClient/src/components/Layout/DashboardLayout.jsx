@@ -19,6 +19,7 @@ import {
   FaLayerGroup, FaThLarge, FaStar, FaCodeBranch,
   FaBoxes, FaWarehouse, FaCashRegister, FaEnvelope, FaSms, FaUserClock, FaUserFriends,
   FaArchive, FaShieldAlt, FaRulerCombined, FaPercent, FaMoneyCheckAlt,
+  FaUserShield, FaGavel, FaUserTie,
 } from "react-icons/fa";
 import "./dashboard.css";
 import TabManager from "../../components/Layout/TabManager";
@@ -662,6 +663,10 @@ const TopToolbar = ({
         "property-workspace": "/dashboard",
         settings: "/settings",
         activities: "/company-setup?tab=activities",
+        "portal-advocates": "/portal-users/advocates",
+        "portal-tenants": "/portal-users/tenants",
+        "portal-landlords": "/portal-users/landlords",
+        "portal-employees": "/portal-users/employees",
       };
     }
 
@@ -963,6 +968,17 @@ const TopToolbar = ({
             { id: "company-setup-home", label: "Company Setup", icon: FaBuilding },
             { id: "settings", label: "Settings", icon: FaCog },
             { id: "activities", label: "Activities", icon: FaClipboard },
+          ],
+        },
+        {
+          id: "portal-users",
+          label: "Portal Users",
+          icon: FaUserShield,
+          submenu: [
+            { id: "portal-advocates", label: "Advocates Portal", icon: FaGavel },
+            { id: "portal-tenants", label: "Tenants Portal", icon: FaUsers },
+            { id: "portal-landlords", label: "Landlords Portal", icon: FaHome },
+            { id: "portal-employees", label: "Employees Portal", icon: FaUserTie },
           ],
         },
         {

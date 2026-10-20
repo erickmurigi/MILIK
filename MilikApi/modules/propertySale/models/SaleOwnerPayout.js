@@ -29,6 +29,11 @@ const saleOwnerPayoutSchema = new mongoose.Schema(
     cgtReference: { type: String, trim: true, default: "" },
     date: { type: Date, default: Date.now },
     source: { type: String, enum: SOURCES, default: "company_cashbook" },
+    // No correction path existed before this field — a mis-entered payout permanently corrupted the
+    // owner's outstanding balance forever (resolveOwnerOutstandingBalance subtracts every payout with no
+    // way to exclude a bad one). "cancelled" is the same voided/audit-trail pattern SalePayment already
+    // uses — the record stays, the GL is reversed, and every balance aggregate excludes it going forward.
+    status: { type: String, enum: ["paid", "cancelled"], default: "paid" },
     // The advocate who physically paid the owner — required when source is "advocate_trust".
     advocate: { type: mongoose.Schema.Types.ObjectId, ref: "SaleAdvocate", default: null },
     // The company account the money actually left from — only meaningful for "company_cashbook".

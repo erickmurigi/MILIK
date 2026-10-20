@@ -29,9 +29,14 @@ describe("dealAdvocateTrustBalance", () => {
 
     await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal, amount: 300_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
 
+    // payoutSource alone is NOT what dealAdvocateTrustBalance checks — it only reflects whichever
+    // payout tranche was recorded LAST (a commission can be settled partly from trust, partly from the
+    // company cashbook), so the real signal is each payouts[] entry's own `source`, exactly like
+    // commissionsController.js's updateCommissionStatus actually populates it.
     await SaleCommission.create({
       business, commissionNumber: "C-1", deal, agent: oid(), saleAmount: 1_000_000, commissionRate: 2,
-      commissionAmount: 20_000, status: "paid", payoutSource: "advocate_trust",
+      commissionAmount: 20_000, status: "paid", payoutSource: "advocate_trust", paidOutAmount: 20_000,
+      payouts: [{ amount: 20_000, whtAmount: 0, netAmount: 20_000, method: "bank_transfer", date: new Date(), source: "advocate_trust" }],
     });
 
     await SaleAdvocateRemittance.create({ business, remittanceNumber: "R-1", advocate: oid(), deal, amount: 15_000 });
@@ -41,6 +46,30 @@ describe("dealAdvocateTrustBalance", () => {
 
     const balance = await dealAdvocateTrustBalance(business, deal);
     expect(balance).toMatchObject({ collected: 300_000, disbursed: 20_000 + 15_000 + 50_000, available: 300_000 - 85_000 });
+  });
+
+  it("sums only the trust-sourced tranche of a commission paid across mixed sources — the top-level payoutSource reflects only the LAST tranche and must never be trusted alone", async () => {
+    const { business } = await setup();
+    const deal = oid();
+
+    await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal, amount: 200_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+
+    // Two tranches: 100,000 genuinely drawn from trust, then 100,000 from the company cashbook (the
+    // commission's own top-level payoutSource ends up "company_cashbook" — the LAST tranche's source —
+    // even though half of it really did leave this deal's trust pool).
+    await SaleCommission.create({
+      business, commissionNumber: "C-MIXED", deal, agent: oid(), saleAmount: 1_000_000, commissionRate: 20,
+      commissionAmount: 200_000, status: "paid", payoutSource: "company_cashbook", paidOutAmount: 200_000,
+      payouts: [
+        { amount: 100_000, whtAmount: 0, netAmount: 100_000, method: "bank_transfer", date: new Date(), source: "advocate_trust" },
+        { amount: 100_000, whtAmount: 0, netAmount: 100_000, method: "bank_transfer", date: new Date(), source: "company_cashbook" },
+      ],
+    });
+
+    const balance = await dealAdvocateTrustBalance(business, deal);
+    // Only the 100,000 advocate_trust tranche left this deal's trust pool — not the full 200,000
+    // commissionAmount, and not 0 (which matching on the stale top-level payoutSource would give).
+    expect(balance).toMatchObject({ collected: 200_000, disbursed: 100_000, available: 100_000 });
   });
 
   it("segregates trust funds between two deals under the same advocate — a remittance against one deal never reduces the other's available balance", async () => {
@@ -69,7 +98,8 @@ describe("dealAdvocateTrustBalance", () => {
     await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal, amount: 200_000, paymentType: "installment", collectionMethod: "direct", status: "paid" });
     await SaleCommission.create({
       business, commissionNumber: "C-2", deal, agent: oid(), saleAmount: 1_000_000, commissionRate: 2,
-      commissionAmount: 20_000, status: "paid", payoutSource: "company_cashbook",
+      commissionAmount: 20_000, status: "paid", payoutSource: "company_cashbook", paidOutAmount: 20_000,
+      payouts: [{ amount: 20_000, whtAmount: 0, netAmount: 20_000, method: "bank_transfer", date: new Date(), source: "company_cashbook" }],
     });
 
     const balance = await dealAdvocateTrustBalance(business, deal);

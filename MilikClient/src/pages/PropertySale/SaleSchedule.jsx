@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -43,6 +43,28 @@ const scheduleTableCols = (T) => [
   { label: "Amount", align: "right" },
   { label: "Status" },
 ];
+
+// Module scope so MilikTable's React.memo isn't defeated by a fresh function identity each parent
+// render — same convention as SaleDeals.jsx's renderDealRow etc. Pure functions of `item` alone, no
+// component state to close over.
+const scheduleRowClassName = (item) => (item.status === "overdue" ? "!bg-rose-50/40 border-l-2 border-l-rose-400" : "");
+const renderScheduleRow = (item) => {
+  const isOverdue = item.status === "overdue";
+  return (
+    <>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{item.installmentNumber}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#0B3B2E]">{item.deal?.dealNumber || "—"}</td>
+      <td className="max-w-[140px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-700">{item.deal?.listing?.title || item.deal?.listing?.listingNumber || "—"}</td>
+      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.deal?.buyer?.fullName || "—"}</td>
+      <td className="max-w-[140px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || `Installment ${item.installmentNumber}`}</td>
+      <td className={`px-3 py-1.5 border-r border-gray-100 font-mono tabular-nums ${isOverdue ? "font-black text-rose-700" : "text-slate-700"}`}>{fmtDate(item.dueDate)}</td>
+      <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black tabular-nums ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{fmtKES(item.expectedAmount)}</td>
+      <td className="px-3 py-1.5">
+        <span className={`inline-block border px-1.5 py-0.5 text-[9px] font-black uppercase ${STATUS_BADGE[item.status] || STATUS_BADGE.upcoming}`}>{item.status}</span>
+      </td>
+    </>
+  );
+};
 
 const SaleSchedule = () => {
   const T = useTerms("saleDeal", "saleBuyer");
@@ -98,11 +120,18 @@ const SaleSchedule = () => {
   const [reminderMessage,   setReminderMessage]   = useState("");
   const [sendingReminders,  setSendingReminders]  = useState(false);
 
-  const toggleSelect = (id) =>
-    setSelectedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleSelect = useCallback((id) =>
+    setSelectedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; }), []);
   const allSelected = items.length > 0 && items.every((i) => selectedIds.has(i._id));
-  const toggleAll   = () =>
-    setSelectedIds(allSelected ? new Set() : new Set(items.map((i) => i._id)));
+  const toggleAll   = useCallback(() =>
+    setSelectedIds(allSelected ? new Set() : new Set(items.map((i) => i._id))), [allSelected, items]);
+  const isChecked   = useCallback((item) => selectedIds.has(item._id), [selectedIds]);
+  const onCheckRow  = useCallback((item) => toggleSelect(item._id), [toggleSelect]);
+  const renderScheduleActions = useCallback((item) => item.deal?._id ? (
+    <button onClick={() => navigate("/sale/deals", { state: { openDealId: item.deal._id } })} className="border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50" title={`Open ${T.saleDeal.toLowerCase()}`}>
+      <FaExternalLinkAlt className="inline" />
+    </button>
+  ) : null, [navigate, T.saleDeal]);
 
   const handleSendReminders = async (e) => {
     e.preventDefault();
@@ -265,31 +294,11 @@ const SaleSchedule = () => {
           allChecked={allSelected}
           someChecked={selectedIds.size > 0 && !allSelected}
           onCheckAll={toggleAll}
-          isChecked={(item) => selectedIds.has(item._id)}
-          onCheckRow={(item) => toggleSelect(item._id)}
-          rowClassName={(item) => item.status === "overdue" ? "!bg-rose-50/40 border-l-2 border-l-rose-400" : ""}
-          renderRow={(item) => {
-            const isOverdue = item.status === "overdue";
-            return (
-              <>
-                <td className="px-3 py-1.5 border-r border-gray-100 font-mono text-slate-500">{item.installmentNumber}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-black text-[#0B3B2E]">{item.deal?.dealNumber || "—"}</td>
-                <td className="max-w-[140px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-700">{item.deal?.listing?.title || item.deal?.listing?.listingNumber || "—"}</td>
-                <td className="px-3 py-1.5 border-r border-gray-100 text-slate-600">{item.deal?.buyer?.fullName || "—"}</td>
-                <td className="max-w-[140px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-500">{item.description || `Installment ${item.installmentNumber}`}</td>
-                <td className={`px-3 py-1.5 border-r border-gray-100 font-mono tabular-nums ${isOverdue ? "font-black text-rose-700" : "text-slate-700"}`}>{fmtDate(item.dueDate)}</td>
-                <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black tabular-nums ${isOverdue ? "text-rose-700" : "text-slate-900"}`}>{fmtKES(item.expectedAmount)}</td>
-                <td className="px-3 py-1.5">
-                  <span className={`inline-block border px-1.5 py-0.5 text-[9px] font-black uppercase ${STATUS_BADGE[item.status] || STATUS_BADGE.upcoming}`}>{item.status}</span>
-                </td>
-              </>
-            );
-          }}
-          renderActions={(item) => item.deal?._id ? (
-            <button onClick={() => navigate("/sale/deals", { state: { openDealId: item.deal._id } })} className="border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 hover:bg-slate-50" title={`Open ${T.saleDeal.toLowerCase()}`}>
-              <FaExternalLinkAlt className="inline" />
-            </button>
-          ) : null}
+          isChecked={isChecked}
+          onCheckRow={onCheckRow}
+          rowClassName={scheduleRowClassName}
+          renderRow={renderScheduleRow}
+          renderActions={renderScheduleActions}
         />
 
         <PaginationBar

@@ -180,7 +180,7 @@ const ensureSharedCompanyAccess = async (requestUser, targetUser) => {
 
 router.get('/', verifyUser, async (req, res) => {
   try {
-    const { companyId, search: rawSearch, status = 'all', moduleKey = '' } = req.query;
+    const { companyId, search: rawSearch, status = 'all', moduleKey = '', profile = '' } = req.query;
     const search = escapeRegex(rawSearch);
     const safePage = Math.max(Number(req.query.page) || 1, 1);
     const maxLimit = isSystemAdmin(req.user) ? 1000 : 200;
@@ -233,6 +233,11 @@ router.get('/', verifyUser, async (req, res) => {
 
     if (moduleKey) {
       andFilters.push({ [`companyAssignments.moduleAccess.${moduleKey}`]: { $in: ['View only', 'Full access'] } });
+    }
+
+    if (profile) {
+      const profiles = String(profile).split(',').map((p) => p.trim()).filter(Boolean);
+      if (profiles.length) andFilters.push({ profile: profiles.length > 1 ? { $in: profiles } : profiles[0] });
     }
 
     if (andFilters.length) query.$and = andFilters;

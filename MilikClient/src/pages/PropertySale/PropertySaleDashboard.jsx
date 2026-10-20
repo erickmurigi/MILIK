@@ -57,12 +57,14 @@ const PropertySaleDashboard = () => {
     queryFn:  () => saleApi.getDashboardStats(),
     placeholderData: (prev) => prev,
     staleTime: 60_000,
+    enabled: !!biz,
   });
 
   const { data: overdueScheduleData } = useQuery({
     queryKey: ["sale-overdue-schedule", biz],
     queryFn:  () => saleApi.getOverdueSchedule({ limit: 5 }),
     staleTime: 5 * 60_000,
+    enabled: !!biz,
   });
 
   const overdueInstallments = overdueScheduleData?.data ?? [];

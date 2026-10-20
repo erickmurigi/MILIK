@@ -12,6 +12,7 @@ import {
   currentUserId, escapeRegex, generateSequentialNumber, reserveSequentialNumberBlock, resolveActiveBusinessId,
 } from "../services/businessScope.js";
 import { agentFilter } from "../middleware/agentScope.js";
+import { ownAdvocateProjectIds } from "../middleware/advocateScope.js";
 import { deleteImageFile } from "../middleware/listingImageUpload.js";
 import { withEffectiveAgent } from "../services/listingAgent.js";
 import { cleanAttributes, typeValue } from "../services/listingAttributes.js";
@@ -121,8 +122,9 @@ export const listProjects = async (req, res, next) => {
       const rx = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ name: rx }, { projectNumber: rx }, { location: rx }, { town: rx }];
     }
-    // advocate-scoped user (mandatory, ungated) can only see projects they're the default advocate for
-    if (req.saleAdvocateId) filter.assignedAdvocate = req.saleAdvocateId;
+    // advocate-scoped user (mandatory, ungated): projects they're the default advocate for, union
+    // projects reached via their own explicitly-assigned deals (see ownAdvocateProjectIds)
+    if (req.saleAdvocateId) filter._id = { $in: await ownAdvocateProjectIds(req, business) };
 
     const [projects, total] = await Promise.all([
       SaleProject.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).populate("assignedAgent", AGENT_FIELDS).populate("owner", OWNER_FIELDS).populate("assignedAdvocate", ADVOCATE_FIELDS).lean(),
@@ -145,11 +147,15 @@ export const listProjects = async (req, res, next) => {
 };
 
 // Sales performance of one project, derived from its units, deals and payments. In "own" visibility mode an agent's
-// deal/payment figures cover only their own deals (unit counts stay shared, like listings).
+// deal/payment figures cover only their own deals (unit counts stay shared, like listings). The caller already
+// 404s a non-own project for an advocate-scoped user (getProject), but a deal inside it can still be explicitly
+// reassigned to a DIFFERENT advocate (SaleDeal.advocate overrides the project default) — excluded here the same
+// way advocateProjectFilter excludes it everywhere else, so these figures don't count another firm's deal.
 const projectPerformance = async (req, business, project, units) => {
   const unitById = new Map(units.map((u) => [String(u._id), u]));
+  const advocateOwnFilter = req.saleAdvocateId ? { $or: [{ advocate: req.saleAdvocateId }, { advocate: null }] } : {};
   const deals = units.length
-    ? await SaleDeal.find({ business, listing: { $in: units.map((u) => u._id) }, status: { $in: ["active", "closed"] }, ...agentFilter(req) })
+    ? await SaleDeal.find({ business, listing: { $in: units.map((u) => u._id) }, status: { $in: ["active", "closed"] }, ...agentFilter(req), ...advocateOwnFilter })
         .select("listing agent agreedPrice status dealDate actualClosingDate updatedAt")
         .lean()
     : [];
@@ -220,14 +226,24 @@ const projectPerformance = async (req, business, project, units) => {
   };
 };
 
+// advocate-scoped user (mandatory, ungated) can see a project either because it defaults to them
+// directly, or — per ownAdvocateProjectIds — because one of their own explicitly-assigned deals sits
+// on a unit inside it; either way the whole project (and its units/owner) becomes visible to them, the
+// same "deal assignment unlocks the project" rule used throughout advocateScope.js. Not just filtered
+// from a list — scoped out as 404 here too, matching every other advocate-scoped lookup in this module.
+const advocateCanSeeProject = async (req, business, project) => {
+  if (!req.saleAdvocateId) return true;
+  if (String(project.assignedAdvocate || "") === req.saleAdvocateId) return true;
+  const projectIds = await ownAdvocateProjectIds(req, business);
+  return projectIds.some((id) => String(id) === String(project._id));
+};
+
 export const getProject = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const project = await findProject(business, req.params.id);
     if (!project) return next(createError(404, "Project not found"));
-    // advocate-scoped user (mandatory, ungated) can only see their own assigned project — not just filtered
-    // from a list, scoped out as 404 here too, matching every other advocate-scoped lookup in this module.
-    if (req.saleAdvocateId && String(project.assignedAdvocate || "") !== req.saleAdvocateId) {
+    if (!(await advocateCanSeeProject(req, business, project))) {
       return next(createError(404, "Project not found"));
     }
 
@@ -408,7 +424,7 @@ export const listProjectUnits = async (req, res, next) => {
     const business = resolveActiveBusinessId(req);
     const project = await findProject(business, req.params.id);
     if (!project) return next(createError(404, "Project not found"));
-    if (req.saleAdvocateId && String(project.assignedAdvocate || "") !== req.saleAdvocateId) {
+    if (!(await advocateCanSeeProject(req, business, project))) {
       return next(createError(404, "Project not found"));
     }
 

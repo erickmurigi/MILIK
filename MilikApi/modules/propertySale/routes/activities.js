@@ -1,11 +1,12 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
 import { attachAgentScope } from "../middleware/agentScope.js";
+import { attachAdvocateScope } from "../middleware/advocateScope.js";
 import { listActivities, getActivity, createActivity, updateActivity, deleteActivity } from "../controllers/activitiesController.js";
 
 const router = express.Router();
 
-router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope);
+router.use(verifyUser, requireCompanyModule("propertySale"), attachAgentScope, attachAdvocateScope);
 
 router.get("/",       requireCompanyPermission("sale-crm-activities", "view",   "propertySale"), listActivities);
 router.post("/",      requireCompanyPermission("sale-crm-activities", "create", "propertySale"), createActivity);

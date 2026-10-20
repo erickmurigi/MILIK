@@ -18,6 +18,7 @@ import {
   reversePropertySaleCommissionTierRelease,
   reversePropertySaleOwnerCommissionTierRelease,
   postPropertySaleOwnerCommissionTierRelease,
+  postPropertySaleCommissionClawbackOnCancellation,
   transferDepositToRevenue,
   forfeitDepositIncome,
   postStampDutyEntry,
@@ -124,7 +125,15 @@ const createOwnerCommissionForDeal = async ({ business, dealId, ownerId, listing
     ownerCommission.releasedAmount = commissionAmount;
     ownerCommission.status = "approved";
     await postPropertySaleOwnerCommissionTierRelease({ businessId: business, ownerCommission, tierRelease: pushed, userId });
-    await ownerCommission.save();
+    try {
+      await ownerCommission.save();
+    } catch (saveErr) {
+      // pushed._id is generated client-side at push() time, before this save ever reaches the DB — if
+      // it fails, the GL entry just posted above is orphaned (same risk as commissionReleaseService.js's
+      // applyTierCrossings).
+      await reversePropertySaleOwnerCommissionTierRelease({ businessId: business, ownerCommission, tierRelease: pushed, userId, reason: "Tier release save failed — compensating reversal" });
+      throw saveErr;
+    }
   }
 
   return ownerCommission;
@@ -389,10 +398,12 @@ export const updateDeal = async (req, res, next) => {
       return next(createError(400, "Advocate not found"));
     }
 
+    const updateAdvocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+
     // agreedPrice changes must be reconciled with payments already taken and any payment schedule
     let priceChange = null;
     if ("agreedPrice" in updates) {
-      const existing = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) }).select("agreedPrice status").lean();
+      const existing = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...updateAdvocateScope }).select("agreedPrice status").lean();
       if (!existing) return next(createError(404, "Deal not found"));
       const newPrice = round2(updates.agreedPrice);
       if (newPrice !== round2(existing.agreedPrice)) {
@@ -418,7 +429,7 @@ export const updateDeal = async (req, res, next) => {
 
     const deal = await populateDeal(
       SaleDeal.findOneAndUpdate(
-        { _id: req.params.id, business, ...agentFilter(req) },
+        { _id: req.params.id, business, ...agentFilter(req), ...updateAdvocateScope },
         { ...updates, updatedBy: userId },
         { new: true, runValidators: true }
       )
@@ -455,7 +466,8 @@ export const closeDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
+    const closeAdvocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...closeAdvocateScope });
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "active") return next(createError(400, `Deal is already ${deal.status}`));
 
@@ -541,7 +553,8 @@ export const cancelDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId = currentUserId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
+    const cancelAdvocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...cancelAdvocateScope });
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status === "closed") return next(createError(400, "Cannot cancel a closed deal"));
     if (deal.status === "cancelled") return next(createError(400, "Deal is already cancelled"));
@@ -582,6 +595,14 @@ export const cancelDeal = async (req, res, next) => {
     // per-tier staged accruals (pending/approved, non-empty release schedule) for both the broker's
     // commission and the company's own owner commission. Roll back deal if any reversal fails.
     const cancellationReason = req.body.cancellationReason ? `Deal cancelled: ${req.body.cancellationReason}` : "Deal cancelled";
+    // A commission can reach this point already (partially) paid out — commissionsController.js only
+    // advances status to "paid" once the FULL amount is disbursed, so a partial payout leaves status
+    // "approved" with paidOutAmount > 0, invisible to the paidCommissionCount guard above. The full
+    // reversal below (Dr 2180 commissionAmount / Cr Expense commissionAmount) is only correct when
+    // nothing was ever paid out — the original payout already debited 2180 by paidOutAmount when the
+    // cash went out, so reversing the FULL amount on top of that overdraws 2180 by exactly
+    // paidOutAmount. postPropertySaleCommissionClawbackOnCancellation corrects exactly that gap.
+    const clawbackCommissions = brokerCommissions.filter((c) => round2(Number(c.paidOutAmount || 0)) > 0);
     try {
       await Promise.all([
         ...brokerCommissions.flatMap((commission) => {
@@ -595,6 +616,11 @@ export const cancelDeal = async (req, res, next) => {
           }
           return []; // legacy "pending" commission never accrued — nothing to reverse
         }),
+        ...clawbackCommissions.map((commission) =>
+          postPropertySaleCommissionClawbackOnCancellation({
+            businessId: business, commission, amount: commission.paidOutAmount, userId, reason: cancellationReason,
+          })
+        ),
         // Reverse whatever is actually in tierReleases — not gated on releaseSchedule.length, since an
         // owner commission created with no staged schedule still gets one synthetic 100% tier posted
         // immediately (see createOwnerCommissionForDeal); this way both the genuinely-staged and the
@@ -615,6 +641,14 @@ export const cancelDeal = async (req, res, next) => {
     await Promise.all([
       SaleCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" }),
       SaleOwnerCommission.updateMany({ business, deal: deal._id, status: { $in: ["pending", "approved"] } }, { status: "cancelled" }),
+      // Record the receivable on each clawed-back commission itself, not just in the GL — so the
+      // amount owed back from the agent is visible on the commission record, not only in the ledger.
+      ...clawbackCommissions.map((commission) =>
+        SaleCommission.updateOne(
+          { _id: commission._id, business },
+          { clawbackReceivable: { amount: commission.paidOutAmount, createdAt: new Date(), settledAmount: 0, status: "outstanding" } }
+        )
+      ),
     ]);
 
     // Forfeit deposit payments to income if requested
@@ -640,7 +674,8 @@ export const cancelDeal = async (req, res, next) => {
 export const deleteDeal = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) }).lean();
+    const deleteAdvocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...deleteAdvocateScope }).lean();
     if (!deal) return next(createError(404, "Deal not found"));
     if (deal.status !== "cancelled") return next(createError(400, "Only cancelled deals can be deleted"));
 
@@ -665,7 +700,8 @@ export const deleteDeal = async (req, res, next) => {
 export const sendDealSms = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) })
+    const advocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...advocateScope })
       .populate("buyer", "fullName phone").lean();
     if (!deal) return next(createError(404, "Deal not found"));
     const phone = String(req.body.phone || deal.buyer?.phone || "").trim();
@@ -682,8 +718,9 @@ export const sendDealSms = async (req, res, next) => {
 export const sendDealEmail = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const advocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
     const [deal, company] = await Promise.all([
-      SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) })
+      SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...advocateScope })
         .populate("buyer",   "fullName email phone buyerNumber")
         .populate("listing", "title listingNumber propertyType location town county askingPrice size sizeUnit")
         .populate("agent",   "fullName")
@@ -827,7 +864,8 @@ export const uploadDealDocument = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
+    const uploadAdvocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...uploadAdvocateScope });
     if (!deal) { discardUpload(); return next(createError(404, "Deal not found")); }
     if (!req.file)  return next(createError(400, "No file uploaded"));
 
@@ -851,7 +889,8 @@ export const uploadDealDocument = async (req, res, next) => {
 export const deleteDealDocument = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
-    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req) });
+    const docAdvocateScope = req.saleAdvocateId ? await advocateProjectFilter(req, business, "listing") : {};
+    const deal = await SaleDeal.findOne({ _id: req.params.id, business, ...agentFilter(req), ...docAdvocateScope });
     if (!deal) return next(createError(404, "Deal not found"));
     const doc = deal.documents.id(req.params.docId);
     if (!doc) return next(createError(404, "Document not found"));

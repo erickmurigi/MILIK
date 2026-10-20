@@ -13,7 +13,9 @@ import {
   postPropertySaleCommissionPayout,
   postPropertySaleCommissionTierRelease,
   reversePropertySaleCommissionAccrual,
+  reversePropertySaleCommissionTierRelease,
   reversePropertySaleCommissionPayout,
+  postPropertySaleCommissionClawbackOnCancellation,
   resolveWhtHandler,
 } from "../services/propertySaleAccountingService.js";
 import { round2 } from "../../../utils/math.js";
@@ -377,19 +379,41 @@ export const updateCommissionStatus = async (req, res, next) => {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
         return next(createError(422, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
       }
-    } else if (status === "cancelled" && (oldCommission.status === "approved" || oldCommission.status === "reversed")) {
-      // Finding 4 & 7: await the reversal and roll back on failure
-      // reversed→cancelled also reverses the accrual so nothing stays on the books
+    } else if (status === "cancelled") {
+      // Finding 4 & 7: await the reversal and roll back on failure.
+      // pending→cancelled is reachable too (ALLOWED_TRANSITIONS.pending includes "cancelled") — a staged
+      // commission can sit at "pending" with tiers already (fully) accrued long before anyone approves
+      // it (tier accrual is payment-driven, independent of status), so this must not skip "pending".
+      // Mirrors dealsController.js's cancelDeal: a staged commission's accrual lives ONLY in tierReleases
+      // (reversePropertySaleCommissionAccrual's lump-type guard can never see those and silently no-ops),
+      // and a commission that's had cash partially disbursed (paidOutAmount > 0 while status is still
+      // "approved" — commissionsController only advances to "paid" once FULLY disbursed) needs the
+      // clawback-receivable correction, not a plain reversal, for the already-paid portion.
+      const cancelReason = `Commission ${oldCommission.commissionNumber} cancelled`;
+      const paidOut = round2(Number(oldCommission.paidOutAmount || 0));
       try {
-        await reversePropertySaleCommissionAccrual({
-          businessId: business,
-          commission: oldCommission,
-          userId,
-          reason: `Commission ${oldCommission.commissionNumber} cancelled`,
-        });
+        if (oldCommission.releaseSchedule?.length) {
+          await Promise.all((oldCommission.tierReleases || []).map((tierRelease) =>
+            reversePropertySaleCommissionTierRelease({ businessId: business, commission: oldCommission, tierRelease, userId, reason: cancelReason })
+          ));
+        } else if (oldCommission.status === "approved" || oldCommission.status === "reversed") {
+          // legacy lump accrual — a "pending" non-staged commission's accrual hasn't posted yet (it
+          // posts lazily on manual approval, see the "approved" branch above), so there's nothing to
+          // reverse for that case.
+          await reversePropertySaleCommissionAccrual({ businessId: business, commission: oldCommission, userId, reason: cancelReason });
+        }
+        if (paidOut > 0) {
+          await postPropertySaleCommissionClawbackOnCancellation({ businessId: business, commission: oldCommission, amount: paidOut, userId, reason: cancelReason });
+        }
       } catch (glErr) {
         await SaleCommission.findByIdAndUpdate(req.params.id, { status: oldCommission.status, updatedBy: userId });
         return next(createError(422, `GL reversal failed: ${glErr.message}. Commission status not changed.`));
+      }
+      if (paidOut > 0) {
+        await SaleCommission.updateOne(
+          { _id: oldCommission._id, business },
+          { clawbackReceivable: { amount: paidOut, createdAt: new Date(), settledAmount: 0, status: "outstanding" } }
+        );
       }
     }
 

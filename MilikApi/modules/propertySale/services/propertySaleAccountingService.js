@@ -351,6 +351,15 @@ export const postStampDutyEntry = async ({ businessId, dealId, amount, cashbookA
 // ─── Commission accrual — Dr Commission Expense (or Owner Clearing, if the deal has an owner) / Cr Commission Payable ───
 
 export const postPropertySaleCommissionAccrual = async ({ businessId, commission, userId }) => {
+  // A staged commission (non-empty releaseSchedule) accrues ONLY via postPropertySaleCommissionTierRelease,
+  // one entry per tier (sourceTransactionType "property_sale_commission_tier") — never this lump type.
+  // This guard lives here, not just in each caller, because two separate callers (closeDeal's pending-
+  // commission sweep, and postPropertySaleCommissionPayout's lazy-accrual-on-payout) have independently
+  // called this function for a staged commission without checking releaseSchedule first, and this
+  // function's own idempotency check below only ever looks for the LUMP type — it can't see tier entries
+  // and would happily post a second, full, duplicate accrual on top of what the tiers already posted.
+  if (commission.releaseSchedule?.length) return;
+
   const amount = round2(Number(commission.commissionAmount || 0));
   if (amount <= 0) return;
 
@@ -413,7 +422,15 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
 // partial disbursements posts — and can be reversed — one clean journal per disbursement, not one
 // shared idempotency guard that only ever allowed a single lump-sum payout.
 export const postPropertySaleCommissionPayout = async ({ businessId, commission, userId, payout, whtHandledBy = "agent" }) => {
-  await postPropertySaleCommissionAccrual({ businessId, commission, userId });
+  // A staged commission's accrual was already posted tier-by-tier (sourceTransactionType
+  // "property_sale_commission_tier", one entry per tier) — postPropertySaleCommissionAccrual's own
+  // idempotency guard only ever looks for the LUMP type ("property_sale_commission") and would never
+  // see those, so calling it here for a staged commission posts a second, full, duplicate accrual on
+  // top of what the tiers already posted. Only a non-staged (immediate-release) commission still needs
+  // the lump accrual posted lazily here, on its first payout.
+  if (!commission.releaseSchedule?.length) {
+    await postPropertySaleCommissionAccrual({ businessId, commission, userId });
+  }
 
   const amount = round2(Number(payout.amount || 0));
   if (amount <= 0) return;
@@ -668,6 +685,53 @@ export const postPropertySaleCommissionClawbackReceivable = async ({ businessId,
   await postEntries([
     { ...base, accountId: receivableAcc._id, direction: "debit",  amount, notes: msg },
     { ...base, accountId: expenseAcc._id,    direction: "credit", amount, notes: msg },
+  ]);
+};
+
+// ─── Clawback correction on cancellation — commission already (partially) paid out in cash ──────────
+//
+// cancelDeal reverses a cancelled commission's ENTIRE accrual via reversePropertySaleCommissionTierRelease
+// / reversePropertySaleCommissionAccrual (Dr 2180 commissionAmount / Cr Expense commissionAmount) exactly
+// as it always has — that part is unchanged and correct when nothing was ever paid out. But the ORIGINAL
+// payout (if any) already debited 2180 by paidOutAmount when the cash went out (Dr 2180 / Cr cashbook),
+// so a FULL reversal on top of that leaves 2180 overdrawn by exactly paidOutAmount (a negative liability —
+// the original accrual is undone twice: once by the payout's own clearing debit, once more by this
+// reversal). This entry corrects exactly that: Dr 1312 Broker Commission Clawback Receivable / Cr 2180,
+// for paidOutAmount only — bringing 2180 back to zero and standing up the receivable to recover the cash
+// that physically left and can't be un-sent. Deliberately does NOT touch Expense (the full reversal above
+// already zeroed it out correctly on its own).
+export const postPropertySaleCommissionClawbackOnCancellation = async ({ businessId, commission, amount, userId, reason }) => {
+  const clawbackAmount = round2(Number(amount || 0));
+  if (clawbackAmount <= 0) return;
+
+  const sourceTransactionType = "property_sale_commission_cancel_clawback";
+  const sourceTransactionId = String(commission._id);
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(new Date());
+  const journalGroupId = new mongoose.Types.ObjectId();
+  const [receivableAcc, payableAcc] = await Promise.all([
+    resolvePSAccount(businessId, "1312"),
+    resolvePSAccount(businessId, "2180"),
+  ]);
+  const ref = commission.commissionNumber || String(commission._id);
+  const msg = reason || `Commission clawed back — deal cancelled after payout — ${ref}`;
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_COMMISSION_CLAWBACK", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: receivableAcc._id, direction: "debit",  amount: clawbackAmount, notes: msg },
+    { ...base, accountId: payableAcc._id,    direction: "credit", amount: clawbackAmount, notes: msg },
   ]);
 };
 
