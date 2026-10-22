@@ -46,6 +46,10 @@ const saleCommissionSchema = new mongoose.Schema(
       type: [{ _id: false, thresholdPct: Number, releasePct: Number }],
       default: [],
     },
+    // True when releaseSchedule was set per-deal (buyer/broker agreed different terms) rather than
+    // copied from company settings — resyncOpenCommissionReleaseSchedules skips these so a later
+    // company-wide schedule edit never overwrites a deal-negotiated one.
+    releaseScheduleOverridden: { type: Boolean, default: false },
     releasedAmount: { type: Number, default: 0, min: 0 },
     // Running total of commissionAmount (gross) retired via `payouts` below — a commission only reaches
     // status "paid" once this equals commissionAmount. Partial payouts are the norm for a large commission

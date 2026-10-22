@@ -138,3 +138,12 @@ export const ownAdvocateProjectIds = async (req, business) => {
     : [];
   return dedupeIds([...defaultProjectIds, ...dealProjectIds]);
 };
+
+// Ids of owners this advocate can see — every owner behind one of their own projects (ownAdvocateProjectIds).
+// Used by anything owner-scoped rather than project/listing-scoped (e.g. rechargeRemittancesController's
+// outstanding-recharges list). null when the caller is unscoped.
+export const ownAdvocateOwnerIds = async (req, business) => {
+  if (!req.saleAdvocateId) return null;
+  const projectIds = await ownAdvocateProjectIds(req, business);
+  return SaleProject.distinct("owner", { business, _id: { $in: projectIds }, owner: { $ne: null } });
+};

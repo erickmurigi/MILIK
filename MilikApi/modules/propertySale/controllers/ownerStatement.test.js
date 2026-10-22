@@ -11,12 +11,14 @@ import SaleListing from "../models/SaleListing.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleOwnerStatement from "../models/SaleOwnerStatement.js";
 import SaleOwnerStatementLine from "../models/SaleOwnerStatementLine.js";
+import SaleAdvocate from "../models/SaleAdvocate.js";
 import { createDeal, cancelDeal } from "./dealsController.js";
 import { createPayment, voidPayment } from "./paymentsController.js";
 import { updateCommissionStatus } from "./commissionsController.js";
 import { updateCommissionReleaseSchedule } from "./settingsController.js";
 import { approveStatement, createDraftStatement, deleteDraftStatement, getStatement, listStatements, reverseStatementApproval } from "./ownerStatementsController.js";
 import { createOwnerPayout, getOwnerOutstandingBalance } from "./ownerPayoutsController.js";
+import { createRechargeRemittance } from "./rechargeRemittancesController.js";
 import { createPaymentVoucher } from "../../../controllers/propertyController/paymentVoucher.js";
 import { getAccountByCode } from "../../../test/factories.financial.js";
 
@@ -75,16 +77,25 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     expect(full.payload.lines[full.payload.lines.length - 1].runningBalance).toBe(statement.netBalance);
   });
 
-  it("includes a recharged expense voucher as a deduction, netBalance accounts for it too", async () => {
+  it("a recharged expense voucher only shows on the statement once an advocate actually recovers it — not merely because it was paid to the service provider", async () => {
     const { business, owner, project, call } = await setup();
     const liabilityAccount = await getAccountByCode(business, "2120");
     const settlementAccount = await getAccountByCode(business, "1100");
-    await call(createPaymentVoucher, {
+    const voucherRes = await call(createPaymentVoucher, {
       body: {
         category: "sale_owner_expense", saleOwner: String(owner._id), saleProject: String(project._id),
         liabilityAccount: String(liabilityAccount._id), settlementAccount: String(settlementAccount._id),
         amount: 15_000, dueDate: new Date(), paidDate: new Date(), narration: "Survey fee", status: "paid",
       },
+    });
+
+    // Paid to the surveyor, but nothing has been recovered from the advocate yet — must not show.
+    const before = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
+    expect(before.payload.rechargedExpenses).toBe(0);
+
+    const advocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-1", fullName: "John Advocate", phone: "0733000333" });
+    await call(createRechargeRemittance, {
+      body: { advocate: String(advocate._id), owner: String(owner._id), allocations: [{ voucher: String(voucherRes.payload._id), amount: 15_000 }] },
     });
 
     const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
@@ -97,16 +108,20 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     expect(expenseLine).toMatchObject({ amount: 15_000, direction: "debit" });
   });
 
-  it("a recharged expense voucher with no saleProject (an owner-level cost) shows up on the owner's combined statement but not on a single-project-scoped one", async () => {
+  it("a recovered expense with no saleProject (an owner-level cost) shows up on the owner's combined statement but not on a single-project-scoped one", async () => {
     const { business, owner, project, call } = await setup();
     const liabilityAccount = await getAccountByCode(business, "2120");
     const settlementAccount = await getAccountByCode(business, "1100");
-    await call(createPaymentVoucher, {
+    const voucherRes = await call(createPaymentVoucher, {
       body: {
         category: "sale_owner_expense", saleOwner: String(owner._id), // deliberately no saleProject
         liabilityAccount: String(liabilityAccount._id), settlementAccount: String(settlementAccount._id),
         amount: 8_000, dueDate: new Date(), paidDate: new Date(), narration: "Legal retainer", status: "paid",
       },
+    });
+    const advocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-2", fullName: "John Advocate", phone: "0733000444" });
+    await call(createRechargeRemittance, {
+      body: { advocate: String(advocate._id), owner: String(owner._id), allocations: [{ voucher: String(voucherRes.payload._id), amount: 8_000 }] },
     });
 
     // Scoped to one project: an owner-general cost isn't that project's to show.

@@ -353,7 +353,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     tenant: tenantId || "all",
     property: fromLedger ? (location.state?.propertyName || "all") : "all",
     unit: "",
-    ledger: "all",
+    cashbook: "all",
     from: "",
     to: "",
   };
@@ -447,6 +447,7 @@ const Receipts = ({ viewMode = "tenant" }) => {
     if (filters.search) params.search = filters.search;
     if (filters.from) params.from = filters.from;
     if (filters.to) params.to = filters.to;
+    if (filters.cashbook && filters.cashbook !== "all") params.cashbook = filters.cashbook;
     if (!isCompanyLandlordMode && isLandlordReceiptView) {
       // Landlord-receipts sub-view: restrict to direct-to-landlord receipts only.
       // Default (Rental Receipts) view intentionally omits this filter so both
@@ -1644,11 +1645,11 @@ const Receipts = ({ viewMode = "tenant" }) => {
               )}
               <ListToolbar.Divider />
               <ListToolbar.Input
-                width="w-28"
+                width="w-36"
                 value={draftFilters.search}
                 onChange={(e) => setDraftFilters((prev) => ({ ...prev, search: e.target.value }))}
                 onKeyDown={(e) => e.key === "Enter" && applySearchFilters()}
-                placeholder={`${termTenant} or Receipt #`}
+                placeholder={`${termTenant}/Receipt#/Ref`}
               />
               <AppSelect
                 value={draftFilters.property}
@@ -1666,10 +1667,14 @@ const Receipts = ({ viewMode = "tenant" }) => {
                 placeholder={termUnit}
               />
               <AppSelect
-                value={draftFilters.ledger}
-                onChange={(v) => setDraftFilters((prev) => ({ ...prev, ledger: v ?? "all" }))}
-                options={[{ value: "receipts", label: "Receipts" }, { value: "cashbook", label: "Cashbook" }]}
-                placeholder="Ledger"
+                value={draftFilters.cashbook}
+                onChange={(v) => setDraftFilters((prev) => ({ ...prev, cashbook: v ?? "all" }))}
+                options={[
+                  { value: "direct_to_landlord", label: "Direct to Landlord" },
+                  ...cashbookOptions.map((option) => ({ value: option.name, label: option.name })),
+                ]}
+                placeholder="Cashbook"
+                searchable
                 clearable
                 compact
               />

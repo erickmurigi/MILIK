@@ -2904,6 +2904,7 @@ export const batchCreatePayments = async (req, res, next) => {
           business:          businessId,
           tenant:            tenantId,
           unit:              unitId,
+          amount:            itemAmount,
           cashbook:          itemPaidDirectToLandlord ? "" : itemCashbook,
           paidDirectToLandlord: itemPaidDirectToLandlord,
           paymentType:       allocationData.primaryPaymentType,
@@ -3041,6 +3042,7 @@ export const getPayments = async (req, res, next) => {
     search,
     tenantSearch,
     paidDirectToLandlord,
+    cashbook,
     hasUnapplied,
     includeTotals,
   } = req.query;
@@ -3065,6 +3067,7 @@ export const getPayments = async (req, res, next) => {
       search,
       tenantSearch,
       paidDirectToLandlord,
+      cashbook,
       hasUnapplied,
       includeTotals,
     ].some((value) => value !== undefined && value !== null && String(value).trim() !== "");
@@ -3157,6 +3160,16 @@ export const getPayments = async (req, res, next) => {
     if (ledger && ledger === "receipts") filter.ledgerType = "receipts";
     if (paidDirectToLandlord !== undefined && paidDirectToLandlord !== "") {
       filter.paidDirectToLandlord = String(paidDirectToLandlord).toLowerCase() === "true";
+    }
+    // Cashbook filter (Receipts page toolbar): an exact cashbook account name filters to
+    // receipts posted against it; "direct_to_landlord" reuses the paidDirectToLandlord flag
+    // instead, since those receipts carry no cashbook value of their own.
+    if (cashbook) {
+      if (String(cashbook).toLowerCase() === "direct_to_landlord") {
+        filter.paidDirectToLandlord = true;
+      } else {
+        filter.cashbook = cashbook;
+      }
     }
     if (String(hasUnapplied || "").toLowerCase() === "true") {
       filter["allocationSummary.unapplied"] = { $gt: 0 };

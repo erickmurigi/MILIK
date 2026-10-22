@@ -76,6 +76,10 @@ export const saleApi = {
   listOwnerPayouts: async (params = {}) => unwrapPage(await adminRequests.get("/sale/owner-payouts", { params })),
   createOwnerPayout: async (payload) => unwrap(await adminRequests.post("/sale/owner-payouts", payload)),
   getOwnerOutstandingBalance: async (ownerId) => unwrap(await adminRequests.get(`/sale/owner-payouts/balance/${ownerId}`)),
+  // Every deal of this owner the current advocate (or, for staff, whoever the backend resolves) holds
+  // trust for, each with its own available balance — the breakdown behind the "pay owner directly from
+  // trust across several deals in one go" picker.
+  getAdvocateOwnerTrustSummary: async (ownerId) => unwrap(await adminRequests.get(`/sale/owner-payouts/trust-summary/${ownerId}`)),
 
   // Advocates (conveyancing advocates who collect buyer payments into their own trust account)
   listAdvocates: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocates", { params })),
@@ -90,6 +94,16 @@ export const saleApi = {
   listAdvocateRemittances: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocate-remittances", { params })),
   createAdvocateRemittance: async (payload) => unwrap(await adminRequests.post("/sale/advocate-remittances", payload)),
   getAdvocateTrustBalance: async (advocateId) => unwrap(await adminRequests.get(`/sale/advocate-remittances/balance/${advocateId}`)),
+
+  // Recharge Remittances — real cash an advocate sends specifically to recover rechargeable owner
+  // expenses (sale_owner_expense PaymentVouchers), distinct from the trust remittances above.
+  // Not run through `unwrap` — the backend's { data: [...] } shape has no `total`/pagination for
+  // unwrapPage to key off, but IS the { data } object the caller (SaleAdvocateRemittances.jsx) reads
+  // `.data` from; `unwrap` would strip it down to the bare array one level too far.
+  listOutstandingRecharges: async (params = {}) => (await adminRequests.get("/sale/recharge-remittances/outstanding", { params }))?.data,
+  listRechargeRemittances: async (params = {}) => unwrapPage(await adminRequests.get("/sale/recharge-remittances", { params })),
+  createRechargeRemittance: async (payload) => unwrap(await adminRequests.post("/sale/recharge-remittances", payload)),
+  voidRechargeRemittance: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/recharge-remittances/${id}/void`, payload)),
 
   // Offers
   listOffers: async (params = {}) => unwrapPage(await adminRequests.get("/sale/offers", { params })),
@@ -138,6 +152,9 @@ export const saleApi = {
   recalculateCommission: async (id, params = {}) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/recalculate`, params)),
   // One row per actual disbursement (a commission can have several partial payouts) — not one per commission.
   listCommissionPayouts: async (params = {}) => unwrapPage(await adminRequests.get("/sale/commissions/payouts", { params })),
+  // Deal-negotiated release schedule override — only possible before any tier has released.
+  // { tiers: [...] } sets a custom schedule; { clear: true } reverts to the company default.
+  setCommissionReleaseScheduleOverride: async (id, payload) => unwrap(await adminRequests.patch(`/sale/commissions/${id}/release-schedule`, payload)),
 
   // Agency (owner) commissions — no manual approve/pay/reverse action exists for these (recognized
   // revenue, not a disbursement). A rate change in Settings auto-resyncs every open one server-side;
@@ -145,6 +162,7 @@ export const saleApi = {
   listOwnerCommissions: async (params = {}) => unwrapPage(await adminRequests.get("/sale/owner-commissions", { params })),
   getOwnerCommission: async (id, params = {}) => unwrap(await adminRequests.get(`/sale/owner-commissions/${id}`, { params })),
   recalculateOwnerCommission: async (id, params = {}) => unwrap(await adminRequests.patch(`/sale/owner-commissions/${id}/recalculate`, params)),
+  setOwnerCommissionReleaseScheduleOverride: async (id, payload) => unwrap(await adminRequests.patch(`/sale/owner-commissions/${id}/release-schedule`, payload)),
 
   // Cashbook accounts (for payment recording)
   listCashbookAccounts: async (params = {}) => {

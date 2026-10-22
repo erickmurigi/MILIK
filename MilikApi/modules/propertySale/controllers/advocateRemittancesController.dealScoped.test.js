@@ -60,48 +60,33 @@ describe("advocate remittance — deal-scoped trust-balance guard", () => {
   });
 });
 
-describe("advocate remittance — auto-allocation against outstanding recoverable expenses", () => {
-  it("applies the incoming amount against the oldest outstanding voucher first, then the remainder as commission-cash", async () => {
+describe("advocate remittance — deal remittances never touch recoverable expenses (explicit recharge flow only)", () => {
+  it("a deal remittance posts pure trust-clearing cash and leaves outstanding recoverable vouchers completely untouched, even when they'd otherwise be fully coverable", async () => {
     const { business, call, advocate, owner, deal, makeRecoverableVoucher } = await setup();
     const older = await makeRecoverableVoucher(5_000, "2026-01-01");
     const newer = await makeRecoverableVoucher(8_000, "2026-02-01");
 
     const res = await call(createRemittance, { body: { advocate: String(advocate._id), deal: String(deal._id), amount: 10_000 } });
     expect(res.statusCode).toBe(201);
-    expect(res.payload.appliedTo).toMatchObject([
-      { category: "recoverable_expense", amount: 5_000 },
-      { category: "recoverable_expense", amount: 5_000 },
-    ]);
-    expect(String(res.payload.appliedTo[0].refId)).toBe(String(older._id));
-    expect(String(res.payload.appliedTo[1].refId)).toBe(String(newer._id));
+    expect(res.payload.appliedTo).toEqual([]);
 
-    // GL: the remittance's own cash leg is the full 10,000 to 1314; the recoverable-expense settlement
-    // entries (Dr 2185 / Cr 1313) are separate, one per voucher actually touched.
+    // GL: only the remittance's own cash leg (full 10,000 to 1314) — no recoverable-expense settlement
+    // entries at all, regardless of what's outstanding for this owner.
     const remittanceLegs = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_advocate_remittance", sourceTransactionId: String(res.payload._id) }).lean();
     expect(remittanceLegs).toHaveLength(2);
     const trustAcc = await getAccountByCode(business, "1314");
     expect(remittanceLegs.find((l) => l.direction === "credit")).toMatchObject({ accountId: trustAcc._id, credit: 10_000 });
 
-    const olderSettlement = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_recoverable_expense_settlement", sourceTransactionId: `${res.payload._id}:recoverable:${older._id}` }).lean();
-    const newerSettlement = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_recoverable_expense_settlement", sourceTransactionId: `${res.payload._id}:recoverable:${newer._id}` }).lean();
-    expect(olderSettlement).toMatchObject([{ direction: "debit", debit: 5_000 }, { direction: "credit", credit: 5_000 }]);
-    expect(newerSettlement).toMatchObject([{ direction: "debit", debit: 5_000 }, { direction: "credit", credit: 5_000 }]);
+    const settlementRows = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_recoverable_expense_settlement" }).lean();
+    expect(settlementRows.length).toBe(0);
 
     const recoverableAcc = await getAccountByCode(business, "1313");
     const recoverableRows = await FinancialLedgerEntry.find({ business, accountId: recoverableAcc._id }).lean();
-    // 13,000 debited by the two vouchers' own accrual, 10,000 credited back by the two settlements above.
+    // The two vouchers' own 13,000 accrual is the ONLY activity on 1313 — nothing recovered by this remittance.
     const net = recoverableRows.reduce((s, r) => s + Number(r.debit || 0) - Number(r.credit || 0), 0);
-    expect(net).toBe(3_000); // 5,000 + 8,000 debited, only 10,000 recovered so far
-  });
-
-  it("a remittance with nothing left to allocate after full recovery is pure commission-cash — no settlement entries at all", async () => {
-    const { business, call, advocate, deal } = await setup();
-    // No recoverable vouchers at all for this owner.
-    const res = await call(createRemittance, { body: { advocate: String(advocate._id), deal: String(deal._id), amount: 12_000 } });
-    expect(res.payload.appliedTo).toMatchObject([{ category: "owner_commission_cash", amount: 12_000 }]);
-
-    const settlementRows = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_recoverable_expense_settlement" }).lean();
-    expect(settlementRows.length).toBe(0);
+    expect(net).toBe(13_000);
+    expect(String(older._id)).toBeTruthy();
+    expect(String(newer._id)).toBeTruthy();
   });
 
   it("legacy call with deal omitted entirely still has no deal/appliedTo split, but IS now checked against the advocate's whole-book trust balance", async () => {

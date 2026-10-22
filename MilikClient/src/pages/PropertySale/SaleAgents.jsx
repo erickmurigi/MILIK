@@ -167,6 +167,12 @@ const SaleAgents = () => {
     queryClient.invalidateQueries({ queryKey: ["sale-agents", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-agents-ref", biz] }),
     queryClient.invalidateQueries({ queryKey: ["sale-agents-perf-list", biz] }),
+    // Editing an agent's commissionRate/commissionType triggers the backend's
+    // recalculateCommissionsForAgent resync of every one of their still-open commissions
+    // (agentsController.js's updateAgent) — the DB is already correct, this just tells the
+    // Commissions page to refetch so the change is visible without a manual reload.
+    queryClient.invalidateQueries({ queryKey: ["sale-commissions", biz] }),
+    queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
   ]), [queryClient, biz]);
 
   const editingId = agentModal?.editingId || "";

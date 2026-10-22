@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaChevronDown, FaCheck, FaFilter, FaMoneyBillWave, FaPrint, FaReceipt, FaRedoAlt, FaTimes, FaUndo } from "react-icons/fa";
+import { FaChevronDown, FaCheck, FaCog, FaFilter, FaMoneyBillWave, FaPrint, FaReceipt, FaRedoAlt, FaTimes, FaUndo } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -22,6 +22,7 @@ import Modal from "../../components/common/Modal";
 import SaleExportButton from "./SaleExportButton";
 import { fmtDate } from "../../utils/dates";
 import MilikTable from "../../components/common/MilikTable";
+import TierListEditor from "./TierListEditor";
 
 const STATUS_BADGE = {
   pending:   "border-amber-200 bg-amber-50 text-amber-700",
@@ -183,7 +184,14 @@ const renderCommissionExpanded = (c) => {
 // behavior if left untouched) but can be reduced to disburse the commission across several real-world
 // cash movements — each one its own WHT-withheld tranche, tracked on commission.payouts.
 function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit }) {
-  const remaining = round2(Number(commission.commissionAmount || 0) - Number(commission.paidOutAmount || 0));
+  // A staged commission can only ever be paid up to what's actually RELEASED so far — tier by tier,
+  // exactly as each one accrues (matches commissionsController.js's own cap). A non-staged commission
+  // has its full amount recognized the instant it's approved, so the cap is just the usual remaining
+  // balance, unchanged from before.
+  const isStaged = commission.releaseSchedule?.length > 0;
+  const totalRemaining = round2(Number(commission.commissionAmount || 0) - Number(commission.paidOutAmount || 0));
+  const remaining = isStaged ? round2(Number(commission.releasedAmount || 0) - Number(commission.paidOutAmount || 0)) : totalRemaining;
+  const stillAccruing = round2(totalRemaining - remaining);
   const [payoutForm, setPayoutForm] = useState({
     amount: String(remaining),
     payoutMethod: "bank_transfer", payoutReference: "", payoutDate: todayISO(),
@@ -215,8 +223,13 @@ function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit })
           <div className="text-sm font-black text-slate-800">{fmtKES(commission.paidOutAmount || 0)}</div>
         </div>
         <div className="col-span-2 bg-emerald-50 px-3 py-2">
-          <div className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Remaining Balance</div>
+          <div className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Available to Pay Now</div>
           <div className="text-xl font-black text-emerald-800">{fmtKES(remaining)}</div>
+          {stillAccruing > 0.01 && (
+            <div className="mt-0.5 text-[10px] font-semibold text-emerald-700/70">
+              + {fmtKES(stillAccruing)} still accruing on a later tier — not yet payable
+            </div>
+          )}
         </div>
       </div>
 
@@ -316,6 +329,43 @@ function PayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit })
   );
 }
 
+// Deal-negotiated release schedule override — only reachable for a commission that hasn't released any
+// tier yet (the caller gates the action button on that too; this modal is the last line of defense).
+function ReleaseScheduleOverrideModal({ commission, saving, onClose, onSubmit }) {
+  const isOverridden = !!commission.releaseScheduleOverridden;
+  const [tiers, setTiers] = useState(commission.releaseSchedule || []);
+
+  return (
+    <Modal
+      title={`Commission Release Schedule — ${commission.commissionNumber}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          {isOverridden && (
+            <button type="button" onClick={() => onSubmit({ clear: true })} disabled={saving} className="border border-amber-200 bg-amber-50 px-4 py-1.5 text-xs font-black text-amber-700 hover:bg-amber-100 disabled:opacity-60">
+              Revert to Company Default
+            </button>
+          )}
+          <button type="button" onClick={() => onSubmit({ tiers })} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+            {saving ? "Saving…" : "Save Custom Schedule"}
+          </button>
+        </>
+      }
+    >
+      <p className="mb-3 text-[11px] text-slate-500">
+        Overrides the company-wide release schedule for this one commission only — e.g. the buyer and broker agreed different terms for this deal. Only possible before any tier has released; a later company-wide schedule edit will never touch this commission once overridden.
+      </p>
+      {isOverridden && (
+        <p className="mb-3 border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[10px] font-bold text-amber-700">
+          This commission already has a custom schedule.
+        </p>
+      )}
+      <TierListEditor tiers={tiers} setTiers={setTiers} label="Tiers" />
+    </Modal>
+  );
+}
+
 const SaleCommissions = () => {
   const T = useTerms("saleAgent", "saleAgents", "saleDeal", "saleDeals");
   const commissionColumns = useMemo(() => commissionCols(T), [T]);
@@ -335,6 +385,7 @@ const SaleCommissions = () => {
   const [page,         setPage]         = useTabState("/sale/commissions:page", 1);
   const [pageSize,     setPageSize]     = useTabState("/sale/commissions:pageSize", PAGE_SIZE);
   const [showPayout,   setShowPayout]   = useState(null);
+  const [showScheduleOverride, setShowScheduleOverride] = useState(null);
   const [saving,       setSaving]       = useState(false);
   const [actionKey,    setActionKey]    = useState("");
   const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -419,6 +470,18 @@ const SaleCommissions = () => {
       if (fullyPaid) window.open(`/sale/commissions/${showPayout._id}/statement`, "_blank");
     } catch (err) {
       toast.error(err?.response?.data?.message || "Failed to record payout");
+    } finally { setSaving(false); }
+  };
+
+  const handleSaveScheduleOverride = async (payload) => {
+    setSaving(true);
+    try {
+      await saleApi.setCommissionReleaseScheduleOverride(showScheduleOverride._id, payload);
+      toast.success(payload.clear ? "Reverted to the company default schedule" : "Custom release schedule saved");
+      setShowScheduleOverride(null);
+      invalidate();
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to save release schedule");
     } finally { setSaving(false); }
   };
 
@@ -550,16 +613,22 @@ const SaleCommissions = () => {
 
   const renderCommissionActions = useCallback((c) => {
     const tp = tierProgress(c);
-    // A staged commission accrues its own GL entries tier-by-tier, automatically, as the buyer pays —
-    // Approve has no accrual effect on one (see commissionsController.js) and stays disabled until every
-    // tier has actually released, so finance never signs off on something still partly in flight.
-    const approveBlocked = tp && !tp.fullyReleased;
+    // A staged commission accrues its own GL entries tier-by-tier, automatically, as the buyer pays.
+    // Approve is just a checkpoint (no accrual effect of its own — see commissionsController.js) and
+    // unlocks as soon as SOMETHING has released, not only once every tier has fired — there's no reason
+    // to wait for the last tier to sign off on the portion that's already real.
+    const approveBlocked = tp && tp.releasedCount === 0;
+    // Pay is capped at what's actually released and not yet paid — tier by tier, exactly as each one
+    // accrues, never ahead of it. A non-staged commission (tp === null) has its full amount recognized
+    // the instant it's approved, so the whole remaining balance is payable immediately, same as always.
+    const payableNow = round2((tp ? Number(c.releasedAmount || 0) : Number(c.commissionAmount || 0)) - Number(c.paidOutAmount || 0));
+    const payBlocked = payableNow <= 0.01;
     return (
     <div className="inline-flex items-center gap-1">
       {c.status === "pending" && (
         approveBlocked ? (
           <span
-            title={`Accrues automatically as the buyer pays — ${tp.releasedCount}/${tp.totalTiers} tiers released so far (${tp.pct}%). Approve unlocks once fully released.`}
+            title={`Accrues automatically as the buyer pays — ${tp.releasedCount}/${tp.totalTiers} tiers released so far (${tp.pct}%). Approve unlocks as soon as the first tier fires.`}
             className="cursor-help whitespace-nowrap border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-400"
           >
             Accruing {tp.pct}%
@@ -571,9 +640,18 @@ const SaleCommissions = () => {
         )
       )}
       {c.status === "approved" && (
-        <button type="button" onClick={() => setShowPayout(c)} title="Pay" className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700 hover:bg-emerald-100">
-          <FaMoneyBillWave className="text-[8px]" />
-        </button>
+        payBlocked ? (
+          <span
+            title={tp ? `Awaiting the next tier — ${tp.pct}% released so far, and everything released has already been paid out.` : "Nothing left to pay out."}
+            className="cursor-help whitespace-nowrap border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-bold text-slate-400"
+          >
+            {tp ? `Awaiting tier (${tp.pct}%)` : "Fully paid"}
+          </span>
+        ) : (
+          <button type="button" onClick={() => setShowPayout(c)} title={tp && !tp.fullyReleased ? `Pay out the ${tp.pct}% released so far` : "Pay"} className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700 hover:bg-emerald-100">
+            <FaMoneyBillWave className="text-[8px]" />
+          </button>
+        )
       )}
       {c.status === "paid" && (
         <button type="button" onClick={() => handleReverse(c)} disabled={actionKey === `${c._id}:reverse`} className="border border-rose-200 bg-rose-50 px-2 py-0.5 text-rose-600 hover:bg-rose-100 disabled:opacity-40" title="Reverse payout GL entry">
@@ -583,6 +661,11 @@ const SaleCommissions = () => {
       {["pending", "approved", "reversed"].includes(c.status) && (
         <button type="button" onClick={() => handleCancel(c)} disabled={actionKey === `${c._id}:cancel`} title="Cancel commission" className="border border-red-200 bg-white px-2 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-40">
           <FaTimes className="text-[8px]" />
+        </button>
+      )}
+      {["pending", "approved"].includes(c.status) && (c.tierReleases?.length || 0) === 0 && (
+        <button type="button" onClick={() => setShowScheduleOverride(c)} title="Custom Release Schedule for this deal" className={`border px-2 py-0.5 hover:bg-slate-100 ${c.releaseScheduleOverridden ? "border-amber-300 bg-amber-50 text-amber-700" : "border-slate-200 bg-white text-slate-500"}`}>
+          <FaCog className="text-[8px]" />
         </button>
       )}
       <button type="button" data-id={c._id} onClick={handlePrintStatement} title="Print Commission Statement" className="border border-[#B7C9C0] bg-white px-2 py-0.5 text-[#0B3B2E] hover:bg-[#F1F6F3]">
@@ -696,6 +779,11 @@ const SaleCommissions = () => {
       {/* Payout Modal */}
       {showPayout && (
         <PayoutModal commission={showPayout} cashbookOptions={cashbookOptions} saving={saving} onClose={() => setShowPayout(null)} onSubmit={handlePayout} />
+      )}
+
+      {/* Release Schedule Override Modal */}
+      {showScheduleOverride && (
+        <ReleaseScheduleOverrideModal commission={showScheduleOverride} saving={saving} onClose={() => setShowScheduleOverride(null)} onSubmit={handleSaveScheduleOverride} />
       )}
     </PropertySaleShell>
   );

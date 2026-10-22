@@ -17,8 +17,11 @@
  *   4430 — Commission Income — Agency Fees   (income)   Cr for the company's own commission (owner-linked deals only)
  *   1312 — Broker Commission Clawback Receivable (asset) Dr when a deal cancels after a tier was already paid out
  *   1313 — Owner Expense Recoverable         (asset)    Dr for costs the company pays on an owner's behalf;
- *          cleared (Cr) by postRecoverableExpenseSettlement, a separate non-cash entry against 2185 —
- *          never by the advocate remittance's own cash leg, which is always a pure Dr cashbook / Cr 1314
+ *          cleared (Cr) either by postAdvocateRechargeRemittance (real cash the advocate sends
+ *          specifically to recover it — Dr cashbook / Cr 1313, the current explicit flow) or, for
+ *          historical records predating that flow, by postRecoverableExpenseSettlement (a separate
+ *          non-cash entry against 2185) — never by the advocate's ordinary trust remittance's own cash
+ *          leg, which is always a pure Dr cashbook / Cr 1314
  *   1314 — Advocate Trust Receivable         (asset)    Dr side for a payment collected into an advocate's own
  *          trust account instead of the company's cash (collectionMethod "advocate_trust"); cleared (Cr) when
  *          the advocate actually remits the money (SaleAdvocateRemittance / postSaleAdvocateRemittance) or
@@ -881,6 +884,61 @@ export const reverseRecoverableExpenseSettlement = async ({ businessId, remittan
     sourceTransactionId: recoverableSettlementSourceId(remittance, appliedToEntry, index),
     userId,
     reason: reason || `Recoverable expense settlement reversed — ${remittance.remittanceNumber || remittance._id}`,
+  });
+
+// ─── Advocate recharge remittance — direct cash settlement of 1313 Owner Expense Recoverable ────────
+//
+// Real money an advocate sends Pink House specifically to recover one or more named "sale_owner_expense"
+// vouchers (SaleAdvocateRechargeRemittance) — NOT trust money, so unlike postSaleAdvocateRemittance
+// there is no 1314 involvement at all: Dr [cashbook] / Cr 1313, for the full remittance amount, in one
+// posting regardless of how many vouchers its `allocations` cover (they all share the same two
+// accounts, so splitting the GL per voucher would add nothing — the allocations themselves, kept on the
+// SaleAdvocateRechargeRemittance document, are what drives outstandingRecoverableExpenseVouchers' own
+// per-voucher netting).
+export const postAdvocateRechargeRemittance = async ({ businessId, remittance, userId, cashbookAccountId }) => {
+  const amount = round2(Number(remittance.amount || 0));
+  if (amount <= 0) return;
+
+  const sourceTransactionType = "property_sale_advocate_recharge_remittance";
+  const sourceTransactionId = String(remittance._id);
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(remittance.date || remittance.createdAt);
+  const journalGroupId = new mongoose.Types.ObjectId();
+
+  const [debitAcc, recoverableAcc] = await Promise.all([
+    cashbookAccountId ? ChartOfAccount.findById(cashbookAccountId).lean() : resolvePSAccount(businessId, "1311"),
+    resolvePSAccount(businessId, "1313"),
+  ]);
+  if (!debitAcc) throw new Error("Cashbook account not found — GL posting aborted");
+
+  const ref = remittance.remittanceNumber || String(remittance._id);
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: remittance.date || remittance.createdAt || new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_ADVOCATE_RECHARGE_REMITTANCE", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: debitAcc._id,       direction: "debit",  amount, notes: `Advocate recharge remittance received — ${ref}` },
+    { ...base, accountId: recoverableAcc._id, direction: "credit", amount, notes: `Owner expense recoverable settled by advocate — ${ref}` },
+  ]);
+};
+
+export const reverseAdvocateRechargeRemittance = async ({ businessId, remittance, userId, reason }) =>
+  reverseEntriesFor({
+    businessId,
+    sourceTransactionType: "property_sale_advocate_recharge_remittance",
+    sourceTransactionId: String(remittance._id),
+    userId,
+    reason: reason || `Advocate recharge remittance reversed — ${remittance.remittanceNumber || remittance._id}`,
   });
 
 // ─── Owner payout — clears part of 2185 Owner Clearing by actually paying the owner ──────────────────

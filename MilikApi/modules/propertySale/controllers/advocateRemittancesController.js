@@ -5,25 +5,12 @@ import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleAdvocateRemittance from "../models/SaleAdvocateRemittance.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleDeal from "../models/SaleDeal.js";
-import SaleListing from "../models/SaleListing.js";
-import SaleProject from "../models/SaleProject.js";
 import { round2 } from "../../../utils/math.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
 import { postSaleAdvocateRemittance, reverseSaleAdvocateRemittance } from "../services/propertySaleAccountingService.js";
 import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
 import { advocateProjectFilter } from "../middleware/advocateScope.js";
-import { outstandingRecoverableExpenseVouchers } from "../services/recoverableExpense.js";
 import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
-
-// Owner id for a deal, resolved via its listing -> project -> owner (mirrors dealsController.js's
-// resolveListingOwner). null for a standalone listing or a project with no owner.
-const resolveDealOwner = async (business, listingId) => {
-  if (!listingId) return null;
-  const listing = await SaleListing.findOne({ business, _id: listingId }).select("project").lean();
-  if (!listing?.project) return null;
-  const project = await SaleProject.findOne({ business, _id: listing.project }).select("owner").lean();
-  return project?.owner || null;
-};
 
 const resolveCashbook = async (businessId, cashbookId) => {
   if (!cashbookId || !mongoose.isValidObjectId(String(cashbookId))) return null;
@@ -130,9 +117,13 @@ export const createRemittance = async (req, res, next) => {
     if (req.body.cashbook && !cashbookAcc) return next(createError(400, "Selected cashbook account not found"));
 
     // Deal-scoped remittance (optional — null/omitted preserves the flat, ad-hoc, advocate-level
-    // remittance this endpoint has always supported, with no appliedTo split at all).
+    // remittance this endpoint has always supported). This is purely a trust-clearing transaction — it
+    // never touches the owner's recoverable expenses any more (that used to be auto-netted off here;
+    // see rechargeRemittancesController.js for the current, explicit, advocate-initiated flow instead).
+    // `appliedTo` stays empty for every new remittance; it's kept on the model only for historical
+    // records that predate this change.
     let dealDoc = null;
-    let appliedTo = [];
+    const appliedTo = [];
     if (req.body.deal) {
       if (!mongoose.isValidObjectId(String(req.body.deal))) return next(createError(400, "Invalid deal"));
       // Scoped advocate caller: the deal must be one of their own assigned-project deals — otherwise
@@ -146,24 +137,6 @@ export const createRemittance = async (req, res, next) => {
       if (amount > trust.available + 0.01) {
         return next(createError(400, `This deal's advocate trust balance is only KES ${trust.available.toLocaleString()} — cannot remit KES ${amount.toLocaleString()}.`));
       }
-
-      // Apply the incoming cash against the owner's outstanding recoverable expenses first
-      // (oldest-due-first across however many vouchers it takes), then whatever's left over is
-      // treated as plain commission-cash — exactly the split postSaleAdvocateRemittance's
-      // postRecoverableExpenseSettlement step expects in appliedTo.
-      const ownerId = await resolveDealOwner(business, dealDoc.listing);
-      let remaining = round2(amount);
-      if (ownerId) {
-        const outstandingVouchers = await outstandingRecoverableExpenseVouchers(business, ownerId);
-        for (const v of outstandingVouchers) {
-          if (remaining <= 0) break;
-          const take = round2(Math.min(v.outstanding, remaining));
-          if (take <= 0) continue;
-          appliedTo.push({ category: "recoverable_expense", refId: v.voucherId, amount: take });
-          remaining = round2(remaining - take);
-        }
-      }
-      if (remaining > 0) appliedTo.push({ category: "owner_commission_cash", refId: null, amount: remaining });
     } else {
       // Ad-hoc (no-deal) remittance: the only balance that can ever bound it is the advocate's whole-book
       // outstanding trust (collected minus already-remitted, across every deal) — without this check,

@@ -51,11 +51,28 @@ export const dealAdvocateTrustBalance = async (business, dealId) => {
       { $match: { business: bId, deal: dId, status: { $ne: "cancelled" } } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
+    // A payout draws this deal's trust either via the single `deal` field (the original, single-deal
+    // shape — amount+cgtAmount in full) or via `allocations` (a combined multi-deal payout — only THIS
+    // deal's own slice, see SaleOwnerPayout.js's comment). The $match's $or finds a payout either way;
+    // the $project picks the correct amount per shape so a legacy single-deal payout is counted
+    // byte-identically to before, and a combined one only ever counts its own slice per deal (so the
+    // same trust shilling can never be recognized as spent twice across two different deals' balances).
     SaleOwnerPayout.aggregate([
-      { $match: { business: bId, deal: dId, source: "advocate_trust", status: { $ne: "cancelled" } } },
-      // amount + cgtAmount — CGT withheld at completion still leaves the trust (paid to KRA on the
-      // owner's behalf), even though the owner only receives `amount` in cash.
-      { $group: { _id: null, total: { $sum: { $add: ["$amount", { $ifNull: ["$cgtAmount", 0] }] } } } },
+      { $match: { business: bId, source: "advocate_trust", status: { $ne: "cancelled" }, $or: [{ deal: dId }, { "allocations.deal": dId }] } },
+      { $project: {
+          amount: { $cond: [
+            { $eq: ["$deal", dId] },
+            { $add: ["$amount", { $ifNull: ["$cgtAmount", 0] }] },
+            { $sum: {
+                $map: {
+                  input: { $filter: { input: { $ifNull: ["$allocations", []] }, as: "a", cond: { $eq: ["$$a.deal", dId] } } },
+                  as: "a", in: "$$a.amount",
+                },
+              },
+            },
+          ] },
+      } },
+      { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
   ]);
   const collectedTotal = round2(collected?.total || 0);

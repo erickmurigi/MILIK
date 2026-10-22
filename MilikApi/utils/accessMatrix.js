@@ -70,6 +70,7 @@ const DEFINITIONS = [
   { resource: 'sale-agents',               moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
   { resource: 'sale-owners',               moduleKey: 'propertySale', actions: ['view', 'create', 'update'] },
   { resource: 'sale-owner-statements',     moduleKey: 'propertySale', actions: ['view', 'create', 'approve'] },
+  { resource: 'sale-owner-payouts',        moduleKey: 'propertySale', actions: ['view', 'create'] },
   { resource: 'sale-advocates',            moduleKey: 'propertySale', actions: ['view', 'create', 'update', 'manage'] },
   { resource: 'sale-advocate-payments',    moduleKey: 'propertySale', actions: ['view', 'create'] },
   { resource: 'sale-advocate-remittances', moduleKey: 'propertySale', actions: ['view', 'create'] },

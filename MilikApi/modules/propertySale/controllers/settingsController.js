@@ -185,7 +185,9 @@ export const updateOwnerCommissionDefaults = async (req, res, next) => {
 // as the threshold rises. A schedule that never reaches 100% cumulative is valid on purpose — an
 // unreached remainder simply never auto-releases until more tiers are added, so a partial/in-progress
 // config is never hard-blocked.
-const tiersProblem = (tiers, label) => {
+// Exported for dealsController/commissionsController/ownerCommissionsController — a deal-level
+// release-schedule override uses the exact same validation as the company-wide settings form.
+export const tiersProblem = (tiers, label) => {
   if (!Array.isArray(tiers)) return `${label} must be a list`;
   let lastThreshold = -1;
   let lastRelease = -1;
@@ -207,6 +209,7 @@ const tiersProblem = (tiers, label) => {
 export const updateCommissionReleaseSchedule = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
     const { enabled, ownerCommissionTiers = [], brokerCommissionTiers = [] } = req.body;
     if (typeof enabled !== "boolean") return next(createError(400, "enabled must be true or false"));
     const ownerError  = tiersProblem(ownerCommissionTiers, "Owner commission tiers");
@@ -224,11 +227,14 @@ export const updateCommissionReleaseSchedule = async (req, res, next) => {
 
     // Every still-open staged commission picks up this new schedule immediately — a tier added/edited
     // here shouldn't only apply to commissions created from now on. Already-accrued tiers are never
-    // disturbed (see foldScheduleUpdate); this only affects what's still eligible to fire later.
+    // disturbed (see foldScheduleUpdate). This also catches up any tier that's already eligible against
+    // a deal's current payment progress (see the function's own doc comment) — so this call can now post
+    // GL, not just update a schedule field.
     await resyncOpenCommissionReleaseSchedules({
       businessId: business,
       ownerCommissionTiers: settings.commissionReleaseSchedule.ownerCommissionTiers,
       brokerCommissionTiers: settings.commissionReleaseSchedule.brokerCommissionTiers,
+      userId,
     });
 
     res.json({ settings });

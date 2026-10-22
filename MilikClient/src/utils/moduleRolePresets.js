@@ -754,6 +754,8 @@ export const MODULE_ROLE_PRESETS = {
           { resource: 'sale-advocate-payments',     action: 'create' },
           { resource: 'sale-advocate-remittances',  action: 'view'   },
           { resource: 'sale-advocate-remittances',  action: 'create' },
+          { resource: 'sale-owner-payouts',         action: 'view'   },
+          { resource: 'sale-owner-payouts',         action: 'create' },
         ],
       },
       salesManager: {

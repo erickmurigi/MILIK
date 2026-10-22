@@ -34,6 +34,7 @@ import { agentFilter } from "../middleware/agentScope.js";
 import { advocateProjectFilter } from "../middleware/advocateScope.js";
 import { andInto, searchWords, wordsSearchFilter } from "../services/saleSearch.js";
 import { round2 } from "../../../utils/math.js";
+import { tiersProblem } from "./settingsController.js";
 
 const fillPlaceholders = (text, vars) =>
   String(text || "").replace(/\{([a-zA-Z0-9_]+)\}/g, (_, k) => vars[k] ?? `{${k}}`);
@@ -67,6 +68,18 @@ const resolveReleaseContext = async (business) => {
   };
 };
 
+// Merges a deal-level override (buyer/broker agreed different terms for this one deal) onto the
+// company-default releaseContext. `null` for either side means "use the company default, no override" —
+// an override is only distinguished from "no override" by the overridden flags below, since an
+// explicit empty-array override (immediate release for this deal only) is a valid, deliberate choice.
+const applyReleaseOverrides = (releaseContext, { brokerTiersOverride, ownerTiersOverride }) => ({
+  ...releaseContext,
+  brokerTiers: brokerTiersOverride ?? releaseContext.brokerTiers,
+  ownerTiers:  ownerTiersOverride  ?? releaseContext.ownerTiers,
+  brokerOverridden: brokerTiersOverride != null,
+  ownerOverridden:  ownerTiersOverride  != null,
+});
+
 // Broker commission — only created when the deal has an agent. `ownerId`/`releaseContext` are resolved
 // once by the caller (persistNewDeal) and shared with createOwnerCommissionForDeal below, since both are
 // independent of whether there's an agent on the deal.
@@ -93,6 +106,7 @@ const createCommissionForDeal = async ({ business, dealId, agent, listingId, buy
     saleAmount, commissionRate, commissionType, commissionAmount,
     whtRate, whtAmount, netAmount,
     releaseSchedule: releaseContext.brokerTiers,
+    releaseScheduleOverridden: Boolean(releaseContext.brokerOverridden),
     status: "pending", createdBy: userId,
   });
 };
@@ -115,6 +129,7 @@ const createOwnerCommissionForDeal = async ({ business, dealId, ownerId, listing
     listing: listingId, buyer: buyerId,
     saleAmount, commissionRate: rate, commissionType, commissionAmount,
     releaseSchedule: releaseContext.ownerTiers,
+    releaseScheduleOverridden: Boolean(releaseContext.ownerOverridden),
     status: "pending", createdBy: userId,
   });
 
@@ -200,16 +215,18 @@ const persistNewDeal = async ({ business, userId, dealDoc, listing, agent, offer
   if (!prevListing) throw createError(400, "This listing is already sold or has an active deal");
 
   // Resolved once and shared: owner-commission creation is independent of whether this deal has an agent.
-  const [ownerId, releaseContext] = await Promise.all([
+  const [ownerId, baseReleaseContext] = await Promise.all([
     resolveListingOwner(business, listing),
     resolveReleaseContext(business),
   ]);
+  const { brokerTiersOverride, ownerTiersOverride, ...commissionArgsRest } = commissionArgs;
+  const releaseContext = applyReleaseOverrides(baseReleaseContext, { brokerTiersOverride, ownerTiersOverride });
 
   let offerFlipped = false;
   try {
     await dealDoc.save();
-    if (agent) await createCommissionForDeal({ ...commissionArgs, business, dealId: dealDoc._id, agent, userId, ownerId, releaseContext });
-    if (ownerId) await createOwnerCommissionForDeal({ ...commissionArgs, business, dealId: dealDoc._id, ownerId, userId, releaseContext });
+    if (agent) await createCommissionForDeal({ ...commissionArgsRest, business, dealId: dealDoc._id, agent, userId, ownerId, releaseContext });
+    if (ownerId) await createOwnerCommissionForDeal({ ...commissionArgsRest, business, dealId: dealDoc._id, ownerId, userId, releaseContext });
     if (offer && offer.status !== "accepted") {
       await SaleOffer.updateOne({ _id: offer._id, business }, { status: "accepted", updatedBy: userId });
       offerFlipped = true;
@@ -341,10 +358,27 @@ export const createDeal = async (req, res, next) => {
     // Strip commission override fields (they belong on the commission record) and server-controlled fields
     const {
       commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate,
+      brokerCommissionTiersOverride, ownerCommissionTiersOverride,
       status: _s, documents: _d, actualClosingDate: _a, _id: _i,
       ...rawDealBody
     } = req.body;
     const dealBody = sanitizeDealBody(rawDealBody);
+
+    // Deal-level release-schedule override (buyer/broker agreed different terms for this one deal) —
+    // null means "no override, use the company default"; an explicit [] is a deliberate immediate-release
+    // override, so it's distinguished from "not provided" rather than treated as falsy.
+    let brokerTiersOverride = null;
+    if (brokerCommissionTiersOverride != null) {
+      const problem = tiersProblem(brokerCommissionTiersOverride, "Broker commission tiers override");
+      if (problem) return next(createError(400, problem));
+      brokerTiersOverride = brokerCommissionTiersOverride.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) }));
+    }
+    let ownerTiersOverride = null;
+    if (ownerCommissionTiersOverride != null) {
+      const problem = tiersProblem(ownerCommissionTiersOverride, "Owner commission tiers override");
+      if (problem) return next(createError(400, problem));
+      ownerTiersOverride = ownerCommissionTiersOverride.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) }));
+    }
 
     const dealNumber = await generateSequentialNumber(SaleDeal, business, "DL");
     // Only the business-verified ids are persisted — never the raw body values
@@ -367,6 +401,7 @@ export const createDeal = async (req, res, next) => {
         listingId: listing._id, buyerId: buyer._id,
         agreedPrice: dealDoc.agreedPrice,
         overrides: { commissionRateOverride, commissionTypeOverride, commissionAmountOverride, whtRate },
+        brokerTiersOverride, ownerTiersOverride,
       },
     });
 

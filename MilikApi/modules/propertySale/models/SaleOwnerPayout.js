@@ -14,9 +14,20 @@ const saleOwnerPayoutSchema = new mongoose.Schema(
     payoutNumber: { type: String, required: true, trim: true },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "SaleOwner", required: true, index: true },
     // Nullable — a payout need not be tied to one specific deal (an owner's net balance can span
-    // several completed deals under their projects), but it MUST be set when source is
-    // "advocate_trust", since trust funds are only ever tracked per-deal (dealAdvocateTrustBalance).
+    // several completed deals under their projects). For "advocate_trust", EITHER `deal` is set
+    // (single-deal payout, the original behavior) OR `allocations` is set (a combined payout drawing
+    // trust from several of the owner's deals in one go — e.g. the advocate collected proceeds across
+    // 3 plots and hands it all to the owner in one payment) — never both.
     deal: { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", default: null, index: true },
+    // Per-deal breakdown of a combined advocate_trust payout — each entry's `amount` is that deal's own
+    // full slice (including its share of any cgtAmount), so sum(allocations.amount) === amount +
+    // cgtAmount exactly. dealAdvocateTrustBalance (dealProgress.js) reads this to know how much of a
+    // given deal's trust this payout actually drew, the same way it reads the single `deal` field for a
+    // non-allocated payout — both must stay in sync with that function if either shape ever changes.
+    allocations: {
+      type: [{ _id: false, deal: { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", required: true }, amount: { type: Number, required: true, min: 0 } }],
+      default: [],
+    },
     amount: { type: Number, required: true, min: 0 },
     // Capital Gains Tax withheld from the owner's gross entitlement for this payout (computed externally
     // via KRA iTax, entered here for record-keeping) — CGT is always the OWNER's own personal obligation,

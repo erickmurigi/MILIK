@@ -137,4 +137,70 @@ describe("dealAdvocateTrustBalance", () => {
     const balance = await dealAdvocateTrustBalance(business, oid());
     expect(balance).toMatchObject({ collected: 0, disbursed: 0, available: 0 });
   });
+
+  describe("combined multi-deal payout (allocations[])", () => {
+    it("only counts THIS deal's own slice of a combined payout toward its disbursed total — never the other deals' slices", async () => {
+      const { business } = await setup();
+      const dealA = oid();
+      const dealB = oid();
+      const dealC = oid(); // untouched by the payout — must stay fully available
+
+      await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealA, amount: 300_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+      await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealB, amount: 200_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+      await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealC, amount: 150_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+
+      const owner = await SaleOwner.create({ business, ownerNumber: "OWN-COMBO", fullName: "Combo Owner" });
+      // One combined payout, deal: null, drawing 120,000 from dealA and 80,000 from dealB.
+      await SaleOwnerPayout.create({
+        business, payoutNumber: "OPY-COMBO", owner: owner._id, amount: 200_000, source: "advocate_trust",
+        allocations: [{ deal: dealA, amount: 120_000 }, { deal: dealB, amount: 80_000 }],
+      });
+
+      const balanceA = await dealAdvocateTrustBalance(business, dealA);
+      const balanceB = await dealAdvocateTrustBalance(business, dealB);
+      const balanceC = await dealAdvocateTrustBalance(business, dealC);
+      expect(balanceA).toMatchObject({ collected: 300_000, disbursed: 120_000, available: 180_000 });
+      expect(balanceB).toMatchObject({ collected: 200_000, disbursed: 80_000, available: 120_000 });
+      expect(balanceC).toMatchObject({ collected: 150_000, disbursed: 0, available: 150_000 });
+    });
+
+    it("a legacy single-deal payout (deal set, no allocations) and a combined payout both correctly reduce their own deals when they coexist", async () => {
+      const { business } = await setup();
+      const dealA = oid();
+      const dealB = oid();
+
+      await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealA, amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+      await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealB, amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+
+      const owner = await SaleOwner.create({ business, ownerNumber: "OWN-MIX", fullName: "Mixed Owner" });
+      // Legacy single-deal payout against dealA.
+      await SaleOwnerPayout.create({ business, payoutNumber: "OPY-LEGACY", owner: owner._id, deal: dealA, amount: 40_000, source: "advocate_trust" });
+      // A LATER combined payout also touching dealA (its remaining balance) plus dealB.
+      await SaleOwnerPayout.create({
+        business, payoutNumber: "OPY-COMBO-2", owner: owner._id, amount: 110_000, source: "advocate_trust",
+        allocations: [{ deal: dealA, amount: 60_000 }, { deal: dealB, amount: 50_000 }],
+      });
+
+      const balanceA = await dealAdvocateTrustBalance(business, dealA);
+      const balanceB = await dealAdvocateTrustBalance(business, dealB);
+      // dealA: 100,000 collected - 40,000 (legacy) - 60,000 (combo slice) = 0 available, not negative,
+      // not double-counted as 100,000 disbursed from each payout independently.
+      expect(balanceA).toMatchObject({ collected: 100_000, disbursed: 100_000, available: 0 });
+      expect(balanceB).toMatchObject({ collected: 100_000, disbursed: 50_000, available: 50_000 });
+    });
+
+    it("a cancelled combined payout no longer counts toward any deal's disbursed total", async () => {
+      const { business } = await setup();
+      const dealA = oid();
+      await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealA, amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
+      const owner = await SaleOwner.create({ business, ownerNumber: "OWN-CANCEL", fullName: "Cancelled Owner" });
+      await SaleOwnerPayout.create({
+        business, payoutNumber: "OPY-CANCEL", owner: owner._id, amount: 50_000, source: "advocate_trust",
+        status: "cancelled", allocations: [{ deal: dealA, amount: 50_000 }],
+      });
+
+      const balance = await dealAdvocateTrustBalance(business, dealA);
+      expect(balance).toMatchObject({ collected: 100_000, disbursed: 0, available: 100_000 });
+    });
+  });
 });

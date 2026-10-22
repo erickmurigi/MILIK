@@ -39,19 +39,26 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
   const T = useTerms("saleOwner");
   const [form, setForm] = useState({
     owner: initialOwnerId, source: "company_cashbook", amount: initialAmount ? String(initialAmount) : "",
-    date: todayIso(), cashbook: "", deal: "", advocate: "", cgtAmount: "", cgtReference: "", reference: "", notes: "",
+    date: todayIso(), cashbook: "", advocate: "", cgtAmount: "", cgtReference: "", reference: "", notes: "",
   });
+  // Trust is drawn per-deal, possibly across several of the owner's deals in one combined payout —
+  // {[dealId]: "amount string"}, built into the API's allocations[] shape at submit time.
+  const [dealAllocations, setDealAllocations] = useState({});
   const [saving, setSaving] = useState(false);
 
-  const { data: dealsData } = useQuery({
-    queryKey: ["sale-deals-ref-payout", biz],
-    queryFn: () => saleApi.listDeals({ business: biz, limit: 500 }),
-    enabled: !!biz && form.source === "advocate_trust",
-    staleTime: 60_000,
+  // Only this owner's deals, each with its own currently-available trust balance for the acting
+  // advocate — replaces an earlier "pick from every deal in the business" dropdown that wasn't even
+  // scoped to the chosen owner, let alone to what trust is actually left to draw from.
+  const { data: trustSummary, isFetching: loadingTrust } = useQuery({
+    queryKey: ["sale-advocate-owner-trust-summary", biz, form.owner],
+    queryFn: () => saleApi.getAdvocateOwnerTrustSummary(form.owner),
+    enabled: !!biz && !!form.owner && form.source === "advocate_trust",
+    staleTime: 10_000,
   });
-  const dealOptions = useMemo(
-    () => (dealsData?.data ?? []).map((d) => ({ value: d._id, label: `${d.dealNumber} — ${d.buyer?.fullName || "—"}${d.listing?.title || d.listing?.listingNumber ? ` (${d.listing.title || d.listing.listingNumber})` : ""}` })),
-    [dealsData]
+  const trustDeals = trustSummary?.data ?? [];
+  const allocatedTotal = useMemo(
+    () => trustDeals.reduce((s, d) => s + (Number(dealAllocations[d.dealId]) || 0), 0),
+    [trustDeals, dealAllocations]
   );
 
   const { data: cashbookAccounts } = useQuery({
@@ -74,7 +81,20 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
     if (!form.owner) return toast.warning(`Choose a ${T.saleOwner.toLowerCase()} first`);
     const amount = Number(form.amount);
     if (!Number.isFinite(amount) || amount <= 0) return toast.warning("Enter an amount greater than 0");
-    if (form.source === "advocate_trust" && !form.deal) return toast.warning("Choose the deal this trust payout is drawn from");
+    const cgtAmount = form.cgtAmount ? Number(form.cgtAmount) : 0;
+
+    let allocations;
+    if (form.source === "advocate_trust") {
+      allocations = trustDeals
+        .map((d) => ({ deal: d.dealId, amount: Number(dealAllocations[d.dealId]) || 0 }))
+        .filter((a) => a.amount > 0);
+      if (!allocations.length) return toast.warning("Allocate this payout to at least one deal's trust balance");
+      const totalAllocated = Math.round(allocations.reduce((s, a) => s + a.amount, 0) * 100) / 100;
+      const totalClaim = Math.round((amount + cgtAmount) * 100) / 100;
+      if (Math.abs(totalAllocated - totalClaim) > 0.01) {
+        return toast.warning(`Allocated KES ${totalAllocated.toLocaleString()} across deals but the payout is for KES ${totalClaim.toLocaleString()} — they must match exactly`);
+      }
+    }
     if (!form.reference.trim()) return toast.warning("Enter a reference number");
     setSaving(true);
     try {
@@ -84,9 +104,9 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
         date: form.date,
         source: form.source,
         cashbook: form.source === "company_cashbook" ? (form.cashbook || undefined) : undefined,
-        deal: form.source === "advocate_trust" ? form.deal : undefined,
+        allocations: form.source === "advocate_trust" ? allocations : undefined,
         advocate: form.source === "advocate_trust" ? (form.advocate || undefined) : undefined,
-        cgtAmount: form.cgtAmount ? Number(form.cgtAmount) : 0,
+        cgtAmount,
         cgtReference: form.cgtReference || "",
         reference: form.reference,
         notes: form.notes,
@@ -119,11 +139,11 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
           <div className="grid gap-2.5 md:grid-cols-3">
             <div>
               <label className={labelClass}>{T.saleOwner}<Required /></label>
-              <AppSelect value={form.owner} onChange={(v) => setForm((p) => ({ ...p, owner: v ?? "" }))} options={ownerOptions} placeholder={`Choose ${T.saleOwner.toLowerCase()}…`} size="sm" searchable clearable />
+              <AppSelect value={form.owner} onChange={(v) => { setForm((p) => ({ ...p, owner: v ?? "" })); setDealAllocations({}); }} options={ownerOptions} placeholder={`Choose ${T.saleOwner.toLowerCase()}…`} size="sm" searchable clearable />
             </div>
             <div>
               <label className={labelClass}>Source</label>
-              <AppSelect value={form.source} onChange={(v) => setForm((p) => ({ ...p, source: v || "company_cashbook", cashbook: "", deal: "", advocate: "" }))} options={SOURCE_OPTS} size="sm" />
+              <AppSelect value={form.source} onChange={(v) => { setForm((p) => ({ ...p, source: v || "company_cashbook", cashbook: "", advocate: "" })); setDealAllocations({}); }} options={SOURCE_OPTS} size="sm" />
             </div>
             <div>
               <label className={labelClass}>Amount<Required /></label>
@@ -140,16 +160,10 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
                 <AppSelect value={form.cashbook} onChange={(v) => setForm((p) => ({ ...p, cashbook: v ?? "" }))} options={cashbookOptions} placeholder="Cashbook…" size="sm" clearable />
               </div>
             ) : (
-              <>
-                <div>
-                  <label className={labelClass}>Deal (trust source)<Required /></label>
-                  <AppSelect value={form.deal} onChange={(v) => setForm((p) => ({ ...p, deal: v ?? "" }))} options={dealOptions} placeholder="Choose deal…" size="sm" searchable clearable />
-                </div>
-                <div>
-                  <label className={labelClass}>Advocate (optional)</label>
-                  <AppSelect value={form.advocate} onChange={(v) => setForm((p) => ({ ...p, advocate: v ?? "" }))} options={advocateOptions} placeholder="Advocate…" size="sm" searchable clearable />
-                </div>
-              </>
+              <div>
+                <label className={labelClass}>Advocate (optional)</label>
+                <AppSelect value={form.advocate} onChange={(v) => setForm((p) => ({ ...p, advocate: v ?? "" }))} options={advocateOptions} placeholder="Advocate…" size="sm" searchable clearable />
+              </div>
             )}
 
             <div>
@@ -162,6 +176,41 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
             </div>
           </div>
         </Section>
+
+        {form.source === "advocate_trust" && form.owner && (
+          <Section title="Draw From Deal(s)">
+            {loadingTrust ? (
+              <p className="text-xs text-slate-400">Loading available trust…</p>
+            ) : !trustDeals.length ? (
+              <p className="text-xs text-slate-400">No trust held for this {T.saleOwner.toLowerCase()} right now.</p>
+            ) : (
+              <div className="space-y-1.5">
+                <p className="text-[11px] text-slate-500">
+                  Split this payout across however many of the {T.saleOwner.toLowerCase()}'s deals it came from — e.g. several plots closed around the same time, handed over in one payment.
+                </p>
+                {trustDeals.map((d) => (
+                  <div key={d.dealId} className="flex items-center gap-2">
+                    <div className="flex-1 truncate text-xs font-semibold text-slate-700">{d.listingLabel}</div>
+                    <div className="w-28 shrink-0 text-right text-[11px] text-slate-400">avail. {Number(d.available).toLocaleString()}</div>
+                    <input
+                      type="number" min="0" max={d.available}
+                      value={dealAllocations[d.dealId] || ""}
+                      onChange={(e) => setDealAllocations((p) => ({ ...p, [d.dealId]: e.target.value }))}
+                      className={`${inputClass} w-28 shrink-0`}
+                      placeholder="0"
+                    />
+                  </div>
+                ))}
+                <div className="flex items-center justify-between border-t border-slate-200 pt-1.5 text-[11px] font-bold">
+                  <span className="text-slate-500">Allocated</span>
+                  <span className={allocatedTotal === (Number(form.amount) || 0) + (Number(form.cgtAmount) || 0) ? "text-emerald-700" : "text-amber-600"}>
+                    {allocatedTotal.toLocaleString()} / {((Number(form.amount) || 0) + (Number(form.cgtAmount) || 0)).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            )}
+          </Section>
+        )}
 
         <Section title="Withholding Tax (Optional)">
           <div className="grid gap-2.5 md:grid-cols-2">

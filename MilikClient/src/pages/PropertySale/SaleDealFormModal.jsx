@@ -10,6 +10,7 @@ import {
   labelClass, inputClass, round2, PAYMENT_PLAN_OPTIONS, FREQUENCY_OPTIONS, DEPOSIT_MODE_OPTIONS,
   generateScheduleRows, ScheduleRowsEditor,
 } from "./SaleScheduleGenerator";
+import TierListEditor from "./TierListEditor";
 
 const textareaClass = "w-full border border-slate-200 bg-white px-2.5 py-1.5 text-sm font-bold text-slate-900 placeholder:font-normal placeholder:text-slate-400 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 const COMMISSION_TYPE_OPTIONS = [{ value: "percentage", label: "Percentage (%)" }, { value: "flat", label: "Flat Amount (KES)" }];
@@ -21,7 +22,7 @@ const COMMISSION_TYPE_OPTIONS = [{ value: "percentage", label: "Percentage (%)" 
 // instead of a blank new deal. Everything else — payment plan, schedule generator, commission
 // override — behaves identically either way, since both are still "create a new deal" (editingId is
 // empty for both), just seeded with different `initial` values by the caller.
-export default function DealFormModal({ editingId, initial, offer, saving, listingFormOptions, buyerOptions, agentFormOptions, agents, advocateFormOptions, onClose, onSubmit }) {
+export default function DealFormModal({ editingId, initial, offer, saving, listingFormOptions, buyerOptions, agentFormOptions, agents, advocateFormOptions, saleSettings, onClose, onSubmit }) {
   const T = useTerms("saleOffer", "saleDeal", "saleListing", "saleBuyer", "saleAgent", "saleAdvocate");
   const confirm = useConfirm();
   const [form, setForm] = useState(initial);
@@ -145,6 +146,50 @@ export default function DealFormModal({ editingId, initial, offer, saving, listi
             </div>
           );
         })()}
+        {!editingId && (
+          <div className="md:col-span-3">
+            <label className="flex cursor-pointer items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={!!form.releaseScheduleOverrideEnabled}
+                onChange={(e) => {
+                  const enabled = e.target.checked;
+                  const companySchedule = saleSettings?.commissionReleaseSchedule;
+                  const companyEnabled = Boolean(companySchedule?.enabled);
+                  setForm((p) => ({
+                    ...p,
+                    releaseScheduleOverrideEnabled: enabled,
+                    brokerCommissionTiersOverride: enabled ? (companyEnabled ? (companySchedule?.brokerCommissionTiers ?? []) : []) : [],
+                    ownerCommissionTiersOverride:  enabled ? (companyEnabled ? (companySchedule?.ownerCommissionTiers  ?? []) : []) : [],
+                  }));
+                }}
+                className="h-3 w-3 accent-[#0B3B2E]"
+              />
+              <span className="text-[10px] font-bold text-slate-500">
+                Custom commission release schedule for this {T.saleDeal.toLowerCase()} (buyer/broker agreed different terms)
+              </span>
+            </label>
+            {form.releaseScheduleOverrideEnabled && (
+              <div className="mt-2 border border-slate-200 bg-slate-50 px-3 py-2.5">
+                <p className="mb-2 text-[10px] text-slate-400">
+                  Seeded from the company default — edit freely. These tiers apply only to this {T.saleDeal.toLowerCase()} and are never changed by a later company-wide schedule edit.
+                </p>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <TierListEditor
+                    tiers={form.ownerCommissionTiersOverride}
+                    setTiers={(updater) => setForm((p) => ({ ...p, ownerCommissionTiersOverride: typeof updater === "function" ? updater(p.ownerCommissionTiersOverride) : updater }))}
+                    label="Company (owner) commission tiers"
+                  />
+                  <TierListEditor
+                    tiers={form.brokerCommissionTiersOverride}
+                    setTiers={(updater) => setForm((p) => ({ ...p, brokerCommissionTiersOverride: typeof updater === "function" ? updater(p.brokerCommissionTiersOverride) : updater }))}
+                    label="Broker (agent) commission tiers"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div>
           <AppSelect
             label={`${T.saleAdvocate} (Optional)`}

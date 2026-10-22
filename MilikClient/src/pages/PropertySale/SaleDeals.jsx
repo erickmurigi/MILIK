@@ -53,6 +53,10 @@ const blankDealForm = {
   listing: "", buyer: "", agent: "", advocate: "", agreedPrice: "", paymentPlan: "installment",
   dealDate: todayISO(), expectedClosingDate: "", notes: "",
   commOverrideEnabled: false, commissionRateOverride: "", commissionTypeOverride: "", commissionAmountOverride: "",
+  // Deal-negotiated commission release schedule (buyer/broker agreed different terms for this one deal) —
+  // only ever sent on create; releaseScheduleOverrideEnabled off means "use the company default", same as
+  // today. The two tier arrays are seeded from the company schedule once the toggle is switched on.
+  releaseScheduleOverrideEnabled: false, brokerCommissionTiersOverride: [], ownerCommissionTiersOverride: [],
   // depositMode/depositValue/installmentCount/frequency/firstInstallmentDate/scheduleRows — the schedule
   // preview's own inputs, never sent to the API (handleSave strips them before building the
   // create/update payload; only the resulting scheduleRows get saved, via a separate setSchedule call
@@ -691,6 +695,7 @@ const SaleDeals = () => {
       // setSchedule, once the new deal's id exists to attach it to.
       const {
         commOverrideEnabled, commissionRateOverride, commissionTypeOverride, commissionAmountOverride,
+        releaseScheduleOverrideEnabled, brokerCommissionTiersOverride, ownerCommissionTiersOverride,
         depositMode, depositValue, installmentCount, frequency, firstInstallmentDate, scheduleRows,
         ...baseForm
       } = form;
@@ -699,6 +704,10 @@ const SaleDeals = () => {
         if (commissionRateOverride !== "") payload.commissionRateOverride = Number(commissionRateOverride);
         if (commissionTypeOverride !== "") payload.commissionTypeOverride = commissionTypeOverride;
         if (commissionAmountOverride !== "") payload.commissionAmountOverride = Number(commissionAmountOverride);
+      }
+      if (!editingId && releaseScheduleOverrideEnabled) {
+        payload.brokerCommissionTiersOverride = brokerCommissionTiersOverride;
+        payload.ownerCommissionTiersOverride = ownerCommissionTiersOverride;
       }
       if (editingId) {
         await saleApi.updateDeal(editingId, payload);
@@ -1269,6 +1278,7 @@ const SaleDeals = () => {
           agentFormOptions={agentFormOptions}
           agents={agents}
           advocateFormOptions={advocateFormOptions}
+          saleSettings={saleSettings}
           onClose={() => setDealModal(null)}
           onSubmit={handleSave}
         />

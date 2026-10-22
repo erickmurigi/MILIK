@@ -84,6 +84,7 @@ export default function TenantProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadError,  setLoadError]  = useState<string | null>(null);
   const [smsLoading, setSmsLoading] = useState(false);
+  const [waLoading,  setWaLoading]  = useState(false);
 
   const loadAll = useCallback(async () => {
     // The tenant itself is essential; balance / invoices / receipts degrade gracefully on their own.
@@ -111,14 +112,6 @@ export default function TenantProfileScreen() {
   useEffect(() => { loadAll(); }, [loadAll]);
 
   const onRefresh = () => { setRefreshing(true); loadAll(); };
-
-  const openWhatsApp = () => {
-    if (!tenant?.phone) return;
-    const digits = tenant.phone.replace(/\D/g, '');
-    // Kenya numbers: normalise 07xx / 01xx to international format
-    const intl = digits.startsWith('0') ? `254${digits.slice(1)}` : digits;
-    Linking.openURL(`https://wa.me/${intl}`).catch(() => Alert.alert('WhatsApp', 'Could not open WhatsApp.'));
-  };
 
   const callTenant = () => {
     if (!tenant?.phone) return;
@@ -155,18 +148,15 @@ export default function TenantProfileScreen() {
   const propertyName   = tenant.unit?.property?.propertyName || '';
   const balanceColor   = owes ? Colors.danger : Colors.success;
 
-  // Pre-fills the device's own SMS app with a balance message and lets the PM
-  // send or edit it themselves — never sent via the company's SMS gateway.
-  // The message comes from the "Overdue Reminder" template admins already
-  // configure under Company Settings > Communication, rendered server-side
-  // against this tenant's real (now-authoritative) balance; if that template
-  // isn't set up for this company, a plain default is used instead so the
-  // button always works.
-  const openSms = async () => {
-    if (!tenant?.phone || smsLoading) return;
-    setSmsLoading(true);
-    let phone = tenant.phone;
-    let body = `Dear ${tenantName}, your balance for Unit ${unitNumber}${propertyName ? ` (${propertyName})` : ''} is ${owes ? fmt(currentBalance) : 'settled'}. - ${tenant.tenantCode || ''}`.trim();
+  // Shared by the SMS and WhatsApp buttons — both open the device's own messaging app
+  // pre-filled with a balance message and let the PM send or edit it themselves; neither
+  // is ever sent via a company gateway. The message comes from the "Overdue Reminder"
+  // template admins already configure under Company Settings > Communication, rendered
+  // server-side against this tenant's real (now-authoritative) balance; if that template
+  // isn't set up for this company, a plain default is used instead so the buttons always work.
+  const buildReminderMessage = async (): Promise<{ phone: string; body: string }> => {
+    let phone = tenant!.phone!;
+    let body = `Dear ${tenantName}, your balance for Unit ${unitNumber}${propertyName ? ` (${propertyName})` : ''} is ${owes ? fmt(currentBalance) : 'settled'}. - ${tenant!.tenantCode || ''}`.trim();
     try {
       const { data } = await api.post('/communications/preview', {
         contextType: 'tenant_bulk',
@@ -179,13 +169,31 @@ export default function TenantProfileScreen() {
       if (preview?.recipientPhone) phone = preview.recipientPhone;
     } catch (_) {
       // Fall back to the default message built above.
-    } finally {
-      setSmsLoading(false);
     }
+    return { phone, body };
+  };
+
+  const openSms = async () => {
+    if (!tenant?.phone || smsLoading) return;
+    setSmsLoading(true);
+    const { phone, body } = await buildReminderMessage();
+    setSmsLoading(false);
     const digits = phone.replace(/[^\d+]/g, '');
     const sep = Platform.OS === 'ios' ? '&' : '?';
     Linking.openURL(`sms:${digits}${sep}body=${encodeURIComponent(body)}`)
       .catch(() => Alert.alert('SMS', 'Could not open the messaging app.'));
+  };
+
+  const openWhatsApp = async () => {
+    if (!tenant?.phone || waLoading) return;
+    setWaLoading(true);
+    const { phone, body } = await buildReminderMessage();
+    setWaLoading(false);
+    const digits = phone.replace(/\D/g, '');
+    // Kenya numbers: normalise 07xx / 01xx to international format
+    const intl = digits.startsWith('0') ? `254${digits.slice(1)}` : digits;
+    Linking.openURL(`https://wa.me/${intl}?text=${encodeURIComponent(body)}`)
+      .catch(() => Alert.alert('WhatsApp', 'Could not open WhatsApp.'));
   };
 
   return (
@@ -219,9 +227,9 @@ export default function TenantProfileScreen() {
                 </TouchableOpacity>
               ) : null}
               {tenant.phone ? (
-                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnWhatsApp]} onPress={openWhatsApp}>
+                <TouchableOpacity style={[styles.actionBtn, styles.actionBtnWhatsApp]} onPress={openWhatsApp} disabled={waLoading}>
                   <Ionicons name="logo-whatsapp" size={20} color="#25D366" />
-                  <Text style={[styles.actionBtnLabel, { color: '#25D366' }]}>WhatsApp</Text>
+                  <Text style={[styles.actionBtnLabel, { color: '#25D366' }]}>{waLoading ? '...' : 'WhatsApp'}</Text>
                 </TouchableOpacity>
               ) : null}
               {tenant.phone ? (

@@ -6,6 +6,7 @@ import { currentUserId, resolveActiveBusinessId } from "../services/businessScop
 import { recalculateOwnerCommission, RECALC_ELIGIBLE_STATUSES } from "../services/commissionRecalculateService.js";
 import { advocateDealScopeFilter } from "../middleware/advocateScope.js";
 import { andInto } from "../services/saleSearch.js";
+import { tiersProblem } from "./settingsController.js";
 
 const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 
@@ -108,6 +109,45 @@ export const recalculateOwnerCommissionRate = async (req, res, next) => {
     } catch (glErr) {
       return next(createError(422, `GL reversal/re-posting failed while recalculating: ${glErr.message}. Check this commission's ledger entries before retrying.`));
     }
+
+    const populated = await populateOwnerCommission(SaleOwnerCommission.findById(commission._id)).lean();
+    res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Deal-level release-schedule override for the owner (agency) commission — mirrors
+// commissionsController.updateCommissionReleaseScheduleOverride; see its comment for the gating rationale.
+export const updateOwnerCommissionReleaseScheduleOverride = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+
+    const advocateFilter = req.saleAdvocateId ? await advocateDealScopeFilter(req, business) : {};
+    const commission = await SaleOwnerCommission.findOne({ _id: req.params.id, business, ...advocateFilter });
+    if (!commission) return next(createError(404, "Agency commission not found"));
+    if (!["pending", "approved"].includes(commission.status)) {
+      return next(createError(400, `Only a pending or approved agency commission can have its release schedule changed (this one is "${commission.status}")`));
+    }
+    if (commission.tierReleases.length > 0) {
+      return next(createError(400, "This commission has already released at least one tier — its schedule can no longer be changed"));
+    }
+
+    if (req.body.clear) {
+      const settings = await SaleSettings.findOne({ business }).select("commissionReleaseSchedule").lean();
+      const schedule = settings?.commissionReleaseSchedule;
+      commission.releaseSchedule = Boolean(schedule?.enabled) ? (schedule?.ownerCommissionTiers ?? []) : [];
+      commission.releaseScheduleOverridden = false;
+    } else {
+      const tiers = Array.isArray(req.body.tiers) ? req.body.tiers : [];
+      const problem = tiersProblem(tiers, "Release schedule tiers");
+      if (problem) return next(createError(400, problem));
+      commission.releaseSchedule = tiers.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) }));
+      commission.releaseScheduleOverridden = true;
+    }
+    commission.updatedBy = userId;
+    await commission.save();
 
     const populated = await populateOwnerCommission(SaleOwnerCommission.findById(commission._id)).lean();
     res.status(200).json(populated);

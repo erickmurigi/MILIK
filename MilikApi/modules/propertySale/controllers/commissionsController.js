@@ -20,6 +20,8 @@ import {
 } from "../services/propertySaleAccountingService.js";
 import { round2 } from "../../../utils/math.js";
 import { defaultWhtRate } from "./dealsController.js";
+import { tiersProblem } from "./settingsController.js";
+import SaleSettings from "../models/SaleSettings.js";
 import { claimPaymentReference } from "../../../services/paymentReferenceGuard.js";
 import { advocateDealScopeFilter } from "../middleware/advocateScope.js";
 import { andInto } from "../services/saleSearch.js";
@@ -226,13 +228,6 @@ export const updateCommissionStatus = async (req, res, next) => {
       return next(createError(400, `Cannot transition commission from "${oldCommission.status}" to "${status}"`));
     }
 
-    // A staged commission may only be marked paid once every tier has released — the existing payout
-    // function always disburses the full commissionAmount in one lump sum, and paying out before all
-    // tiers have accrued would disburse more than has actually been recognized to the payable account.
-    if (status === "paid" && oldCommission.releaseSchedule?.length && oldCommission.releasedAmount < oldCommission.commissionAmount - 0.01) {
-      return next(createError(400, `Not all commission tiers have released yet — ${oldCommission.releasedAmount} of ${oldCommission.commissionAmount} recognized so far`));
-    }
-
     // "source" (default "company_cashbook" — zero behavior change for every existing caller that
     // doesn't send it): who physically pays the broker. "advocate_trust" means the advocate settles
     // the broker directly out of trust funds they hold for THIS deal — guarded against that deal's own
@@ -250,15 +245,30 @@ export const updateCommissionStatus = async (req, res, next) => {
 
       const totalAmount  = round2(Number(oldCommission.commissionAmount || 0));
       const alreadyPaid  = round2(Number(oldCommission.paidOutAmount || 0));
-      const remaining    = round2(totalAmount - alreadyPaid);
-      // Omitting amount pays off whatever's left — today's exact one-shot behavior for any caller that
-      // doesn't yet know about partial payouts.
+      // A staged commission can only ever be paid out up to what's actually RELEASED so far — tier by
+      // tier, exactly as each one accrues, never the full commissionAmount ahead of schedule. A
+      // non-staged commission (empty releaseSchedule) has its full amount recognized the instant it's
+      // approved, so there's no tier ceiling to apply — the old "payable cap = commissionAmount" behavior
+      // is unchanged for that case.
+      const isStaged = Boolean(oldCommission.releaseSchedule?.length);
+      const payableCap = isStaged ? round2(Number(oldCommission.releasedAmount || 0)) : totalAmount;
+      const remaining  = round2(payableCap - alreadyPaid);
+      if (remaining <= 0) {
+        return next(createError(400, isStaged
+          ? `Nothing available to pay out yet — only ${payableCap.toLocaleString()} of ${totalAmount.toLocaleString()} has released so far`
+          : `This commission has already been fully paid out`));
+      }
+      // Omitting amount pays off whatever's currently available (not necessarily the whole commission,
+      // for a staged one) — today's exact one-shot behavior for any caller that doesn't yet know about
+      // partial payouts, now correctly bounded by what's released rather than the eventual total.
       const requestedAmount = req.body.amount != null && req.body.amount !== "" ? round2(Number(req.body.amount)) : remaining;
       if (!Number.isFinite(requestedAmount) || requestedAmount <= 0) {
         return next(createError(400, "Payout amount must be greater than 0"));
       }
       if (requestedAmount > remaining + 0.01) {
-        return next(createError(400, `Payout amount (${requestedAmount.toLocaleString()}) exceeds the remaining balance of ${remaining.toLocaleString()}`));
+        return next(createError(400, isStaged
+          ? `Payout amount (${requestedAmount.toLocaleString()}) exceeds what's released and unpaid so far (${remaining.toLocaleString()})`
+          : `Payout amount (${requestedAmount.toLocaleString()}) exceeds the remaining balance of ${remaining.toLocaleString()}`));
       }
 
       if (source === "advocate_trust") {
@@ -462,6 +472,50 @@ export const recalculateCommissionRate = async (req, res, next) => {
     } catch (glErr) {
       return next(createError(422, `GL reversal/re-posting failed while recalculating: ${glErr.message}. Check this commission's ledger entries before retrying.`));
     }
+
+    const populated = await populateCommission(SaleCommission.findById(commission._id)).lean();
+    res.status(200).json(populated);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Deal-level release-schedule override — lets a buyer/broker-negotiated deal follow its own tier
+// schedule instead of the company default. Only ever touches releaseSchedule itself (no GL effect),
+// so it's gated purely on nothing having released yet: once a tier fires, that revenue recognition is
+// final and the schedule that produced it can no longer be rewritten out from under it.
+export const updateCommissionReleaseScheduleOverride = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId = currentUserId(req);
+
+    const scopedAgentId = await resolveAgentScope(req, business);
+    const commission = await SaleCommission.findOne({ _id: req.params.id, business, ...(scopedAgentId && { agent: scopedAgentId }) });
+    if (!commission) return next(createError(404, "Commission not found"));
+    if (req.saleAgentSelf && String(commission.agent) === req.saleAgentSelf) {
+      return next(createError(403, "Agents cannot change the status of their own commissions"));
+    }
+    if (!["pending", "approved"].includes(commission.status)) {
+      return next(createError(400, `Only a pending or approved commission can have its release schedule changed (this one is "${commission.status}")`));
+    }
+    if (commission.tierReleases.length > 0) {
+      return next(createError(400, "This commission has already released at least one tier — its schedule can no longer be changed"));
+    }
+
+    if (req.body.clear) {
+      const settings = await SaleSettings.findOne({ business }).select("commissionReleaseSchedule").lean();
+      const schedule = settings?.commissionReleaseSchedule;
+      commission.releaseSchedule = Boolean(schedule?.enabled) ? (schedule?.brokerCommissionTiers ?? []) : [];
+      commission.releaseScheduleOverridden = false;
+    } else {
+      const tiers = Array.isArray(req.body.tiers) ? req.body.tiers : [];
+      const problem = tiersProblem(tiers, "Release schedule tiers");
+      if (problem) return next(createError(400, problem));
+      commission.releaseSchedule = tiers.map((t) => ({ thresholdPct: Number(t.thresholdPct), releasePct: Number(t.releasePct) }));
+      commission.releaseScheduleOverridden = true;
+    }
+    commission.updatedBy = userId;
+    await commission.save();
 
     const populated = await populateCommission(SaleCommission.findById(commission._id)).lean();
     res.status(200).json(populated);

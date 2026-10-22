@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useTerms } from "../../hooks/useTerm";
-import { selectAllProperties, selectAllTenants } from "../../redux/selectors";
+import { selectAllProperties } from "../../redux/selectors";
 import { useNavigate } from "react-router-dom";
 import {
   FaArrowLeft,
@@ -19,9 +19,10 @@ import { fmtDate } from "../../utils/dates";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { adminRequests } from "../../utils/requestMethods";
-import { getTenants, getChartOfAccounts } from "../../redux/apiCalls";
+import { getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
 import { useTabState } from "../../hooks/useTabState";
+import { isCashbookAccount } from "../../utils/cashbookUtils";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -61,7 +62,6 @@ const BatchReceipts = () => {
   const dispatch      = useDispatch();
   const navigate      = useNavigate();
   const company       = useSelector((s) => s.company?.currentCompany);
-  const allTenants    = useSelector(selectAllTenants);
   const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "tenants", "unit", "property", "properties");
   const allProperties = useSelector(selectAllProperties);
   const businessId    = company?._id;
@@ -88,6 +88,8 @@ const BatchReceipts = () => {
   // ── Manual state ──────────────────────────────────────────────────────────────
   const [propertyId,  setPropertyId]  = useTabState("/receipts/batch:property", "");
   const [manualRows,  setManualRows]  = useState({});
+  const [propertyTenants,        setPropertyTenants]        = useState([]);
+  const [propertyTenantsLoading, setPropertyTenantsLoading] = useState(false);
 
   // ── Submission ────────────────────────────────────────────────────────────────
   const [submitting, setSubmitting] = useState(false);
@@ -97,15 +99,14 @@ const BatchReceipts = () => {
   useEffect(() => {
     if (!businessId) return;
     getChartOfAccounts({ business: businessId, type: "asset", isPosting: true })
-      .then((list) => setCashbookOptions(list.filter((a) => !a.isHeader)))
+      .then((list) => setCashbookOptions(list.filter(isCashbookAccount)))
       .catch(() => {});
   }, [businessId]);
 
   useEffect(() => {
     if (!businessId) return;
-    if (!allTenants.length)    getTenants(dispatch, businessId, "active");
     if (!allProperties.length) dispatch(getProperties({ business: businessId }));
-  }, [businessId, dispatch, allTenants.length, allProperties.length]);
+  }, [businessId, dispatch, allProperties.length]);
 
   // ── Fetch M-Pesa collections ──────────────────────────────────────────────────
   const loadCollections = useCallback(async () => {
@@ -151,15 +152,23 @@ const BatchReceipts = () => {
   }, [collections, mpesaPropertyFilter]);
 
   // ── Tenants for manual property ───────────────────────────────────────────────
-  const propertyTenants = useMemo(() => {
-    if (!propertyId) return [];
-    return allTenants.filter((t) => {
-      const pid = t.unit?.property?._id || t.unit?.property;
-      return String(pid) === String(propertyId);
-    });
-  }, [allTenants, propertyId]);
-
-  useEffect(() => { setManualRows({}); }, [propertyId]);
+  // Fetched scoped to the selected property (not filtered client-side out of a
+  // global tenant list): the shared tenants list elsewhere in the app loads only
+  // the first page (backend defaults to limit=100), so a business with more active
+  // tenants than that would silently show "0 tenants" for any property whose
+  // tenants fell past that page — exactly the bug this replaces.
+  useEffect(() => {
+    setManualRows({});
+    if (!propertyId || !businessId) { setPropertyTenants([]); return; }
+    let cancelled = false;
+    setPropertyTenantsLoading(true);
+    const params = new URLSearchParams({ business: businessId, status: "active", property: propertyId, limit: "500" });
+    adminRequests.get(`/tenants?${params}`)
+      .then(({ data }) => { if (!cancelled) setPropertyTenants(Array.isArray(data?.data) ? data.data : []); })
+      .catch(() => { if (!cancelled) { setPropertyTenants([]); toast.error("Failed to load tenants for this property."); } })
+      .finally(() => { if (!cancelled) setPropertyTenantsLoading(false); });
+    return () => { cancelled = true; };
+  }, [propertyId, businessId]);
 
   // ── M-Pesa toggle ─────────────────────────────────────────────────────────────
   const toggleMpesa = useCallback((id) => {
@@ -329,82 +338,62 @@ const BatchReceipts = () => {
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout>
-      <div className="flex flex-col">
+      <div className="flex h-full flex-col">
 
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-4 py-3">
-          <button
-            onClick={() => navigate("/receipts")}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition"
-          >
-            <FaArrowLeft size={11} />
-          </button>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700">Receipts · Batch Entry</p>
-            <h1 className="text-[18px] font-black leading-tight text-slate-900">Batch Receipt Entry</h1>
-          </div>
-        </div>
-
-        {/* ── Shared defaults bar ──────────────────────────────────────────── */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 bg-slate-50/70 px-4 py-2.5">
-          <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-slate-400">Defaults</span>
+        {/* ── Toolbar (one line) ──────────────────────────────────────────── */}
+        <ListToolbar>
+          <ListToolbar.Button icon={FaArrowLeft} variant="outline" onClick={() => navigate("/receipts")}>
+            Receipts
+          </ListToolbar.Button>
+          <ListToolbar.Divider />
 
           {!shared.paidDirectToLandlord ? (
-            <div className="flex items-center gap-1.5">
-              <label className="text-[10px] font-semibold text-slate-500">Cashbook</label>
+            <div className="flex shrink-0 items-center gap-1">
               <AppSelect
-                size="sm"
-                placeholder="— Required —"
+                compact
+                placeholder="Cashbook *"
                 value={shared.cashbook}
                 onChange={(v) => setSharedField("cashbook", v ?? "")}
                 options={cashbookSelectOptions}
-                error={!shared.cashbook ? "Required" : ""}
               />
             </div>
           ) : (
-            <span className="rounded border border-[#0B3B2E]/20 bg-[#0B3B2E]/8 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-[#0B3B2E]">
-              Direct to Landlord — no cashbook entry
+            <span className="shrink-0 border border-[#0B3B2E]/30 bg-[#0B3B2E]/8 px-2 py-0.5 text-[10px] font-bold text-[#0B3B2E]">
+              Direct to Landlord
             </span>
           )}
 
-          <div className="flex items-center gap-1.5">
-            <label className="text-[10px] font-semibold text-slate-500">Method</label>
+          <div className="flex shrink-0 items-center gap-1">
+            <label className="text-[10px] font-black text-slate-700">Method</label>
             <AppSelect
-              size="sm"
+              compact
               value={shared.paymentMethod}
               onChange={(v) => setSharedField("paymentMethod", v ?? "mobile_money")}
               options={METHODS}
             />
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <label className="text-[10px] font-semibold text-slate-500">Date</label>
-            <input
-              type="date"
-              value={shared.paymentDate}
-              onChange={(e) => setSharedField("paymentDate", e.target.value)}
-              className="h-7 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-emerald-500 focus:outline-none"
-            />
+          <div className="flex shrink-0 items-center gap-1">
+            <label className="text-[10px] font-black text-slate-700">Date</label>
+            <ListToolbar.Input type="date" value={shared.paymentDate} onChange={(e) => setSharedField("paymentDate", e.target.value)} />
           </div>
 
-          <div className="flex items-center gap-1.5">
-            <label className="text-[10px] font-semibold text-slate-500">Period</label>
+          <div className="flex shrink-0 items-center gap-1">
+            <label className="text-[10px] font-black text-slate-700">Period</label>
             <AppSelect
-              size="sm"
+              compact
               value={String(shared.month)}
               onChange={(v) => setSharedField("month", Number(v ?? shared.month))}
               options={MONTH_SELECT_OPTIONS}
             />
-            <input
-              type="number"
+            <ListToolbar.Input
+              type="number" width="w-14" min={2000} max={2099}
               value={shared.year}
-              min={2000} max={2099}
               onChange={(e) => setSharedField("year", Number(e.target.value))}
-              className="h-7 w-20 rounded border border-slate-200 bg-white px-2 text-[11px] text-slate-800 focus:border-emerald-500 focus:outline-none"
             />
           </div>
 
-          <label className="ml-auto flex cursor-pointer items-center gap-2 text-[11px] font-bold text-slate-600">
+          <label className="flex shrink-0 cursor-pointer items-center gap-1.5 text-[10px] font-black text-slate-700">
             <input
               type="checkbox"
               checked={!!shared.paidDirectToLandlord}
@@ -415,100 +404,122 @@ const BatchReceipts = () => {
                   cashbook: e.target.checked ? "" : prev.cashbook,
                 }))
               }
-              className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+              className="h-3 w-3 border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
             />
             Direct to Landlord
           </label>
-        </div>
+
+          <ListToolbar.Divider />
+
+          {tab === "mpesa" ? (
+            <>
+              <label className="shrink-0 text-[10px] font-black text-slate-700">From</label>
+              <ListToolbar.Input type="date" value={mpesaDateFrom} onChange={(e) => setMpesaDateFrom(e.target.value)} />
+              <label className="shrink-0 text-[10px] font-black text-slate-700">To</label>
+              <ListToolbar.Input type="date" value={mpesaDateTo} onChange={(e) => setMpesaDateTo(e.target.value)} />
+              {mpesaPropertyOptions.length > 1 && (
+                <AppSelect
+                  compact
+                  clearable
+                  placeholder="All Properties"
+                  value={mpesaPropertyFilter}
+                  onChange={(v) => setMpesaPropertyFilter(v ?? "")}
+                  options={mpesaPropertyOptions}
+                />
+              )}
+              <ListToolbar.Button variant="outline" disabled={colLoading} onClick={loadCollections}>
+                {colLoading && <Spinner size="sm" />} {colLoading ? "Loading…" : "Refresh"}
+              </ListToolbar.Button>
+            </>
+          ) : (
+            <>
+              <AppSelect
+                compact
+                clearable
+                placeholder="Select Property"
+                value={propertyId}
+                onChange={(v) => setPropertyId(v ?? "")}
+                options={allPropertyOptions}
+              />
+              {propertyId && propertyTenants.length > 0 && (
+                <ListToolbar.Button icon={FaBolt} variant="outline" onClick={quickFillBalance}>
+                  Fill Balances
+                </ListToolbar.Button>
+              )}
+            </>
+          )}
+
+          <ListToolbar.Divider />
+
+          {tab === "mpesa" && !colLoading && collections.length > 0 && (
+            <>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                {collections.length} available
+              </span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                Total: KES {fmt(mpesaTotal)}
+              </span>
+            </>
+          )}
+          {tab === "manual" && propertyId && (
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              {propertyTenants.length} tenant{propertyTenants.length !== 1 ? "s" : ""}
+            </span>
+          )}
+
+          {tab === "mpesa" && (
+            <ListToolbar.Button variant="outline" className="ml-auto" onClick={() => navigate("/receipts/mpesa-collections")}>
+              Assign unmatched →
+            </ListToolbar.Button>
+          )}
+        </ListToolbar>
 
         {/* ── Tab bar ──────────────────────────────────────────────────────── */}
-        <div className="border-b border-slate-200 bg-white px-4">
-          <div className="flex">
-            {[
-              { key: "mpesa",  icon: <FaMobileAlt size={10} />, label: "M-Pesa Collections", count: collections.length },
-              { key: "manual", icon: <FaListAlt   size={10} />, label: "Manual / Cash Entry",  count: propertyId ? propertyTenants.length : null },
-            ].map((t) => (
-              <button
-                key={t.key}
-                onClick={() => { setTab(t.key); setResults(null); }}
-                className={`relative flex items-center gap-2 px-4 py-3 text-[12px] font-bold transition-colors ${
-                  tab === t.key
-                    ? "text-[#0B3B2E] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#0B3B2E] after:content-['']"
-                    : "text-slate-500 hover:text-slate-700"
-                }`}
-              >
-                {t.icon}
-                {t.label}
-                {t.count != null && t.count > 0 && (
-                  <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-                    tab === t.key ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
-                  }`}>
-                    {t.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
+        <div className="flex shrink-0 border-b border-slate-200 bg-white px-3">
+          {[
+            { key: "mpesa",  icon: <FaMobileAlt size={10} />, label: "M-Pesa Collections", count: collections.length },
+            { key: "manual", icon: <FaListAlt   size={10} />, label: "Manual / Cash Entry",  count: propertyId ? propertyTenants.length : null },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => { setTab(t.key); setResults(null); }}
+              className={`relative flex items-center gap-2 px-3 py-2 text-[11px] font-black transition-colors ${
+                tab === t.key
+                  ? "text-[#0B3B2E] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-[#0B3B2E] after:content-['']"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {t.icon}
+              {t.label}
+              {t.count != null && t.count > 0 && (
+                <span className={`px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                  tab === t.key ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+                }`}>
+                  {t.count}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* ── Page content ─────────────────────────────────────────────────── */}
-        <div className="px-4 py-4">
+        <div className="flex-1 overflow-y-auto px-3 py-3">
 
           {/* ─── M-Pesa tab ───────────────────────────────────────────────── */}
           {tab === "mpesa" && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex min-h-0 flex-col border border-slate-200 bg-white">
 
-              {/* Filter bar */}
-              <ListToolbar>
-                <label className="shrink-0 text-[9px] font-semibold text-slate-500">From</label>
-                <ListToolbar.Input type="date" value={mpesaDateFrom} onChange={(e) => setMpesaDateFrom(e.target.value)} />
-                <label className="shrink-0 text-[9px] font-semibold text-slate-500">To</label>
-                <ListToolbar.Input type="date" value={mpesaDateTo} onChange={(e) => setMpesaDateTo(e.target.value)} />
-                {mpesaPropertyOptions.length > 1 && (
-                  <AppSelect
-                    compact
-                    clearable
-                    placeholder="All Properties"
-                    value={mpesaPropertyFilter}
-                    onChange={(v) => setMpesaPropertyFilter(v ?? "")}
-                    options={mpesaPropertyOptions}
-                  />
-                )}
-                <ListToolbar.Button variant="outline" disabled={colLoading} onClick={loadCollections}>
-                  {colLoading && <Spinner size="sm" />} {colLoading ? "Loading…" : "Refresh"}
-                </ListToolbar.Button>
-                <span className="ml-auto shrink-0 pl-2 text-[9px] text-slate-400">
-                  Showing tenant-matched rows.{" "}
-                  <button onClick={() => navigate("/receipts/mpesa-collections")} className="text-emerald-700 hover:underline">
-                    Assign unmatched →
+              {mpesaSelected.length > 0 && (
+                <div className="flex items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-[11px]">
+                  <span className="font-black text-emerald-700">
+                    {mpesaSelected.length} selected · KES {fmt(selectedTotal)}
+                  </span>
+                  <button
+                    onClick={() => setMpesaSel(new Set())}
+                    className="ml-auto text-[11px] font-bold text-slate-400 hover:text-rose-500 hover:underline"
+                  >
+                    Clear selection
                   </button>
-                </span>
-              </ListToolbar>
-
-              {/* Stats strip */}
-              {!colLoading && collections.length > 0 && (
-                <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-2 text-[12px]">
-                  <span className="text-slate-600">
-                    <span className="font-bold text-slate-900">{collections.length}</span> available
-                  </span>
-                  <span className="text-slate-300">·</span>
-                  <span className="text-slate-600">
-                    KES <span className="font-bold text-slate-900">{fmt(mpesaTotal)}</span>
-                  </span>
-                  {mpesaSelected.length > 0 && (
-                    <>
-                      <span className="text-slate-300">·</span>
-                      <span className="font-black text-emerald-700">
-                        {mpesaSelected.length} selected · KES {fmt(selectedTotal)}
-                      </span>
-                      <button
-                        onClick={() => setMpesaSel(new Set())}
-                        className="ml-auto text-[11px] text-slate-400 hover:text-rose-500 hover:underline"
-                      >
-                        Clear selection
-                      </button>
-                    </>
-                  )}
                 </div>
               )}
 
@@ -545,7 +556,7 @@ const BatchReceipts = () => {
                       <td className="px-3 py-1.5 border-r border-gray-100 whitespace-nowrap text-slate-600">{fmtDate(col.transactionDate)}</td>
                       <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black text-slate-900">{fmt(col.amount)}</td>
                       <td className="px-3 py-1.5 border-r border-gray-100">
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">{col.transactionCode || "—"}</span>
+                        <span className="bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700">{col.transactionCode || "—"}</span>
                       </td>
                       <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{col.payerName || col.msisdn || "—"}</td>
                       <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{col.accountReference || col.billRefNumber || "—"}</td>
@@ -557,7 +568,7 @@ const BatchReceipts = () => {
                             {unitNo && <span className="ml-1.5 text-[10px] text-slate-400">· {unitNo}</span>}
                           </span>
                         ) : (
-                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Unmatched</span>
+                          <span className="border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-600">Unmatched</span>
                         )}
                       </td>
                     </>
@@ -569,44 +580,16 @@ const BatchReceipts = () => {
 
           {/* ─── Manual tab ───────────────────────────────────────────────── */}
           {tab === "manual" && (
-            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex min-h-0 flex-col border border-slate-200 bg-white">
 
-              {/* Toolbar */}
-              <div className="flex items-center gap-0.5 overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-2 py-1">
-                <AppSelect
-                  compact
-                  clearable
-                  placeholder="— Select Property —"
-                  value={propertyId}
-                  onChange={(v) => setPropertyId(v ?? "")}
-                  options={allPropertyOptions}
-                />
-
-                {propertyId && propertyTenants.length > 0 && (
-                  <button
-                    onClick={quickFillBalance}
-                    className="flex h-[20px] items-center gap-0.5 border border-amber-300 bg-amber-50 px-1.5 text-[9px] font-bold text-amber-800 hover:bg-amber-100 transition"
-                  >
-                    <FaBolt size={7} /> Select All + Fill Balance
-                  </button>
-                )}
-
-                {propertyId && (
-                  <span className="text-[11px] text-slate-400">
-                    {propertyTenants.length} tenant{propertyTenants.length !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-
-              {/* Stats strip */}
               {propertyId && manualSelected.length > 0 && (
-                <div className="flex items-center gap-3 border-b border-slate-100 px-4 py-2 text-[12px]">
+                <div className="flex items-center gap-3 border-b border-slate-100 px-3 py-1.5 text-[11px]">
                   <span className="font-black text-emerald-700">
                     {manualSelected.length} selected · KES {fmt(selectedTotal)}
                   </span>
                   <button
                     onClick={() => setManualRows({})}
-                    className="ml-auto text-[11px] text-slate-400 hover:text-rose-500 hover:underline"
+                    className="ml-auto text-[11px] font-bold text-slate-400 hover:text-rose-500 hover:underline"
                   >
                     Clear all
                   </button>
@@ -617,19 +600,19 @@ const BatchReceipts = () => {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[820px] border-collapse text-[12px]">
                   <thead>
-                    <tr className="bg-[#0B3B2E] text-[11px] text-white">
+                    <tr className="bg-[#0B3B2E] text-[10px] font-black uppercase tracking-widest text-white">
                       <th className="w-10 px-3 py-2 text-left">
                         <button onClick={toggleAllManual} disabled={!propertyTenants.length} className="text-white/70 hover:text-white disabled:opacity-30">
                           {allManualChecked ? <FaCheckSquare size={13} /> : <FaSquare size={13} />}
                         </button>
                       </th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">{termUnit}</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">{termTenant}</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-right font-bold">Balance</th>
-                      <th className="w-32 border-r border-white/10 px-3 py-2 text-right font-bold">Amount *</th>
-                      <th className="w-44 border-r border-white/10 px-3 py-2 text-left font-bold">Reference No. *</th>
-                      <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Notes</th>
-                      <th className="w-20 px-3 py-2 text-center font-bold" title="Direct to Landlord">→ LL</th>
+                      <th className="border-r border-white/10 px-3 py-2 text-left">{termUnit}</th>
+                      <th className="border-r border-white/10 px-3 py-2 text-left">{termTenant}</th>
+                      <th className="border-r border-white/10 px-3 py-2 text-right">Balance</th>
+                      <th className="w-32 border-r border-white/10 px-3 py-2 text-right">Amount *</th>
+                      <th className="w-44 border-r border-white/10 px-3 py-2 text-left">Reference No. *</th>
+                      <th className="border-r border-white/10 px-3 py-2 text-left">Notes</th>
+                      <th className="w-20 px-3 py-2 text-center" title="Direct to Landlord">→ LL</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -638,6 +621,12 @@ const BatchReceipts = () => {
                         <td colSpan={8} className="py-14 text-center">
                           <p className="text-[13px] font-bold text-slate-400">Select a property to load tenants</p>
                           <p className="mt-1 text-[11px] text-slate-400">Choose from the dropdown above to see active tenants.</p>
+                        </td>
+                      </tr>
+                    ) : propertyTenantsLoading ? (
+                      <tr>
+                        <td colSpan={8} className="py-10 text-center text-[12px] text-slate-400">
+                          <Spinner size="sm" /> Loading tenants…
                         </td>
                       </tr>
                     ) : propertyTenants.length === 0 ? (
@@ -659,7 +648,7 @@ const BatchReceipts = () => {
                             key={id}
                             className={`border-b border-gray-100 transition-colors ${
                               checked
-                                ? "bg-emerald-50/85 shadow-[inset_4px_0_0_0_#0B3B2E]"
+                                ? "bg-[#C8E6D4] shadow-[inset_4px_0_0_0_#0B3B2E]"
                                 : idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
                             }`}
                           >
@@ -699,7 +688,7 @@ const BatchReceipts = () => {
                                 value={row.amount || ""}
                                 onChange={(e) => setManualRow(id, "amount", e.target.value)}
                                 onFocus={() => !checked && toggleManualRow(id)}
-                                className={`w-full rounded border px-2 py-1 text-right font-mono text-[12px] focus:outline-none transition ${
+                                className={`w-full border px-2 py-1 text-right font-mono text-[12px] focus:outline-none transition ${
                                   amtErr ? "border-rose-300 bg-rose-50/50 focus:border-rose-400" : "border-slate-200 focus:border-emerald-500"
                                 }`}
                               />
@@ -711,7 +700,7 @@ const BatchReceipts = () => {
                                 value={row.refNumber || ""}
                                 onChange={(e) => setManualRow(id, "refNumber", e.target.value)}
                                 onFocus={() => !checked && toggleManualRow(id)}
-                                className={`w-full rounded border px-2 py-1 text-[12px] focus:outline-none transition ${
+                                className={`w-full border px-2 py-1 text-[12px] focus:outline-none transition ${
                                   refErr ? "border-rose-300 bg-rose-50/50 focus:border-rose-400" : "border-slate-200 focus:border-emerald-500"
                                 }`}
                               />
@@ -722,7 +711,7 @@ const BatchReceipts = () => {
                                 placeholder="Optional"
                                 value={row.notes || ""}
                                 onChange={(e) => setManualRow(id, "notes", e.target.value)}
-                                className="w-full rounded border border-slate-200 px-2 py-1 text-[12px] focus:border-emerald-500 focus:outline-none"
+                                className="w-full border border-slate-200 px-2 py-1 text-[12px] focus:border-emerald-500 focus:outline-none"
                               />
                             </td>
                             <td className="px-3 py-1.5 text-center">
@@ -731,7 +720,7 @@ const BatchReceipts = () => {
                                 checked={!!row.directToLandlord}
                                 onChange={(e) => setManualRow(id, "directToLandlord", e.target.checked)}
                                 title="Mark this receipt as Direct to Landlord"
-                                className="h-3.5 w-3.5 rounded border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
+                                className="h-3.5 w-3.5 border-slate-300 text-[#0B3B2E] focus:ring-[#0B3B2E]"
                               />
                             </td>
                           </tr>
@@ -746,7 +735,7 @@ const BatchReceipts = () => {
 
           {/* ─── Results panel ────────────────────────────────────────────── */}
           {results && (
-            <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            <div className="mt-3 border border-slate-200 bg-white">
               <div className={`flex items-center gap-3 border-b px-4 py-3 ${
                 results.totalFailed === 0 ? "border-emerald-100 bg-emerald-50" : "border-amber-100 bg-amber-50"
               }`}>
@@ -765,7 +754,7 @@ const BatchReceipts = () => {
               {results.failed.length > 0 && (
                 <div className="border-b border-slate-100 px-4 py-3">
                   <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-rose-600">Failed Items</p>
-                  <div className="divide-y divide-rose-50 rounded-lg border border-rose-100 bg-rose-50/50 text-[12px]">
+                  <div className="divide-y divide-rose-50 border border-rose-100 bg-rose-50/50 text-[12px]">
                     {results.failed.map((f, i) => (
                       <div key={i} className="flex items-start gap-2 px-3 py-1.5">
                         <FaTimesCircle className="mt-0.5 shrink-0 text-rose-400" size={11} />
@@ -781,11 +770,11 @@ const BatchReceipts = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-[12px]">
                     <thead>
-                      <tr className="bg-[#0B3B2E] text-[11px] text-white">
-                        <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Receipt No.</th>
-                        <th className="border-r border-white/10 px-3 py-2 text-left font-bold">Reference</th>
-                        <th className="border-r border-white/10 px-3 py-2 text-left font-bold">{termTenant}</th>
-                        <th className="px-3 py-2 text-right font-bold">Amount</th>
+                      <tr className="bg-[#0B3B2E] text-[10px] font-black uppercase tracking-widest text-white">
+                        <th className="border-r border-white/10 px-3 py-2 text-left">Receipt No.</th>
+                        <th className="border-r border-white/10 px-3 py-2 text-left">Reference</th>
+                        <th className="border-r border-white/10 px-3 py-2 text-left">{termTenant}</th>
+                        <th className="px-3 py-2 text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -806,11 +795,11 @@ const BatchReceipts = () => {
         </div>
 
         {/* ── Sticky action bar ────────────────────────────────────────────── */}
-        <div className="sticky bottom-0 z-10 flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-slate-200 bg-white px-3 py-2">
           <div className="flex items-center gap-4">
             {selectedCount > 0 ? (
               <>
-                <span className="text-[13px] font-bold text-slate-700">
+                <span className="text-[13px] font-black text-slate-700">
                   {selectedCount} receipt{selectedCount !== 1 ? "s" : ""} ready
                 </span>
                 <span className="text-[15px] font-black text-[#0B3B2E]">KES {fmt(selectedTotal)}</span>
@@ -824,7 +813,7 @@ const BatchReceipts = () => {
           <button
             onClick={handlePost}
             disabled={submitting || selectedCount === 0 || (!shared.paidDirectToLandlord && !shared.cashbook)}
-            className="flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-6 py-2 text-[13px] font-black text-white shadow hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-40 transition"
+            className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting
               ? <><Spinner size="sm" /> Posting…</>

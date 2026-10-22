@@ -10,6 +10,7 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import Modal from "../../components/common/Modal";
 import SalePropertyTypeEditor from "./SalePropertyTypeEditor";
+import TierListEditor from "../PropertySale/TierListEditor";
 import { useConfirm } from "../../context/ConfirmContext";
 import { adminRequests, getErrorMessage as extractErrorMessage } from "../../utils/requestMethods";
 import { createLatePenaltyRule, getChartOfAccounts, getLatePenaltyRules, updateLatePenaltyRule } from "../../redux/apiCalls";
@@ -2884,7 +2885,14 @@ const CompanySettings = () => {
             try {
               await adminRequests.put("/sale/settings/owner-commission-defaults", saleOwnerCommForm);
               toast.success("Owner commission defaults saved.");
-              await loadSaleSettings();
+              // Same as the release-schedule save above: the backend already resynced every open agency
+              // commission (recalculateOwnerCommissionsForBusiness) before responding — this just tells
+              // the Commissions pages to refetch so the change is visible without a manual reload.
+              await Promise.all([
+                loadSaleSettings(),
+                queryClient.invalidateQueries({ queryKey: ["sale-owner-commissions", currentCompany?._id] }),
+                queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
+              ]);
             } catch (err) { toast.error(extractErrorMessage(err)); }
             finally { setSavingSaleOwnerComm(false); }
           }} disabled={savingSaleOwnerComm}>
@@ -2912,42 +2920,6 @@ const CompanySettings = () => {
 
   // Shared editor for one payee's tier list (owner or broker) — add/remove rows, no save button of its own
   // (the parent tab saves both lists together).
-  const renderTierListEditor = (tiers, setTiers, label) => (
-    <div>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-xs font-bold text-slate-700">{label}</span>
-        <button type="button" onClick={() => setTiers((rows) => [...rows, { thresholdPct: 0, releasePct: 0 }])}
-          className="border border-slate-200 bg-white px-2 py-1 text-[10px] font-bold text-slate-600 hover:bg-slate-50">
-          + Add Tier
-        </button>
-      </div>
-      {tiers.length === 0 ? (
-        <p className="text-[11px] text-slate-400">No tiers — nothing releases until at least one is added (while the schedule is enabled).</p>
-      ) : (
-        <div className="space-y-2">
-          {tiers.map((tier, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <div className="flex-1">
-                <label className="mb-0.5 block text-[10px] text-slate-400">% of price paid</label>
-                <Input type="number" min="0" max="100" step="1" value={tier.thresholdPct}
-                  onChange={(e) => setTiers((rows) => rows.map((r, idx) => idx === i ? { ...r, thresholdPct: Number(e.target.value || 0) } : r))} />
-              </div>
-              <div className="flex-1">
-                <label className="mb-0.5 block text-[10px] text-slate-400">% of commission released</label>
-                <Input type="number" min="0" max="100" step="1" value={tier.releasePct}
-                  onChange={(e) => setTiers((rows) => rows.map((r, idx) => idx === i ? { ...r, releasePct: Number(e.target.value || 0) } : r))} />
-              </div>
-              <button type="button" onClick={() => setTiers((rows) => rows.filter((_, idx) => idx !== i))}
-                className="mt-4 border border-red-200 bg-white px-2 py-1.5 text-[10px] font-bold text-red-600 hover:bg-red-50">
-                Remove
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
   const RELEASE_MODE_OPTIONS = [
     { value: false, title: "Immediate", body: "Commission releases in full as soon as it's approved — today's behavior." },
     { value: true, title: "Staged by payment progress", body: "Commission releases in tiers, as the buyer pays off the deal. Configure the tiers below." },
@@ -2970,7 +2942,18 @@ const CompanySettings = () => {
             try {
               await adminRequests.put("/sale/settings/commission-release-schedule", releaseScheduleForm);
               toast.success("Commission release schedule saved.");
-              await loadSaleSettings();
+              // The backend resyncs every open (pending/approved) staged commission's releaseSchedule
+              // synchronously before responding (resyncOpenCommissionReleaseSchedules) — the DB is already
+              // correct by the time this resolves. What was missing was telling the Commissions pages'
+              // own React Query caches to refetch, so a tier edit here shows up there without a manual
+              // page reload.
+              await Promise.all([
+                loadSaleSettings(),
+                queryClient.invalidateQueries({ queryKey: ["sale-commissions", currentCompany?._id] }),
+                queryClient.invalidateQueries({ queryKey: ["sale-owner-commissions", currentCompany?._id] }),
+                queryClient.invalidateQueries({ queryKey: ["sale-commission-payouts", currentCompany?._id] }),
+                queryClient.invalidateQueries({ queryKey: ["sale-dashboard"] }),
+              ]);
             } catch (err) { toast.error(extractErrorMessage(err)); }
             finally { setSavingReleaseSchedule(false); }
           }} disabled={savingReleaseSchedule}>
@@ -2979,16 +2962,16 @@ const CompanySettings = () => {
         }
       >
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {renderTierListEditor(
-            releaseScheduleForm.ownerCommissionTiers,
-            (updater) => setReleaseScheduleForm((p) => ({ ...p, ownerCommissionTiers: typeof updater === "function" ? updater(p.ownerCommissionTiers) : updater })),
-            "Company (owner) commission tiers",
-          )}
-          {renderTierListEditor(
-            releaseScheduleForm.brokerCommissionTiers,
-            (updater) => setReleaseScheduleForm((p) => ({ ...p, brokerCommissionTiers: typeof updater === "function" ? updater(p.brokerCommissionTiers) : updater })),
-            "Broker (agent) commission tiers",
-          )}
+          <TierListEditor
+            tiers={releaseScheduleForm.ownerCommissionTiers}
+            setTiers={(updater) => setReleaseScheduleForm((p) => ({ ...p, ownerCommissionTiers: typeof updater === "function" ? updater(p.ownerCommissionTiers) : updater }))}
+            label="Company (owner) commission tiers"
+          />
+          <TierListEditor
+            tiers={releaseScheduleForm.brokerCommissionTiers}
+            setTiers={(updater) => setReleaseScheduleForm((p) => ({ ...p, brokerCommissionTiers: typeof updater === "function" ? updater(p.brokerCommissionTiers) : updater }))}
+            label="Broker (agent) commission tiers"
+          />
         </div>
       </Card>
     </div>

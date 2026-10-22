@@ -1,6 +1,10 @@
+import mongoose from "mongoose";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
+import SaleDeal from "../models/SaleDeal.js";
+import SalePayment from "../models/SalePayment.js";
 import { round2 } from "../../../utils/math.js";
+import { percentPaid } from "./dealProgress.js";
 import {
   postPropertySaleCommissionTierRelease,
   postPropertySaleOwnerCommissionTierRelease,
@@ -61,6 +65,31 @@ export const foldScheduleUpdate = (existingSchedule, tierReleases, newTiers) => 
   return [...frozen, ...fresh].sort((a, b) => a.thresholdPct - b.thresholdPct);
 };
 
+// One batched deal-fetch + one batched payment-sum aggregate for a set of commissions' deals — same
+// batching rationale as commissionRecalculateService.js's buildDealDataCache (kept separate, not
+// imported, to avoid a cycle: that file already imports FROM this one). Returns a Map keyed by
+// String(dealId) -> currentPct (cumulative % of agreedPrice paid), used by the catch-up pass below.
+const buildCurrentPctCache = async (businessId, commissions) => {
+  const dealIds = [...new Set(commissions.map((c) => String(c.deal)).filter(Boolean))].map((id) => new mongoose.Types.ObjectId(id));
+  if (!dealIds.length) return new Map();
+  const bId = new mongoose.Types.ObjectId(String(businessId));
+  const [deals, paidTotals] = await Promise.all([
+    SaleDeal.find({ _id: { $in: dealIds }, business: businessId }).select("agreedPrice").lean(),
+    SalePayment.aggregate([
+      { $match: { business: bId, deal: { $in: dealIds }, status: "paid" } },
+      { $group: { _id: "$deal", total: { $sum: "$amount" } } },
+    ]),
+  ]);
+  const dealsById = new Map(deals.map((d) => [String(d._id), d]));
+  const paidByDeal = new Map(paidTotals.map((p) => [String(p._id), p.total || 0]));
+  const cache = new Map();
+  for (const dealId of new Set(commissions.map((c) => String(c.deal)).filter(Boolean))) {
+    const deal = dealsById.get(dealId);
+    cache.set(dealId, deal ? percentPaid(paidByDeal.get(dealId) || 0, deal.agreedPrice) : 0);
+  }
+  return cache;
+};
+
 // Brings every still-open (pending/approved) STAGED commission's releaseSchedule up to date with the
 // company's current settings — called right after Settings > Commission Release is saved, so a tier
 // added/edited there takes effect on in-flight commissions immediately instead of only on commissions
@@ -68,10 +97,20 @@ export const foldScheduleUpdate = (existingSchedule, tierReleases, newTiers) => 
 // never staged) are deliberately left untouched — converting an immediate-release commission into a
 // staged one retroactively is a different, much bigger change than keeping an already-staged one in
 // sync, and isn't what this is for.
-export const resyncOpenCommissionReleaseSchedules = async ({ businessId, ownerCommissionTiers, brokerCommissionTiers }) => {
+//
+// Updating the stored schedule alone isn't enough: a tier just added (or edited) can already be
+// eligible against a deal's CURRENT payment progress — e.g. a deal sitting at exactly 50% paid, with a
+// 50%-threshold tier added just now — and nothing else will ever re-check that, since tier-crossing is
+// normally only evaluated reactively, on the NEXT live payment (applyTierCrossings). Without this
+// catch-up pass, that tier would silently wait forever for a payment that may never come. So for every
+// commission whose schedule actually changed, this also re-derives the deal's current %paid and fires
+// any now-eligible tier immediately, the exact same way a live payment would have.
+export const resyncOpenCommissionReleaseSchedules = async ({ businessId, ownerCommissionTiers, brokerCommissionTiers, userId = null }) => {
+  // releaseScheduleOverridden commissions are deal-negotiated (buyer/broker agreed different terms) —
+  // a company-wide settings edit must never overwrite one of those.
   const [brokerCommissions, ownerCommissions] = await Promise.all([
-    SaleCommission.find({ business: businessId, status: { $in: ["pending", "approved"] }, "releaseSchedule.0": { $exists: true } }),
-    SaleOwnerCommission.find({ business: businessId, status: { $in: ["pending", "approved"] }, "releaseSchedule.0": { $exists: true } }),
+    SaleCommission.find({ business: businessId, status: { $in: ["pending", "approved"] }, "releaseSchedule.0": { $exists: true }, releaseScheduleOverridden: { $ne: true } }),
+    SaleOwnerCommission.find({ business: businessId, status: { $in: ["pending", "approved"] }, "releaseSchedule.0": { $exists: true }, releaseScheduleOverridden: { $ne: true } }),
   ]);
 
   // Only actually write (and count) a record whose folded schedule genuinely differs — most commissions
@@ -90,7 +129,52 @@ export const resyncOpenCommissionReleaseSchedules = async ({ businessId, ownerCo
     return true;
   });
 
-  await Promise.all([...changedBroker.map((c) => c.save()), ...changedOwner.map((c) => c.save())]);
+  const pctCache = await buildCurrentPctCache(businessId, [...changedBroker, ...changedOwner]);
+
+  const saveBroker = async (commission) => {
+    const currentPct = pctCache.get(String(commission.deal)) ?? 0;
+    const crossed = newlyCrossedTiers(commission, 0, currentPct);
+    const posted = [];
+    for (const tier of crossed) {
+      commission.tierReleases.push({ _id: undefined, ...tier, status: "accrued", accruedAt: new Date(), paidAt: null });
+      const pushed = commission.tierReleases[commission.tierReleases.length - 1];
+      commission.releasedAmount = round2(Number(commission.releasedAmount || 0) + tier.amount);
+      await postPropertySaleCommissionTierRelease({ businessId, commission, tierRelease: pushed, userId });
+      posted.push(pushed);
+    }
+    try {
+      await commission.save();
+    } catch (saveErr) {
+      await Promise.all(posted.map((tierRelease) =>
+        reversePropertySaleCommissionTierRelease({ businessId, commission, tierRelease, userId, reason: "Tier release save failed — compensating reversal" })
+      ));
+      throw saveErr;
+    }
+  };
+
+  const saveOwner = async (ownerCommission) => {
+    const currentPct = pctCache.get(String(ownerCommission.deal)) ?? 0;
+    const crossed = newlyCrossedTiers(ownerCommission, 0, currentPct);
+    const posted = [];
+    for (const tier of crossed) {
+      ownerCommission.tierReleases.push({ _id: undefined, ...tier, accruedAt: new Date() });
+      const pushed = ownerCommission.tierReleases[ownerCommission.tierReleases.length - 1];
+      ownerCommission.releasedAmount = round2(Number(ownerCommission.releasedAmount || 0) + tier.amount);
+      await postPropertySaleOwnerCommissionTierRelease({ businessId, ownerCommission, tierRelease: pushed, userId });
+      posted.push(pushed);
+    }
+    if (crossed.length) maybeAutoApproveOwnerCommission(ownerCommission);
+    try {
+      await ownerCommission.save();
+    } catch (saveErr) {
+      await Promise.all(posted.map((tierRelease) =>
+        reversePropertySaleOwnerCommissionTierRelease({ businessId, ownerCommission, tierRelease, userId, reason: "Tier release save failed — compensating reversal" })
+      ));
+      throw saveErr;
+    }
+  };
+
+  await Promise.all([...changedBroker.map(saveBroker), ...changedOwner.map(saveOwner)]);
 
   return { brokerUpdated: changedBroker.length, ownerUpdated: changedOwner.length };
 };

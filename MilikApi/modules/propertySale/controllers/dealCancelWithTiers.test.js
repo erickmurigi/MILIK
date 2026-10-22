@@ -1,6 +1,7 @@
 // Phase 5: cancelDeal must reverse staged/tiered commission accruals (broker + owner), not just the
-// legacy whole-amount accrual — and a staged commission may only reach "paid" once every tier has
-// released (the existing payout always disburses the full commissionAmount in one lump sum).
+// legacy whole-amount accrual — and a staged commission can be paid out tier by tier, exactly as each
+// one releases (never ahead of it — a payout is always capped at releasedAmount - paidOutAmount, not
+// the full commissionAmount, until the last tier fires and the two converge).
 import { describe, it, expect } from "vitest";
 import { callController } from "../../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../../test/factories.js";
@@ -139,7 +140,7 @@ describe("cancelDeal — staged broker commission, partial release", () => {
 });
 
 describe("cancelDeal — updateCommissionStatus 'paid' gate on staged commissions", () => {
-  it("rejects marking a staged commission paid before all its tiers have released, and posts nothing", async () => {
+  it("pays out exactly the released tier when only some have fired, stays 'approved' (not 'paid'), and rejects asking for more than that", async () => {
     const { business, call, agent, owner } = await setup();
     await call(updateCommissionReleaseSchedule, {
       body: {
@@ -158,18 +159,33 @@ describe("cancelDeal — updateCommissionStatus 'paid' gate on staged commission
     // Force to "approved" directly (bypassing the manual-approve GL flow, which is irrelevant to this gate)
     await SaleCommission.updateOne({ _id: commission._id }, { status: "approved" });
 
-    const payoutEntriesBefore = await FinancialLedgerEntry.countDocuments({ business, sourceTransactionType: "property_sale_commission_payout" });
+    // Asking for more than what's released (even though it's less than the full commissionAmount) is
+    // rejected — a payout can never run ahead of accrual.
+    await expect(call(updateCommissionStatus, {
+      params: { id: String(commission._id) },
+      body: { status: "paid", amount: 15000, payoutDate: new Date().toISOString(), payoutMethod: "bank_transfer" },
+    })).rejects.toThrow(/exceeds what's released and unpaid so far/);
 
+    // Omitting amount pays out exactly what's released (10,000) — not the full commissionAmount (20,000).
+    const res = await call(updateCommissionStatus, {
+      params: { id: String(commission._id) },
+      body: { status: "paid", payoutDate: new Date().toISOString(), payoutMethod: "bank_transfer" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.payload.status).toBe("approved"); // not fully paid yet — tier 2 hasn't released
+    expect(res.payload.paidOutAmount).toBe(10000);
+
+    const payoutEntries = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_commission_payout" }).lean();
+    expect(payoutEntries.length).toBeGreaterThan(0);
+    const thisPayout = payoutEntries.filter((e) => e.sourceTransactionId.startsWith(`${commission._id}:payout:`));
+    const net = thisPayout.reduce((s, e) => s + (e.debit || 0) - (e.credit || 0), 0);
+    expect(Math.abs(net)).toBeLessThan(0.01); // the payout's own leg is internally balanced
+
+    // A second attempt for the now-exhausted released balance correctly finds nothing left to pay.
     await expect(call(updateCommissionStatus, {
       params: { id: String(commission._id) },
       body: { status: "paid", payoutDate: new Date().toISOString(), payoutMethod: "bank_transfer" },
-    })).rejects.toThrow(/Not all commission tiers have released yet — 10000 of 20000 recognized so far/);
-
-    const payoutEntriesAfter = await FinancialLedgerEntry.countDocuments({ business, sourceTransactionType: "property_sale_commission_payout" });
-    expect(payoutEntriesAfter).toBe(payoutEntriesBefore);
-
-    const commissionAfter = await SaleCommission.findById(commission._id).lean();
-    expect(commissionAfter.status).toBe("approved"); // unchanged — rejected before the write
+    })).rejects.toThrow(/Nothing available to pay out yet/);
   });
 
   it("allows marking a staged commission paid once every tier has released (gate doesn't over-block)", async () => {
