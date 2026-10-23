@@ -6,9 +6,9 @@ import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
 import SaleOwnerPayout from "../models/SaleOwnerPayout.js";
-import SaleAdvocateRemittance from "../models/SaleAdvocateRemittance.js";
-import SaleAdvocateRechargeRemittance from "../models/SaleAdvocateRechargeRemittance.js";
+import SaleAgencyCommissionPayout from "../models/SaleAgencyCommissionPayout.js";
 import PaymentVoucher from "../../../models/PaymentVoucher.js";
+import { outstandingRecoverableExpenseVouchers } from "./recoverableExpense.js";
 import { round2 } from "../../../utils/math.js";
 
 const toId = (v) => new mongoose.Types.ObjectId(String(v));
@@ -54,43 +54,49 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     return deal?.dealNumber || "Deal";
   };
 
-  const [payments, ownerCommissions, brokerCommissions, rechargeRemittances, legacyRemittances, ownerPayouts] = await Promise.all([
+  const [payments, ownerCommissions, brokerCommissions, rechargeVouchers, ownerPayouts] = await Promise.all([
     SalePayment.find({
       business: businessId, deal: { $in: dealIds }, status: "paid",
       paymentDate: { $gte: start, $lte: end },
     }).select("amount paymentDate deal paymentNumber").lean(),
     SaleOwnerCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionRate commissionType status deal").lean(),
-    SaleCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionAmount commissionRate commissionType releaseSchedule status updatedAt deal").lean(),
-    // A rechargeable owner expense (a "sale_owner_expense" PaymentVoucher, paid by the company on the
-    // owner's behalf) only shows up here once the advocate has actually RECOVERED it — never merely
-    // because the voucher itself was paid to the service provider. Current, explicit flow: a dedicated
-    // SaleAdvocateRechargeRemittance posted against one or more named vouchers.
-    SaleAdvocateRechargeRemittance.find({ business: businessId, owner: ownerId, status: { $ne: "cancelled" } })
-      .select("remittanceNumber date allocations").lean(),
-    // Legacy flow (predates the explicit recharge remittance above): a deal-scoped advocate trust
-    // remittance used to auto-net a portion of its cash against this owner's recoverable expenses.
-    // Historical records still need to surface here exactly as they always have.
-    SaleAdvocateRemittance.find({ business: businessId, deal: { $in: dealIds }, status: { $ne: "cancelled" }, "appliedTo.category": "recoverable_expense" })
-      .select("remittanceNumber date appliedTo").lean(),
+    SaleCommission.find({ business: businessId, owner: ownerId, deal: { $in: dealIds } }).select("tierReleases commissionNumber commissionAmount commissionRate commissionType releaseSchedule status paidOutAmount updatedAt deal").lean(),
+    // A rechargeable owner expense is a real cost the owner owes from the moment the company pays it on
+    // their behalf — it shows (and reduces net balance) immediately, same as every other cost line here.
+    // Whether the advocate has actually recovered it yet is a RECOVERY STATUS (paid: true/false on the
+    // line, used for red/green), never a gate on whether it counts.
+    // saleProject is optional on the voucher — `$in` with `null` in the list matches both an explicit
+    // null and a missing field, so an owner-general (project-less) recharge isn't silently dropped from
+    // the combined (unscoped) statement; when scoped to one project, it deliberately stays out, same as
+    // every other project-optional line.
+    PaymentVoucher.find({
+      business: businessId, saleOwner: ownerId, category: "sale_owner_expense",
+      status: { $in: ["approved", "paid"] }, ...(projectId ? { saleProject: projectId } : { saleProject: { $in: [...projectIds, null] } }),
+    }).select("amount narration payeeName dueDate paidDate voucherNo saleProject").lean(),
     // Money actually paid out to the owner (company cashbook or advocate trust) — so a statement run
     // after a payout reflects what's really still outstanding, not the full gross balance forever.
     SaleOwnerPayout.find({ business: businessId, owner: ownerId, status: { $ne: "cancelled" } }).select("amount cgtAmount date payoutNumber deal").lean(),
   ]);
 
-  // Both recovery sources above only carry a voucher id — fetch the vouchers once, batched, for the
-  // project/narration/payee context each statement line needs.
-  const recoveredVoucherIds = [
-    ...rechargeRemittances.flatMap((r) => r.allocations.map((a) => a.voucher)),
-    ...legacyRemittances.flatMap((r) => r.appliedTo.filter((a) => a.category === "recoverable_expense").map((a) => a.refId)),
-  ];
-  const recoveredVouchers = recoveredVoucherIds.length
-    ? await PaymentVoucher.find({ business: businessId, _id: { $in: recoveredVoucherIds } }).select("narration payeeName voucherNo saleProject").lean()
+  // Per-voucher recovered status (nets BOTH the current explicit recharge-remittance flow and the
+  // legacy auto-netted one — see recoverableExpense.js) — drives each recharge line's red/green paid flag.
+  const rechargeOutstandingByVoucher = new Map(
+    (await outstandingRecoverableExpenseVouchers(businessId, ownerId)).map((v) => [String(v.voucherId), v.outstanding])
+  );
+
+  // Per-commission paid-out total for agency (owner) commission — unlike broker commission, this isn't
+  // stored directly on the record (a payout can span several commissions in one go), so it's computed
+  // here the same way outstandingAgencyCommissions does.
+  const ownerCommissionIds = ownerCommissions.map((c) => toId(c._id));
+  const agencyPaidRows = ownerCommissionIds.length
+    ? await SaleAgencyCommissionPayout.aggregate([
+        { $match: { business: toId(businessId), status: { $ne: "cancelled" } } },
+        { $unwind: "$allocations" },
+        { $match: { "allocations.ownerCommission": { $in: ownerCommissionIds } } },
+        { $group: { _id: "$allocations.ownerCommission", total: { $sum: "$allocations.amount" } } },
+      ])
     : [];
-  const voucherById = new Map(recoveredVouchers.map((v) => [String(v._id), v]));
-  // A project-less (owner-general) recharge — e.g. a legal fee covering the relationship generally, not
-  // one plot — always shows when the statement isn't scoped to one project; when it IS scoped to one
-  // project, a project-less recharge deliberately stays out, same as every other project-optional line.
-  const voucherInScope = (voucher) => !projectId || String(voucher?.saleProject || "") === String(projectId);
+  const agencyPaidByCommission = new Map(agencyPaidRows.map((r) => [String(r._id), round2(r.total || 0)]));
 
   const rawLines = [];
 
@@ -118,10 +124,23 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     // every one of those tiers has already been reversed — so none of them are a real cost to the owner
     // any more, and must not leak back into a statement as if they still were.
     if (oc.status === "cancelled") continue;
+    // Walks this commission's own tiers in the order they fired, attributing each deferred tier's "paid"
+    // status against the SAME commission's own running agency-commission-payout total — tier 1 is paid
+    // before tier 2 can be, matching how postAgencyCommissionPayout/outstandingAgencyCommissions treat the
+    // deferred balance as one running total per commission, not per tier.
+    let agencyPaidRemaining = agencyPaidByCommission.get(String(oc._id)) || 0;
     for (const tier of oc.tierReleases || []) {
       if (!inPeriod(tier.accruedAt, start, end)) continue;
+      // Not deferred (the deal had no advocate-trust money at release time) — recognized immediately,
+      // always "paid" from the owner's point of view; deferred — paid once this tier's own slice of the
+      // commission's running deferred total has been covered by an Agency Commission Payout.
+      let paid = true;
+      if (tier.deferred) {
+        paid = round2(tier.amount) <= agencyPaidRemaining + 0.01;
+        agencyPaidRemaining = round2(Math.max(0, agencyPaidRemaining - tier.amount));
+      }
       rawLines.push({
-        transactionDate: tier.accruedAt, category: "company_commission", direction: "debit", amount: round2(tier.amount),
+        transactionDate: tier.accruedAt, category: "company_commission", direction: "debit", amount: round2(tier.amount), paid,
         // thresholdPct is the tier's configured milestone, not necessarily the buyer's exact cumulative
         // %paid at this moment — a single payment can jump past several tiers at once (e.g. 10% -> 60%
         // crosses both a 30% and a 50% tier in the same pass), so "passed the Nth% milestone" is the
@@ -146,11 +165,17 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     // accrual itself deliberately stays live — see reversePropertySaleCommissionPayout — so it is NOT
     // excluded here.
     if (bc.status === "cancelled") continue;
+    // Same running-total, fires-in-order attribution as the agency commission loop above, but against
+    // this commission's own stored paidOutAmount (broker commission tracks it directly — a payout can
+    // never span several brokers' commissions the way an agency commission payout can).
+    let brokerPaidRemaining = round2(bc.paidOutAmount || 0);
     if (bc.releaseSchedule?.length) {
       for (const tier of bc.tierReleases || []) {
         if (!inPeriod(tier.accruedAt, start, end)) continue;
+        const paid = round2(tier.amount) <= brokerPaidRemaining + 0.01;
+        brokerPaidRemaining = round2(Math.max(0, brokerPaidRemaining - tier.amount));
         rawLines.push({
-          transactionDate: tier.accruedAt, category: "broker_commission", direction: "debit", amount: round2(tier.amount),
+          transactionDate: tier.accruedAt, category: "broker_commission", direction: "debit", amount: round2(tier.amount), paid,
           description: `${listingLabelForDeal(bc.deal)} — Broker commission released at ${rateLabel(bc.commissionRate, bc.commissionType)}, passed the ${tier.thresholdPct}% payment milestone · ${bc.commissionNumber}`,
           deal: bc.deal, project: projectForDeal(bc.deal),
           sourceTransactionType: "property_sale_commission_tier", sourceTransactionId: `${bc._id}:tier:${tier._id}`,
@@ -159,6 +184,7 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     } else if (["approved", "paid"].includes(bc.status) && inPeriod(bc.updatedAt, start, end)) {
       rawLines.push({
         transactionDate: bc.updatedAt, category: "broker_commission", direction: "debit", amount: round2(bc.commissionAmount),
+        paid: round2(bc.commissionAmount) <= brokerPaidRemaining + 0.01,
         description: `${listingLabelForDeal(bc.deal)} — Broker commission at ${rateLabel(bc.commissionRate, bc.commissionType)} (full release) · ${bc.commissionNumber}`,
         deal: bc.deal, project: projectForDeal(bc.deal),
         sourceTransactionType: "property_sale_commission", sourceTransactionId: String(bc._id),
@@ -166,34 +192,23 @@ export const generateOwnerStatementData = async ({ businessId, ownerId, projectI
     }
   }
 
-  // A single statement line per RECOVERY (not per voucher) — a voucher partially recovered across two
-  // remittances shows as two lines, each dated and amounted to when and how much was actually recovered.
-  const rechargeLine = (voucherId, amount, date, remittanceLabel, sourceTransactionType, sourceTransactionId) => {
-    if (!inPeriod(date, start, end)) return null;
-    const voucher = voucherById.get(String(voucherId));
-    if (!voucherInScope(voucher)) return null;
-    const projLabel = voucher?.saleProject ? projectNameById.get(String(voucher.saleProject)) : null;
-    const what = voucher?.narration || (voucher?.payeeName ? `Paid to ${voucher.payeeName}` : "Recharged expense");
-    return {
-      transactionDate: date, category: "expense", direction: "debit", amount: round2(amount),
-      description: `${projLabel ? `${projLabel} — ` : ""}${what} recovered via advocate remittance · ${remittanceLabel}${voucher?.voucherNo ? ` (${voucher.voucherNo})` : ""}`,
-      deal: null, project: voucher?.saleProject || null,
-      sourceTransactionType, sourceTransactionId,
-    };
-  };
-
-  for (const r of rechargeRemittances) {
-    for (const a of r.allocations) {
-      const line = rechargeLine(a.voucher, a.amount, r.date, r.remittanceNumber, "property_sale_advocate_recharge_remittance", `${r._id}:${a.voucher}`);
-      if (line) rawLines.push(line);
-    }
-  }
-  for (const r of legacyRemittances) {
-    for (const a of r.appliedTo) {
-      if (a.category !== "recoverable_expense") continue;
-      const line = rechargeLine(a.refId, a.amount, r.date, r.remittanceNumber, "property_sale_recoverable_expense_settlement", `${r._id}:recoverable:${a.refId}`);
-      if (line) rawLines.push(line);
-    }
+  // One line per voucher — amount is the FULL voucher amount, dated when the company actually paid the
+  // contractor, and counted toward the owner's net balance immediately. `paid` (recovered from the
+  // advocate yet, in full) is a status flag only — it drives red/green on the statement, it is never a
+  // gate on whether the cost shows or counts.
+  for (const v of rechargeVouchers) {
+    const effectiveDate = v.paidDate || v.dueDate;
+    if (!inPeriod(effectiveDate, start, end)) continue;
+    const outstanding = rechargeOutstandingByVoucher.get(String(v._id)) || 0;
+    const projLabel = v.saleProject ? projectNameById.get(String(v.saleProject)) : null;
+    const what = v.narration || (v.payeeName ? `Paid to ${v.payeeName}` : "Recharged expense");
+    rawLines.push({
+      transactionDate: effectiveDate, category: "expense", direction: "debit", amount: round2(v.amount),
+      paid: outstanding <= 0.01,
+      description: `${projLabel ? `${projLabel} — ` : ""}${what}${v.voucherNo ? ` · ${v.voucherNo}` : ""}`,
+      deal: null, project: v.saleProject || null,
+      sourceTransactionType: "payment_voucher", sourceTransactionId: String(v._id),
+    });
   }
 
   for (const p of ownerPayouts) {

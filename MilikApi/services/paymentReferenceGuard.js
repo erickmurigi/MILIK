@@ -12,8 +12,8 @@ import { createError } from "../utils/error.js";
 const SOURCE_LABELS = {
   SalePayment:             "Sale Payment",
   SaleCommission:          "Commission Payout",
-  SaleAdvocateRemittance:  "Advocate Remittance",
   SaleAdvocateRechargeRemittance: "Advocate Recharge Remittance",
+  SaleAgencyCommissionPayout: "Agency Commission Payout",
   SaleOwnerPayout:         "Owner Payout",
   CarWashPayment:          "Car Wash Payment",
   CarWashDeposit:          "Car Wash Deposit",

@@ -9,6 +9,7 @@
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
+import Company from "../../../models/Company.js";
 import { postEntry, postReversal } from "../../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../../services/chartAccountAggregationService.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
@@ -48,6 +49,16 @@ const dayRange = (value = new Date()) => {
 // Mirrors the _rulesCache pattern in commissionService.js.
 const _accountCache = new Map(); // `${business}:${code}` → account doc
 
+// Exported so a settings-save can drop a stale cached account the moment a business reconfigures which
+// real ChartOfAccount backs a code — _accountCache otherwise never expires, so without this an override
+// wouldn't take effect until the process restarted.
+export const clearCWAccountCache = (businessId, code = null) => {
+  if (code) { _accountCache.delete(`${businessId}:${code}`); return; }
+  for (const key of _accountCache.keys()) {
+    if (key.startsWith(`${businessId}:`)) _accountCache.delete(key);
+  }
+};
+
 /**
  * Find or create a car wash system account for the given business.
  * Uses upsert so it is fully idempotent and never returns null for known codes.
@@ -59,6 +70,23 @@ export const resolveCarWashAccount = async (businessId, code) => {
   const cacheKey = `${businessId}:${code}`;
   const cached = _accountCache.get(cacheKey);
   if (cached) return cached;
+
+  // A business can redirect this code to one of its own ChartOfAccount rows instead of the
+  // auto-created system default (Company.carwashSettings.accountingDefaults, set via Settings > Car
+  // Wash > Accounting Defaults) — same override-then-fallback shape as PropertySale's resolvePSAccount.
+  const company = await Company.findById(businessId).select("carwashSettings.accountingDefaults").lean();
+  const overrideId = company?.carwashSettings?.accountingDefaults?.get
+    ? company.carwashSettings.accountingDefaults.get(code)
+    : company?.carwashSettings?.accountingDefaults?.[code];
+  if (overrideId) {
+    const overrideAcc = await ChartOfAccount.findOne({
+      _id: overrideId, business: businessId, type: tpl.type, isPosting: { $ne: false }, isHeader: { $ne: true },
+    }).lean();
+    if (overrideAcc) {
+      _accountCache.set(cacheKey, overrideAcc);
+      return overrideAcc;
+    }
+  }
 
   const account = await ChartOfAccount.findOneAndUpdate(
     { business: businessId, code },
@@ -81,6 +109,28 @@ export const resolveCarWashAccount = async (businessId, code) => {
     { upsert: true, new: true }
   );
   _accountCache.set(cacheKey, account);
+  return account;
+};
+
+// Exposed so the settings controller can build the "which accounts can be overridden" UI from the exact
+// same registry resolveCarWashAccount uses — never a second, hand-maintained copy that could drift.
+export const listCWAccountTemplates = () =>
+  Object.entries(CW_ACCOUNT_TEMPLATES).map(([code, tpl]) => ({ code, name: tpl.name, type: tpl.type }));
+
+// Validates a submitted override before it's saved — must resolve to a real, postable ChartOfAccount of
+// the EXACT type the code's role requires.
+export const validateCWAccountOverride = async ({ businessId, code, rawValue }) => {
+  const tpl = CW_ACCOUNT_TEMPLATES[code];
+  if (!tpl) throw new Error(`Unknown car wash account code "${code}"`);
+  const normalized = String(rawValue || "").trim();
+  if (!normalized) return null;
+
+  const query = { business: businessId, type: tpl.type, isPosting: { $ne: false }, isHeader: { $ne: true } };
+  if (/^[a-f\d]{24}$/i.test(normalized)) query._id = normalized;
+  else query.code = normalized;
+
+  const account = await ChartOfAccount.findOne(query).select("_id code name type").lean();
+  if (!account) throw new Error(`${tpl.name} selection is invalid, the wrong account type, or no longer available for this company.`);
   return account;
 };
 

@@ -2,12 +2,13 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { FaChevronDown, FaFilter, FaRedoAlt } from "react-icons/fa";
+import { FaChevronDown, FaFilter, FaMoneyBillWave, FaRedoAlt } from "react-icons/fa";
 import PropertySaleShell from "./PropertySaleShell";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
 import PaginationBar from "../../components/PaginationBar";
-import { fmtKES, saleApi } from "../../services/propertySaleApi";
+import Modal from "../../components/common/Modal";
+import { fmtKES, saleApi, todayISO } from "../../services/propertySaleApi";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import { useTerms } from "../../hooks/useTerm";
@@ -17,6 +18,7 @@ import SaleExportButton from "./SaleExportButton";
 import { exportAfterFetch, fetchAllPages, money, printAfterFetch } from "./salePrint";
 import { fmtDate } from "../../utils/dates";
 import MilikTable from "../../components/common/MilikTable";
+import { inputClass, labelClass } from "../../utils/formStyles";
 
 // The company's own agency commission for selling on an owner's behalf — structurally parallel to
 // Broker Commissions but simpler: no WHT, and no manual approve/pay/reverse action exists, since this
@@ -51,12 +53,13 @@ const tierProgress = (c) => {
 
 const agencyCols = (T) => [
   { label: "Comm. No.", width: "11%" },
-  { label: T.saleOwner, width: "15%" },
-  { label: T.saleDeal, width: "10%" },
-  { label: "Property", width: "16%" },
-  { label: "Rate", width: "8%" },
-  { label: "Amount", align: "right", width: "14%" },
-  { label: "Status", width: "18%" },
+  { label: T.saleOwner, width: "14%" },
+  { label: T.saleDeal, width: "9%" },
+  { label: "Property", width: "14%" },
+  { label: "Rate", width: "7%" },
+  { label: "Amount", align: "right", width: "12%" },
+  { label: "Status", width: "15%" },
+  { label: "Advocate Payout", width: "16%" },
 ];
 
 const renderAgencyRow = (c) => (
@@ -69,7 +72,7 @@ const renderAgencyRow = (c) => (
       {c.commissionRate}{c.commissionType === "percentage" ? "%" : " KES"}
     </td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black tabular-nums text-slate-900">{fmtKES(c.commissionAmount)}</td>
-    <td className="px-3 py-1.5">
+    <td className="px-3 py-1.5 border-r border-gray-100">
       <div className="inline-flex flex-nowrap items-center gap-1">
         <span className={`inline-block border px-1.5 py-0.5 text-[9px] font-black uppercase ${STATUS_BADGE[c.status] || "border-slate-200 bg-slate-50 text-slate-600"}`}>
           {AGENCY_STATUS_LABEL[c.status] || c.status}
@@ -84,6 +87,23 @@ const renderAgencyRow = (c) => (
           );
         })()}
       </div>
+    </td>
+    <td className="px-3 py-1.5">
+      {/* Only a deal funded via advocate trust ever gets here (deferredAmount === 0 otherwise) — the
+          company's own income recognition on it waits for the advocate to actually hand the cash over. */}
+      {Number(c.deferredAmount || 0) > 0 ? (
+        c.agencyOutstanding > 0.01 ? (
+          <span className="inline-block whitespace-nowrap border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-rose-600">
+            {fmtKES(c.agencyOutstanding)} owed
+          </span>
+        ) : (
+          <span className="inline-block whitespace-nowrap border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-700">
+            Paid by Advocate
+          </span>
+        )
+      ) : (
+        <span className="text-[10px] text-slate-300">—</span>
+      )}
     </td>
   </>
 );
@@ -130,6 +150,60 @@ const renderAgencyExpanded = (c) => {
   );
 };
 
+// Settles how much of this commission's deferred (trust-funded) income the advocate has actually paid
+// over — recognizes 4430 income and clears the matching slice of the deal's trust receivable in one
+// posting (propertySaleAccountingService.postAgencyCommissionPayout). One commission at a time, same
+// deliberately-simple pattern as the broker Payout modal.
+function AgencyPayoutModal({ commission, cashbookOptions, saving, onClose, onSubmit }) {
+  const [form, setForm] = useState({ amount: String(commission.agencyOutstanding), date: todayISO(), cashbook: "", reference: "", notes: "" });
+  return (
+    <Modal
+      title={`Advocate Payout — ${commission.commissionNumber}`}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" onClick={onClose} className="border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+          <button type="button" onClick={() => onSubmit(form)} disabled={saving} className="bg-[#0B3B2E] px-4 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60">
+            {saving ? "Saving…" : "Confirm Payout"}
+          </button>
+        </>
+      }
+    >
+      <div className="mb-3 grid grid-cols-2 gap-px border border-slate-200 bg-slate-200 text-center">
+        <div className="bg-slate-50 px-3 py-2">
+          <div className="text-[9px] font-black uppercase tracking-wider text-slate-400">Owner</div>
+          <div className="text-sm font-black text-slate-800">{commission.owner?.fullName || "—"}</div>
+        </div>
+        <div className="bg-emerald-50 px-3 py-2">
+          <div className="text-[9px] font-black uppercase tracking-wider text-emerald-600">Outstanding</div>
+          <div className="text-sm font-black text-emerald-800">{fmtKES(commission.agencyOutstanding)}</div>
+        </div>
+      </div>
+      <div className="flex flex-col gap-3">
+        <div>
+          <label className={labelClass}>Amount Received Now</label>
+          <input type="number" min="0" max={commission.agencyOutstanding} value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <label className={labelClass}>Date</label>
+          <input type="date" value={form.date} onChange={(e) => setForm((p) => ({ ...p, date: e.target.value }))} className={inputClass} />
+        </div>
+        <div>
+          <AppSelect label="Received Into" value={form.cashbook} onChange={(v) => setForm((p) => ({ ...p, cashbook: v ?? "" }))} options={cashbookOptions} placeholder="Cashbook…" size="md" clearable />
+        </div>
+        <div>
+          <label className={labelClass}>Reference</label>
+          <input value={form.reference} onChange={(e) => setForm((p) => ({ ...p, reference: e.target.value }))} className={inputClass} placeholder="e.g. M-Pesa ref, EFT reference…" />
+        </div>
+        <div>
+          <label className={labelClass}>Notes</label>
+          <input value={form.notes} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} className={inputClass} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 const SaleAgencyCommissions = () => {
   const T = useTerms("saleOwner", "saleOwners", "saleDeal", "saleDeals");
   const agencyColumns = useMemo(() => agencyCols(T), [T]);
@@ -148,6 +222,8 @@ const SaleAgencyCommissions = () => {
   const [pageSize,     setPageSize]     = useTabState("/sale/agency-commissions:pageSize", PAGE_SIZE);
   const [showStatusMenu, setShowStatusMenu] = useState(false);
   const statusBtnRef = useRef(null);
+  const [showPayout, setShowPayout] = useState(null);
+  const [paySaving, setPaySaving] = useState(false);
 
   const { data: ownersData } = useQuery({
     queryKey: ["sale-owners-ref", biz, "all"],
@@ -161,6 +237,13 @@ const SaleAgencyCommissions = () => {
     enabled:  !!biz,
     staleTime: 5 * 60_000,
   });
+  const { data: cashbookAccounts = [] } = useQuery({
+    queryKey: ["sale-cashbook-accounts", biz],
+    queryFn:  () => saleApi.listCashbookAccounts({ business: biz }),
+    enabled:  !!biz,
+    staleTime: 10 * 60_000,
+  });
+  const cashbookOptions = useMemo(() => cashbookAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name}` })), [cashbookAccounts]);
   const ownersRef = useMemo(() => ownersData?.data ?? [], [ownersData]);
   const dealsRef  = useMemo(() => dealsData?.data  ?? [], [dealsData]);
 
@@ -186,6 +269,36 @@ const SaleAgencyCommissions = () => {
   const totalPages  = Math.max(1, Math.ceil(total / pageSize));
 
   const invalidate = useCallback(() => queryClient.invalidateQueries({ queryKey: ["sale-owner-commissions", biz] }), [queryClient, biz]);
+
+  const handlePayout = async (payForm) => {
+    const amount = Number(payForm.amount);
+    if (!Number.isFinite(amount) || amount <= 0) return toast.warning("Enter an amount greater than 0");
+    setPaySaving(true);
+    try {
+      await saleApi.createAgencyCommissionPayout({
+        business: biz, advocate: showPayout.trustAdvocate,
+        allocations: [{ ownerCommission: showPayout._id, amount }],
+        date: payForm.date, cashbook: payForm.cashbook || undefined,
+        reference: payForm.reference, notes: payForm.notes,
+      });
+      invalidate();
+      setShowPayout(null);
+      toast.success("Advocate payout recorded");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to record payout");
+    } finally {
+      setPaySaving(false);
+    }
+  };
+
+  const renderAgencyActions = useCallback((c) => {
+    if (!(Number(c.deferredAmount || 0) > 0 && c.agencyOutstanding > 0.01)) return null;
+    return (
+      <button type="button" onClick={() => setShowPayout(c)} title="Record what the advocate has paid over" className="border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-emerald-700 hover:bg-emerald-100">
+        <FaMoneyBillWave className="text-[8px]" />
+      </button>
+    );
+  }, []);
 
   const buildReportFilters = () => ({
     business: biz,
@@ -325,9 +438,10 @@ const SaleAgencyCommissions = () => {
             rows={commissions}
             loading={loading}
             empty="No agency commissions found."
-            minWidth={760}
+            minWidth={900}
             renderRow={renderAgencyRow}
             renderExpanded={renderAgencyExpanded}
+            renderActions={renderAgencyActions}
           />
 
           <PaginationBar
@@ -342,6 +456,10 @@ const SaleAgencyCommissions = () => {
           />
         </div>
       </div>
+
+      {showPayout && (
+        <AgencyPayoutModal commission={showPayout} cashbookOptions={cashbookOptions} saving={paySaving} onClose={() => setShowPayout(null)} onSubmit={handlePayout} />
+      )}
     </PropertySaleShell>
   );
 };

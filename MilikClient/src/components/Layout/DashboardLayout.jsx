@@ -1071,7 +1071,7 @@ const TopToolbar = ({
             ] : []),
             ...(saleUsesAdvocates ? [
               { id: "sale-advocates", label: saleT.saleAdvocates, icon: FaUsers },
-              { id: "sale-advocate-remittances", label: "Remittances", icon: FaFileAlt },
+              { id: "sale-advocate-remittances", label: "Rechargeable Expenses", icon: FaFileAlt },
             ] : []),
           ],
         },

@@ -8,7 +8,6 @@ import mongoose from "mongoose";
 import { createTestCompany } from "../../../test/factories.js";
 import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
-import SaleAdvocateRemittance from "../models/SaleAdvocateRemittance.js";
 import SaleOwnerPayout from "../models/SaleOwnerPayout.js";
 import SaleOwner from "../models/SaleOwner.js";
 import { dealAdvocateTrustBalance } from "./dealProgress.js";
@@ -23,7 +22,7 @@ const setup = async () => {
 };
 
 describe("dealAdvocateTrustBalance", () => {
-  it("collected (advocate_trust payments) minus disbursed (commission payout + remittance + owner payout), for one deal", async () => {
+  it("collected (advocate_trust payments) minus disbursed (commission payout + owner payout), for one deal", async () => {
     const { business } = await setup();
     const deal = oid();
 
@@ -39,13 +38,11 @@ describe("dealAdvocateTrustBalance", () => {
       payouts: [{ amount: 20_000, whtAmount: 0, netAmount: 20_000, method: "bank_transfer", date: new Date(), source: "advocate_trust" }],
     });
 
-    await SaleAdvocateRemittance.create({ business, remittanceNumber: "R-1", advocate: oid(), deal, amount: 15_000 });
-
     const owner = await SaleOwner.create({ business, ownerNumber: "OWN-1", fullName: "John Mwangi" });
     await SaleOwnerPayout.create({ business, payoutNumber: "OPY-1", owner: owner._id, deal, amount: 50_000, source: "advocate_trust" });
 
     const balance = await dealAdvocateTrustBalance(business, deal);
-    expect(balance).toMatchObject({ collected: 300_000, disbursed: 20_000 + 15_000 + 50_000, available: 300_000 - 85_000 });
+    expect(balance).toMatchObject({ collected: 300_000, disbursed: 20_000 + 50_000, available: 300_000 - 70_000 });
   });
 
   it("sums only the trust-sourced tranche of a commission paid across mixed sources — the top-level payoutSource reflects only the LAST tranche and must never be trusted alone", async () => {
@@ -72,7 +69,7 @@ describe("dealAdvocateTrustBalance", () => {
     expect(balance).toMatchObject({ collected: 200_000, disbursed: 100_000, available: 100_000 });
   });
 
-  it("segregates trust funds between two deals under the same advocate — a remittance against one deal never reduces the other's available balance", async () => {
+  it("segregates trust funds between two deals under the same advocate — a payout against one deal never reduces the other's available balance", async () => {
     const { business } = await setup();
     const dealA = oid();
     const dealB = oid();
@@ -80,14 +77,15 @@ describe("dealAdvocateTrustBalance", () => {
     await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealA, amount: 500_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
     await SalePayment.create({ business, paymentNumber: nextPaymentNumber(), deal: dealB, amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", status: "paid" });
 
-    // A large remittance scoped to deal A only
-    await SaleAdvocateRemittance.create({ business, remittanceNumber: "R-A", advocate: oid(), deal: dealA, amount: 400_000 });
+    // A large owner payout scoped to deal A only
+    const owner = await SaleOwner.create({ business, ownerNumber: "OWN-SEG", fullName: "Segregation Owner" });
+    await SaleOwnerPayout.create({ business, payoutNumber: "OPY-A", owner: owner._id, deal: dealA, amount: 400_000, source: "advocate_trust" });
 
     const balanceA = await dealAdvocateTrustBalance(business, dealA);
     const balanceB = await dealAdvocateTrustBalance(business, dealB);
 
     expect(balanceA).toMatchObject({ collected: 500_000, disbursed: 400_000, available: 100_000 });
-    // Deal B's full collection is still available — it must not have been drawn down by deal A's remittance
+    // Deal B's full collection is still available — it must not have been drawn down by deal A's payout
     expect(balanceB).toMatchObject({ collected: 100_000, disbursed: 0, available: 100_000 });
   });
 

@@ -90,13 +90,13 @@ export const saleApi = {
   linkAdvocateUser: async (id, userId) => unwrap(await adminRequests.post(`/sale/advocates/${id}/users`, { userId })),
   unlinkAdvocateUser: async (id, userId) => unwrap(await adminRequests.delete(`/sale/advocates/${id}/users/${userId}`)),
 
-  // Advocate Trust Remittances
-  listAdvocateRemittances: async (params = {}) => unwrapPage(await adminRequests.get("/sale/advocate-remittances", { params })),
-  createAdvocateRemittance: async (payload) => unwrap(await adminRequests.post("/sale/advocate-remittances", payload)),
+  // Advocate trust balance — read-only, scoped across every deal this advocate has ever collected
+  // trust for (owner/broker/agency-commission payouts each draw against it; there's no generic
+  // "remit to the company" action any more, only purpose-specific disbursements straight from trust).
   getAdvocateTrustBalance: async (advocateId) => unwrap(await adminRequests.get(`/sale/advocate-remittances/balance/${advocateId}`)),
 
   // Recharge Remittances — real cash an advocate sends specifically to recover rechargeable owner
-  // expenses (sale_owner_expense PaymentVouchers), distinct from the trust remittances above.
+  // expenses (sale_owner_expense PaymentVouchers).
   // Not run through `unwrap` — the backend's { data: [...] } shape has no `total`/pagination for
   // unwrapPage to key off, but IS the { data } object the caller (SaleAdvocateRemittances.jsx) reads
   // `.data` from; `unwrap` would strip it down to the bare array one level too far.
@@ -104,6 +104,15 @@ export const saleApi = {
   listRechargeRemittances: async (params = {}) => unwrapPage(await adminRequests.get("/sale/recharge-remittances", { params })),
   createRechargeRemittance: async (payload) => unwrap(await adminRequests.post("/sale/recharge-remittances", payload)),
   voidRechargeRemittance: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/recharge-remittances/${id}/void`, payload)),
+
+  // Agency Commission Payouts — real cash an advocate sends specifically to settle Pink House's own
+  // (agency) commission on deals funded via their trust account; the one event that finally recognizes
+  // that income (it's deferred on the books until this happens). Same { data } shape (no pagination) as
+  // listOutstandingRecharges above — not run through `unwrap` for the same reason.
+  listOutstandingAgencyCommissions: async (params = {}) => (await adminRequests.get("/sale/agency-commission-payouts/outstanding", { params }))?.data,
+  listAgencyCommissionPayouts: async (params = {}) => unwrapPage(await adminRequests.get("/sale/agency-commission-payouts", { params })),
+  createAgencyCommissionPayout: async (payload) => unwrap(await adminRequests.post("/sale/agency-commission-payouts", payload)),
+  voidAgencyCommissionPayout: async (id, payload = {}) => unwrap(await adminRequests.patch(`/sale/agency-commission-payouts/${id}/void`, payload)),
 
   // Offers
   listOffers: async (params = {}) => unwrapPage(await adminRequests.get("/sale/offers", { params })),

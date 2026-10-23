@@ -1,6 +1,11 @@
 /**
  * Self-contained GL accounting service for the Property Sales module.
  *
+ * Every account below is resolved through the single resolvePSAccount(businessId, code) choke point,
+ * which checks SaleSettings.accountingDefaults for a per-business override before auto-creating its own
+ * system account — so a company can redirect any of these codes to its own ChartOfAccount numbering
+ * (Settings > Property Sales > Accounting Defaults) without touching any of the posting logic below.
+ *
  * Accounts used:
  *   [cashbook]  — Actual bank/cash account chosen at payment time (Dr side for receipts)
  *   1311 — Property Sale Receipts Control   (asset)    fallback Dr when no cashbook provided
@@ -14,18 +19,21 @@
  *   5321 — Agent Commission Disbursements    (liability) fallback Cr when no cashbook provided at payout
  *   2185 — Owner Clearing / Payable          (liability) owner-linked deals: replaces 5320 as the debit side for
  *          both broker commission accrual and the company's own commission recognition
- *   4430 — Commission Income — Agency Fees   (income)   Cr for the company's own commission (owner-linked deals only)
+ *   4430 — Commission Income — Agency Fees   (income)   Cr for the company's own commission — immediately, for a
+ *          tier whose deal has no advocate-trust money (the company already holds the cash); deferred via 2186
+ *          for a tier whose deal DOES have advocate-trust money, until postAgencyCommissionPayout
+ *   2186 — Agency Commission Payable (Unremitted) (liability) Cr at tier release instead of 4430 when deferred
+ *          (see 4430 above); cleared (Dr) by postAgencyCommissionPayout, which recognizes the deferred 4430
+ *          income AND clears the corresponding slice of 1314 in the same posting — an advocate-trust-funded
+ *          agency commission is never recognized as the company's own income until the advocate actually pays it
  *   1312 — Broker Commission Clawback Receivable (asset) Dr when a deal cancels after a tier was already paid out
  *   1313 — Owner Expense Recoverable         (asset)    Dr for costs the company pays on an owner's behalf;
- *          cleared (Cr) either by postAdvocateRechargeRemittance (real cash the advocate sends
- *          specifically to recover it — Dr cashbook / Cr 1313, the current explicit flow) or, for
- *          historical records predating that flow, by postRecoverableExpenseSettlement (a separate
- *          non-cash entry against 2185) — never by the advocate's ordinary trust remittance's own cash
- *          leg, which is always a pure Dr cashbook / Cr 1314
+ *          cleared (Cr) by postAdvocateRechargeRemittance — real cash the advocate sends specifically to
+ *          recover it, Dr cashbook / Cr 1313
  *   1314 — Advocate Trust Receivable         (asset)    Dr side for a payment collected into an advocate's own
  *          trust account instead of the company's cash (collectionMethod "advocate_trust"); cleared (Cr) when
- *          the advocate actually remits the money (SaleAdvocateRemittance / postSaleAdvocateRemittance) or
- *          pays the broker/owner directly from trust (postPropertySaleCommissionPayout / postSaleOwnerPayout)
+ *          the advocate pays the broker/owner/company directly from trust (postPropertySaleCommissionPayout /
+ *          postSaleOwnerPayout / postAgencyCommissionPayout)
  */
 
 import mongoose from "mongoose";
@@ -35,6 +43,7 @@ import SaleSettings from "../models/SaleSettings.js";
 import { postEntry, postEntries, postReversal } from "../../../services/ledgerPostingService.js";
 import { resolveWhtPayableAccount } from "../../../services/withholdingTaxService.js";
 import { round2 } from "../../../utils/math.js";
+import { dealAdvocateTrustBalance } from "./dealProgress.js";
 
 const PS_ACCOUNT_TEMPLATES = {
   "1311": { name: "Property Sale Receipts Control",  type: "asset",     group: "assets",      subGroup: "Current Assets" },
@@ -50,6 +59,7 @@ const PS_ACCOUNT_TEMPLATES = {
   "1312": { name: "Broker Commission Clawback Receivable", type: "asset", group: "assets",       subGroup: "Current Assets" },
   "1313": { name: "Owner Expense Recoverable",         type: "asset",     group: "assets",       subGroup: "Current Assets" },
   "1314": { name: "Advocate Trust Receivable",         type: "asset",     group: "assets",       subGroup: "Current Assets" },
+  "2186": { name: "Agency Commission Payable (Unremitted)", type: "liability", group: "liabilities", subGroup: "Owner Payables" },
 };
 
 
@@ -72,6 +82,17 @@ const dayRange = (value = new Date()) => {
 
 const accountIdCache = new Map(); // `${businessId}:${code}` -> ObjectId
 
+// Exported so a settings-save can drop a stale cached id the moment a business reconfigures which real
+// ChartOfAccount backs a code — resolvePSAccount's cache otherwise never expires, so without this an
+// override wouldn't take effect until the process restarted. Called with just `businessId` to clear
+// every code at once (simplest correct choice for a bulk accounting-defaults save).
+export const clearPSAccountCache = (businessId, code = null) => {
+  if (code) { accountIdCache.delete(`${businessId}:${code}`); return; }
+  for (const key of accountIdCache.keys()) {
+    if (key.startsWith(`${businessId}:`)) accountIdCache.delete(key);
+  }
+};
+
 // Exported so other modules (e.g. the PMS PaymentVoucher controller's `sale_owner_expense`
 // category, which debits 1313 Owner Expense Recoverable) can self-register against the same
 // fixed system accounts without duplicating the upsert-and-cache pattern.
@@ -82,6 +103,23 @@ export const resolvePSAccount = async (businessId, code) => {
 
   const tpl = PS_ACCOUNT_TEMPLATES[code];
   if (!tpl) throw new Error(`resolvePSAccount: unknown code "${code}"`);
+
+  // A business can redirect this code to one of its own ChartOfAccount rows instead of the
+  // auto-created system default (SaleSettings.accountingDefaults, set via Settings > Accounting
+  // Defaults) — same override-then-fallback shape as PMS's companyAccountingDefaultsService, but
+  // reached through this single choke point so every account in the module picks it up uniformly.
+  const settings = await SaleSettings.findOne({ business: businessId }).select("accountingDefaults").lean();
+  const overrideId = settings?.accountingDefaults?.get ? settings.accountingDefaults.get(code) : settings?.accountingDefaults?.[code];
+  if (overrideId) {
+    const overrideAcc = await ChartOfAccount.findOne({
+      _id: overrideId, business: businessId, type: tpl.type, isPosting: { $ne: false }, isHeader: { $ne: true },
+    }).lean();
+    if (overrideAcc) {
+      accountIdCache.set(cacheKey, overrideAcc._id);
+      return overrideAcc;
+    }
+  }
+
   const acc = await ChartOfAccount.findOneAndUpdate(
     { business: businessId, code },
     {
@@ -104,6 +142,29 @@ export const resolvePSAccount = async (businessId, code) => {
   );
   accountIdCache.set(cacheKey, acc._id);
   return acc;
+};
+
+// Exposed so the settings controller can build the "which accounts can be overridden" UI from the exact
+// same registry resolvePSAccount uses — never a second, hand-maintained copy that could drift out of sync.
+export const listPSAccountTemplates = () =>
+  Object.entries(PS_ACCOUNT_TEMPLATES).map(([code, tpl]) => ({ code, name: tpl.name, type: tpl.type }));
+
+// Validates a submitted override before it's saved — must resolve to a real, postable ChartOfAccount of
+// the EXACT type the code's role requires (an income code can never be redirected to a liability account,
+// etc.), same guard PMS's validateAccountingDefaultAccount applies to its own overrides.
+export const validatePSAccountOverride = async ({ businessId, code, rawValue }) => {
+  const tpl = PS_ACCOUNT_TEMPLATES[code];
+  if (!tpl) throw new Error(`Unknown property-sale account code "${code}"`);
+  const normalized = String(rawValue || "").trim();
+  if (!normalized) return null;
+
+  const query = { business: businessId, type: tpl.type, isPosting: { $ne: false }, isHeader: { $ne: true } };
+  if (/^[a-f\d]{24}$/i.test(normalized)) query._id = normalized;
+  else query.code = normalized;
+
+  const account = await ChartOfAccount.findOne(query).select("_id code name type").lean();
+  if (!account) throw new Error(`${tpl.name} selection is invalid, the wrong account type, or no longer available for this company.`);
+  return account;
 };
 
 // ─── WHT handling responsibility ──────────────────────────────────────────────
@@ -603,11 +664,25 @@ export const reversePropertySaleCommissionTierRelease = async ({ businessId, com
     reason: reason || `Commission tier reversed — ${commission.commissionNumber || commission._id}`,
   });
 
-// Company's own commission tier — Dr Owner Clearing / Cr Commission Income. No payout counterpart: this
-// is recognized revenue, never disbursed to a third party.
+// Company's own commission tier — Dr Owner Clearing / Cr [Commission Income, or Agency Commission
+// Payable if deferred]. The owner's balance is reduced immediately either way (the cost is real the
+// moment it's earned) — what's deferred is only whether the COMPANY recognizes it as its own income
+// right away, which depends on whether the deal's proceeds are sitting in an advocate's trust account
+// (not yet in the company's hands) or were collected directly. Sets tierRelease.deferred on the passed
+// subdocument so the caller's own .save() persists which branch was taken — read later by
+// outstandingAgencyCommissions() and the payout cap, and by the owner statement's red/green status.
 export const postPropertySaleOwnerCommissionTierRelease = async ({ businessId, ownerCommission, tierRelease, userId }) => {
   const amount = round2(Number(tierRelease.amount || 0));
   if (amount <= 0) return;
+
+  // Deferral only applies to a STAGED commission (a releaseSchedule), where a tier fires AFTER real
+  // payment progress — by then, the deal's trust balance (if any) genuinely reflects what's been
+  // collected so far. An immediate-release commission (no schedule) fires its one tier at DEAL CREATION,
+  // before any payment exists at all — there's nothing yet to check, and immediate-release's whole
+  // defining behavior is recognizing eagerly regardless of payment status, so it keeps doing exactly
+  // that rather than silently gaining a deferral it was never designed to have.
+  const isDeferred = Boolean(ownerCommission.releaseSchedule?.length) && (await dealAdvocateTrustBalance(businessId, ownerCommission.deal)).collected > 0;
+  tierRelease.deferred = isDeferred;
 
   const sourceTransactionType = "property_sale_owner_commission_tier";
   const sourceTransactionId = `${ownerCommission._id}:tier:${tierRelease._id}`;
@@ -620,9 +695,9 @@ export const postPropertySaleOwnerCommissionTierRelease = async ({ businessId, o
 
   const { start, end } = dayRange(tierRelease.accruedAt);
   const journalGroupId = new mongoose.Types.ObjectId();
-  const [clearingAcc, incomeAcc] = await Promise.all([
+  const [clearingAcc, creditAcc] = await Promise.all([
     resolvePSAccount(businessId, "2185"),
-    resolvePSAccount(businessId, "4430"),
+    resolvePSAccount(businessId, isDeferred ? "2186" : "4430"),
   ]);
   const ref = ownerCommission.commissionNumber || String(ownerCommission._id);
 
@@ -635,7 +710,7 @@ export const postPropertySaleOwnerCommissionTierRelease = async ({ businessId, o
 
   await postEntries([
     { ...base, accountId: clearingAcc._id, direction: "debit",  amount, notes: `Owner commission tier recognized (${tierRelease.thresholdPct}% paid) — ${ref}` },
-    { ...base, accountId: incomeAcc._id,   direction: "credit", amount, notes: `Commission income — ${ref}` },
+    { ...base, accountId: creditAcc._id,   direction: "credit", amount, notes: isDeferred ? `Commission income deferred pending advocate payout — ${ref}` : `Commission income — ${ref}` },
   ]);
 };
 
@@ -646,6 +721,69 @@ export const reversePropertySaleOwnerCommissionTierRelease = async ({ businessId
     sourceTransactionId: `${ownerCommission._id}:tier:${tierRelease._id}`,
     userId,
     reason: reason || `Owner commission tier reversed — ${ownerCommission.commissionNumber || ownerCommission._id}`,
+  });
+
+// ─── Agency commission payout — the one event that finally recognizes deferred commission income ────
+//
+// Only ever settles DEFERRED tiers (tierReleases[].deferred === true — a deal with advocate-trust
+// money). A single 4-leg entry does both things at once: recognizes the income that was deferred at
+// release time, AND clears the matching slice of the advocate's trust receivable, since the cash is
+// always coming out of the advocate's trust holdings (deferral only ever happens when it is):
+//   Dr 2186 Agency Commission Payable (Unremitted)   [amount]   — clears the release-time placeholder
+//   Cr 4430 Commission Income — Agency Fees           [amount]   — NOW recognized, for real
+//   Dr [cashbook]                                      [amount]   — cash arrives
+//   Cr 1314 Advocate Trust Receivable                  [amount]   — clears the matching trust receivable
+// `payout` is a SaleAgencyCommissionPayout document — its own `allocations` breakdown (which specific
+// commissions this covers) is audit metadata only, same as SaleOwnerPayout's; the GL posts the FULL
+// amount in one go regardless of how many commissions it's split across.
+export const postAgencyCommissionPayout = async ({ businessId, payout, userId, cashbookAccountId }) => {
+  const amount = round2(Number(payout.amount || 0));
+  if (amount <= 0) return;
+
+  const sourceTransactionType = "property_sale_agency_commission_payout";
+  const sourceTransactionId = String(payout._id);
+
+  const existing = await FinancialLedgerEntry.countDocuments({
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
+  });
+  if (existing > 0) return;
+
+  const { start, end } = dayRange(payout.date || payout.createdAt);
+  const journalGroupId = new mongoose.Types.ObjectId();
+
+  const [deferredAcc, incomeAcc, debitAcc, trustAcc] = await Promise.all([
+    resolvePSAccount(businessId, "2186"),
+    resolvePSAccount(businessId, "4430"),
+    cashbookAccountId ? ChartOfAccount.findById(cashbookAccountId).lean() : resolvePSAccount(businessId, "1311"),
+    resolvePSAccount(businessId, "1314"),
+  ]);
+  if (!debitAcc) throw new Error("Cashbook account not found — GL posting aborted");
+
+  const ref = payout.payoutNumber || String(payout._id);
+
+  const base = {
+    business: businessId, sourceTransactionType, sourceTransactionId,
+    transactionDate: payout.date || payout.createdAt || new Date(),
+    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
+    category: "PROPERTY_SALE_AGENCY_COMMISSION_PAYOUT", createdBy: userId, allowUnscoped: true,
+  };
+
+  await postEntries([
+    { ...base, accountId: deferredAcc._id, direction: "debit",  amount, notes: `Agency commission payable cleared — ${ref}` },
+    { ...base, accountId: incomeAcc._id,   direction: "credit", amount, notes: `Commission income recognized — ${ref}` },
+    { ...base, accountId: debitAcc._id,    direction: "debit",  amount, notes: `Agency commission received from advocate — ${ref}` },
+    { ...base, accountId: trustAcc._id,    direction: "credit", amount, notes: `Advocate trust receivable cleared — ${ref}` },
+  ]);
+};
+
+export const reverseAgencyCommissionPayout = async ({ businessId, payout, userId, reason }) =>
+  reverseEntriesFor({
+    businessId,
+    sourceTransactionType: "property_sale_agency_commission_payout",
+    sourceTransactionId: String(payout._id),
+    userId,
+    reason: reason || `Agency commission payout reversed — ${payout.payoutNumber || payout._id}`,
   });
 
 // ─── Clawback on cancellation — a tier already paid out in cash can't be un-sent ─────────────────────
@@ -738,159 +876,11 @@ export const postPropertySaleCommissionClawbackOnCancellation = async ({ busines
   ]);
 };
 
-// ─── Advocate trust remittance — clears 1314 Advocate Trust Receivable ───────────────────────────────
-//
-// Called when an advocate actually hands over money they collected into their own trust account. This
-// is ALWAYS a pure cash entry for the FULL amount, regardless of `appliedTo` — Dr [cashbook] / Cr 1314,
-// full stop. (An earlier revision of this function split the credit leg between 1313/1314 by appliedTo
-// content; that conflated a cash movement with a non-cash reclassification and left 1314 permanently
-// short by the recovered-expense amount. Fixed: the recoverable-expense recognition is now a completely
-// separate, non-cash entry — see postRecoverableExpenseSettlement below — posted alongside this one.)
-//
-// `appliedTo` is a computed breakdown (built by the caller from outstandingRecoverableExpense), never
-// user-submitted free-form, and is kept on the SaleAdvocateRemittance document purely as audit/breakdown
-// metadata. Entries whose category is "recoverable_expense" each additionally drive one
-// postRecoverableExpenseSettlement call; "owner_commission_cash" entries have no GL effect of their own
-// (that cash is just part of the ordinary 1314 clearance). Omitting appliedTo (or an empty array) posts
-// only the cash leg — today's exact original behavior.
-
-export const postSaleAdvocateRemittance = async ({ businessId, remittance, userId, cashbookAccountId, appliedTo = [] }) => {
-  const amount = round2(Number(remittance.amount || 0));
-
-  if (amount > 0) {
-    const sourceTransactionType = "property_sale_advocate_remittance";
-    const sourceTransactionId = String(remittance._id);
-
-    const existing = await FinancialLedgerEntry.countDocuments({
-      business: businessId, sourceTransactionType, sourceTransactionId,
-      status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
-    });
-
-    if (existing === 0) {
-      const { start, end } = dayRange(remittance.date || remittance.createdAt);
-      const journalGroupId = new mongoose.Types.ObjectId();
-
-      const [debitAcc, trustAcc] = await Promise.all([
-        cashbookAccountId
-          ? ChartOfAccount.findById(cashbookAccountId).lean()
-          : resolvePSAccount(businessId, "1311"),
-        resolvePSAccount(businessId, "1314"),
-      ]);
-      if (!debitAcc) throw new Error("Cashbook account not found — GL posting aborted");
-
-      const ref = remittance.remittanceNumber || String(remittance._id);
-
-      const base = {
-        business: businessId, sourceTransactionType, sourceTransactionId,
-        transactionDate: remittance.date || remittance.createdAt || new Date(),
-        statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
-        category: "PROPERTY_SALE_ADVOCATE_REMITTANCE", createdBy: userId, allowUnscoped: true,
-      };
-
-      await postEntries([
-        { ...base, accountId: debitAcc._id, direction: "debit",  amount, notes: `Advocate trust remittance received — ${ref}` },
-        { ...base, accountId: trustAcc._id, direction: "credit", amount, notes: `Advocate trust receivable cleared — ${ref}` },
-      ]);
-    }
-  }
-
-  // Each recoverable-expense entry gets its own, independently idempotent, non-cash settlement.
-  const list = Array.isArray(appliedTo) ? appliedTo : [];
-  await Promise.all(
-    list.map((entry, index) =>
-      entry?.category === "recoverable_expense"
-        ? postRecoverableExpenseSettlement({ businessId, remittance, appliedToEntry: entry, userId, index })
-        : null
-    )
-  );
-};
-
-export const reverseSaleAdvocateRemittance = async ({ businessId, remittance, userId, reason }) => {
-  await reverseEntriesFor({
-    businessId,
-    sourceTransactionType: "property_sale_advocate_remittance",
-    sourceTransactionId: String(remittance._id),
-    userId,
-    reason: reason || `Advocate remittance reversed — ${remittance.remittanceNumber || remittance._id}`,
-  });
-
-  const list = Array.isArray(remittance.appliedTo) ? remittance.appliedTo : [];
-  await Promise.all(
-    list.map((entry, index) =>
-      entry?.category === "recoverable_expense"
-        ? reverseRecoverableExpenseSettlement({ businessId, remittance, appliedToEntry: entry, userId, reason, index })
-        : null
-    )
-  );
-};
-
-// ─── Recoverable-expense settlement — a separate, non-cash reclassification ──────────────────────────
-//
-// When an advocate's remittance recovers a recoverable owner expense (SaleAdvocateRemittance.appliedTo,
-// category "recoverable_expense"), the cash itself is already accounted for in full by
-// postSaleAdvocateRemittance's ordinary Dr Cashbook / Cr 1314 leg above. This entry is the separate
-// recognition that the OWNER's net claim is reduced by that amount — because that recovery is precisely
-// why the owner is effectively footing this cost out of their own proceeds — and that the company's
-// receivable for having paid the expense upfront is now cleared:
-//   Dr 2185 Owner Clearing / Cr 1313 Owner Expense Recoverable
-//
-// Keyed by remittance + the applied entry's refId (falling back to its array index when refId is
-// absent), so each recovered expense within one remittance is its own idempotent, independently
-// reversible posting.
-
-const recoverableSettlementSourceId = (remittance, appliedToEntry, index = 0) =>
-  `${remittance._id}:recoverable:${appliedToEntry?.refId || index}`;
-
-export const postRecoverableExpenseSettlement = async ({ businessId, remittance, appliedToEntry, userId, index = 0 }) => {
-  const amount = round2(Number(appliedToEntry?.amount || 0));
-  if (amount <= 0) return;
-
-  const sourceTransactionType = "property_sale_recoverable_expense_settlement";
-  const sourceTransactionId = recoverableSettlementSourceId(remittance, appliedToEntry, index);
-
-  const existing = await FinancialLedgerEntry.countDocuments({
-    business: businessId, sourceTransactionType, sourceTransactionId,
-    status: { $ne: "reversed" }, category: { $ne: "REVERSAL" },
-  });
-  if (existing > 0) return;
-
-  const { start, end } = dayRange(remittance.date || remittance.createdAt);
-  const journalGroupId = new mongoose.Types.ObjectId();
-
-  const [clearingAcc, recoverableAcc] = await Promise.all([
-    resolvePSAccount(businessId, "2185"),
-    resolvePSAccount(businessId, "1313"),
-  ]);
-
-  const ref = remittance.remittanceNumber || String(remittance._id);
-
-  const base = {
-    business: businessId, sourceTransactionType, sourceTransactionId,
-    transactionDate: remittance.date || remittance.createdAt || new Date(),
-    statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
-    category: "PROPERTY_SALE_RECOVERABLE_EXPENSE_SETTLEMENT", createdBy: userId, allowUnscoped: true,
-  };
-
-  await postEntries([
-    { ...base, accountId: clearingAcc._id,   direction: "debit",  amount, notes: `Owner expense recoverable settled against owner's proceeds — ${ref}` },
-    { ...base, accountId: recoverableAcc._id, direction: "credit", amount, notes: `Owner expense recoverable cleared — ${ref}` },
-  ]);
-};
-
-export const reverseRecoverableExpenseSettlement = async ({ businessId, remittance, appliedToEntry, userId, reason, index = 0 }) =>
-  reverseEntriesFor({
-    businessId,
-    sourceTransactionType: "property_sale_recoverable_expense_settlement",
-    sourceTransactionId: recoverableSettlementSourceId(remittance, appliedToEntry, index),
-    userId,
-    reason: reason || `Recoverable expense settlement reversed — ${remittance.remittanceNumber || remittance._id}`,
-  });
-
 // ─── Advocate recharge remittance — direct cash settlement of 1313 Owner Expense Recoverable ────────
 //
 // Real money an advocate sends Pink House specifically to recover one or more named "sale_owner_expense"
-// vouchers (SaleAdvocateRechargeRemittance) — NOT trust money, so unlike postSaleAdvocateRemittance
-// there is no 1314 involvement at all: Dr [cashbook] / Cr 1313, for the full remittance amount, in one
+// vouchers (SaleAdvocateRechargeRemittance) — NOT trust money, so there is no 1314 involvement at all:
+// Dr [cashbook] / Cr 1313, for the full remittance amount, in one
 // posting regardless of how many vouchers its `allocations` cover (they all share the same two
 // accounts, so splitting the GL per voucher would add nothing — the allocations themselves, kept on the
 // SaleAdvocateRechargeRemittance document, are what drives outstandingRecoverableExpenseVouchers' own

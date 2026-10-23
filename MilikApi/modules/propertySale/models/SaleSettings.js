@@ -90,6 +90,15 @@ const saleSettingsSchema = new mongoose.Schema(
     advocateDefaults: {
       whtHandledBy: { type: String, enum: ["advocate", "agent"], default: "agent" },
     },
+    // Per-business override of which real ChartOfAccount backs each of the module's fixed system
+    // accounts (see PS_ACCOUNT_TEMPLATES in services/propertySaleAccountingService.js) — keyed by the
+    // same code string (e.g. "4430"), so a template added later needs no schema change here. Empty/unset
+    // for a code keeps today's exact behavior: resolvePSAccount auto-creates its own system account.
+    accountingDefaults: {
+      type: Map,
+      of: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount" },
+      default: () => new Map(),
+    },
   },
   { timestamps: true }
 );

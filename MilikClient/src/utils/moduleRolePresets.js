@@ -731,14 +731,15 @@ export const MODULE_ROLE_PRESETS = {
         ],
       },
       // Scoped automatically by the backend (advocateScope.js) to only their own assigned-project
-      // deals/listings/payments/owners/commissions/remittances — view-only everywhere except their own
-      // deal payments and trust remittances, which they can also record (narrower
-      // sale-advocate-payments/sale-advocate-remittances resources, matching exactly what the routes
-      // check for an advocate-linked caller). They never get CRM (leads/activities — no advocate
-      // concept there) or buyers, and never get update/void/delete on anything.
+      // deals/listings/payments/owners/commissions/recharge remittances — view-only everywhere except
+      // their own deal payments and recharge remittances (recovering recoverable owner expenses), which
+      // they can also record (narrower sale-advocate-payments/sale-advocate-remittances resources,
+      // matching exactly what the routes check for an advocate-linked caller). They never get CRM
+      // (leads/activities — no advocate concept there) or buyers, and never get update/void/delete on
+      // anything.
       advocate: {
         label: 'Advocate',
-        description: "View their own assigned deals, listings/units, owners and owner statements, and commissions; record payments and trust remittances (payouts) — all automatically scoped to their own assigned project(s) by the backend",
+        description: "View their own assigned deals, listings/units, owners and owner statements, commissions, and trust balance; record payments and recharge remittances (recovering recoverable owner expenses) — all automatically scoped to their own assigned project(s) by the backend",
         grants: [
           { resource: 'sale-deals',                action: 'view'   },
           { resource: 'sale-listings',              action: 'view'   },

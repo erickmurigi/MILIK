@@ -3,7 +3,7 @@ import { createError } from "../../../utils/error.js";
 import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleProject from "../models/SaleProject.js";
 import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from "../services/businessScope.js";
-import { advocateTrustBalance } from "./advocateRemittancesController.js";
+import { advocateTrustBalance } from "./advocateTrustController.js";
 import { round2 } from "../../../utils/math.js";
 
 // userIds is deliberately NOT settable through the generic create/update body — array mutation needs an

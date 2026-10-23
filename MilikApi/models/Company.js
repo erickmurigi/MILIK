@@ -628,6 +628,15 @@ const companySchema = new mongoose.Schema(
           messageBody: { type: String, default: '' },
         },
       ],
+      // Per-business override of which real ChartOfAccount backs each of resolveCarWashAccount's fixed
+      // codes (see CW_ACCOUNT_TEMPLATES in modules/carwash/services/carwashAccountingService.js) — keyed
+      // by the same code string. Empty/unset for a code keeps today's exact behavior: resolveCarWashAccount
+      // auto-creates its own system account.
+      accountingDefaults: {
+        type: Map,
+        of: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount' },
+        default: () => new Map(),
+      },
     },
 
     communication: {

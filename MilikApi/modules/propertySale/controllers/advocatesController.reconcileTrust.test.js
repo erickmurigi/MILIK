@@ -7,10 +7,11 @@ import SaleAdvocate from "../models/SaleAdvocate.js";
 import SaleProject from "../models/SaleProject.js";
 import SaleBuyer from "../models/SaleBuyer.js";
 import SaleListing from "../models/SaleListing.js";
+import SaleOwner from "../models/SaleOwner.js";
+import SaleOwnerPayout from "../models/SaleOwnerPayout.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { createDeal } from "./dealsController.js";
 import { createPayment } from "./paymentsController.js";
-import { createRemittance } from "./advocateRemittancesController.js";
 import { reconcileTrust } from "./advocatesController.js";
 
 let seq = 0;
@@ -37,8 +38,12 @@ describe("advocate trust reconciliation", () => {
   it("logs a variance entry against the system-computed balance, with no GL posting", async () => {
     const { business, call, advocate, deal } = await setup();
     await call(createPayment, { body: { deal: String(deal._id), amount: 500_000, paymentType: "installment", collectionMethod: "advocate_trust" } });
-    await call(createRemittance, { body: { advocate: String(advocate._id), amount: 100_000 } });
-    // system balance = 500,000 collected - 100,000 remitted = 400,000
+    const owner = await SaleOwner.create({ business, ownerNumber: "OWN-RECON", fullName: "Reconciliation Owner" });
+    // Posted directly at the model level (bypassing the owner-payout controller's own cap) purely to
+    // engineer a known disbursed figure for this reconciliation math — not exercising the payout flow
+    // itself, which has its own dedicated tests.
+    await SaleOwnerPayout.create({ business, payoutNumber: "OPY-RECON", owner: owner._id, deal: deal._id, amount: 100_000, source: "advocate_trust" });
+    // system balance = 500,000 collected - 100,000 disbursed = 400,000
 
     const glBefore = await FinancialLedgerEntry.countDocuments({ business });
 

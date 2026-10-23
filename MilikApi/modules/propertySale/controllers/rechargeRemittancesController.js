@@ -141,7 +141,7 @@ export const createRechargeRemittance = async (req, res, next) => {
     const userId = currentUserId(req);
 
     // Scoped advocate caller: always remit as themselves — same "never let the caller's own input
-    // override the scope" rule as advocateRemittancesController.js's createRemittance.
+    // override the scope" rule used throughout this module.
     const advocateId = req.saleAdvocateId || req.body.advocate;
     if (req.saleAdvocateId && req.body.advocate && String(req.body.advocate) !== req.saleAdvocateId) {
       return next(createError(404, "Advocate not found"));
@@ -237,10 +237,9 @@ export const createRechargeRemittance = async (req, res, next) => {
   }
 };
 
-// Staff-only correction path — same voided/audit-trail pattern as advocateRemittancesController.js's
-// voidRemittance: the record stays (status "cancelled"), only the GL and the claimed reference are
-// released. A scoped advocate can create their own recharge remittances but not correct them after the
-// fact.
+// Staff-only correction path — same voided/audit-trail pattern used throughout this module: the record
+// stays (status "cancelled"), only the GL and the claimed reference are released. A scoped advocate can
+// create their own recharge remittances but not correct them after the fact.
 export const voidRechargeRemittance = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);

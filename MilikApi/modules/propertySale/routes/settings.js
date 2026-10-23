@@ -14,6 +14,7 @@ import {
   updateUseAdvocates,
   loadDefaults,
   addCommTemplate, updateCommTemplate, deleteCommTemplate,
+  listAccountingDefaultTemplates, updatePSAccountingDefaults,
 } from "../controllers/settingsController.js";
 
 const router = express.Router();
@@ -40,6 +41,9 @@ router.put("/agent-visibility",           updateAgentVisibility);
 router.put("/use-projects",               updateUseProjects);
 router.put("/use-owners",                 updateUseOwners);
 router.put("/use-advocates",              updateUseAdvocates);
+
+router.get("/accounting-defaults/templates", listAccountingDefaultTemplates);
+router.put("/accounting-defaults",           updatePSAccountingDefaults);
 
 router.post("/load-defaults/:collection", loadDefaults);
 

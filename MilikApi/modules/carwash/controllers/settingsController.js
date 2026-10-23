@@ -13,6 +13,7 @@ import CarWashStaffDamage from "../models/CarWashStaffDamage.js";
 import CarWashDeposit from "../models/CarWashDeposit.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import CarWashStaffSaving from "../models/CarWashStaffSaving.js";
+import { listCWAccountTemplates, validateCWAccountOverride, clearCWAccountCache, resolveCarWashAccount } from "../services/carwashAccountingService.js";
 
 const METHODS = ["cash", "mpesa", "bank", "card", "other"];
 
@@ -67,8 +68,11 @@ export const getCarWashSettings = async (req, res, next) => {
     const damageDeductionMode  = company?.carwashSettings?.damageDeductionMode  || "full";
     const damageDeductionValue = company?.carwashSettings?.damageDeductionValue != null
       ? Number(company.carwashSettings.damageDeductionValue) : null;
+    // A Mongoose Map serializes to a plain {code: accountId} object over .lean() + res.json() — already
+    // exactly the shape the Accounting Defaults tab's form state reads/writes.
+    const accountingDefaults = company?.carwashSettings?.accountingDefaults || {};
 
-    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, queueBgImage, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue } });
+    res.json({ success: true, data: { defaultCashbooks, savingsEnabled, savingsDeductionPerJob, smsTemplates, queueDisplayName, queueBgImage, discountMinJobPrice, discountMaxPercent, damageDeductionMode, damageDeductionValue, accountingDefaults } });
   } catch (err) {
     next(err);
   }
@@ -187,6 +191,54 @@ export const updateCarWashSettings = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+// Every code in CW_ACCOUNT_TEMPLATES, for the Settings page to render one row per account without a
+// second, hand-maintained copy of the registry that could drift out of sync. Each row is enriched with
+// `resolvedAccount` — exactly what resolveCarWashAccount would use right now, override or system default.
+export const listCarWashAccountingDefaultTemplates = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const templates = listCWAccountTemplates();
+    const resolved = await Promise.all(templates.map((t) => resolveCarWashAccount(business, t.code)));
+    const accounts = await ChartOfAccount.find({ _id: { $in: resolved.map((a) => a._id) } }).select("code name").lean();
+    const accountById = new Map(accounts.map((a) => [String(a._id), a]));
+    res.json({
+      success: true,
+      templates: templates.map((t, i) => {
+        const acc = accountById.get(String(resolved[i]._id));
+        return { ...t, resolvedAccount: { _id: resolved[i]._id, code: acc?.code || null, name: acc?.name || null } };
+      }),
+    });
+  } catch (err) { next(err); }
+};
+
+// Per-business override of which real ChartOfAccount backs each of resolveCarWashAccount's fixed codes.
+// `req.body.accountingDefaults` is {code: accountIdOrCode}; an empty string/null for a code clears its
+// override back to the system default. Every submitted value is validated against that code's own
+// required account type before being saved.
+export const updateCarWashAccountingDefaults = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const incoming = req.body?.accountingDefaults || {};
+
+    const company = await Company.findById(business).select("carwashSettings.accountingDefaults").lean();
+    const nextDefaults = new Map(Object.entries(company?.carwashSettings?.accountingDefaults || {}));
+    for (const [code, rawValue] of Object.entries(incoming)) {
+      let account;
+      try {
+        account = await validateCWAccountOverride({ businessId: business, code, rawValue });
+      } catch (validationErr) {
+        return next({ status: 400, message: validationErr.message });
+      }
+      if (account) nextDefaults.set(code, account._id);
+      else nextDefaults.delete(code);
+    }
+
+    await Company.updateOne({ _id: business }, { $set: { "carwashSettings.accountingDefaults": Object.fromEntries(nextDefaults) } });
+    clearCWAccountCache(business);
+    res.json({ success: true, message: "Car Wash accounting defaults saved" });
+  } catch (err) { next(err); }
 };
 
 export const backfillBranches = async (req, res, next) => {

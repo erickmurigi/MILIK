@@ -1183,6 +1183,10 @@ const CompanySettings = () => {
   const [savingSaleOwnerComm, setSavingSaleOwnerComm] = useState(false);
   const [releaseScheduleForm, setReleaseScheduleForm] = useState({ enabled: false, ownerCommissionTiers: [], brokerCommissionTiers: [] });
   const [savingReleaseSchedule, setSavingReleaseSchedule] = useState(false);
+  const [saleAccountTemplates, setSaleAccountTemplates] = useState([]);
+  const [saleAccountingDefaults, setSaleAccountingDefaults] = useState({});
+  const [loadingSaleAccountTemplates, setLoadingSaleAccountTemplates] = useState(false);
+  const [savingSaleAccounting, setSavingSaleAccounting] = useState(false);
   const [savingSaleSwitch, setSavingSaleSwitch] = useState(false);
   const queryClient = useQueryClient();
 
@@ -1207,6 +1211,10 @@ const CompanySettings = () => {
   const [loadingCW, setLoadingCW] = useState(false);
   const [savingCW, setSavingCW] = useState(false);
   const [dirtyCW, setDirtyCW] = useState(false);
+  const [cwAccountTemplates, setCwAccountTemplates] = useState([]);
+  const [cwAccountingDefaults, setCwAccountingDefaults] = useState({});
+  const [loadingCwAccountTemplates, setLoadingCwAccountTemplates] = useState(false);
+  const [savingCwAccounting, setSavingCwAccounting] = useState(false);
   const [taxConfig, setTaxConfig] = useState(normalizeTaxConfiguration());
   const [accountingDefaults, setAccountingDefaults] = useState(normalizeAccountingDefaults());
   const [hrAccountingDefaults, setHrAccountingDefaults] = useState(normalizeHrAccountingDefaults());
@@ -1362,7 +1370,23 @@ const CompanySettings = () => {
           brokerCommissionTiers: s.commissionReleaseSchedule.brokerCommissionTiers ?? [],
         });
       }
+      // A Mongoose Map serializes to a plain {code: accountId} object over JSON — already exactly the
+      // shape setSaleAccountingDefaultField reads/writes, no extra normalization needed.
+      setSaleAccountingDefaults(s?.accountingDefaults || {});
     } catch { /* noop */ }
+  }, [hasSale, currentCompany?._id]);
+
+  // One row per PS_ACCOUNT_TEMPLATES entry (code, label, allowed type, and what would be used
+  // automatically) — fetched from the backend's own registry so a new account code added there shows
+  // up here with no frontend change needed.
+  const loadSaleAccountTemplates = useCallback(async () => {
+    if (!hasSale || !currentCompany?._id) return;
+    setLoadingSaleAccountTemplates(true);
+    try {
+      const res = await adminRequests.get("/sale/settings/accounting-defaults/templates");
+      setSaleAccountTemplates(Array.isArray(res.data?.templates) ? res.data.templates : []);
+    } catch { setSaleAccountTemplates([]); }
+    finally { setLoadingSaleAccountTemplates(false); }
   }, [hasSale, currentCompany?._id]);
 
   const loadInvPOSSettings = useCallback(async () => {
@@ -1410,9 +1434,22 @@ const CompanySettings = () => {
       setCwDiscountMaxPercent(String(s?.discountMaxPercent  ?? 0));
       setCwDmgMode(s?.damageDeductionMode || "full");
       setCwDmgValue(s?.damageDeductionValue != null ? String(s.damageDeductionValue) : "");
+      setCwAccountingDefaults(s?.accountingDefaults || {});
       setDirtyCW(false);
     } catch { toast.error("Failed to load Car Wash settings"); }
     finally { setLoadingCW(false); }
+  }, [hasCW, currentCompany?._id]);
+
+  // One row per CW_ACCOUNT_TEMPLATES entry (code, label, allowed type, and what would be used
+  // automatically) — fetched from the backend's own registry, mirroring the Property Sales tab exactly.
+  const loadCwAccountTemplates = useCallback(async () => {
+    if (!hasCW || !currentCompany?._id) return;
+    setLoadingCwAccountTemplates(true);
+    try {
+      const res = await carWashApi.listAccountingDefaultTemplates();
+      setCwAccountTemplates(Array.isArray(res?.templates) ? res.templates : []);
+    } catch { setCwAccountTemplates([]); }
+    finally { setLoadingCwAccountTemplates(false); }
   }, [hasCW, currentCompany?._id]);
 
   const saveCWSettings = async () => {
@@ -1478,12 +1515,16 @@ const CompanySettings = () => {
   useEffect(() => {
     if (activeTab === "accounting" || activeTab === "hrAccounting" || activeTab === "expenses") {
       loadChartAccounts();
+      // Property Sales and Car Wash accounting defaults are now cards on this same combined tab
+      // (alongside General/PMS/HR/Inventory) rather than their own separate tabs.
+      loadSaleAccountTemplates();
+      loadCwAccountTemplates();
     }
     if (activeTab === "penaltyRules") {
       loadPenaltyRules();
       loadPenaltyAccounts();
     }
-  }, [loadChartAccounts, loadPenaltyRules, loadPenaltyAccounts, activeTab]);
+  }, [loadChartAccounts, loadPenaltyRules, loadPenaltyAccounts, loadSaleAccountTemplates, loadCwAccountTemplates, activeTab]);
 
   const activeCounts = useMemo(
     () => ({
@@ -1547,6 +1588,14 @@ const CompanySettings = () => {
 
   const setInvAccountingDefaultField = useCallback((field, value) => {
     setInvAccountingDefaults((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const setSaleAccountingDefaultField = useCallback((code, value) => {
+    setSaleAccountingDefaults((prev) => ({ ...prev, [code]: value }));
+  }, []);
+
+  const setCwAccountingDefaultField = useCallback((code, value) => {
+    setCwAccountingDefaults((prev) => ({ ...prev, [code]: value }));
   }, []);
 
   const openCreateModal = useCallback((tabKey) => {
@@ -1855,6 +1904,34 @@ const CompanySettings = () => {
       toast.error(extractErrorMessage(error));
     } finally {
       setSavingInvAccounting(false);
+    }
+  };
+
+  const saveSaleAccountingDefaults = async () => {
+    if (!currentCompany?._id) return;
+    setSavingSaleAccounting(true);
+    try {
+      await adminRequests.put("/sale/settings/accounting-defaults", { accountingDefaults: saleAccountingDefaults });
+      toast.success("Property Sales accounting defaults saved. New postings will use these accounts.");
+      await Promise.all([loadSaleSettings(), loadSaleAccountTemplates()]);
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingSaleAccounting(false);
+    }
+  };
+
+  const saveCwAccountingDefaults = async () => {
+    if (!currentCompany?._id) return;
+    setSavingCwAccounting(true);
+    try {
+      await carWashApi.updateAccountingDefaults({ accountingDefaults: cwAccountingDefaults });
+      toast.success("Car Wash accounting defaults saved. New postings will use these accounts.");
+      await Promise.all([loadCWSettings(), loadCwAccountTemplates()]);
+    } catch (error) {
+      toast.error(extractErrorMessage(error));
+    } finally {
+      setSavingCwAccounting(false);
     }
   };
 
@@ -2596,6 +2673,56 @@ const CompanySettings = () => {
     </div>
   );
 
+  // Same visual shape as renderAccountingDefaultsGrid above, but for a module whose accounts are a
+  // dynamic, backend-fetched registry ({code, name, type, resolvedAccount}) instead of a hardcoded
+  // FIELDS array — PropertySale and Car Wash both resolve every account through a single choke-point
+  // function keyed by code, so their rows come from the backend's own registry rather than a second,
+  // hand-maintained copy here.
+  const renderDynamicAccountingDefaultsGrid = (templates, defaults, setField) => (
+    <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+      {templates.map((tpl) => {
+        const bucket = chartAccountOptionsByType[tpl.type];
+        const options = bucket?.options || [];
+        const selectedAccount = (bucket?.accounts || []).find((account) => String(account?._id || "") === String(defaults[tpl.code] || ""));
+        const fallback = tpl.resolvedAccount || null;
+        const fallbackLabel = fallback ? `${fallback.code ? `${fallback.code} – ` : ""}${fallback.name}` : "";
+
+        return (
+          <div key={tpl.code} className="border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-extrabold text-slate-900">
+              {tpl.name} <span className="ml-1 font-mono text-[10px] font-normal text-slate-400">{tpl.code}</span>
+            </div>
+
+            <div className="mt-3">
+              <AppSelect
+                value={defaults[tpl.code] || ""}
+                onChange={(v) => setField(tpl.code, v ?? "")}
+                options={options}
+                placeholder={fallbackLabel ? `${fallbackLabel} (automatic)` : "No account available — choose one"}
+                clearable
+                searchable
+                size="md"
+              />
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Allowed type: {tpl.type}</div>
+              <ActionButton variant="subtle" onClick={() => setField(tpl.code, "")}>Clear</ActionButton>
+            </div>
+
+            <div className="mt-2 text-xs leading-5 text-slate-600">
+              {selectedAccount
+                ? `Selected: ${selectedAccount.code ? `${selectedAccount.code} • ` : ""}${selectedAccount.name}`
+                : fallbackLabel
+                  ? `Used until you choose one: ${fallbackLabel}`
+                  : "No account available. Choose one, or create it in Chart of Accounts."}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
   const renderAccountingTab = () => (
     <div className="space-y-6">
       <Card
@@ -2688,6 +2815,54 @@ const CompanySettings = () => {
             </div>
           ) : (
             renderAccountingDefaultsGrid(INV_ACCOUNTING_DEFAULT_FIELDS, invAccountingDefaults, setInvAccountingDefaultField)
+          )}
+        </Card>
+      )}
+
+      {hasSale && (
+        <Card
+          title="Property Sales Accounting Defaults"
+          subtitle="Redirect any of the module's fixed system accounts (deal/commission/trust postings) to your own Chart of Accounts numbering. Leaving a row blank keeps the auto-created MILIK default."
+          action={
+            <ActionButton variant="primary" onClick={saveSaleAccountingDefaults} disabled={savingSaleAccounting || loadingAccounts || loadingSaleAccountTemplates}>
+              {savingSaleAccounting ? <Spinner size="sm" /> : <FaSave />} Save Property Sales Defaults
+            </ActionButton>
+          }
+        >
+          <div className="border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
+            Choose real Chart of Accounts rows. Each account's role stays fixed — only which real account backs that role is configurable, and only an account of the matching allowed type can be chosen.
+          </div>
+
+          {loadingAccounts || loadingSaleAccountTemplates ? (
+            <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+              <Spinner size="sm" /> Loading Chart of Accounts...
+            </div>
+          ) : (
+            renderDynamicAccountingDefaultsGrid(saleAccountTemplates, saleAccountingDefaults, setSaleAccountingDefaultField)
+          )}
+        </Card>
+      )}
+
+      {hasCW && (
+        <Card
+          title="Car Wash Accounting Defaults"
+          subtitle="Redirect any of the module's fixed system accounts (service income, commissions, savings, damage recovery) to your own Chart of Accounts numbering. Leaving a row blank keeps the auto-created MILIK default."
+          action={
+            <ActionButton variant="primary" onClick={saveCwAccountingDefaults} disabled={savingCwAccounting || loadingAccounts || loadingCwAccountTemplates}>
+              {savingCwAccounting ? <Spinner size="sm" /> : <FaSave />} Save Car Wash Defaults
+            </ActionButton>
+          }
+        >
+          <div className="border border-amber-200 bg-amber-50 px-3 py-2.5 text-[11px] leading-5 text-amber-800">
+            Choose real Chart of Accounts rows. Each account's role stays fixed — only which real account backs that role is configurable, and only an account of the matching allowed type can be chosen.
+          </div>
+
+          {loadingAccounts || loadingCwAccountTemplates ? (
+            <div className="mt-4 flex items-center gap-3 text-sm text-slate-600">
+              <Spinner size="sm" /> Loading Chart of Accounts...
+            </div>
+          ) : (
+            renderDynamicAccountingDefaultsGrid(cwAccountTemplates, cwAccountingDefaults, setCwAccountingDefaultField)
           )}
         </Card>
       )}

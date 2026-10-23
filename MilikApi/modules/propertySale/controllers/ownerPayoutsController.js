@@ -308,7 +308,7 @@ export const createOwnerPayout = async (req, res, next) => {
       });
     } catch (glErr) {
       // GL failed — delete the payout so DB and ledger stay in sync (same rollback pattern used
-      // throughout this module, e.g. advocateRemittancesController.js's createRemittance)
+      // throughout this module, e.g. rechargeRemittancesController.js's createRechargeRemittance)
       await SaleOwnerPayout.deleteOne({ _id: payout._id });
       await releasePaymentReference({ business, reference: payout.reference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});
       await releasePaymentReference({ business, reference: payout.cgtReference, sourceModel: "SaleOwnerPayout", sourceId: payout._id }).catch(() => {});

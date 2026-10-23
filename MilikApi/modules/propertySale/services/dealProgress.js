@@ -1,8 +1,9 @@
 import mongoose from "mongoose";
 import SalePayment from "../models/SalePayment.js";
 import SaleCommission from "../models/SaleCommission.js";
-import SaleAdvocateRemittance from "../models/SaleAdvocateRemittance.js";
 import SaleOwnerPayout from "../models/SaleOwnerPayout.js";
+import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
+import SaleAgencyCommissionPayout from "../models/SaleAgencyCommissionPayout.js";
 import { round2 } from "../../../utils/math.js";
 
 // Sum of a deal's confirmed ("paid") payments, optionally excluding one payment — shared by
@@ -24,13 +25,17 @@ export const percentPaid = (totalPaid, agreedPrice) =>
 // Money an advocate holds in trust FOR THIS SPECIFIC DEAL that hasn't yet been disbursed to anyone —
 // broker, agent, or owner. Prevents one deal's completion from drawing against another deal's funds
 // (both an LSK trust-compliance concern for the advocate and a leak in our own records). Every
-// disbursement action (broker payout via advocate_trust, advocate remittance, owner payout via
-// advocate_trust) MUST call this and reject if the requested amount exceeds `available`, before
+// disbursement action (broker payout via advocate_trust, owner payout via advocate_trust, agency
+// commission payout) MUST call this and reject if the requested amount exceeds `available`, before
 // posting anything.
 export const dealAdvocateTrustBalance = async (business, dealId) => {
   const bId = new mongoose.Types.ObjectId(String(business));
   const dId = new mongoose.Types.ObjectId(String(dealId));
-  const [[collected], [commissionPaid], [remitted], [ownerPaid]] = await Promise.all([
+  // A deal has at most one SaleOwnerCommission (created once, alongside the deal itself) — resolved up
+  // front so the agency-commission-payout aggregate below can match on it directly, same join-avoidance
+  // approach as everything else in this function.
+  const ownerCommission = await SaleOwnerCommission.findOne({ business: bId, deal: dId }).select("_id").lean();
+  const [[collected], [commissionPaid], [ownerPaid], [agencyCommissionPaid]] = await Promise.all([
     SalePayment.aggregate([
       { $match: { business: bId, deal: dId, collectionMethod: "advocate_trust", status: "paid" } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
@@ -46,10 +51,6 @@ export const dealAdvocateTrustBalance = async (business, dealId) => {
       { $unwind: "$payouts" },
       { $match: { "payouts.source": "advocate_trust" } },
       { $group: { _id: null, total: { $sum: "$payouts.amount" } } }, // gross — this is what left the trust pool, net-to-broker + withheld both came out of it
-    ]),
-    SaleAdvocateRemittance.aggregate([
-      { $match: { business: bId, deal: dId, status: { $ne: "cancelled" } } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
     // A payout draws this deal's trust either via the single `deal` field (the original, single-deal
     // shape — amount+cgtAmount in full) or via `allocations` (a combined multi-deal payout — only THIS
@@ -74,8 +75,19 @@ export const dealAdvocateTrustBalance = async (business, dealId) => {
       } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
     ]),
+    // The agency commission's own payout — real cash the advocate hands over specifically to settle the
+    // company's deferred commission (propertySaleAccountingService.js's postAgencyCommissionPayout).
+    // Only relevant when this deal actually has an owner commission at all.
+    ownerCommission
+      ? SaleAgencyCommissionPayout.aggregate([
+          { $match: { business: bId, status: { $ne: "cancelled" }, "allocations.ownerCommission": ownerCommission._id } },
+          { $unwind: "$allocations" },
+          { $match: { "allocations.ownerCommission": ownerCommission._id } },
+          { $group: { _id: null, total: { $sum: "$allocations.amount" } } },
+        ])
+      : Promise.resolve([null]),
   ]);
   const collectedTotal = round2(collected?.total || 0);
-  const disbursed = round2((commissionPaid?.total || 0) + (remitted?.total || 0) + (ownerPaid?.total || 0));
+  const disbursed = round2((commissionPaid?.total || 0) + (ownerPaid?.total || 0) + (agencyCommissionPaid?.total || 0));
   return { collected: collectedTotal, disbursed, available: round2(collectedTotal - disbursed) };
 };

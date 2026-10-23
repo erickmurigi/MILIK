@@ -23,6 +23,11 @@ const saleOwnerStatementLineSchema = new mongoose.Schema(
     sourceTransactionType: { type: String, default: null, trim: true },
     sourceTransactionId: { type: String, default: null, trim: true },
     lineNumber: { type: Number, required: true, min: 1 },
+    // Recovery/disbursement status for an "expense", "company_commission" or "broker_commission" line —
+    // true once the advocate has recovered/paid it out in full, false while still outstanding. Drives
+    // red/green on the statement; never on "proceeds"/"owner_payout" lines, which have no such status
+    // (left undefined/null for those, same as every other category-specific field on this shared schema).
+    paid: { type: Boolean, default: null },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
   },
   { timestamps: true }

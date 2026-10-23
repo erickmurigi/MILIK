@@ -77,7 +77,7 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     expect(full.payload.lines[full.payload.lines.length - 1].runningBalance).toBe(statement.netBalance);
   });
 
-  it("a recharged expense voucher only shows on the statement once an advocate actually recovers it — not merely because it was paid to the service provider", async () => {
+  it("a recharged expense voucher shows on the statement the moment it's paid — red (unpaid) until the advocate recovers it, then green (paid)", async () => {
     const { business, owner, project, call } = await setup();
     const liabilityAccount = await getAccountByCode(business, "2120");
     const settlementAccount = await getAccountByCode(business, "1100");
@@ -89,15 +89,22 @@ describe("owner statement — generation and totals (immediate-release, no stagi
       },
     });
 
-    // Paid to the surveyor, but nothing has been recovered from the advocate yet — must not show.
+    // Paid to the surveyor, nothing recovered from the advocate yet — shows immediately, unpaid (red).
     const before = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
-    expect(before.payload.rechargedExpenses).toBe(0);
+    expect(before.payload).toMatchObject({
+      grossProceeds: 1_000_000, companyCommission: 30_000, brokerCommission: 20_000, rechargedExpenses: 15_000,
+      netBalance: 1_000_000 - 30_000 - 20_000 - 15_000,
+    });
+    const beforeFull = await call(getStatement, { params: { id: String(before.payload._id) } });
+    const beforeExpenseLine = beforeFull.payload.lines.find((l) => l.category === "expense");
+    expect(beforeExpenseLine).toMatchObject({ amount: 15_000, direction: "debit", paid: false });
 
     const advocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-1", fullName: "John Advocate", phone: "0733000333" });
     await call(createRechargeRemittance, {
       body: { advocate: String(advocate._id), owner: String(owner._id), allocations: [{ voucher: String(voucherRes.payload._id), amount: 15_000 }] },
     });
 
+    // Net balance is unchanged by the recovery (it was already counted) — only the paid flag flips.
     const res = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
     expect(res.payload).toMatchObject({
       grossProceeds: 1_000_000, companyCommission: 30_000, brokerCommission: 20_000, rechargedExpenses: 15_000,
@@ -105,32 +112,30 @@ describe("owner statement — generation and totals (immediate-release, no stagi
     });
     const full = await call(getStatement, { params: { id: String(res.payload._id) } });
     const expenseLine = full.payload.lines.find((l) => l.category === "expense");
-    expect(expenseLine).toMatchObject({ amount: 15_000, direction: "debit" });
+    expect(expenseLine).toMatchObject({ amount: 15_000, direction: "debit", paid: true });
   });
 
-  it("a recovered expense with no saleProject (an owner-level cost) shows up on the owner's combined statement but not on a single-project-scoped one", async () => {
+  it("an expense with no saleProject (an owner-level cost) shows up on the owner's combined statement but not on a single-project-scoped one", async () => {
     const { business, owner, project, call } = await setup();
     const liabilityAccount = await getAccountByCode(business, "2120");
     const settlementAccount = await getAccountByCode(business, "1100");
-    const voucherRes = await call(createPaymentVoucher, {
+    await call(createPaymentVoucher, {
       body: {
         category: "sale_owner_expense", saleOwner: String(owner._id), // deliberately no saleProject
         liabilityAccount: String(liabilityAccount._id), settlementAccount: String(settlementAccount._id),
         amount: 8_000, dueDate: new Date(), paidDate: new Date(), narration: "Legal retainer", status: "paid",
       },
     });
-    const advocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-2", fullName: "John Advocate", phone: "0733000444" });
-    await call(createRechargeRemittance, {
-      body: { advocate: String(advocate._id), owner: String(owner._id), allocations: [{ voucher: String(voucherRes.payload._id), amount: 8_000 }] },
-    });
 
     // Scoped to one project: an owner-general cost isn't that project's to show.
     const scoped = await call(createDraftStatement, { body: { owner: String(owner._id), project: String(project._id), periodStart: periodStart(), periodEnd: periodEnd() } });
     expect(scoped.payload.rechargedExpenses).toBe(0);
 
-    // Not scoped to any one project (the owner's combined statement): it must show up.
+    // Not scoped to any one project (the owner's combined statement): it must show up, unpaid (red).
     const combined = await call(createDraftStatement, { body: { owner: String(owner._id), periodStart: periodStart(), periodEnd: periodEnd() } });
     expect(combined.payload.rechargedExpenses).toBe(8_000);
+    const full = await call(getStatement, { params: { id: String(combined.payload._id) } });
+    expect(full.payload.lines.find((l) => l.category === "expense")).toMatchObject({ paid: false });
   });
 
   it("a bare 'To' date (e.g. \"2026-10-14\", exactly how a plain <input type=\"date\"> sends it) still includes activity recorded LATER that same day — it must mean the whole day, not midnight at its start", async () => {

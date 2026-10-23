@@ -37,6 +37,12 @@ const saleOwnerCommissionSchema = new mongoose.Schema(
       releasePct: Number,
       amount: Number,
       accruedAt: { type: Date, default: Date.now },
+      // True when this tier's income was deferred (the deal had advocate-trust money at release time,
+      // so the cash wasn't in the company's hands yet) — posted to 2186 Agency Commission Payable
+      // (Unremitted) instead of straight to 4430, pending an explicit SaleAgencyCommissionPayout. False
+      // for a tier recognized immediately (the deal's proceeds were already in the company's own
+      // cashbook, so there's nothing for an advocate to hand over).
+      deferred: { type: Boolean, default: false },
     }],
     notes: { type: String, trim: true, default: "" },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },

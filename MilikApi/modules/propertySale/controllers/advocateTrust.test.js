@@ -1,8 +1,9 @@
 // Advocate trust accounting: conveyancing advocates physically collect buyer payments into their own
-// trust account before remitting to the company. This is orthogonal to the owner-commission/staged-release
-// feature — tier-crossing keys off the buyer's SalePayment record regardless of collectionMethod, so
-// nothing about commissions changes. See modules/propertySale/services/propertySaleAccountingService.js
-// (1314 Advocate Trust Receivable, postSaleAdvocateRemittance) and middleware/advocateScope.js.
+// trust account, then pay the broker/owner/company directly out of it. This is orthogonal to the
+// owner-commission/staged-release feature — tier-crossing keys off the buyer's SalePayment record
+// regardless of collectionMethod, so nothing about commissions changes. See
+// modules/propertySale/services/propertySaleAccountingService.js (1314 Advocate Trust Receivable) and
+// middleware/advocateScope.js.
 import { describe, it, expect } from "vitest";
 import mongoose from "mongoose";
 import { callController } from "../../../test/callController.js";
@@ -19,7 +20,7 @@ import Company from "../../../models/Company.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { createDeal, getDeal, listDeals } from "./dealsController.js";
 import { createPayment } from "./paymentsController.js";
-import { createRemittance, getAdvocateTrustBalance, getRemittance, listRemittances } from "./advocateRemittancesController.js";
+import { getAdvocateTrustBalance } from "./advocateTrustController.js";
 import { getAdvocate, listAdvocates } from "./advocatesController.js";
 import { getBuyer, listBuyers } from "./buyersController.js";
 import { createOffer, getOffer, listOffers } from "./offersController.js";
@@ -124,9 +125,9 @@ describe("advocate trust accounting — payment debit side", () => {
   });
 });
 
-describe("advocate trust remittance", () => {
-  it("posts Dr cashbook / Cr 1314 and reduces the outstanding trust balance", async () => {
-    const { business, call, advocate, cashbook, makeDeal } = await setup();
+describe("advocate trust balance", () => {
+  it("collected reflects advocate_trust payments; outstanding starts equal to collected with nothing disbursed yet", async () => {
+    const { business, call, advocate, makeDeal } = await setup();
     const deal = await makeDeal();
 
     const payRes = await call(createPayment, {
@@ -134,28 +135,8 @@ describe("advocate trust remittance", () => {
     });
     expect(payRes.statusCode).toBe(201);
 
-    const before = await call(getAdvocateTrustBalance, { params: { advocateId: String(advocate._id) } });
-    expect(before.payload).toMatchObject({ collected: 300000, remitted: 0, outstanding: 300000 });
-
-    const remitRes = await call(createRemittance, {
-      body: { advocate: String(advocate._id), amount: 120_000, cashbook: String(cashbook._id), reference: "EFT-001" },
-    });
-    expect(remitRes.statusCode).toBe(201);
-
-    const trustAcc = await getAccountByCode(business, "1314");
-    const entries = await FinancialLedgerEntry.find({ business, sourceTransactionType: "property_sale_advocate_remittance", sourceTransactionId: String(remitRes.payload._id) }).lean();
-    expect(entries).toHaveLength(2);
-
-    const debit = entries.find((e) => e.direction === "debit");
-    expect(String(debit.accountId)).toBe(String(cashbook._id));
-    expect(debit.debit).toBe(120000);
-
-    const credit = entries.find((e) => e.direction === "credit");
-    expect(String(credit.accountId)).toBe(String(trustAcc._id));
-    expect(credit.credit).toBe(120000);
-
-    const after = await call(getAdvocateTrustBalance, { params: { advocateId: String(advocate._id) } });
-    expect(after.payload).toMatchObject({ collected: 300000, remitted: 120000, outstanding: 180000 });
+    const balance = await call(getAdvocateTrustBalance, { params: { advocateId: String(advocate._id) } });
+    expect(balance.payload).toMatchObject({ collected: 300000, outstanding: 300000 });
   });
 });
 
@@ -209,13 +190,10 @@ describe("advocate scoping — visibility and commission hiding", () => {
   });
 });
 
-describe("advocate scoping — the advocates directory and remittances ledger", () => {
-  it("an advocate-scoped user sees only their own record and remittances, never another advocate's", async () => {
+describe("advocate scoping — the advocates directory and trust balance", () => {
+  it("an advocate-scoped user sees only their own record and trust balance, never another advocate's", async () => {
     const { business, call, advocate, cashbook, makeDeal } = await setup();
 
-    // An ad-hoc (no-deal) remittance is now balance-checked against the advocate's own whole-book
-    // outstanding trust (collected minus already-remitted) — give both advocates real trust collections
-    // to remit against, instead of the unbacked KES 1 this test used before that check existed.
     const otherProject = await SaleProject.create({ business, projectNumber: "PRJ-2", name: "Other Estate", assignedAdvocate: null });
     const otherAdvocate = await SaleAdvocate.create({ business, advocateNumber: "ADV-2", fullName: "Other Advocate", phone: "0733000444" });
     await SaleProject.updateOne({ _id: otherProject._id }, { assignedAdvocate: otherAdvocate._id });
@@ -224,11 +202,6 @@ describe("advocate scoping — the advocates directory and remittances ledger", 
 
     const ownDeal = await makeDeal();
     await call(createPayment, { body: { deal: String(ownDeal._id), amount: 100_000, paymentType: "installment", collectionMethod: "advocate_trust", cashbook: String(cashbook._id) } });
-
-    await call(createRemittance, { body: { advocate: String(otherAdvocate._id), amount: 1, cashbook: String(cashbook._id), reference: "OTHER-1" } });
-
-    const ownRemit = await call(createRemittance, { body: { advocate: String(advocate._id), amount: 1, cashbook: String(cashbook._id), reference: "OWN-1" } });
-    expect(ownRemit.statusCode).toBe(201);
 
     const advocateUser = await createTestUser({ company: { _id: business }, adminAccess: false });
     await SaleAdvocate.updateOne({ _id: advocate._id }, { userIds: [advocateUser._id] });
@@ -252,21 +225,10 @@ describe("advocate scoping — the advocates directory and remittances ledger", 
     // Another advocate's record is a 404, not a 403 — existence isn't even confirmed.
     await expect(asAdvocate(getAdvocate, { params: { id: String(otherAdvocate._id) } })).rejects.toThrow();
 
-    // Remittances: own ledger only, even when the query string explicitly asks for another advocate.
-    const listRemitRes = await asAdvocate(listRemittances, { query: { advocate: String(otherAdvocate._id) } });
-    const remitAdvocateIds = listRemitRes.payload.data.map((r) => String(r.advocate?._id || r.advocate));
-    expect(remitAdvocateIds.every((id) => id === String(advocate._id))).toBe(true);
-    expect(remitAdvocateIds.length).toBeGreaterThan(0);
-
-    const getOwnRemitRes = await asAdvocate(getRemittance, { params: { id: String(ownRemit.payload._id) } });
-    expect(getOwnRemitRes.statusCode).toBe(200);
-
-    const otherRemit = await call(createRemittance, { body: { advocate: String(otherAdvocate._id), amount: 1, cashbook: String(cashbook._id), reference: "OTHER-2" } });
-    await expect(asAdvocate(getRemittance, { params: { id: String(otherRemit.payload._id) } })).rejects.toThrow();
-
     // Trust balance: own id works, another advocate's id is scoped out as 404.
     const ownBalance = await asAdvocate(getAdvocateTrustBalance, { params: { advocateId: String(advocate._id) } });
     expect(ownBalance.statusCode).toBe(200);
+    expect(ownBalance.payload.collected).toBe(100000);
     await expect(asAdvocate(getAdvocateTrustBalance, { params: { advocateId: String(otherAdvocate._id) } })).rejects.toThrow();
   });
 });

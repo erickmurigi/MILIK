@@ -142,6 +142,7 @@ import saleOwnerPayoutRoutes    from "./modules/propertySale/routes/ownerPayouts
 import saleAdvocateRoutes      from "./modules/propertySale/routes/advocates.js";
 import saleAdvocateRemittanceRoutes from "./modules/propertySale/routes/advocateRemittances.js";
 import saleRechargeRemittanceRoutes from "./modules/propertySale/routes/rechargeRemittances.js";
+import saleAgencyCommissionPayoutRoutes from "./modules/propertySale/routes/agencyCommissionPayouts.js";
 import clientRoutes         from "./modules/clients/routes/clients.js";
 import clientContractRoutes from "./modules/clients/routes/contracts.js";
 import clientInvoiceRoutes  from "./modules/clients/routes/invoices.js";
@@ -712,6 +713,7 @@ app.use("/api/sale/owner-payouts", saleOwnerPayoutRoutes);
 app.use("/api/sale/advocates",   saleAdvocateRoutes);
 app.use("/api/sale/advocate-remittances", saleAdvocateRemittanceRoutes);
 app.use("/api/sale/recharge-remittances", saleRechargeRemittanceRoutes);
+app.use("/api/sale/agency-commission-payouts", saleAgencyCommissionPayoutRoutes);
 app.use("/api/inventory/locations",       invLocationRoutes);
 app.use("/api/inventory/categories",      invCategoryRoutes);
 app.use("/api/inventory/products",        invProductRoutes);

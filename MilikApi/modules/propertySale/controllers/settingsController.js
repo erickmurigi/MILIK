@@ -1,12 +1,14 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleSettings from "../models/SaleSettings.js";
+import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import { invalidateAgentVisibilityCache } from "../middleware/agentScope.js";
 import { sanitizeTypeConfig } from "../services/listingAttributes.js";
 import { WHT_MAX_RATE } from "../../../utils/withholdingTax.js";
 import { resyncOpenCommissionReleaseSchedules } from "../services/commissionReleaseService.js";
 import { recalculateOwnerCommissionsForBusiness } from "../services/commissionRecalculateService.js";
+import { listPSAccountTemplates, validatePSAccountOverride, clearPSAccountCache, resolvePSAccount } from "../services/propertySaleAccountingService.js";
 
 const ensureSettings = async (business) => {
   let s = await SaleSettings.findOne({ business });
@@ -287,6 +289,61 @@ export const updateUseAdvocates = async (req, res, next) => {
     const settings = await ensureSettings(business);
     settings.useAdvocates = req.body.enabled;
     await settings.save();
+    res.json({ settings });
+  } catch (err) { next(err); }
+};
+
+// Every code in PS_ACCOUNT_TEMPLATES, for the Settings page to render one row per account without a
+// second, hand-maintained copy of the registry that could drift out of sync. Each row is enriched with
+// `resolvedAccount` — exactly what resolvePSAccount would use right now, override or system default —
+// so the page can show "used until you choose one" the same way PMS's own accounting-defaults tab does.
+// resolvePSAccount auto-creates a missing system account as a side effect of resolving it (same as every
+// real posting already does), so simply opening this page can create the as-yet-unused system accounts a
+// touch earlier than the first real transaction would — harmless, same empty-balance rows either way.
+export const listAccountingDefaultTemplates = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const templates = listPSAccountTemplates();
+    const resolvedIds = await Promise.all(templates.map((t) => resolvePSAccount(business, t.code)));
+    // resolvePSAccount's cache only ever stores an _id (see accountIdCache) — a cache hit returns just
+    // {_id}, no code/name — so the real code/name for display is looked up fresh here regardless of
+    // whether this particular resolve was a cache hit or not.
+    const accounts = await ChartOfAccount.find({ _id: { $in: resolvedIds.map((a) => a._id) } }).select("code name").lean();
+    const accountById = new Map(accounts.map((a) => [String(a._id), a]));
+    res.json({
+      templates: templates.map((t, i) => {
+        const acc = accountById.get(String(resolvedIds[i]._id));
+        return { ...t, resolvedAccount: { _id: resolvedIds[i]._id, code: acc?.code || null, name: acc?.name || null } };
+      }),
+    });
+  } catch (err) { next(err); }
+};
+
+// Per-business override of which real ChartOfAccount backs each of resolvePSAccount's fixed codes.
+// `req.body.accountingDefaults` is {code: accountIdOrCode}; an empty string/null for a code clears its
+// override back to the system default. Every submitted value is validated against that code's own
+// required account type before being saved — never trusts the client's own account-type labeling.
+export const updatePSAccountingDefaults = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const settings = await ensureSettings(business);
+    const incoming = req.body?.accountingDefaults || {};
+
+    const nextDefaults = new Map(settings.accountingDefaults || []);
+    for (const [code, rawValue] of Object.entries(incoming)) {
+      let account;
+      try {
+        account = await validatePSAccountOverride({ businessId: business, code, rawValue });
+      } catch (validationErr) {
+        return next(createError(400, validationErr.message));
+      }
+      if (account) nextDefaults.set(code, account._id);
+      else nextDefaults.delete(code);
+    }
+    settings.accountingDefaults = nextDefaults;
+    await settings.save();
+
+    clearPSAccountCache(business);
     res.json({ settings });
   } catch (err) { next(err); }
 };

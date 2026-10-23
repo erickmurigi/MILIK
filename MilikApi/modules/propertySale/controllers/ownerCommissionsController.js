@@ -1,12 +1,62 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import SaleOwnerCommission from "../models/SaleOwnerCommission.js";
+import SaleAgencyCommissionPayout from "../models/SaleAgencyCommissionPayout.js";
+import SaleDeal from "../models/SaleDeal.js";
 import SaleSettings from "../models/SaleSettings.js";
+import { round2 } from "../../../utils/math.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import { recalculateOwnerCommission, RECALC_ELIGIBLE_STATUSES } from "../services/commissionRecalculateService.js";
 import { advocateDealScopeFilter } from "../middleware/advocateScope.js";
 import { andInto } from "../services/saleSearch.js";
 import { tiersProblem } from "./settingsController.js";
+
+// Deferred-amount / outstanding readout attached to each commission row — same math as
+// agencyCommissionOutstanding.js but joined onto the full list here (including non-deferred and
+// fully-paid commissions) so the page can show a "Pay" action without a second round trip. Also resolves
+// which advocate the payout should be attributed to, using the EXACT SAME deal->advocate rule
+// ownAdvocateDealIds (middleware/advocateScope.js) uses in reverse (advocate->deals) — a deal's own
+// explicit SaleDeal.advocate, else its listing's assignedAdvocate, else that listing's project's — so a
+// payout created from this id always lands inside that advocate's own dealIdsForAdvocate() scope and the
+// controller's own ownership check never rejects it.
+const attachAgencyPayoutStatus = async (business, commissions) => {
+  const deferredCommissions = commissions.filter((c) => (c.tierReleases || []).some((t) => t.deferred));
+  const deferredIds = deferredCommissions.map((c) => c._id);
+  let paidByCommission = new Map();
+  let advocateByDeal = new Map();
+  if (deferredIds.length) {
+    const dealIds = [...new Set(deferredCommissions.map((c) => String(c.deal?._id || c.deal)))].map(toObjectId);
+    const [paidRows, deals] = await Promise.all([
+      SaleAgencyCommissionPayout.aggregate([
+        { $match: { business: toObjectId(business), status: { $ne: "cancelled" } } },
+        { $unwind: "$allocations" },
+        { $match: { "allocations.ownerCommission": { $in: deferredIds } } },
+        { $group: { _id: "$allocations.ownerCommission", total: { $sum: "$allocations.amount" } } },
+      ]),
+      SaleDeal.find({ business, _id: { $in: dealIds } })
+        .select("advocate listing")
+        .populate({ path: "listing", select: "assignedAdvocate project", populate: { path: "project", select: "assignedAdvocate" } })
+        .lean(),
+    ]);
+    paidByCommission = new Map(paidRows.map((r) => [String(r._id), round2(r.total || 0)]));
+    advocateByDeal = new Map(deals.map((d) => [
+      String(d._id),
+      d.advocate || d.listing?.assignedAdvocate || d.listing?.project?.assignedAdvocate || null,
+    ]));
+  }
+  return commissions.map((c) => {
+    const deferredAmount = round2((c.tierReleases || []).filter((t) => t.deferred).reduce((s, t) => s + Number(t.amount || 0), 0));
+    const agencyPaidAmount = paidByCommission.get(String(c._id)) || 0;
+    const dealId = String(c.deal?._id || c.deal);
+    return {
+      ...c,
+      deferredAmount,
+      agencyPaidAmount,
+      agencyOutstanding: round2(Math.max(0, deferredAmount - agencyPaidAmount)),
+      trustAdvocate: deferredAmount > 0 ? advocateByDeal.get(dealId) || null : null,
+    };
+  });
+};
 
 const toObjectId = (v) => new mongoose.Types.ObjectId(String(v));
 
@@ -64,7 +114,8 @@ export const listOwnerCommissions = async (req, res, next) => {
       cancelled: statsMap.cancelled || { count: 0, amount: 0 },
     };
 
-    res.status(200).json({ data: commissions, total, page, pages: Math.ceil(total / limit), stats });
+    const enriched = await attachAgencyPayoutStatus(business, commissions);
+    res.status(200).json({ data: enriched, total, page, pages: Math.ceil(total / limit), stats });
   } catch (err) {
     next(err);
   }
@@ -76,7 +127,8 @@ export const getOwnerCommission = async (req, res, next) => {
     const advocateFilter = req.saleAdvocateId ? await advocateDealScopeFilter(req, business) : {};
     const commission = await populateOwnerCommission(SaleOwnerCommission.findOne({ _id: req.params.id, business, ...advocateFilter })).lean();
     if (!commission) return next(createError(404, "Agency commission not found"));
-    res.status(200).json(commission);
+    const [enriched] = await attachAgencyPayoutStatus(business, [commission]);
+    res.status(200).json(enriched);
   } catch (err) {
     next(err);
   }

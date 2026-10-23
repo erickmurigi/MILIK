@@ -3,8 +3,9 @@ import mongoose from "mongoose";
 const ADVOCATE_STATUSES = ["active", "inactive"];
 
 // A conveyancing advocate/firm that physically collects buyer payments into their own client/trust
-// account before remitting to the company — see SaleAdvocateRemittance for the remittance workflow
-// and 1314 Advocate Trust Receivable (propertySaleAccountingService.js) for the GL side.
+// account, paying the broker/owner/company directly from it (postPropertySaleCommissionPayout /
+// postSaleOwnerPayout / postAgencyCommissionPayout) — see 1314 Advocate Trust Receivable
+// (propertySaleAccountingService.js) for the GL side.
 // Deliberately no fee/rate field — Kenyan practice is usually the buyer pays their own legal fee
 // directly, not something recharged to the owner; don't model a cost flow nobody's confirmed.
 const saleAdvocateSchema = new mongoose.Schema(

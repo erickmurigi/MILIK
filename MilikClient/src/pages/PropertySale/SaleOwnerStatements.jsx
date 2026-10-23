@@ -45,6 +45,16 @@ const splitDescription = (description) => {
   return { headline: description.slice(0, idx), ref: description.slice(idx + 3) };
 };
 
+// Paid/recovered status lives on the DESCRIPTION, not the Amount (already red/green for debit/credit —
+// doubling that up with paid-status would make a red amount ambiguous between "deduction" and "unpaid")
+// or the Category badge (already colored per category type — recoloring it by status would destroy
+// that at-a-glance identification). Only company/broker commission and recharged-expense lines carry a
+// `paid` flag at all; proceeds and owner payouts have no "paid" concept and stay the default color.
+const descriptionColorClass = (row) => {
+  if (row.paid === undefined || row.paid === null) return "text-slate-700";
+  return row.paid ? "text-emerald-700" : "text-red-600";
+};
+
 const renderLineRow = (row) => {
   const { headline, ref } = splitDescription(row.description);
   return (
@@ -55,9 +65,11 @@ const renderLineRow = (row) => {
           {CATEGORY_LABEL[row.category] || row.category}
         </span>
       </td>
-      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">
+      <td className={`px-3 py-1.5 border-r border-gray-100 font-semibold ${descriptionColorClass(row)}`}>
         {headline}
-        {ref && <span className="ml-1.5 font-mono text-[10px] text-slate-400">{ref}</span>}
+        {ref && <span className="ml-1.5 font-mono text-[10px] font-normal text-slate-400">{ref}</span>}
+        {row.paid === false && <span className="ml-1.5 text-[9px] font-black uppercase tracking-wide text-red-600">· Pending</span>}
+        {row.paid === true && <span className="ml-1.5 text-[9px] font-black uppercase tracking-wide text-emerald-700">· Paid</span>}
       </td>
       <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums ${row.direction === "credit" ? "text-emerald-700" : "text-red-600"}`}>
         {row.direction === "credit" ? "+" : "-"}{fmtKES(row.amount)}
@@ -217,7 +229,7 @@ const SaleOwnerStatements = () => {
       columns: [
         { label: "Date", value: (r) => shortDate(r.transactionDate) },
         { label: "Category", value: (r) => CATEGORY_LABEL[r.category] || r.category },
-        { label: "Description", value: (r) => r.description },
+        { label: "Description", value: (r) => `${r.description}${r.paid === false ? " (Pending)" : r.paid === true ? " (Paid)" : ""}` },
         { label: "Amount (KES)", align: "right", value: (r) => (r.direction === "credit" ? money(r.amount) : `(${money(r.amount)})`) },
         { label: "Balance (KES)", align: "right", value: (r) => money(r.runningBalance) },
       ],

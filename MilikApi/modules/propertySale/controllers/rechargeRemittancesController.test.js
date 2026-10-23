@@ -1,7 +1,6 @@
-// Explicit "pay the recharge" flow (replaces the old automatic netting that used to happen silently
-// inside advocateRemittancesController.createRemittance — see its dealScoped.test.js): an advocate sees
-// their owners' outstanding recoverable-expense vouchers and deliberately remits cash to settle one or
-// more of them, posting a direct Dr cashbook / Cr 1313 Owner Expense Recoverable settlement.
+// Explicit "pay the recharge" flow: an advocate sees their owners' outstanding recoverable-expense
+// vouchers and deliberately remits cash to settle one or more of them, posting a direct Dr cashbook /
+// Cr 1313 Owner Expense Recoverable settlement.
 import { describe, it, expect } from "vitest";
 import { callController } from "../../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../../test/factories.js";

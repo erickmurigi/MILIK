@@ -1,6 +1,6 @@
 import express from "express";
 import { verifyUser, requireCompanyModule, requireCompanyPermission } from "../../../controllers/verifyToken.js";
-import { getCarWashSettings, updateCarWashSettings, backfillBranches, uploadQueueBgImage } from "../controllers/settingsController.js";
+import { getCarWashSettings, updateCarWashSettings, backfillBranches, uploadQueueBgImage, listCarWashAccountingDefaultTemplates, updateCarWashAccountingDefaults } from "../controllers/settingsController.js";
 import { queueBgUpload } from "../middleware/queueBgUpload.js";
 
 const router = express.Router();
@@ -9,6 +9,8 @@ router.use(verifyUser, requireCompanyModule("carwash"));
 
 router.get("/", requireCompanyPermission("carwash-settings", "view", "carwash"), getCarWashSettings);
 router.put("/", requireCompanyPermission("carwash-settings", "manage", "carwash"), updateCarWashSettings);
+router.get("/accounting-defaults/templates", requireCompanyPermission("carwash-settings", "view", "carwash"), listCarWashAccountingDefaultTemplates);
+router.put("/accounting-defaults", requireCompanyPermission("carwash-settings", "manage", "carwash"), updateCarWashAccountingDefaults);
 router.post("/backfill-branches", requireCompanyPermission("carwash-settings", "manage", "carwash"), backfillBranches);
 router.post(
   "/queue-bg-image",
