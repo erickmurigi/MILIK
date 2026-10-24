@@ -4,25 +4,33 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   FaSearch, FaPlus, FaEdit, FaTrash, FaSyncAlt,
   FaChevronDown, FaChevronUp, FaCheckSquare, FaSquare,
-  FaExclamationTriangle, FaTimes,
+  FaExclamationTriangle, FaTimes, FaPrint, FaDownload,
+  FaCompressAlt, FaExpandAlt,
 } from "react-icons/fa";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import ListToolbar from "../../components/common/ListToolbar";
 import AppSelect from "../../components/common/AppSelect";
 import { getChartOfAccounts } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { hasCompanyPermission } from "../../utils/permissions";
+import { hasCompanyModule } from "../../utils/companyModules";
 import { useConfirm } from "../../context/ConfirmContext";
 import { formatMoney } from "../../utils/money";
+import { printTabularList } from "../../utils/printKit";
 
+// Group color used to be a different hue per type (rose/violet/blue/amber) — purely decorative
+// category-coding, which the house style reserves for genuine status meaning only. Every group header
+// is now the same green, same as every other section header in the app; the label text (always in the
+// same fixed order) is what tells them apart.
 const ACCOUNT_GROUPS = [
-  { key: "assets",      label: "Assets",      bg: "bg-[#0B3B2E]",  badge: "bg-emerald-100 text-emerald-800" },
-  { key: "liabilities", label: "Liabilities", bg: "bg-rose-900",   badge: "bg-rose-100 text-rose-800" },
-  { key: "equity",      label: "Equity",      bg: "bg-violet-900", badge: "bg-violet-100 text-violet-800" },
-  { key: "income",      label: "Income",      bg: "bg-blue-900",   badge: "bg-blue-100 text-blue-800" },
-  { key: "expenses",    label: "Expenses",    bg: "bg-amber-900",  badge: "bg-amber-100 text-amber-800" },
+  { key: "assets",      label: "Assets" },
+  { key: "liabilities", label: "Liabilities" },
+  { key: "equity",      label: "Equity" },
+  { key: "income",      label: "Income" },
+  { key: "expenses",    label: "Expenses" },
 ];
 
 const SUBGROUP_OPTIONS_BY_TYPE = {
@@ -116,6 +124,15 @@ const ChartOfAccounts = () => {
     canDeleteCOA: hasCompanyPermission(currentUser, currentCompany, "chartOfAccounts", "delete", "accounts"),
   }), [currentUser, currentCompany]);
 
+  // Only offer a module scope the company actually has enabled — "general" isn't a real module (it's
+  // the fallback scope for accounts not tied to any specific one), so it's never gated.
+  const moduleScopeOptions = useMemo(
+    () => MODULE_SCOPE_OPTIONS.filter((o) => o.value === "" || o.value === "general" || hasCompanyModule(currentCompany, o.value))
+      .filter((o) => o.value !== "")
+      .map((o) => ({ value: o.value, label: o.label })),
+    [currentCompany]
+  );
+
   const [accounts,            setAccounts]          = useState([]);
   const [search,              setSearch]            = useTabState(`${activityBase}:search`, "");
   const [searchInput,         setSearchInput]       = useState(search);
@@ -124,6 +141,12 @@ const ChartOfAccounts = () => {
   const [refreshing,          setRefreshing]        = useState(false);
   const [saving,              setSaving]            = useState(false);
   const [showControlAccounts, setShowControlAccounts] = useState(true);
+  const [typeFilter,          setTypeFilter]        = useState("");
+  const [statusFilter,        setStatusFilter]      = useState("");
+  // Hides zero-balance accounts by default — most of a fresh/system-seeded Chart of Accounts is unused
+  // stub accounts; "With Balances Only" shows what's actually in use, "All Accounts" shows the full
+  // structure for anyone managing it.
+  const [balanceFilter,       setBalanceFilter]     = useState("withBalances");
   const [selectedIds,         setSelectedIds]       = useState([]);
   const [showForm,            setShowForm]          = useState(false);
   const [editingAccountId,    setEditingAccountId]  = useState(null);
@@ -210,17 +233,20 @@ const ChartOfAccounts = () => {
       String(account?.name    || "").toLowerCase().includes("control") ||
       String(account?.code    || "").toLowerCase().includes("ctrl");
     if (!showControlAccounts && isControl) return false;
+    if (statusFilter === "active"   && account.isActive === false) return false;
+    if (statusFilter === "inactive" && account.isActive !== false) return false;
     if (!normalizedSearch) return true;
     const haystack = [
       account.code, account.name, account.type, account.group, account.subGroup,
       account.normalBalanceSide, account.parentAccount?.name, account.parentAccount?.code,
     ].filter(Boolean).join(" ").toLowerCase();
     return haystack.includes(normalizedSearch);
-  }), [accounts, normalizedSearch, showControlAccounts]);
+  }), [accounts, normalizedSearch, showControlAccounts, statusFilter]);
 
   // ── Grouping: by type → by class (all predefined subgroups always visible) ──
   const typeGroups = useMemo(() => {
-    return ACCOUNT_GROUPS.map((group) => {
+    const groupsToShow = typeFilter ? ACCOUNT_GROUPS.filter((g) => g.key === typeFilter) : ACCOUNT_GROUPS;
+    return groupsToShow.map((group) => {
       const groupType = GROUP_TO_TYPE[group.key] || "asset";
       const allSubgroups = subGroupOptionsForType(groupType);
 
@@ -237,14 +263,27 @@ const ChartOfAccounts = () => {
       }
 
       const classes = [...classMap.entries()]
-        // Hide empty classes only when searching (empty = no matching results)
-        .filter(([, accs]) => !normalizedSearch || accs.length > 0)
-        .map(([cls, accs]) => ({ cls, accounts: accs, isEmpty: accs.length === 0 }));
+        .map(([cls, accs]) => {
+          // "With Balances Only" narrows what's DISPLAYED, not the underlying set — a class whose real
+          // accounts all happen to be zero right now is hidden entirely (nothing to show), never
+          // presented as structurally empty (which would wrongly offer "+ Add first account").
+          const visible = balanceFilter === "withBalances" ? accs.filter((a) => Number(a.balance || 0) !== 0) : accs;
+          return { cls, accounts: visible, isEmpty: accs.length === 0, hiddenByBalanceFilter: accs.length > 0 && visible.length === 0 };
+        })
+        .filter((c) => {
+          if (c.hiddenByBalanceFilter) return false;
+          // A genuinely empty class (no accounts at all, not just none with a balance) is the same kind
+          // of noise as a zero-balance account — "With Balances Only" hides it too, including its
+          // "+ Add first account" placeholder; "All Accounts" still shows the full predefined structure.
+          if (balanceFilter === "withBalances" && c.isEmpty) return false;
+          return !normalizedSearch || c.accounts.length > 0;
+        });
 
-      const totalBalance = typeAccounts.reduce((s, a) => s + Number(a.balance || 0), 0);
-      return { ...group, classes, count: typeAccounts.length, totalBalance, groupType };
+      const visibleGroupAccounts = classes.flatMap((c) => c.accounts);
+      const totalBalance = visibleGroupAccounts.reduce((s, a) => s + Number(a.balance || 0), 0);
+      return { ...group, classes, count: visibleGroupAccounts.length, totalBalance, groupType };
     });
-  }, [filteredAccounts, normalizedSearch]);
+  }, [filteredAccounts, normalizedSearch, typeFilter, balanceFilter]);
 
   // ── Form helpers ──
   const parentOptions = useMemo(() =>
@@ -440,9 +479,70 @@ const ChartOfAccounts = () => {
     }
   };
 
-  // ── Style shortcuts ──
-  const labelCls = "mb-0.5 block text-xs font-semibold text-slate-700";
-  const inputCls = "w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+  const expandAll   = () => setCollapsed({});
+  const collapseAll = () => setCollapsed(Object.fromEntries(ACCOUNT_GROUPS.map((g) => [g.key, true])));
+
+  // Everything currently visible, in display order — same accounts/order the on-screen groups render,
+  // so print/export always matches what's on screen regardless of which filters are active.
+  const visibleAccountsInOrder = useMemo(
+    () => typeGroups.flatMap((g) => g.classes.flatMap((c) => c.accounts.map((a) => ({ ...a, _group: g.label, _class: c.cls })))),
+    [typeGroups]
+  );
+
+  const [printing, setPrinting] = useState(false);
+  const handlePrintList = () => {
+    if (!visibleAccountsInOrder.length) { toast.info("There are nothing to print — adjust the filters."); return; }
+    setPrinting(true);
+    const grandTotal = visibleAccountsInOrder.reduce((s, a) => s + Number(a.balance || 0), 0);
+    const printed = printTabularList({
+      title: "Chart of Accounts",
+      subtitle: `${visibleAccountsInOrder.length.toLocaleString()} account${visibleAccountsInOrder.length !== 1 ? "s" : ""}`,
+      company: currentCompany,
+      summaryItems: [
+        ["Total Accounts", visibleAccountsInOrder.length.toLocaleString()],
+        ["Net Balance", formatMoney(grandTotal)],
+      ],
+      columns: [
+        { label: "Code", value: (a) => a.code || "-" },
+        { label: "Account Name", value: (a) => a.name || "-" },
+        { label: "Type", value: (a) => a._group },
+        { label: "Class", value: (a) => a._class },
+        { label: "Normal Side", value: (a) => a.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[a.type] || "-" },
+        { label: "Balance", align: "right", bold: true, value: (a) => formatMoney(Number(a.balance || 0)) },
+        { label: "Status", value: (a) => (a.isActive === false ? "INACTIVE" : a.isHeader ? "HEADER" : "POSTING") },
+      ],
+      rows: visibleAccountsInOrder,
+      totalsRow: [`Total (${visibleAccountsInOrder.length.toLocaleString()} accounts)`, "", "", "", "", formatMoney(grandTotal), ""],
+    });
+    if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
+    setPrinting(false);
+  };
+
+  const [exporting, setExporting] = useState(false);
+  const handleExportCsv = () => {
+    if (!visibleAccountsInOrder.length) { toast.info("There is nothing to export — adjust the filters."); return; }
+    setExporting(true);
+    const header = ["Code", "Account Name", "Type", "Class", "Normal Side", "Balance", "Status"];
+    const rows = visibleAccountsInOrder.map((a) => [
+      a.code || "", a.name || "", a._group, a._class,
+      a.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[a.type] || "",
+      Number(a.balance || 0).toFixed(2),
+      a.isActive === false ? "INACTIVE" : a.isHeader ? "HEADER" : "POSTING",
+    ]);
+    const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "chart-of-accounts.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    setExporting(false);
+  };
+
+  // ── Style shortcuts — the house standard (square corners, fixed h-7), not the older auto-height/rounded pattern ──
+  const labelCls = "mb-1 block text-xs font-bold text-slate-900";
+  const inputCls = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition border-slate-300 focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
   // ── Render ──
   return (
@@ -450,30 +550,53 @@ const ChartOfAccounts = () => {
       <div className="flex h-full flex-col overflow-hidden bg-slate-100">
 
         {/* ── Toolbar ── */}
-        <div className="shrink-0 border-b border-slate-200 bg-white px-3 py-2 flex items-center gap-2 flex-wrap">
-          {/* Search */}
-          <div className="relative">
-            <FaSearch className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
-            <input
+        <ListToolbar>
+          <div className="relative shrink-0">
+            <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+            <ListToolbar.Input
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Code, name, type, class..."
-              className="h-7 w-52 border border-slate-200 bg-slate-50 pl-6 pr-2 text-xs focus:outline-none focus:border-[#0B3B2E]"
+              width="w-52"
+              className="pl-6"
             />
           </div>
 
-          {/* Module scope */}
           <AppSelect
             size="sm"
             clearable
             placeholder="All Modules"
             value={moduleScope}
             onChange={(v) => setModuleScope(v ?? "")}
-            options={MODULE_SCOPE_OPTIONS.filter((o) => o.value !== "").map((o) => ({ value: o.value, label: o.label }))}
+            options={moduleScopeOptions}
           />
 
-          {/* Control accounts */}
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 cursor-pointer select-none">
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="All Types"
+            value={typeFilter}
+            onChange={(v) => setTypeFilter(v ?? "")}
+            options={ACCOUNT_GROUPS.map((g) => ({ value: g.key, label: g.label }))}
+          />
+
+          <AppSelect
+            size="sm"
+            clearable
+            placeholder="Active & Inactive"
+            value={statusFilter}
+            onChange={(v) => setStatusFilter(v ?? "")}
+            options={[{ value: "active", label: "Active Only" }, { value: "inactive", label: "Inactive Only" }]}
+          />
+
+          <AppSelect
+            size="sm"
+            value={balanceFilter}
+            onChange={(v) => setBalanceFilter(v ?? "withBalances")}
+            options={[{ value: "withBalances", label: "With Balances Only" }, { value: "all", label: "All Accounts" }]}
+          />
+
+          <label className="flex shrink-0 items-center gap-1.5 text-[10px] font-semibold text-slate-600 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showControlAccounts}
@@ -483,45 +606,32 @@ const ChartOfAccounts = () => {
             Control Accounts
           </label>
 
-          {/* Right-side actions */}
-          <div className="ml-auto flex items-center gap-1.5">
+          <ListToolbar.Divider />
+          <ListToolbar.Button icon={FaExpandAlt} variant="outline" onClick={expandAll}>Expand All</ListToolbar.Button>
+          <ListToolbar.Button icon={FaCompressAlt} variant="outline" onClick={collapseAll}>Collapse All</ListToolbar.Button>
+
+          <div className="ml-auto flex shrink-0 items-center gap-1">
             {selectedIds.length > 0 && (
-              <span className="text-[11px] font-semibold text-slate-500 px-1">
+              <span className="border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
                 {selectedIds.length} selected
               </span>
             )}
-            <button
-              onClick={loadAccounts}
-              title="Refresh"
-              className="h-7 px-2.5 border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 flex items-center text-xs"
-            >
+            <ListToolbar.Button icon={FaPrint} variant="outline" disabled={printing} onClick={handlePrintList}>Print</ListToolbar.Button>
+            <ListToolbar.Button icon={FaDownload} variant="outline" disabled={exporting} onClick={handleExportCsv}>Export</ListToolbar.Button>
+            <ListToolbar.Divider />
+            <ListToolbar.Button variant="outline" onClick={loadAccounts} title="Refresh">
               <FaSyncAlt size={9} className={refreshing ? "animate-spin" : ""} />
-            </button>
+            </ListToolbar.Button>
             {selectedAccounts.length === 1 && canUpdateCOA && (
-              <button
-                onClick={() => openEditModal(selectedAccounts[0])}
-                className="h-7 px-3 bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold flex items-center gap-1"
-              >
-                <FaEdit size={9} /> Edit
-              </button>
+              <ListToolbar.Button icon={FaEdit} variant="dark" onClick={() => openEditModal(selectedAccounts[0])}>Edit</ListToolbar.Button>
             )}
             {selectedAccounts.length > 0 && canDeleteCOA && (
-              <button
-                onClick={handleDeleteSelected}
-                className="h-7 px-3 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1"
-              >
-                <FaTrash size={9} /> Delete
-              </button>
+              <ListToolbar.Button icon={FaTrash} variant="danger" onClick={handleDeleteSelected}>Delete</ListToolbar.Button>
             )}
-            <button
-              onClick={openCreateModal}
-              disabled={!canCreateCOA}
-              className="h-7 px-3 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold flex items-center gap-1 disabled:opacity-50"
-            >
-              <FaPlus size={9} /> Add Account
-            </button>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canCreateCOA} onClick={openCreateModal}>Add Account</ListToolbar.Button>
           </div>
-        </div>
+        </ListToolbar>
 
         {/* ── Body: list + form panel ── */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -539,9 +649,9 @@ const ChartOfAccounts = () => {
               const allSel  = allIds.length > 0 && allIds.every((id) => selectedIds.includes(id));
 
               return (
-                <div key={group.key} className="overflow-hidden border border-slate-200 shadow-sm">
+                <div key={group.key} className="overflow-hidden border border-slate-200">
                   {/* Type section header */}
-                  <div className={`${group.bg} flex items-center gap-2.5 px-3 py-2`}>
+                  <div className="bg-[#0B3B2E] flex items-center gap-2.5 px-3 py-2">
                     <button
                       onClick={() => toggleSelectGroup(allGroupAccounts)}
                       className="text-white/50 hover:text-white shrink-0"
@@ -551,8 +661,8 @@ const ChartOfAccounts = () => {
                         : <FaSquare size={12} />
                       }
                     </button>
-                    <span className="font-bold text-white text-sm">{group.label}</span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 ${group.badge}`}>
+                    <span className="font-black text-white text-sm uppercase tracking-wide">{group.label}</span>
+                    <span className="border border-white/20 bg-white/10 px-1.5 py-0.5 text-[10px] font-bold text-white/90">
                       {group.count} {group.count === 1 ? "account" : "accounts"}
                     </span>
                     <span className="ml-auto text-xs font-bold text-white/80 tabular-nums">
@@ -572,12 +682,12 @@ const ChartOfAccounts = () => {
                       <table className="w-full min-w-[680px] text-[11px] border-collapse">
                         <thead>
                           <tr className="bg-[#0B3B2E] text-white">
-                            <th className="w-10 px-3 py-1 border-r border-white/10"></th>
-                            <th className="text-left px-3 py-1 font-bold border-r border-white/10">Code</th>
-                            <th className="text-left px-3 py-1 font-bold border-r border-white/10">Account Name</th>
-                            <th className="text-left px-3 py-1 font-bold border-r border-white/10">Normal Side</th>
-                            <th className="text-right px-3 py-1 font-bold border-r border-white/10">Balance</th>
-                            <th className="text-right px-3 py-1 font-bold">Status</th>
+                            <th style={{ width: "4%" }} className="px-3 py-1.5 border-r border-white/10"></th>
+                            <th style={{ width: "12%" }} className="text-left px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Code</th>
+                            <th style={{ width: "40%" }} className="text-left px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Account Name</th>
+                            <th style={{ width: "12%" }} className="text-left px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Normal Side</th>
+                            <th style={{ width: "18%" }} className="text-right px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Balance</th>
+                            <th style={{ width: "14%" }} className="text-right px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">Status</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -632,14 +742,16 @@ const ChartOfAccounts = () => {
                                 )}
 
                                 {/* Account rows */}
-                                {clsAcc.accounts.map((account) => {
+                                {clsAcc.accounts.map((account, idx) => {
                                   const selected = selectedIds.includes(account._id);
                                   const balance  = Number(account.balance || 0);
                                   return (
                                     <tr
                                       key={account._id}
-                                      className={`border-b border-gray-100 hover:bg-blue-50/40 cursor-pointer transition-colors ${
-                                        selected ? "bg-emerald-50 hover:bg-emerald-50" : ""
+                                      className={`border-b border-gray-100 cursor-pointer transition-colors ${
+                                        selected
+                                          ? "bg-[#C8E6D4] shadow-[inset_2px_0_0_#0B3B2E] hover:bg-[#C8E6D4]"
+                                          : `hover:bg-[#EBF5EF] ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}`
                                       } ${account.isActive === false ? "opacity-60" : ""}`}
                                       onDoubleClick={() => {
                                         if (account?.isPosting !== false && !account?.isHeader)
@@ -651,7 +763,7 @@ const ChartOfAccounts = () => {
                                           : "Header accounts cannot open activity"
                                       }
                                     >
-                                      <td className="px-3 py-1 border-r border-gray-100">
+                                      <td className="px-3 py-1.5 border-r border-gray-100" onClick={(e) => e.stopPropagation()}>
                                         <button
                                           onClick={() => toggleSelect(account._id)}
                                           className="text-slate-300 hover:text-slate-600"
@@ -662,32 +774,32 @@ const ChartOfAccounts = () => {
                                           }
                                         </button>
                                       </td>
-                                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">
+                                      <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-slate-900">
                                         {account.code}
                                       </td>
-                                      <td className="px-3 py-1 border-r border-gray-100">
+                                      <td className="px-3 py-1.5 border-r border-gray-100">
                                         <span
-                                          className="font-medium text-slate-900"
+                                          className="font-semibold text-slate-900"
                                           style={{ paddingLeft: `${Number(account.level || 0) * 16}px` }}
                                         >
                                           {account.name}
                                         </span>
                                       </td>
-                                      <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
+                                      <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
                                         {account.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[account.type] || "—"}
                                       </td>
-                                      <td className={`px-3 py-1 border-r border-gray-100 text-right font-semibold tabular-nums ${
-                                        balance !== 0 ? "text-slate-800" : "text-slate-300"
+                                      <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums ${
+                                        balance !== 0 ? "text-slate-900" : "text-slate-300"
                                       }`}>
                                         {formatMoney(balance)}
                                       </td>
-                                      <td className="px-3 py-1 text-right">
+                                      <td className="px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                                         <div className="inline-flex gap-1 items-center justify-end">
                                           {canUpdateCOA && (
                                             <button
-                                              onClick={(e) => { e.stopPropagation(); openEditModal(account); }}
+                                              onClick={() => openEditModal(account)}
                                               title="Edit account"
-                                              className="text-slate-300 hover:text-amber-500 transition-colors"
+                                              className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors"
                                             >
                                               <FaEdit size={11} />
                                             </button>
@@ -699,7 +811,7 @@ const ChartOfAccounts = () => {
                                           )}
                                           {account.isActive === false && canUpdateCOA && (
                                             <button
-                                              onClick={(e) => { e.stopPropagation(); handleReactivate(account); }}
+                                              onClick={() => handleReactivate(account)}
                                               title="Switch this account back on so it can take postings again"
                                               className="px-1.5 py-0.5 text-[9px] bg-amber-100 text-amber-800 hover:bg-amber-200 font-bold uppercase"
                                             >

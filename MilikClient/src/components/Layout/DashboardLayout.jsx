@@ -634,9 +634,15 @@ const TopToolbar = ({
     enabled: isPropertySaleWorkspace && !!activeCompanyContext?._id,
     staleTime: 10 * 60_000,
   });
-  const saleUsesProjects = Boolean(saleSettings?.useProjects);
-  const saleUsesOwners = Boolean(saleSettings?.useOwners);
-  const saleUsesAdvocates = Boolean(saleSettings?.useAdvocates);
+  // Before this query resolves, saleSettings is undefined — defaulting these to `false` made every
+  // settings-gated menu item (Projects/Units, Owners/Advocates, and the whole "Remittances" top-level
+  // group, which has no unconditional child to keep it from vanishing) momentarily disappear, then pop
+  // back in once the fetch completed. Default to showing them while genuinely unknown; only a resolved
+  // "false" from real settings should ever hide something.
+  const saleSettingsKnown = saleSettings !== undefined;
+  const saleUsesProjects = saleSettingsKnown ? Boolean(saleSettings?.useProjects) : true;
+  const saleUsesOwners = saleSettingsKnown ? Boolean(saleSettings?.useOwners) : true;
+  const saleUsesAdvocates = saleSettingsKnown ? Boolean(saleSettings?.useAdvocates) : true;
   const isHumanResourceWorkspace  = effectiveMenuWorkspace === WORKSPACE_IDS.HUMAN_RESOURCE;
   const isCommunicationsWorkspace = effectiveMenuWorkspace === WORKSPACE_IDS.COMMUNICATIONS;
   const isClientsWorkspace        = effectiveMenuWorkspace === WORKSPACE_IDS.CLIENTS;
@@ -1046,6 +1052,31 @@ const TopToolbar = ({
           ],
         },
         {
+          id: "sale-remittances",
+          label: "Remittances",
+          icon: FaMoneyBillWave,
+          submenu: [
+            ...(saleUsesOwners ? [
+              { id: "sale-owner-statements", label: saleT.saleOwnerStatements, icon: FaFileAlt },
+              { id: "sale-owner-statements-approved", label: "Approved Statements", icon: FaCheckCircle },
+              { id: "sale-owner-payouts", label: "Owner Payouts", icon: FaMoneyBillWave },
+            ] : []),
+            ...(saleUsesAdvocates ? [
+              { id: "sale-advocate-remittances", label: "Rechargeable Expenses", icon: FaFileAlt },
+            ] : []),
+          ],
+        },
+        {
+          id: "sale-parties",
+          label: "Parties",
+          icon: FaUser,
+          submenu: [
+            { id: "sale-agents", label: saleT.saleAgents, icon: FaUser },
+            ...(saleUsesOwners ? [{ id: "sale-owners", label: saleT.saleOwners, icon: FaUsers }] : []),
+            ...(saleUsesAdvocates ? [{ id: "sale-advocates", label: saleT.saleAdvocates, icon: FaUsers }] : []),
+          ],
+        },
+        {
           id: "sale-reporting",
           label: "Reports",
           icon: FaFileAlt,
@@ -1055,24 +1086,6 @@ const TopToolbar = ({
             { id: "sale-cash-flow",  label: "Cash Flow Forecast", icon: FaCalendarAlt },
             { id: "sale-funnel",     label: "Conversion Funnel",  icon: FaChartLine },
             { id: "sale-agent-perf", label: `${saleT.saleAgent} Performance`,  icon: FaUser },
-          ],
-        },
-        {
-          id: "sale-parties",
-          label: "Parties",
-          icon: FaUser,
-          submenu: [
-            { id: "sale-agents", label: saleT.saleAgents, icon: FaUser },
-            ...(saleUsesOwners ? [
-              { id: "sale-owners", label: saleT.saleOwners, icon: FaUsers },
-              { id: "sale-owner-statements", label: saleT.saleOwnerStatements, icon: FaFileAlt },
-              { id: "sale-owner-statements-approved", label: "Approved Statements", icon: FaCheckCircle },
-              { id: "sale-owner-payouts", label: "Owner Payouts", icon: FaMoneyBillWave },
-            ] : []),
-            ...(saleUsesAdvocates ? [
-              { id: "sale-advocates", label: saleT.saleAdvocates, icon: FaUsers },
-              { id: "sale-advocate-remittances", label: "Rechargeable Expenses", icon: FaFileAlt },
-            ] : []),
           ],
         },
         {
@@ -1251,7 +1264,6 @@ const TopToolbar = ({
           label: "General Ledger",
           icon: FaBook,
           submenu: [
-            { id: "acc-dashboard",          label: "Accounts Overview",   icon: FaChartLine },
             { id: "acc-chart-of-accounts",  label: "Chart of Accounts",   icon: FaLayerGroup },
             { id: "acc-journals",           label: "Journal Entries",     icon: FaBook },
             { id: "acc-bank-reconciliation", label: "Bank Reconciliation", icon: FaUniversity },

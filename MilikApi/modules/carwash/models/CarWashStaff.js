@@ -13,6 +13,7 @@ const carWashStaffSchema = new mongoose.Schema(
     role: { type: String, trim: true, default: "" },
     startDate: { type: Date, required: true },
     active: { type: Boolean, default: true },
+    commissionEligible: { type: Boolean, default: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
   },

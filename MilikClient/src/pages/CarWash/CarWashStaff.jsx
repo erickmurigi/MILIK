@@ -19,7 +19,7 @@ import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
 
 const GRN = "#0B3B2E";
-const emptyForm = { name: "", phone: "", role: "", startDate: "", active: true, branch: "" };
+const emptyForm = { name: "", phone: "", role: "", startDate: "", active: true, branch: "", commissionEligible: true };
 const DEFAULT_PAGE_SIZE = 50;
 const fmt = formatMoney;
 
@@ -140,7 +140,7 @@ const WalletDrawer = ({ row, cashbooks, onPayoutSuccess }) => {
 
   if (loading) return (
     <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-      <td colSpan={6} className="px-10 py-4 text-center text-xs text-slate-400">Loading wallet…</td>
+      <td colSpan={7} className="px-10 py-4 text-center text-xs text-slate-400">Loading wallet…</td>
     </tr>
   );
 
@@ -155,7 +155,7 @@ const WalletDrawer = ({ row, cashbooks, onPayoutSuccess }) => {
   return (
     <>
       <tr className="border-b border-slate-100 bg-[#F8FBF9]">
-        <td colSpan={6} className="px-6 py-4">
+        <td colSpan={7} className="px-6 py-4">
           <div className="space-y-4">
 
             {/* Commission summary */}
@@ -306,7 +306,7 @@ const CarWashStaff = () => {
   const openEdit = (row) => {
     const draft = readDraft(`cw-staff-edit-${row._id}`);
     setEditingId(row._id);
-    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", startDate: row.startDate ? row.startDate.slice(0, 10) : "", active: row.active !== false, branch: row.branch?._id || row.branch || "" });
+    setForm(draft ?? { name: row.name || "", phone: row.phone || "", role: row.role || "", startDate: row.startDate ? row.startDate.slice(0, 10) : "", active: row.active !== false, branch: row.branch?._id || row.branch || "", commissionEligible: row.commissionEligible !== false });
     setShowModal(true);
   };
 
@@ -398,6 +398,9 @@ const CarWashStaff = () => {
                 </span>
               </div>
               {row.phone && <p className="text-xs text-slate-600">{row.phone}</p>}
+              <p className="text-[11px] text-slate-500">
+                {row.commissionEligible === false ? "Salaried — no commission" : "Commission eligible"}
+              </p>
               {canManage && (
                 <button type="button" onClick={() => openEdit(row)} title="Edit staff" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
                   <FaEdit size={12} />
@@ -419,6 +422,7 @@ const CarWashStaff = () => {
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Role</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>
               <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
+              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Commission</th>
               <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>
             </tr>
           </thead>
@@ -453,6 +457,11 @@ const CarWashStaff = () => {
                         {row.active === false ? "Inactive" : "Active"}
                       </span>
                     </td>
+                    <td className="px-2 py-1">
+                      {row.commissionEligible === false
+                        ? <span className="text-[11px] text-slate-400">Salaried</span>
+                        : <span className="text-[11px] font-semibold text-slate-700">Commission</span>}
+                    </td>
                     <td className="px-2 py-1 text-right">
                       {canManage && (
                         <button type="button" onClick={() => openEdit(row)} title="Edit staff" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
@@ -473,7 +482,7 @@ const CarWashStaff = () => {
               );
             }) : (
               <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No Car Wash staff found.</td>
+                <td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No Car Wash staff found.</td>
               </tr>
             )}
           </tbody>
@@ -533,6 +542,13 @@ const CarWashStaff = () => {
               <input type="checkbox" checked={form.active} onChange={(e) => setForm((p) => ({ ...p, active: e.target.checked }))} />
               Active
             </label>
+            <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+              <input type="checkbox" checked={form.commissionEligible} onChange={(e) => setForm((p) => ({ ...p, commissionEligible: e.target.checked }))} />
+              Eligible for Commission
+            </label>
+            <p className="md:col-span-2 -mt-2 text-[10px] text-slate-400">
+              Uncheck for salaried attendants who should never earn per-job commission, regardless of any commission rule set up for them.
+            </p>
           </form>
         </Modal>
       )}

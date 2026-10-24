@@ -49,26 +49,26 @@ export const DashboardLinkButton = ({ onClick, children = "View All →" }) => (
 export const DashboardQuickAccess = ({ links, onNavigate }) => (
   <div className="grid grid-cols-2 gap-px bg-slate-100">
     {links.map(({ label, to, Icon }) => (
-      <button key={to} type="button" onClick={() => onNavigate(to)} className="flex items-center gap-2 bg-white px-3 py-2.5 text-left hover:bg-[#F1F6F3]">
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center bg-[#0B3B2E]/10 text-xs text-[#0B3B2E]">
+      <button key={to} type="button" onClick={() => onNavigate(to)} className="flex items-center gap-1.5 bg-white px-2 py-1.5 text-left hover:bg-[#F1F6F3]">
+        <span className="flex h-5 w-5 shrink-0 items-center justify-center bg-[#0B3B2E]/10 text-[10px] text-[#0B3B2E]">
           <Icon />
         </span>
-        <span className="text-xs font-bold leading-tight text-slate-800">{label}</span>
+        <span className="truncate text-[11px] font-bold text-slate-800" title={label}>{label}</span>
       </button>
     ))}
   </div>
 );
 
-/** Label / note on the left, a figure on the right. rows: [{ label, note, value, tone }] with tone "good" | "warn" | undefined */
+/** Label (+ optional inline note) on the left, one line, a figure on the right. rows: [{ label, note, value, tone }] with tone "good" | "warn" | undefined */
 export const DashboardSummaryRows = ({ rows, loading }) => (
   <div className="divide-y divide-slate-100">
     {rows.map(({ label, note, value, tone }) => (
-      <div key={label} className="flex items-center justify-between gap-2 px-3 py-2">
-        <div>
-          <p className="text-xs font-bold text-slate-700">{label}</p>
-          {note && <p className="text-[10px] text-slate-400">{note}</p>}
-        </div>
-        <span className={`text-right text-base font-extrabold tabular-nums ${tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-orange-600" : "text-slate-900"}`}>
+      <div key={label} className="flex items-center justify-between gap-2 px-3 py-1.5">
+        <p className="min-w-0 truncate text-xs font-bold text-slate-700" title={note ? `${label} — ${note}` : label}>
+          {label}
+          {note && <span className="ml-1 font-normal text-slate-400">· {note}</span>}
+        </p>
+        <span className={`shrink-0 text-right text-sm font-extrabold tabular-nums ${tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-orange-600" : "text-slate-900"}`}>
           {loading ? "…" : value}
         </span>
       </div>

@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import CarWashCommissionRule from "../models/CarWashCommissionRule.js";
+import CarWashStaff from "../models/CarWashStaff.js";
 import CarWashStaffCommission from "../models/CarWashStaffCommission.js";
 import CarWashCommissionPayout from "../models/CarWashCommissionPayout.js";
 import { resolveAuditActorUserId } from "../../../utils/systemActor.js";
@@ -28,6 +29,20 @@ const getActiveRules = async (business) => {
 };
 // Call this whenever rules are saved/deleted so the cache reflects the change immediately
 export const invalidateRulesCache = (business) => _rulesCache.delete(String(business));
+
+// Same pattern, for staff whose commissionEligible flag is explicitly off — they never accrue,
+// regardless of any matching rule (e.g. salaried attendants not paid per-job commission).
+const _ineligibleStaffCache = new Map(); // businessId → { ids: Set, at }
+const getIneligibleStaffIds = async (business) => {
+  const key = String(business);
+  const hit = _ineligibleStaffCache.get(key);
+  if (hit && Date.now() - hit.at < RULES_TTL) return hit.ids;
+  const staff = await CarWashStaff.find({ business, commissionEligible: false }).select("_id").lean();
+  const ids = new Set(staff.map((s) => String(s._id)));
+  _ineligibleStaffCache.set(key, { ids, at: Date.now() });
+  return ids;
+};
+export const invalidateStaffEligibilityCache = (business) => _ineligibleStaffCache.delete(String(business));
 
 const dayRange = (value = new Date()) => {
   const date = value ? new Date(value) : new Date();
@@ -109,9 +124,10 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
     ? job.serviceLines
     : [{ service: job.service || null, serviceName: job.serviceName || "", vehicleType: job.vehicleType || "", price: Number(job.price || 0), lineStaff: null }];
 
-  const [actorUserId, allRules] = await Promise.all([
+  const [actorUserId, allRules, ineligibleStaffIds] = await Promise.all([
     req ? resolveAuditActorUserId({ req, businessId: job.business }) : Promise.resolve(null),
     getActiveRules(job.business),
+    getIneligibleStaffIds(job.business),
   ]);
 
   // Build per-staff commission breakdown respecting per-line staff assignment.
@@ -134,6 +150,7 @@ export const accrueCommissionForJob = async ({ req = null, job, paidLineSet = nu
     if (!splitCount) continue;
 
     for (const staffId of recipients) {
+      if (ineligibleStaffIds.has(staffId)) continue;
       const rule = resolveRuleFromCache(allRules, line.service || null, staffId);
       if (!rule || Number(rule.rate || 0) <= 0) continue;
 

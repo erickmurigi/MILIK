@@ -133,13 +133,26 @@ const CarWashCommissionRules = () => {
   });
   const services = servicesRaw ?? [];
 
-  const { data: staffRaw } = useQuery({
+  const { data: staffRaw, refetch: refetchStaff } = useQuery({
     queryKey: ["cw-staff-ref"],
     queryFn: () => carWashApi.listStaff({ active: true }),
     staleTime: 5 * 60_000,
     select: (data) => normalizeListPayload(data, "staff"),
   });
   const staff = staffRaw ?? [];
+
+  const [togglingId, setTogglingId] = useState("");
+  const toggleEligibility = async (row) => {
+    setTogglingId(row._id);
+    try {
+      await carWashApi.setStaffCommissionEligibility(row._id, row.commissionEligible === false);
+      await Promise.all([refetchStaff(), queryClient.invalidateQueries({ queryKey: ["cw-staff"] })]);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to update commission eligibility");
+    } finally {
+      setTogglingId("");
+    }
+  };
 
   const openNew = () => { setEditId(""); setEditInitialForm(emptyRule); setShowModal(true); };
   const openEdit = (rule) => {
@@ -200,6 +213,50 @@ const CarWashCommissionRules = () => {
           </ListToolbar.Button>
         )}
       </ListToolbar>
+      <div className="mb-2 overflow-x-auto border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5">
+          <p className="text-[11px] font-black uppercase tracking-wide text-slate-600">Staff Commission Eligibility</p>
+          <p className="text-[10px] text-slate-500">Attendants switched off here never accrue commission on a job, regardless of any rule below — use this for salaried staff.</p>
+        </div>
+        <table className="w-full min-w-[520px] text-xs">
+          <thead className="bg-[#0B3B2E] text-white">
+            <tr>
+              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Staff</th>
+              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Role</th>
+              <th className="px-3 py-1.5 text-left font-bold uppercase tracking-wide">Branch</th>
+              <th className="px-3 py-1.5 text-center font-bold uppercase tracking-wide">Commission Eligible</th>
+            </tr>
+          </thead>
+          <tbody>
+            {staff.length ? staff.map((row) => (
+              <tr key={row._id} className="border-b border-slate-200 hover:bg-slate-50">
+                <td className="px-3 py-1.5 font-extrabold text-slate-900">{row.name}</td>
+                <td className="px-3 py-1.5 text-slate-700">{row.role || "—"}</td>
+                <td className="px-3 py-1.5 text-slate-700">{row.branch?.name || "—"}</td>
+                <td className="px-3 py-1.5 text-center">
+                  <button
+                    type="button"
+                    disabled={!canManage || togglingId === row._id}
+                    onClick={() => toggleEligibility(row)}
+                    title={row.commissionEligible === false ? "Salaried — click to enable commission" : "Commission eligible — click to switch to salaried"}
+                    className={`inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-bold disabled:cursor-not-allowed disabled:opacity-50 ${
+                      row.commissionEligible === false
+                        ? "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    {row.commissionEligible === false ? <FaToggleOff size={10} /> : <FaToggleOn size={10} />}
+                    {row.commissionEligible === false ? "Salaried" : "Commission"}
+                  </button>
+                </td>
+              </tr>
+            )) : (
+              <tr><td colSpan={4} className="px-3 py-6 text-center text-xs font-semibold text-slate-500">No active staff found.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
       <div className="min-h-[calc(100vh-14rem)] overflow-x-auto border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center gap-4 border-b border-slate-200 bg-[#EDF5F1] px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-600">
           <span>Total Rules: <strong className="text-[#0B3B2E]">{rules.length}</strong></span>

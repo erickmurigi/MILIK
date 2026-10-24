@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { clearDraft, readDraft, writeDraft } from "../../hooks/useFormDraft";
@@ -10,9 +10,19 @@ import useCarWashPermission from "../../hooks/useCarWashPermission";
 import AppSelect from "../../components/common/AppSelect";
 import PaginationBar from "../../components/PaginationBar";
 import ListToolbar from "../../components/common/ListToolbar";
-import { inputClass, labelClass } from "../../utils/formStyles";
+import MilikTable from "../../components/common/MilikTable";
+import StatusBadge from "../../components/common/StatusBadge";
 
 import Modal from "../../components/common/Modal";
+
+const SERVICE_STATUS_MAP = {
+  active: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  inactive: "border-orange-200 bg-orange-50 text-orange-700",
+};
+
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass =
+  "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
 
 const emptyForm = { name: "", category: "", jobType: "both", pricingType: "flat", defaultPrice: "", pricingTiers: [], active: true, isTaxable: false, taxRate: "", isCombo: false, comboDescription: "" };
 const normalizeForm = (f) => ({ ...emptyForm, ...f, pricingTiers: Array.isArray(f?.pricingTiers) ? f.pricingTiers : [], isTaxable: Boolean(f?.isTaxable), taxRate: f?.taxRate !== undefined ? String(f.taxRate) : "", isCombo: Boolean(f?.isCombo), comboDescription: String(f?.comboDescription || "") });
@@ -25,7 +35,7 @@ const CarWashServices = () => {
   const [editingId, setEditingId]     = useState("");
   const [filters, setFilters]         = useTabState("/carwash/services:filters", { search: "", status: "" });
   const [appliedFilters, setApplied]  = useTabState("/carwash/services:appliedFilters", { search: "", status: "" });
-  const [expandedIds, setExpandedIds] = useState([]);
+  const [expandedIds, setExpandedIds] = useState(new Set());
   const [page, setPage]               = useTabState("/carwash/services:page", 1);
   const [pageSize, setPageSize]       = useTabState("/carwash/services:pageSize", DEFAULT_PAGE_SIZE);
   const [showModal, setShowModal]     = useState(false);
@@ -53,7 +63,7 @@ const CarWashServices = () => {
   });
 
   useEffect(() => { if (error) toast.error("Failed to load services"); }, [error]);
-  useEffect(() => { setExpandedIds([]); }, [servicesData]);
+  useEffect(() => { setExpandedIds(new Set()); }, [servicesData]);
 
   const rows = normalizeListPayload(servicesData, "services");
   const pagination = servicesData?.pagination || { page, limit: pageSize, total: rows.length, pages: 1 };
@@ -201,7 +211,99 @@ const CarWashServices = () => {
   const applyFilters = (e) => { e.preventDefault(); setPage(1); setApplied({ ...filters }); };
   const resetFilters = () => { setFilters({ search: "", status: "" }); setPage(1); setApplied({ search: "", status: "" }); };
   const toggleExpanded = (id) =>
-    setExpandedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const renderServiceRow = useCallback((row) => {
+    const tiers = Array.isArray(row.pricingTiers) ? row.pricingTiers : [];
+    return (
+      <>
+        <td className="px-3 py-1.5 border-r border-gray-100">
+          <div className="flex items-center gap-1.5">
+            <span className="font-extrabold text-slate-900">{row.name}</span>
+            {row.isCombo && <span className="inline-flex border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-700">Combo</span>}
+          </div>
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{row.category || "—"}</td>
+        <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">
+          {row.pricingType === "per_sqft" ? (
+            <span className="font-semibold">KES {row.defaultPrice}/sqft</span>
+          ) : tiers.length > 0 ? (
+            <span className="font-semibold">{tiers.length} vehicle type{tiers.length !== 1 ? "s" : ""}</span>
+          ) : (
+            <span className="text-slate-400">Flat rate</span>
+          )}
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100 text-right font-extrabold text-slate-900">
+          {row.pricingType === "per_sqft" ? <span className="text-slate-400 font-normal">calculated</span> : formatMoney(row.defaultPrice)}
+        </td>
+        <td className="px-3 py-1.5 border-r border-gray-100">
+          <StatusBadge status={row.active === false ? "inactive" : "active"} map={SERVICE_STATUS_MAP} />
+        </td>
+      </>
+    );
+  }, []);
+
+  const renderServiceActions = useCallback((row) => (
+    canManage ? (
+      <div className="inline-flex items-center justify-end gap-1">
+        <button type="button" onClick={() => openDuplicate(row)} title="Duplicate" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <FaCopy size={12} />
+        </button>
+        <button type="button" onClick={() => openEdit(row)} title="Edit service" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <FaEdit size={12} />
+        </button>
+      </div>
+    ) : null
+  ), [canManage]);
+
+  const renderServiceExpanded = useCallback((row) => {
+    const tiers = Array.isArray(row.pricingTiers) ? row.pricingTiers : [];
+    return (
+      <div className="text-[11px] text-slate-600">
+        {row.isCombo && row.comboDescription && (
+          <div className="mb-3 border border-slate-200 bg-slate-50 px-3 py-2">
+            <p className="text-[9px] font-black uppercase tracking-wide text-slate-500 mb-1">Includes</p>
+            <p className="text-[11px] text-slate-700 leading-relaxed">{row.comboDescription}</p>
+          </div>
+        )}
+        {tiers.length > 0 ? (
+          <div className="max-w-sm">
+            <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Vehicle Type Pricing</p>
+            <table className="w-full border border-slate-200 text-xs">
+              <thead className="bg-[#0B3B2E]">
+                <tr>
+                  <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-widest text-white">Vehicle Type</th>
+                  <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase tracking-widest text-white">Price</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tiers.map((t, i) => (
+                  <tr key={i} className="border-t border-slate-200">
+                    <td className="px-3 py-1.5 font-semibold text-slate-800">{t.vehicleType}</td>
+                    <td className="px-3 py-1.5 text-right font-extrabold text-slate-900">{formatMoney(t.price)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-slate-300 bg-slate-50">
+                  <td className="px-3 py-1.5 text-[10px] font-bold uppercase text-slate-500">Default / Other</td>
+                  <td className="px-3 py-1.5 text-right font-extrabold text-slate-700">{formatMoney(row.defaultPrice)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-3">
+            <div><span className="font-extrabold uppercase text-slate-500">Price:</span> {formatMoney(row.defaultPrice)}</div>
+            <div><span className="font-extrabold uppercase text-slate-500">Created:</span> {row.createdAt ? new Date(row.createdAt).toLocaleDateString("en-KE") : "—"}</div>
+            <div><span className="font-extrabold uppercase text-slate-500">Service ID:</span> {row._id}</div>
+          </div>
+        )}
+      </div>
+    );
+  }, []);
 
   // CarWashShell no longer renders its own header strip (showToolbar={false} below), so the
   // "Queue Display" button it used to carry is duplicated here, same handler, inside our own toolbar.
@@ -239,6 +341,7 @@ const CarWashServices = () => {
               { value: "inactive", label: "Inactive" },
             ]}
           />
+          <ListToolbar.Divider />
           <ListToolbar.Button icon={FaSearch} variant="accent" type="submit">Search</ListToolbar.Button>
           <ListToolbar.Button icon={FaRedoAlt} variant="outline" type="button" onClick={resetFilters}>Reset</ListToolbar.Button>
           <ListToolbar.Divider />
@@ -249,9 +352,12 @@ const CarWashServices = () => {
             Queue Display
           </ListToolbar.Button>
           {canManage && (
-            <ListToolbar.Button icon={FaPlus} variant="accent" type="button" className="ml-auto" onClick={() => openCreate()}>
-              New Service
-            </ListToolbar.Button>
+            <>
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaPlus} variant="primary" type="button" onClick={() => openCreate()}>
+                New Service
+              </ListToolbar.Button>
+            </>
           )}
         </ListToolbar>
       </form>
@@ -261,26 +367,24 @@ const CarWashServices = () => {
         <div className="sm:hidden flex-1 min-h-0 overflow-y-auto divide-y divide-slate-200">
           {rows.length ? rows.map((row) => {
             const tiers = Array.isArray(row.pricingTiers) ? row.pricingTiers : [];
-            const expanded = expandedIds.includes(row._id);
+            const expanded = expandedIds.has(row._id);
             return (
               <div key={row._id} className="p-3 space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <p className="text-sm font-extrabold text-slate-900">{row.name}</p>
-                      {row.isCombo && <span className="inline-flex border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-purple-700">Combo</span>}
+                      {row.isCombo && <span className="inline-flex border border-slate-300 bg-slate-100 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-700">Combo</span>}
                     </div>
                     {row.category && <p className="text-xs text-slate-500">{row.category}</p>}
                   </div>
-                  <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${row.active === false ? "border-orange-200 bg-orange-50 text-orange-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-                    {row.active === false ? "Inactive" : "Active"}
-                  </span>
+                  <StatusBadge status={row.active === false ? "inactive" : "active"} map={SERVICE_STATUS_MAP} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
                   {row.pricingType === "per_sqft" ? (
-                    <span className="inline-flex border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">KES {row.defaultPrice}/sqft</span>
+                    <span className="font-semibold text-slate-700">KES {row.defaultPrice}/sqft</span>
                   ) : tiers.length > 0 ? (
-                    <span className="inline-flex border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">{tiers.length} vehicle type{tiers.length !== 1 ? "s" : ""}</span>
+                    <span className="font-semibold text-slate-700">{tiers.length} vehicle type{tiers.length !== 1 ? "s" : ""}</span>
                   ) : (
                     <span className="font-extrabold text-slate-900">{formatMoney(row.defaultPrice)}</span>
                   )}
@@ -323,127 +427,25 @@ const CarWashServices = () => {
           )}
         </div>
         <div className="hidden sm:flex sm:flex-col sm:flex-1 sm:min-h-0 sm:overflow-hidden">
-        <div className="flex-1 overflow-y-auto overflow-x-auto">
-        <table className="w-full min-w-[800px] text-xs">
-          <thead className="sticky top-0 z-10 bg-[#0B3B2E] text-white">
-            <tr>
-              <th className="w-8 px-2 py-1.5 text-left" />
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Service</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Category</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Vehicle Pricing</th>
-              <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Base / Default Price</th>
-              <th className="px-2 py-1.5 text-left font-bold uppercase tracking-wide">Status</th>
-              <th className="px-2 py-1.5 text-right font-bold uppercase tracking-wide">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row) => {
-                const expanded = expandedIds.includes(row._id);
-                const tiers = Array.isArray(row.pricingTiers) ? row.pricingTiers : [];
-                return (
-                  <React.Fragment key={row._id}>
-                    <tr className="border-b border-slate-200 hover:bg-slate-50">
-                      <td className="px-2 py-1">
-                        <button type="button" onClick={() => toggleExpanded(row._id)} className="text-[#0B3B2E] hover:text-[#FF8C00]">
-                          {expanded ? <FaChevronDown /> : <FaChevronRight />}
-                        </button>
-                      </td>
-                      <td className="px-2 py-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-slate-900">{row.name}</span>
-                          {row.isCombo && <span className="inline-flex border border-purple-300 bg-purple-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-purple-700">Combo</span>}
-                        </div>
-                      </td>
-                      <td className="px-2 py-1 text-slate-700">{row.category || "—"}</td>
-                      <td className="px-2 py-1">
-                        {row.pricingType === "per_sqft" ? (
-                          <span className="inline-flex border border-violet-200 bg-violet-50 px-2 py-0.5 text-[10px] font-bold text-violet-700">
-                            KES {row.defaultPrice}/sqft
-                          </span>
-                        ) : tiers.length > 0 ? (
-                          <span className="inline-flex border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                            {tiers.length} vehicle type{tiers.length !== 1 ? "s" : ""}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400">Flat rate</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1 text-right font-extrabold text-slate-900">
-                        {row.pricingType === "per_sqft" ? <span className="text-slate-400 font-normal text-[10px]">calculated</span> : formatMoney(row.defaultPrice)}
-                      </td>
-                      <td className="px-2 py-1">
-                        <span className={`inline-flex border px-2 py-0.5 text-[11px] font-bold uppercase ${row.active === false ? "border-orange-200 bg-orange-50 text-orange-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
-                          {row.active === false ? "Inactive" : "Active"}
-                        </span>
-                      </td>
-                      <td className="px-2 py-1 text-right">
-                        {canManage && (
-                          <div className="inline-flex items-center justify-end gap-1">
-                            <button type="button" onClick={() => openDuplicate(row)} title="Duplicate" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                              <FaCopy size={12} />
-                            </button>
-                            <button type="button" onClick={() => openEdit(row)} title="Edit service" className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900">
-                              <FaEdit size={12} />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                    {expanded && (
-                      <tr className="border-b border-slate-200 bg-[#F8FBF9]">
-                        <td colSpan={7} className="px-10 py-3 text-[11px] text-slate-600">
-                          {row.isCombo && row.comboDescription && (
-                            <div className="mb-3 border border-purple-200 bg-purple-50 px-3 py-2">
-                              <p className="text-[9px] font-black uppercase tracking-wide text-purple-500 mb-1">Includes</p>
-                              <p className="text-[11px] text-purple-900 leading-relaxed">{row.comboDescription}</p>
-                            </div>
-                          )}
-                          {tiers.length > 0 ? (
-                            <div className="max-w-sm">
-                              <p className="mb-2 text-[10px] font-black uppercase tracking-wide text-slate-400">Vehicle Type Pricing</p>
-                              <table className="w-full border border-slate-200 text-xs">
-                                <thead className="bg-[#0B3B2E]">
-                                  <tr>
-                                    <th className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-widest text-white">Vehicle Type</th>
-                                    <th className="px-3 py-1.5 text-right text-[10px] font-black uppercase tracking-widest text-white">Price</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {tiers.map((t, i) => (
-                                    <tr key={i} className="border-t border-slate-200">
-                                      <td className="px-3 py-1.5 font-semibold text-slate-800">{t.vehicleType}</td>
-                                      <td className="px-3 py-1.5 text-right font-extrabold text-slate-900">{formatMoney(t.price)}</td>
-                                    </tr>
-                                  ))}
-                                  <tr className="border-t-2 border-slate-300 bg-slate-50">
-                                    <td className="px-3 py-1.5 text-[10px] font-bold uppercase text-slate-500">Default / Other</td>
-                                    <td className="px-3 py-1.5 text-right font-extrabold text-slate-700">{formatMoney(row.defaultPrice)}</td>
-                                  </tr>
-                                </tbody>
-                              </table>
-                            </div>
-                          ) : (
-                            <div className="grid gap-3 md:grid-cols-3">
-                              <div><span className="font-extrabold uppercase text-slate-500">Price:</span> {formatMoney(row.defaultPrice)}</div>
-                              <div><span className="font-extrabold uppercase text-slate-500">Created:</span> {row.createdAt ? new Date(row.createdAt).toLocaleDateString("en-KE") : "—"}</div>
-                              <div><span className="font-extrabold uppercase text-slate-500">Service ID:</span> {row._id}</div>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })
-            ) : (
-              <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-xs font-semibold text-slate-500">No Car Wash services found.</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        </div>{/* end scroll */}
+          <MilikTable
+            columns={[
+              { label: "Service" },
+              { label: "Category" },
+              { label: "Vehicle Pricing" },
+              { label: "Base / Default Price", align: "right" },
+              { label: "Status" },
+            ]}
+            rows={rows}
+            rowKey="_id"
+            minWidth="800px"
+            empty="No Car Wash services found."
+            loading={loading}
+            renderRow={renderServiceRow}
+            renderActions={renderServiceActions}
+            renderExpanded={renderServiceExpanded}
+            expandedKeys={expandedIds}
+            onExpandedKeysChange={setExpandedIds}
+          />
         </div>{/* end desktop table */}
         <PaginationBar
           page={pagination.page}

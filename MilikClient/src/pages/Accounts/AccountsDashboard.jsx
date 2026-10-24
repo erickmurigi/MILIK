@@ -1,14 +1,14 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
 } from "recharts";
 import {
   FaArchive, FaArrowDown, FaArrowUp, FaBalanceScale, FaBook, FaCalendarAlt, FaChartLine, FaChartPie,
   FaCoins, FaCreditCard, FaExclamationTriangle, FaFileContract, FaFileInvoice, FaFileInvoiceDollar, FaHourglassHalf,
-  FaLayerGroup, FaPlus, FaRedoAlt, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers,
+  FaLayerGroup, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers,
 } from "react-icons/fa";
 import { selectCurrentCompany } from "../../redux/selectors";
 import ModuleShell from "../../components/Layout/ModuleShell";
@@ -128,7 +128,6 @@ const TH = "px-3 py-2 text-[10px] font-black uppercase tracking-widest text-whit
 // ─── Page ─────────────────────────────────────────────────────────────────────
 const AccountsDashboard = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const biz = useSelector(selectCurrentCompany)?._id || "";
 
   const { data: stats, isFetching: statsLoading } = useQuery({
@@ -199,55 +198,8 @@ const AccountsDashboard = () => {
   const loading = statsLoading && !stats;
   const period = s.period;
 
-  const refresh = () => ["acc-dashboard-stats", "acc-dashboard-charts", "acc-dashboard-recent"].forEach((key) => queryClient.invalidateQueries({ queryKey: [key] }));
-
-  const periodTone = useMemo(() => {
-    if (!period) return "border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100";
-    return period.status === "open"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-      : period.status === "closed"
-        ? "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-        : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100";
-  }, [period]);
-
   return (
-    <ModuleShell
-      moduleLabel="MILIK Accounting"
-      title="Dashboard"
-      action={
-        <>
-          <button
-            type="button"
-            onClick={() => navigate("/accounts/accounting-periods")}
-            className={`inline-flex h-7 items-center gap-1.5 border px-2.5 text-[10px] font-bold transition ${periodTone}`}
-          >
-            <FaCalendarAlt size={9} />
-            {loading ? "…" : period ? `${period.name} · ${String(period.status).toUpperCase()}` : "No active period"}
-          </button>
-          <button
-            type="button"
-            onClick={refresh}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaRedoAlt size={9} className={statsLoading || chartsLoading || recentLoading ? "animate-spin" : ""} /> Refresh
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/accounts/journals")}
-            className="inline-flex h-7 items-center gap-1 border border-[#B7C9C0] bg-white px-2.5 text-xs font-bold text-[#0B3B2E] hover:bg-[#F1F6F3]"
-          >
-            <FaPlus size={9} /> Journal
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate("/accounts/payment-vouchers/new")}
-            className="inline-flex h-7 items-center gap-1 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-          >
-            <FaPlus size={9} /> Voucher
-          </button>
-        </>
-      }
-    >
+    <ModuleShell>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
 
         {/* ── Needs attention ─────────────────────────────────────────────── */}
@@ -266,11 +218,11 @@ const AccountsDashboard = () => {
 
         {/* ── KPI stat cards ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
-          <DashboardStatCard label="Cash In · this month"  value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashIn, 0)}  icon={FaArrowDown} tone="green"  sub="Cashbook receipts" />
-          <DashboardStatCard label="Cash Out · this month" value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashOut, 0)} icon={FaArrowUp}   tone="orange" sub="Cashbook payments" />
-          <DashboardStatCard label={thisMonthNet >= 0 ? "Net Profit · this month" : "Net Loss · this month"} value={chartsLoading && !charts ? "…" : formatMoney(Math.abs(thisMonthNet), 0)} icon={FaChartLine} tone={thisMonthNet >= 0 ? "green" : "red"} sub="Income less expenses" />
-          <DashboardStatCard label="Vouchers Pending" value={loading ? "…" : pendingVouchers} icon={FaCreditCard} tone="orange" sub={loading ? "" : `${s.draftVouchers ?? 0} draft · ${s.approvedVouchers ?? 0} approved`} onClick={() => navigate("/accounts/payment-vouchers")} />
-          <DashboardStatCard label="Draft Journals" value={loading ? "…" : (s.draftJournals ?? 0)} icon={FaHourglassHalf} tone="green" sub={loading ? "" : `${s.postedJournals ?? 0} posted this month`} onClick={() => navigate("/accounts/journals")} />
+          <DashboardStatCard compact label="Cash In · this month"  value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashIn, 0)}  icon={FaArrowDown} tone="green"  sub="Cashbook receipts" />
+          <DashboardStatCard compact label="Cash Out · this month" value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashOut, 0)} icon={FaArrowUp}   tone="orange" sub="Cashbook payments" />
+          <DashboardStatCard compact label={thisMonthNet >= 0 ? "Net Profit · this month" : "Net Loss · this month"} value={chartsLoading && !charts ? "…" : formatMoney(Math.abs(thisMonthNet), 0)} icon={FaChartLine} tone={thisMonthNet >= 0 ? "green" : "red"} sub="Income less expenses" />
+          <DashboardStatCard compact label="Vouchers Pending" value={loading ? "…" : pendingVouchers} icon={FaCreditCard} tone="orange" sub={loading ? "" : `${s.draftVouchers ?? 0} draft · ${s.approvedVouchers ?? 0} approved`} onClick={() => navigate("/accounts/payment-vouchers")} />
+          <DashboardStatCard compact label="Draft Journals" value={loading ? "…" : (s.draftJournals ?? 0)} icon={FaHourglassHalf} tone="green" sub={loading ? "" : `${s.postedJournals ?? 0} posted this month`} onClick={() => navigate("/accounts/journals")} />
         </div>
 
         {/* ── Main two-column area ────────────────────────────────────────── */}

@@ -3,6 +3,7 @@ import { createError } from "../../../utils/error.js";
 import CarWashJob from "../models/CarWashJob.js";
 import CarWashStaff from "../models/CarWashStaff.js";
 import { currentUserId, escapeRegex, parseBoolean, resolveActiveBusinessId, resolveActiveBranchId } from "../services/businessScope.js";
+import { invalidateStaffEligibilityCache } from "../services/commissionService.js";
 
 const toOidOrNull = (v) => {
   const s = String(v || "").trim();
@@ -15,6 +16,7 @@ const sanitizeStaffPayload = (body = {}) => ({
   role: String(body.role || "").trim().toUpperCase(),
   startDate: body.startDate ? new Date(body.startDate) : null,
   active: parseBoolean(body.active, true),
+  commissionEligible: parseBoolean(body.commissionEligible, true),
 });
 
 export const listStaff = async (req, res, next) => {
@@ -57,6 +59,7 @@ export const createStaff = async (req, res, next) => {
     const branchFromBody = toOidOrNull(req.body.branch);
     const branchId = branchFromBody || resolveActiveBranchId(req) || null;
     const staff = await CarWashStaff.create({ ...payload, business, branch: branchId, createdBy: userId, updatedBy: userId });
+    invalidateStaffEligibilityCache(business);
     res.status(201).json({ success: true, data: staff, staff, message: "Car Wash staff member created" });
   } catch (error) {
     next(error);
@@ -75,7 +78,25 @@ export const updateStaff = async (req, res, next) => {
       { new: true, runValidators: true }
     ).lean();
     if (!staff) return next(createError(404, "Car Wash staff member not found"));
+    invalidateStaffEligibilityCache(business);
     res.status(200).json({ success: true, data: staff, staff, message: "Car Wash staff member updated" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const setStaffCommissionEligibility = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const commissionEligible = parseBoolean(req.body.commissionEligible, true);
+    const staff = await CarWashStaff.findOneAndUpdate(
+      { _id: req.params.id, business },
+      { commissionEligible, updatedBy: currentUserId(req) },
+      { new: true, runValidators: true }
+    ).lean();
+    if (!staff) return next(createError(404, "Car Wash staff member not found"));
+    invalidateStaffEligibilityCache(business);
+    res.status(200).json({ success: true, data: staff, staff, message: "Commission eligibility updated" });
   } catch (error) {
     next(error);
   }

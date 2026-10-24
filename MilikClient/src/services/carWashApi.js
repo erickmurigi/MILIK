@@ -93,6 +93,7 @@ export const carWashApi = {
   listStaff: async (params = {}) => unwrap(await adminRequests.get("/carwash/staff", { params: bp(params) })),
   createStaff: async (payload) => unwrap(await adminRequests.post("/carwash/staff", bb(payload))),
   updateStaff: async (id, payload) => unwrap(await adminRequests.put(`/carwash/staff/${id}`, payload)),
+  setStaffCommissionEligibility: async (id, commissionEligible) => unwrap(await adminRequests.patch(`/carwash/staff/${id}/commission-eligibility`, { commissionEligible })),
   deleteStaff: async (id) => unwrap(await adminRequests.delete(`/carwash/staff/${id}`)),
   listBranches: async (params = {}) => unwrap(await adminRequests.get("/carwash/branches", { params })),
   getActiveBranch: async () => unwrap(await adminRequests.get("/carwash/branches/active")),
