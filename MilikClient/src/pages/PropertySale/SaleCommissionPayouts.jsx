@@ -52,7 +52,14 @@ const renderPayoutRow = (p) => (
     <td className="px-3 py-1.5 font-bold text-slate-800 border-r border-gray-100">{p.agent?.fullName || "—"}</td>
     <td className="px-3 py-1.5 font-mono font-black text-slate-700 border-r border-gray-100">{p.deal?.dealNumber || "—"}</td>
     <td className="max-w-[130px] truncate px-3 py-1.5 text-slate-500 border-r border-gray-100">{p.listing?.title || p.listing?.listingNumber || "—"}</td>
-    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums text-slate-500">{fmtKES(p.whtAmount)}</td>
+    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums text-slate-500">
+      {fmtKES(p.whtAmount)}
+      {p.whtAmount > 0 && p.whtHandledBy === "advocate" && (
+        <span className="ml-1 border border-purple-200 bg-purple-50 px-1 py-0 text-[8px] font-black uppercase text-purple-600" title="The advocate self-remits this WHT to KRA — never posted to our own books">
+          advocate remits
+        </span>
+      )}
+    </td>
     <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-black tabular-nums text-emerald-700">{fmtKES(p.netAmount)}</td>
     <td className="px-3 py-1.5 border-r border-gray-100">
       <span className="border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[9px] font-black uppercase text-slate-600">{fmtLabel(p.method)}</span>
@@ -167,13 +174,14 @@ const SaleCommissionPayouts = () => {
         { label: T.saleDeal, value: (p) => p.deal?.dealNumber || "—" },
         { label: "Property", value: (p) => p.listing?.title || p.listing?.listingNumber || "—" },
         { label: "WHT (KES)", align: "right", value: (p) => money(p.whtAmount) },
+        { label: "WHT Remitted By", value: (p) => (p.whtAmount > 0 ? (p.whtHandledBy === "advocate" ? "Advocate" : "Agency") : "—") },
         { label: "Net Paid (KES)", align: "right", value: (p) => money(p.netAmount) },
         { label: "Method", value: (p) => fmtLabel(p.method) },
         { label: "Reference", value: (p) => p.reference || "—" },
         { label: "Date", value: (p) => (p.date ? fmtDate(p.date) : "—") },
       ],
       rows,
-      totalsRow: ["TOTAL", `${rows.length} payouts`, "", "", money(rows.reduce((s, p) => s + Number(p.whtAmount ?? 0), 0)), money(rows.reduce((s, p) => s + Number(p.netAmount ?? 0), 0)), "", "", ""],
+      totalsRow: ["TOTAL", `${rows.length} payouts`, "", "", money(rows.reduce((s, p) => s + Number(p.whtAmount ?? 0), 0)), "", money(rows.reduce((s, p) => s + Number(p.netAmount ?? 0), 0)), "", "", ""],
     }));
     setPrinting(false);
   };
@@ -197,6 +205,7 @@ const SaleCommissionPayouts = () => {
         { label: T.saleDeal, value: (p) => p.deal?.dealNumber || "—" },
         { label: "Property", value: (p) => p.listing?.title || p.listing?.listingNumber || "—" },
         { label: "WHT (KES)", value: (p) => money(p.whtAmount) },
+        { label: "WHT Remitted By", value: (p) => (p.whtAmount > 0 ? (p.whtHandledBy === "advocate" ? "Advocate" : "Agency") : "—") },
         { label: "Net Paid (KES)", value: (p) => money(p.netAmount) },
         { label: "Method", value: (p) => fmtLabel(p.method) },
         { label: "Reference", value: (p) => p.reference || "—" },

@@ -172,11 +172,18 @@ export const validatePSAccountOverride = async ({ businessId, code, rawValue }) 
 // Who withholds/remits WHT when an advocate physically pays a broker's commission out of trust
 // funds: "advocate" (self-remits to KRA under their own registration — no 2141 leg on our books)
 // or "agent" (forwards the withheld amount to the company, which remits via the existing WHT
-// machinery — 2141 gets credited, exactly like a normal direct-pay commission). A per-advocate
-// override (SaleAdvocate.whtHandledBy) wins; otherwise falls back to the company-wide default
-// (SaleSettings.advocateDefaults.whtHandledBy, itself defaulting to "agent" — today's behavior).
+// machinery — 2141 gets credited, exactly like a normal direct-pay commission). Priority:
+//   1. A per-advocate explicit override (SaleAdvocate.whtHandledBy) always wins.
+//   2. Otherwise, if this deal resolves to an advocate at all (via its own, its listing's, or its
+//      project's assignedAdvocate — see commissionsController.js's resolveDealAdvocate), the project/
+//      deal is advocate-managed, so WHT defaults to the advocate self-remitting. The agency does not
+//      run advocate WHT ledgers, so it never assumes that responsibility just because no explicit
+//      override was set.
+//   3. Only a deal with NO advocate relationship at all falls back to the company-wide default
+//      (SaleSettings.advocateDefaults.whtHandledBy, itself defaulting to "agent").
 export const resolveWhtHandler = async (businessId, advocateDoc) => {
   if (advocateDoc?.whtHandledBy) return advocateDoc.whtHandledBy;
+  if (advocateDoc) return "advocate";
   const settings = await SaleSettings.findOne({ business: businessId }).select("advocateDefaults").lean();
   return settings?.advocateDefaults?.whtHandledBy || "agent";
 };

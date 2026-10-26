@@ -10,7 +10,6 @@ import {
   FaFilter,
   FaPlus,
   FaRedoAlt,
-  FaSearch,
   FaTimes,
   FaTrash,
   FaUndo,
@@ -38,6 +37,7 @@ import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
+import StatusBadge from '../../components/common/StatusBadge';
 import { useTerms } from "../../hooks/useTerm";
 
 const JOURNAL_TYPES = [
@@ -85,7 +85,7 @@ const JOURNAL_TYPES = [
 
 const STATUS_STYLES = {
   draft: "bg-slate-100 text-slate-700 border-slate-200",
-  posted: "bg-green-100 text-green-700 border-green-200",
+  posted: "bg-emerald-50 text-emerald-700 border-emerald-200",
   reversed: "bg-amber-100 text-amber-700 border-amber-200",
 };
 
@@ -251,22 +251,6 @@ const JournalEntries = () => {
     () => JOURNAL_TYPES.map((type) => ({ value: type.value, label: getJournalTypePresentation(type.value)?.label || type.label })),
     []
   );
-
-  const totals = useMemo(() => {
-    return journals.reduce(
-      (acc, item) => {
-        const amount = Number(item.amount || 0);
-        acc.total += amount;
-        if (item.status === "draft") acc.draft += amount;
-        if (item.status === "posted") acc.posted += amount;
-        if (item.status === "reversed") acc.reversed += amount;
-        acc.draftCount = (acc.draftCount || 0) + (item.status === "draft" ? 1 : 0);
-        return acc;
-      },
-      { total: 0, draft: 0, posted: 0, reversed: 0, draftCount: 0 }
-    );
-  }, [journals]);
-
 
   const totalPages = Math.max(1, serverPages);
 
@@ -583,21 +567,6 @@ const JournalEntries = () => {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
             <ListToolbar>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Journals: {serverTotal}</span>
-              <span className="shrink-0 border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[9px] font-bold text-blue-700">Total: KES {totals.total.toLocaleString()}</span>
-              <span className="shrink-0 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">Posted: KES {totals.posted.toLocaleString()}</span>
-              <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">Draft: {totals.draftCount}</span>
-              <ListToolbar.Divider />
-              <div className="relative shrink-0">
-                <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
-                <ListToolbar.Input
-                  value={filters.search}
-                  onChange={(e) => { setFilter("search")(e); setCurrentPage(1); }}
-                  placeholder="Journal no, reference, narration"
-                  width="w-44"
-                  className="pl-5"
-                />
-              </div>
               <AppSelect
                 value={filters.status !== "all" ? filters.status : ""}
                 onChange={(v) => { setFilters((p) => ({ ...p, status: v ?? "all" })); setCurrentPage(1); }}
@@ -627,6 +596,15 @@ const JournalEntries = () => {
                 clearable
                 searchable
               />
+
+              <ListToolbar.Divider />
+
+              <ListToolbar.Input
+                value={filters.search}
+                onChange={(e) => { setFilter("search")(e); setCurrentPage(1); }}
+                placeholder="Journal no, reference, narration"
+                width="w-44"
+              />
               <ListToolbar.Button
                 icon={FaFilter}
                 variant="outline"
@@ -634,14 +612,21 @@ const JournalEntries = () => {
               >
                 Reset
               </ListToolbar.Button>
-              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadJournals} />
+
+              <ListToolbar.Divider />
+
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadJournals} title="Refresh" />
               {hasOwnerJournals && canCreateJournal && (
                 <ListToolbar.Button variant="outline" onClick={openCreateModal} title="Two-line journal for owner / property statements">
                   Owner journal
                 </ListToolbar.Button>
               )}
+
+              <ListToolbar.Divider />
+
               <ListToolbar.Button
                 icon={FaPlus}
+                variant="primary"
                 onClick={() => (canCreateJournal ? openJournalPage() : toast.warning("You do not have permission to create journals"))}
               >
                 New Journal
@@ -650,13 +635,13 @@ const JournalEntries = () => {
 
             <MilikTable
               columns={[
-                { label: "Journal #" },
-                { label: "Date" },
-                { label: "Type" },
-                { label: "Debit Account / Lines" },
-                { label: "Credit Account / Narration" },
-                { label: "Amount (KES)", align: "right" },
-                { label: "Status", align: "center" },
+                { label: "Journal #", width: "9%" },
+                { label: "Date", width: "8%" },
+                { label: "Type", width: "13%" },
+                { label: "Accounts", width: "24%" },
+                { label: "Narration / Reference", width: "22%" },
+                { label: "Amount (KES)", align: "right", width: "12%" },
+                { label: "Status", align: "center", width: "8%" },
               ]}
               rows={journals}
               rowKey="_id"
@@ -666,14 +651,33 @@ const JournalEntries = () => {
               onRowClick={(journal) => openJournalPage(journal)}
               renderRow={(journal) => (
                 <>
-                  <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[130px] truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.debitAccount?.name}>{journal.lines?.length ? <span className="font-semibold text-slate-600">{journal.lines.length} lines</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.debitAccount?.code}</span>{journal.debitAccount?.name || "—"}</>}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700 max-w-[200px] truncate" title={journal.creditAccount?.name}>{journal.lines?.length ? <span className="text-slate-400">{journal.narration || journal.reference || "—"}</span> : <><span className="font-mono font-bold text-slate-400 mr-1">{journal.creditAccount?.code}</span>{journal.creditAccount?.name || "—"}</>}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[journal.status] || STATUS_STYLES.draft}`}>{journal.status}</span>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-[#0B3B2E] whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100">
+                    {journal.lines?.length ? (
+                      <span className="font-semibold text-slate-600">{journal.lines.length} lines</span>
+                    ) : (
+                      <div className="space-y-0.5 leading-tight">
+                        <div className="truncate" title={journal.debitAccount?.name}>
+                          <span className="mr-1 text-[9px] font-black text-blue-600">DR</span>
+                          <span className="mr-1 font-mono font-bold text-slate-400">{journal.debitAccount?.code}</span>
+                          <span className="text-slate-700">{journal.debitAccount?.name || "—"}</span>
+                        </div>
+                        <div className="truncate" title={journal.creditAccount?.name}>
+                          <span className="mr-1 text-[9px] font-black text-emerald-600">CR</span>
+                          <span className="mr-1 font-mono font-bold text-slate-400">{journal.creditAccount?.code}</span>
+                          <span className="text-slate-700">{journal.creditAccount?.name || "—"}</span>
+                        </div>
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 max-w-[220px] truncate" title={[journal.narration, journal.reference].filter(Boolean).join(" · ")}>
+                    {journal.narration || journal.reference || "—"}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
+                    <StatusBadge status={journal.status} map={STATUS_STYLES} />
                   </td>
                 </>
               )}
@@ -684,19 +688,19 @@ const JournalEntries = () => {
                 return (
                   <div className="flex justify-end gap-1">
                     {journal.status === "posted" && (
-                      <button onClick={() => setGlJournal(journal)} className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800" title="View GL Entries"><FaBook size={12} /></button>
+                      <button onClick={() => setGlJournal(journal)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="View GL Entries"><FaBook size={12} /></button>
                     )}
                     {journal.status === "draft" && canUpdateJournal && (
-                      <button onClick={() => (journal.lines?.length ? openJournalPage(journal) : openEditModal(journal))} disabled={!canUpdateJournal || !!rowActionKey} className="rounded p-1 text-blue-600 hover:bg-blue-50 hover:text-blue-800 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
+                      <button onClick={() => (journal.lines?.length ? openJournalPage(journal) : openEditModal(journal))} disabled={!canUpdateJournal || !!rowActionKey} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40" title="Edit"><FaEdit size={12} /></button>
                     )}
                     {journal.status === "draft" && canPostJournal && (
-                      <button onClick={() => handlePostJournal(journal)} disabled={!canPostJournal || !!rowActionKey} className="rounded p-1 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-800 disabled:opacity-40" title={busyPost ? "Posting…" : "Post Journal"}><FaCheck size={12} /></button>
+                      <button onClick={() => handlePostJournal(journal)} disabled={!canPostJournal || !!rowActionKey} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40" title={busyPost ? "Posting…" : "Post Journal"}><FaCheck size={12} /></button>
                     )}
                     {journal.status === "posted" && canReverseJournal && (
-                      <button onClick={() => handleReverseJournal(journal)} disabled={!canReverseJournal || !!rowActionKey} className="rounded p-1 text-amber-600 hover:bg-amber-50 hover:text-amber-800 disabled:opacity-40" title={busyReverse ? "Reversing…" : "Reverse"}><FaUndo size={12} /></button>
+                      <button onClick={() => handleReverseJournal(journal)} disabled={!canReverseJournal || !!rowActionKey} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40" title={busyReverse ? "Reversing…" : "Reverse"}><FaUndo size={12} /></button>
                     )}
                     {journal.status === "draft" && canDeleteJournal && (
-                      <button onClick={() => handleDeleteJournal(journal)} disabled={!canDeleteJournal || !!rowActionKey} className="rounded p-1 text-rose-600 hover:bg-rose-50 hover:text-rose-800 disabled:opacity-40" title={busyDelete ? "Deleting…" : "Delete"}><FaTrash size={12} /></button>
+                      <button onClick={() => handleDeleteJournal(journal)} disabled={!canDeleteJournal || !!rowActionKey} className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800 disabled:opacity-40" title={busyDelete ? "Deleting…" : "Delete"}><FaTrash size={12} /></button>
                     )}
                   </div>
                 );

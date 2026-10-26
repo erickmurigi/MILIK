@@ -41,6 +41,11 @@ const SUBGROUP_OPTIONS_BY_TYPE = {
   expense:   ["Cost of Revenue", "Inventory Adjustments", "Cost of Sales", "Operating Expenses", "Administrative Expenses", "Finance Costs", "Other Expenses"],
 };
 
+// Numbering convention already in consistent use across every company's chart (seed data +
+// every hand-created account observed): asset 1xxx, liability 2xxx, equity 3xxx, income 4xxx,
+// expense 5xxx. Used only to suggest the next free code — never enforced, still freely editable.
+const TYPE_CODE_BASE = { asset: 1000, liability: 2000, equity: 3000, income: 4000, expense: 5000 };
+
 const NORMAL_BALANCE_BY_TYPE = {
   asset: "Debit", expense: "Debit",
   liability: "Credit", equity: "Credit", income: "Credit",
@@ -69,6 +74,14 @@ const GROUP_TO_TYPE = {
   assets: "asset", liabilities: "liability", equity: "equity",
   income: "income", expenses: "expense",
 };
+
+// Page-load optimization: this page's account list is local state (not Redux), fetched whole and
+// grouped client-side — same "local-state own list" pattern as Take-On Balances/LandlordPayments.
+// Without this, switching tabs away and back (or revisiting from another module via activityBase)
+// re-fetched the entire chart from scratch every time. Keyed per business+moduleScope since those
+// are genuinely different result sets; bypassed with {force:true} after mutations or an explicit Refresh.
+const _coaCache = new Map(); // `${businessId}:${moduleScope}` → { data, at }
+const COA_CACHE_STALE_MS = 30_000;
 
 const blankForm = {
   code: "", name: "", type: "asset", group: "assets",
@@ -185,11 +198,21 @@ const ChartOfAccounts = () => {
   // ── Data loading ──
   const businessId = currentCompany?._id || "";
 
-  const loadAccounts = useCallback(async () => {
+  const loadAccounts = useCallback(async ({ force = false } = {}) => {
     const requestId = requestSequenceRef.current + 1;
     requestSequenceRef.current = requestId;
     setSelectedIds([]);
     if (!businessId) { setLoading(false); return; }
+
+    const cacheKey = `${businessId}:${moduleScope}`;
+    const cached = _coaCache.get(cacheKey);
+    if (!force && cached && Date.now() - cached.at < COA_CACHE_STALE_MS) {
+      setAccounts(cached.data);
+      hasLoadedOnce.current = true;
+      setLoading(false);
+      return;
+    }
+
     if (!hasLoadedOnce.current) setLoading(true);
     setRefreshing(true);
     try {
@@ -197,7 +220,9 @@ const ChartOfAccounts = () => {
       if (moduleScope) params.moduleScope = moduleScope;
       const rows = await getChartOfAccounts(params);
       if (requestSequenceRef.current !== requestId) return;
-      setAccounts(Array.isArray(rows) ? rows : []);
+      const data = Array.isArray(rows) ? rows : [];
+      setAccounts(data);
+      _coaCache.set(cacheKey, { data, at: Date.now() });
       hasLoadedOnce.current = true;
     } catch (error) {
       if (requestSequenceRef.current !== requestId) return;
@@ -219,7 +244,7 @@ const ChartOfAccounts = () => {
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
   useEffect(() => {
-    const handleRefresh = () => loadAccounts();
+    const handleRefresh = () => loadAccounts({ force: true });
     window.addEventListener("invoicesUpdated", handleRefresh);
     return () => window.removeEventListener("invoicesUpdated", handleRefresh);
   }, [businessId, loadAccounts]);
@@ -315,6 +340,20 @@ const ChartOfAccounts = () => {
     () => currentSubGroupOptions.map((opt) => ({ value: opt, label: opt })),
     [currentSubGroupOptions]
   );
+
+  // Next free code within the selected type's conventional range — suggested, not forced.
+  const suggestedCode = useMemo(() => {
+    const base = TYPE_CODE_BASE[effectiveType] || 1000;
+    const used = new Set(
+      accounts
+        .filter((a) => String(a.type || "").toLowerCase() === effectiveType)
+        .map((a) => Number(a.code))
+        .filter((n) => Number.isFinite(n) && n >= base && n < base + 1000)
+    );
+    let candidate = used.size ? Math.max(...used) + 1 : base;
+    while (used.has(candidate)) candidate += 1;
+    return String(candidate);
+  }, [accounts, effectiveType]);
 
   const codeConflict = useMemo(() => {
     if (!formData.code.trim()) return false;
@@ -427,7 +466,7 @@ const ChartOfAccounts = () => {
       }
       closeForm();
       setSelectedIds([]);
-      await loadAccounts();
+      await loadAccounts({ force: true });
     } catch (error) {
       toast.error(
         error?.response?.data?.error ||
@@ -465,7 +504,7 @@ const ChartOfAccounts = () => {
     if (switchedOff) toast.warning(`${switchedOff} account${switchedOff === 1 ? " has" : "s have"} transactions, so ${switchedOff === 1 ? "it was" : "they were"} switched off (Inactive) instead of deleted.`);
     failures.forEach((message) => toast.error(message));
     setSelectedIds([]);
-    await loadAccounts();
+    await loadAccounts({ force: true });
     setSaving(false);
   };
 
@@ -473,7 +512,7 @@ const ChartOfAccounts = () => {
     try {
       await adminRequests.post(`/chart-of-accounts/${account._id}/reactivate`, { business: businessId });
       toast.success(`${account.code} ${account.name} is active again.`);
-      await loadAccounts();
+      await loadAccounts({ force: true });
     } catch (error) {
       toast.error(error?.response?.data?.error || error?.response?.data?.message || "Failed to reactivate the account");
     }
@@ -619,7 +658,7 @@ const ChartOfAccounts = () => {
             <ListToolbar.Button icon={FaPrint} variant="outline" disabled={printing} onClick={handlePrintList}>Print</ListToolbar.Button>
             <ListToolbar.Button icon={FaDownload} variant="outline" disabled={exporting} onClick={handleExportCsv}>Export</ListToolbar.Button>
             <ListToolbar.Divider />
-            <ListToolbar.Button variant="outline" onClick={loadAccounts} title="Refresh">
+            <ListToolbar.Button variant="outline" onClick={() => loadAccounts({ force: true })} title="Refresh">
               <FaSyncAlt size={9} className={refreshing ? "animate-spin" : ""} />
             </ListToolbar.Button>
             {selectedAccounts.length === 1 && canUpdateCOA && (
@@ -629,7 +668,7 @@ const ChartOfAccounts = () => {
               <ListToolbar.Button icon={FaTrash} variant="danger" onClick={handleDeleteSelected}>Delete</ListToolbar.Button>
             )}
             <ListToolbar.Divider />
-            <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canCreateCOA} onClick={openCreateModal}>Add Account</ListToolbar.Button>
+            <ListToolbar.Button icon={FaPlus} variant="primary" disabled={!canCreateCOA} onClick={openCreateModal}>Add Account</ListToolbar.Button>
           </div>
         </ListToolbar>
 
@@ -898,6 +937,15 @@ const ChartOfAccounts = () => {
                     {!editingAccountId && !codeConflict && formData.code.trim() && (
                       <p className="mt-1 text-[10px] text-emerald-600 font-semibold">✓ Code is available</p>
                     )}
+                    {!editingAccountId && !formData.code.trim() && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, code: suggestedCode }))}
+                        className="mt-1 text-[10px] font-semibold text-[#0B3B2E] hover:underline"
+                      >
+                        Suggest next code: {suggestedCode} (click to use)
+                      </button>
+                    )}
                   </div>
 
                   {/* Name */}
@@ -1024,7 +1072,7 @@ const ChartOfAccounts = () => {
                   <button
                     type="submit"
                     disabled={saving || codeConflict || !formData.code.trim() || !formData.name.trim()}
-                    className="flex-1 h-8 bg-[#FF8C00] hover:bg-[#e67e00] text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 h-8 bg-[#0B3B2E] hover:bg-[#0A3127] text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {saving
                       ? "Saving..."

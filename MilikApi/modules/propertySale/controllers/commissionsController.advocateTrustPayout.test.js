@@ -1,6 +1,8 @@
 // Broker commission paid via advocate trust (§8.3a): updateCommissionStatus's source="advocate_trust"
 // path — the deal-scoped trust-balance guard rejects an over-draw, and the WHT leg is present/absent
-// per the advocate's (or the company default's) whtHandledBy setting.
+// per resolveWhtHandler's priority: per-advocate override > "the deal's project/listing has an
+// assigned advocate, so the advocate self-remits by default" > company-wide default (only reached
+// when the deal has no advocate relationship at all).
 import { describe, it, expect } from "vitest";
 import { callController } from "../../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../../test/factories.js";
@@ -90,13 +92,32 @@ describe("commission payout via advocate trust — trust-balance guard", () => {
 });
 
 describe("commission payout via advocate trust — WHT leg present/absent per whtHandledBy", () => {
-  it("whtHandledBy default (agent, company default): credits 1314 net and 2141 the withheld tax", async () => {
+  it("deal's project has an assigned advocate, no per-advocate override: defaults to the advocate self-remitting — no 2141 leg, full gross credited to 1314", async () => {
     const { business, call, makeDeal, payAdvocateTrust, legs } = await setup();
     const deal = await makeDeal();
     await payAdvocateTrust(deal, 20_000);
 
     const commission = await SaleCommission.findOne({ business, deal: deal._id }).lean();
-    expect(commission.whtAmount).toBe(1_000); // 5% of 20,000
+    expect(commission.whtAmount).toBe(1_000); // 5% of 20,000 — still computed, just not posted to 2141
+    await call(updateCommissionStatus, { params: { id: String(commission._id) }, body: { status: "approved" } });
+    await call(updateCommissionStatus, {
+      params: { id: String(commission._id) },
+      body: { status: "paid", source: "advocate_trust", payoutDate: "2026-10-01", payoutMethod: "bank_transfer" },
+    });
+
+    const rows = await legs(commission._id, "property_sale_commission_payout");
+    expect(rows.length).toBe(2);
+    const trustAcc = await getAccountByCode(business, "1314");
+    expect(rows.find((r) => r.direction === "credit")).toMatchObject({ accountId: trustAcc._id, credit: 20_000 });
+  });
+
+  it("per-advocate override forces 'agent' even though the project has an assigned advocate: credits 1314 net and 2141 the withheld tax", async () => {
+    const { business, call, advocate, makeDeal, payAdvocateTrust, legs } = await setup();
+    await SaleAdvocate.updateOne({ _id: advocate._id }, { whtHandledBy: "agent" });
+    const deal = await makeDeal();
+    await payAdvocateTrust(deal, 20_000);
+
+    const commission = await SaleCommission.findOne({ business, deal: deal._id }).lean();
     await call(updateCommissionStatus, { params: { id: String(commission._id) }, body: { status: "approved" } });
     await call(updateCommissionStatus, {
       params: { id: String(commission._id) },
@@ -111,11 +132,14 @@ describe("commission payout via advocate trust — WHT leg present/absent per wh
     expect(rows.find((r) => String(r.accountId) === String(whtAcc._id))).toMatchObject({ direction: "credit", credit: 1_000 });
   });
 
-  it("whtHandledBy='advocate' (set on the collecting advocate): no 2141 leg, full gross credited to 1314", async () => {
-    const { business, call, advocate, makeDeal, payAdvocateTrust, legs } = await setup();
-    await SaleAdvocate.updateOne({ _id: advocate._id }, { whtHandledBy: "advocate" });
-    const deal = await makeDeal();
-    await payAdvocateTrust(deal, 20_000);
+  it("deal has no advocate relationship at all (standalone listing, no project, no deal.advocate): falls back to the company-wide default (agent) — credits 1314 net and 2141 the withheld tax", async () => {
+    const { business, call, legs } = await setup();
+    const agent = await SaleAgent.create({ business, agentNumber: "AG-NOADV", fullName: "No Advocate Agent", phone: "0711999999", commissionRate: 2 });
+    const buyer = await SaleBuyer.create({ business, buyerNumber: "B-NOADV", fullName: "No Advocate Buyer", phone: "0700999999", email: "noadv@example.com" });
+    const listing = await SaleListing.create({ business, listingNumber: "L-NOADV", title: "Standalone Plot", askingPrice: 1_000_000, unitNumber: "U-NOADV" }); // no project, no assignedAdvocate
+    const dealRes = await call(createDeal, { body: { listing: String(listing._id), buyer: String(buyer._id), agent: String(agent._id), agreedPrice: 1_000_000 } });
+    const deal = dealRes.payload;
+    await call(createPayment, { body: { deal: String(deal._id), amount: 20_000, paymentType: "installment", collectionMethod: "advocate_trust" } });
 
     const commission = await SaleCommission.findOne({ business, deal: deal._id }).lean();
     await call(updateCommissionStatus, { params: { id: String(commission._id) }, body: { status: "approved" } });
@@ -125,9 +149,9 @@ describe("commission payout via advocate trust — WHT leg present/absent per wh
     });
 
     const rows = await legs(commission._id, "property_sale_commission_payout");
-    expect(rows.length).toBe(2);
-    const trustAcc = await getAccountByCode(business, "1314");
-    expect(rows.find((r) => r.direction === "credit")).toMatchObject({ accountId: trustAcc._id, credit: 20_000 });
+    expect(rows.length).toBe(3);
+    const whtAcc = await getAccountByCode(business, "2141");
+    expect(rows.find((r) => String(r.accountId) === String(whtAcc._id))).toMatchObject({ direction: "credit" });
   });
 });
 

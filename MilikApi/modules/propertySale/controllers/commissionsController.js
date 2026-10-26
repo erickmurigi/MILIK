@@ -3,8 +3,8 @@ import { createError } from "../../../utils/error.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import SaleCommission from "../models/SaleCommission.js";
 import SaleAgent from "../models/SaleAgent.js";
-import SalePayment from "../models/SalePayment.js";
 import SaleAdvocate from "../models/SaleAdvocate.js";
+import SaleDeal from "../models/SaleDeal.js";
 import { currentUserId, resolveActiveBusinessId } from "../services/businessScope.js";
 import { dealAdvocateTrustBalance } from "../services/dealProgress.js";
 import { recalculateBrokerCommission, RECALC_ELIGIBLE_STATUSES } from "../services/commissionRecalculateService.js";
@@ -22,20 +22,27 @@ import { round2 } from "../../../utils/math.js";
 import { defaultWhtRate } from "./dealsController.js";
 import { tiersProblem } from "./settingsController.js";
 import SaleSettings from "../models/SaleSettings.js";
-import { claimPaymentReference } from "../../../services/paymentReferenceGuard.js";
+import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
 import { advocateDealScopeFilter } from "../middleware/advocateScope.js";
 import { andInto } from "../services/saleSearch.js";
 
-// The advocate who actually collected this deal's trust funds — read off the deal's own advocate_trust
-// payments (the advocate who physically holds the money for this specific deal), not necessarily the
-// project's "assigned" advocate, which may have been overridden per-payment. Most recent wins when a
-// deal somehow has more than one (shouldn't happen in practice, but SalePayment.advocate is per-row).
-const resolveDealCollectingAdvocate = async (business, dealId) => {
-  const payment = await SalePayment.findOne({
-    business, deal: dealId, collectionMethod: "advocate_trust", advocate: { $ne: null },
-  }).sort({ paymentDate: -1 }).select("advocate").lean();
-  if (!payment?.advocate) return null;
-  return SaleAdvocate.findOne({ _id: payment.advocate, business }).select("whtHandledBy").lean();
+// The advocate this deal belongs to — explicit SaleDeal.advocate override, else (for a listing that
+// belongs to a project) the project's assignedAdvocate, else the listing's own assignedAdvocate (for a
+// standalone listing with no project). Same precedence middleware/advocateScope.js uses for visibility
+// scoping — a listing's own assignedAdvocate is ignored once it belongs to a project (SaleListing.js).
+// Used by resolveWhtHandler: a deal that resolves to an advocate this way means the project (or
+// deal/listing) is advocate-managed, which defaults WHT responsibility to that advocate.
+const resolveDealAdvocate = async (business, dealId) => {
+  const deal = await SaleDeal.findOne({ _id: dealId, business })
+    .select("advocate listing")
+    .populate({ path: "listing", select: "assignedAdvocate project", populate: { path: "project", select: "assignedAdvocate" } })
+    .lean();
+  const advocateId =
+    deal?.advocate ||
+    (deal?.listing?.project ? deal.listing.project.assignedAdvocate : deal?.listing?.assignedAdvocate) ||
+    null;
+  if (!advocateId) return null;
+  return SaleAdvocate.findOne({ _id: advocateId, business }).select("whtHandledBy").lean();
 };
 
 const resolveCashbook = async (businessId, cashbookId) => {
@@ -173,6 +180,7 @@ export const listCommissionPayoutEvents = async (req, res, next) => {
         date: p.date,
         reference: p.reference,
         source: p.source,
+        whtHandledBy: p.whtHandledBy,
         // Reversal is all-or-nothing on the parent commission — only surface the action once, on its
         // most recent tranche, and only once the commission is actually fully settled.
         isReversible: c.status === "paid" && String(p._id) === String(lastId),
@@ -276,7 +284,7 @@ export const updateCommissionStatus = async (req, res, next) => {
         if (requestedAmount > trust.available + 0.01) {
           return next(createError(400, `This deal's advocate trust balance is only KES ${trust.available.toLocaleString()} — cannot pay out KES ${requestedAmount.toLocaleString()} from trust funds.`));
         }
-        const advocateDoc = await resolveDealCollectingAdvocate(business, oldCommission.deal);
+        const advocateDoc = await resolveDealAdvocate(business, oldCommission.deal);
         whtHandledBy = await resolveWhtHandler(business, advocateDoc);
       }
 
@@ -298,6 +306,7 @@ export const updateCommissionStatus = async (req, res, next) => {
         date: payoutDate,
         reference: payoutReference || "",
         source,
+        whtHandledBy,
         createdBy: userId,
         createdAt: new Date(),
       };
@@ -374,6 +383,11 @@ export const updateCommissionStatus = async (req, res, next) => {
           $pull: { payouts: { _id: payoutEntry._id } },
           $inc: { paidOutAmount: -payoutEntry.amount },
         });
+        // The reference was claimed against this now-reverted payout entry — release it too, or it's
+        // permanently stuck "already used" with no payout anywhere for the user to find and delete.
+        if (payoutReference) {
+          await releasePaymentReference({ business, reference: payoutReference, sourceModel: "SaleCommission", sourceId: payoutEntry._id });
+        }
         return next(createError(422, `GL posting failed: ${glErr.message}. Commission status not changed.`));
       }
     } else if (status === "reversed" && oldCommission.status === "paid") {

@@ -2611,28 +2611,36 @@ export const getLiabilitySubledger = async (req, res, next) => {
       return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
     }
 
-    // â”€â”€ 2141 WHT Payable â€” group by source voucher then by month â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // â”€â”€ 2141 WHT Payable â€” group by source (voucher OR property-sale commission payout), then by month.
+    // sourceTransactionId isn't always a PaymentVoucher id: a commission payout's WHT leg
+    // (postPropertySaleCommissionPayout) uses the composite id "<commissionId>:payout:<payoutId>" — that
+    // string would fail ObjectId casting if ever handed to PaymentVoucher.find(), so the two source kinds
+    // are split and resolved separately rather than relying on `$in` to silently skip the bad ones.
     if (tab === "wht") {
       const agg = await FinancialLedgerEntry.aggregate([
         { $match: glMatch },
         {
           $group: {
-            _id:             "$sourceTransactionId",
-            credit:          { $sum: creditExpr },
-            debit:           { $sum: debitExpr },
-            transactionDate: { $last: "$transactionDate" },
+            _id:                   "$sourceTransactionId",
+            credit:                { $sum: creditExpr },
+            debit:                 { $sum: debitExpr },
+            transactionDate:       { $last: "$transactionDate" },
+            sourceTransactionType: { $last: "$sourceTransactionType" },
           },
         },
       ]).allowDiskUse(true);
 
       const rows = agg
-        .map((r) => ({ sourceId: r._id, balance: round2(r.credit - r.debit), date: r.transactionDate }))
+        .map((r) => ({ sourceId: r._id, balance: round2(r.credit - r.debit), date: r.transactionDate, sourceType: r.sourceTransactionType || "" }))
         .filter((r) => r.balance > 0.005);
 
       const total = round2(rows.reduce((s, r) => s + r.balance, 0));
       if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
 
-      const voucherIds = rows.map((r) => r.sourceId).filter(Boolean);
+      const commissionRows = rows.filter((r) => r.sourceType === "property_sale_commission_payout");
+      const voucherRows    = rows.filter((r) => r.sourceType !== "property_sale_commission_payout" && mongoose.Types.ObjectId.isValid(String(r.sourceId || "")));
+
+      const voucherIds = voucherRows.map((r) => r.sourceId);
       const vouchers   = voucherIds.length
         ? await PaymentVoucher.find({ _id: { $in: voucherIds } })
             .populate("serviceProvider", "name")
@@ -2642,8 +2650,21 @@ export const getLiabilitySubledger = async (req, res, next) => {
         : [];
       const vMap = new Map(vouchers.map((v) => [String(v._id), v]));
 
+      // Composite id's first segment is the SaleCommission's own _id — batch-fetch once, keyed by that.
+      const commissionIds = [...new Set(commissionRows.map((r) => String(r.sourceId).split(":payout:")[0]))];
+      let commissionMap = new Map();
+      if (commissionIds.length) {
+        const SaleCommission = (await import("../../modules/propertySale/models/SaleCommission.js")).default;
+        const commissions = await SaleCommission.find({ _id: { $in: commissionIds } })
+          .populate("agent", "fullName")
+          .populate("listing", "title listingNumber")
+          .select("commissionNumber agent listing payouts")
+          .lean();
+        commissionMap = new Map(commissions.map((c) => [String(c._id), c]));
+      }
+
       const byMonth = new Map();
-      rows.forEach((r) => {
+      voucherRows.forEach((r) => {
         const v = vMap.get(String(r.sourceId));
         const d = new Date(v?.paidDate || r.date || new Date());
         const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
@@ -2660,6 +2681,27 @@ export const getLiabilitySubledger = async (req, res, next) => {
           grossAmount: round2(Math.abs(Number(v?.amount    || 0))),
           whtBalance:  r.balance,
           date:        v?.paidDate || r.date,
+        });
+      });
+      commissionRows.forEach((r) => {
+        const [commissionId, payoutId] = String(r.sourceId).split(":payout:");
+        const c = commissionMap.get(commissionId);
+        const payout = c?.payouts?.find((p) => String(p._id) === String(payoutId));
+        const d = new Date(payout?.date || r.date || new Date());
+        const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const label = d.toLocaleString("en-KE", { month: "long", year: "numeric" });
+        if (!byMonth.has(key)) byMonth.set(key, { month: key, monthLabel: label, subtotal: 0, rows: [] });
+        const g = byMonth.get(key);
+        g.subtotal = round2(g.subtotal + r.balance);
+        g.rows.push({
+          sourceId:    String(r.sourceId),
+          voucherNo:   c?.commissionNumber || "â€”",
+          narration:   "Broker commission WHT",
+          vendor:      c?.agent?.fullName || "",
+          property:    c?.listing?.title || c?.listing?.listingNumber || "",
+          grossAmount: round2(Number(payout?.amount || 0)),
+          whtBalance:  r.balance,
+          date:        payout?.date || r.date,
         });
       });
 

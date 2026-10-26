@@ -65,6 +65,12 @@ const saleCommissionSchema = new mongoose.Schema(
       reference: { type: String, trim: true, default: "" },
       cashbook:  { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
       source:    { type: String, enum: ["company_cashbook", "advocate_trust"], default: "company_cashbook" },
+      // Who actually remits this slice's whtAmount to KRA — "agent" (posted to our own 2141, same as a
+      // direct-pay commission) or "advocate" (self-remitted under the advocate's own registration, no
+      // GL entry on our books at all). Only meaningful when source is "advocate_trust"; recorded here
+      // (not just used transiently for the GL-posting decision) purely so the Commission Payouts report
+      // can show who's responsible for each WHT amount without the agency owning that ledger.
+      whtHandledBy: { type: String, enum: ["agent", "advocate"], default: "agent" },
       createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
       createdAt: { type: Date, default: Date.now },
     }],
