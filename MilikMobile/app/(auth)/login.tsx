@@ -10,6 +10,7 @@ import { setCredentials } from '../../redux/slices/authSlice';
 import { Colors } from '../../constants/colors';
 import { STORAGE_KEYS } from '../../constants';
 import api from '../../services/api';
+import { registerForPushNotificationsAsync } from '../../services/pushNotifications';
 
 export default function LoginScreen() {
   const router   = useRouter();
@@ -53,6 +54,7 @@ export default function LoginScreen() {
       await AsyncStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
       await AsyncStorage.setItem(STORAGE_KEYS.COMPANY, JSON.stringify(company));
       dispatch(setCredentials({ token, user, company }));
+      registerForPushNotificationsAsync();
       router.replace('/(app)/(tabs)');
     } catch (err: any) {
       const apiMsg = err?.response?.data?.message;

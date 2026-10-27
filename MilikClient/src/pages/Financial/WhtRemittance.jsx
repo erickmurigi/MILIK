@@ -25,6 +25,7 @@ import ListToolbar from "../../components/common/ListToolbar";
 import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import SharedStatusBadge from "../../components/common/StatusBadge";
 
 const GRN    = "#0B3B2E";
@@ -437,11 +438,13 @@ export default function WhtRemittance() {
 
           <form id="wht-remit-form" onSubmit={handleSubmit} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount Remitted (KES)" required>
-                <input type="number" min="0.01" step="0.01" required
+              <Field label="Amount Remitted" required>
+                <CurrencyInput
+                  required
                   value={form.amountRemitted}
                   onChange={(e) => setForm((f) => ({ ...f, amountRemitted: e.target.value }))}
-                  className={inputClass} placeholder="0.00" />
+                  inputClassName={inputClass.replace("px-3", "pl-10 pr-3")}
+                />
               </Field>
               <Field label="Payment Date" required>
                 <input type="date" required

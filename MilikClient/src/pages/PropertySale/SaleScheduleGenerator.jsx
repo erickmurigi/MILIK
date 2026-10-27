@@ -1,6 +1,7 @@
 import React from "react";
 import { FaPlus, FaTrash } from "react-icons/fa";
 import { fmtKES, todayISO } from "../../services/propertySaleApi";
+import CurrencyInput from "../../components/common/CurrencyInput";
 
 // Shared between the plain "New Deal" form (SaleDeals.jsx) and "Convert Offer to Deal" (SaleOffers.jsx) —
 // both let the same payment-plan-aware schedule preview be built at the same moment the deal itself is
@@ -80,7 +81,7 @@ export function ScheduleRowsEditor({ items, setItems, agreedPrice }) {
                   <input type="date" value={item.dueDate} onChange={(e) => setItems((prev) => prev.map((x, i) => i === idx ? { ...x, dueDate: e.target.value } : x))} className={`${inputClass} font-normal`} />
                 </td>
                 <td className="px-2 py-1">
-                  <input type="number" min="0" value={item.expectedAmount} onChange={(e) => setItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} className={`${inputClass} font-mono font-normal`} placeholder="0.00" />
+                  <CurrencyInput prefix={null} value={item.expectedAmount} onChange={(e) => setItems((prev) => prev.map((x, i) => i === idx ? { ...x, expectedAmount: e.target.value } : x))} inputClassName={`${inputClass} font-mono font-normal`} />
                 </td>
                 <td className="px-2 py-1">
                   <input type="text" value={item.description} onChange={(e) => setItems((prev) => prev.map((x, i) => i === idx ? { ...x, description: e.target.value } : x))} className={`${inputClass} font-normal`} placeholder={`Installment ${idx + 1}`} />
@@ -125,7 +126,11 @@ export function SchedulePreviewSection({ form, onFieldChange, onGenerate, setSch
         <div>
           <label className={labelClass}>Deposit</label>
           <div className="flex gap-1">
-            <input type="number" min="0" value={form.depositValue} onChange={(e) => onFieldChange({ depositValue: e.target.value })} className={inputClass} placeholder={form.depositMode === "percent" ? "e.g. 25" : "e.g. 2,000,000"} />
+            {form.depositMode === "percent" ? (
+              <input type="number" min="0" value={form.depositValue} onChange={(e) => onFieldChange({ depositValue: e.target.value })} className={inputClass} placeholder="e.g. 25" />
+            ) : (
+              <CurrencyInput value={form.depositValue} onChange={(e) => onFieldChange({ depositValue: e.target.value })} inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} placeholder="2,000,000.00" />
+            )}
             <div className="flex shrink-0 border border-slate-200 bg-white">
               {DEPOSIT_MODE_OPTIONS.map((o) => (
                 <button

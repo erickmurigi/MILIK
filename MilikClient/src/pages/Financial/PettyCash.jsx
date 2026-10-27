@@ -28,6 +28,7 @@ import ListToolbar from '../../components/common/ListToolbar';
 import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import {
   approvePettyCashReplenishment,
   createPettyCashAccount,
@@ -789,8 +790,8 @@ const PettyCash = () => {
             </div>
           </div>
           <div>
-            <label className={labelClass}>Float Amount (KES) <span className="text-red-500">*</span></label>
-            <input type="number" min="0" step="1" className={inputClass} value={accountForm.floatAmount} onChange={(e) => setAccountForm((p) => ({ ...p, floatAmount: e.target.value }))} placeholder="e.g. 10000" />
+            <label className={labelClass}>Float Amount <span className="text-red-500">*</span></label>
+            <CurrencyInput value={accountForm.floatAmount} onChange={(e) => setAccountForm((p) => ({ ...p, floatAmount: e.target.value }))} placeholder="e.g. 10000" inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
           </div>
           <div>
             <label className={labelClass}>Petty Cash Asset Account (GL)</label>
@@ -827,8 +828,8 @@ const PettyCash = () => {
               <input type="date" className={inputClass} value={disbForm.date} onChange={(e) => setDisbForm((p) => ({ ...p, date: e.target.value }))} />
             </div>
             <div>
-              <label className={labelClass}>Amount (KES) <span className="text-red-500">*</span></label>
-              <input type="number" min="0.01" step="0.01" className={inputClass} value={disbForm.amount} onChange={(e) => setDisbForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" />
+              <label className={labelClass}>Amount <span className="text-red-500">*</span></label>
+              <CurrencyInput value={disbForm.amount} onChange={(e) => setDisbForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
             </div>
           </div>
           <div>
@@ -904,8 +905,8 @@ const PettyCash = () => {
             </div>
           )}
           <div>
-            <label className={labelClass}>Amount to Top Up (KES) <span className="text-red-500">*</span></label>
-            <input type="number" min="0.01" step="0.01" className={inputClass} value={repForm.amount} onChange={(e) => setRepForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" />
+            <label className={labelClass}>Amount to Top Up <span className="text-red-500">*</span></label>
+            <CurrencyInput value={repForm.amount} onChange={(e) => setRepForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
           </div>
           <div>
             <label className={labelClass}>Draw From (Bank Account)</label>

@@ -15,6 +15,7 @@ import mongoose from "mongoose";
 import dns from "node:dns";
 import jwt from "jsonwebtoken";
 import authRoutes from "./routes/auth.js";
+import pushTokenRoutes from "./routes/pushToken.js";
 import userRoutes from "./routes/user.js";
 import printerRoute from "./routes/printers.js";
 import landlordRoutes from "./routes/propertyRoutes/landlords.js";
@@ -102,6 +103,8 @@ import { processDueBilling } from "./modules/carwash/controllers/creditAccountsC
 import { processAutoRentInvoices } from "./services/autoRentInvoicingService.js";
 import { createPage } from "./services/browserService.js";
 import { processRenewalReminders } from "./modules/clients/services/renewalReminderService.js";
+import { processLeaseExpiryPushReminders } from "./services/leaseExpiryPushService.js";
+import { processLowStockPushDigest } from "./modules/inventory/services/lowStockPushService.js";
 import hrDepartmentRoutes from "./modules/hr/routes/departments.js";
 import hrDesignationRoutes from "./modules/hr/routes/designations.js";
 import hrEmployeeRoutes from "./modules/hr/routes/employees.js";
@@ -604,6 +607,7 @@ app.get("/api", (req, res) => {
 app.use("/uploads", verifyToken, express.static(UPLOADS_ROOT));
 
 app.use("/api/auth", authRoutes);
+app.use("/api/push", pushTokenRoutes);
 app.use("/api/trial", trialLimiter, trialRoutes);
 app.use("/api/public/listings", publicListingsLimiter, publicListingsRoute);
 app.use("/api/rental-leads", rentalListingLeadsRoute);
@@ -959,6 +963,39 @@ async function startServer() {
       console.log("[RenewalReminder Cron] Scheduled — daily at 08:30 EAT");
     } catch (cronErr) {
       console.error("[RenewalReminder Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+    // ── Lease expiry push reminder cron ──────────────────────────────────────
+    // Runs at 08:45 EAT daily. Pushes to PMS-access users at 30/7/1 days before a lease's end date.
+    try {
+      const cron = await import("node-cron");
+      cron.default.schedule("45 8 * * *", async () => {
+        try {
+          const sent = await processLeaseExpiryPushReminders();
+          if (sent) console.log(`[LeaseExpiryPush Cron] Notified for ${sent} lease(s)`);
+        } catch (err) {
+          console.error("[LeaseExpiryPush Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[LeaseExpiryPush Cron] Scheduled — daily at 08:45 EAT");
+    } catch (cronErr) {
+      console.error("[LeaseExpiryPush Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
+    // ── Low stock push digest cron ───────────────────────────────────────────
+    // Runs at 09:00 EAT daily. Pushes to inventory-access users for products at/below reorder level.
+    try {
+      const cron = await import("node-cron");
+      cron.default.schedule("0 9 * * *", async () => {
+        try {
+          const count = await processLowStockPushDigest();
+          if (count) console.log(`[LowStockPush Cron] Notified for ${count} low-stock item(s)`);
+        } catch (err) {
+          console.error("[LowStockPush Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[LowStockPush Cron] Scheduled — daily at 09:00 EAT");
+    } catch (cronErr) {
+      console.error("[LowStockPush Cron] Failed to schedule:", cronErr?.message || cronErr);
     }
     } // end isPrimaryWorker
 

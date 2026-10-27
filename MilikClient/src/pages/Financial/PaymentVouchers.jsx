@@ -3,6 +3,7 @@ import BankDetailsFields from "../../components/common/BankDetailsFields";
 import { printDocument, printTabularList } from "../../utils/printKit";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import { adminRequests } from "../../utils/requestMethods";
 import useDebounce from "../../hooks/useDebounce";
 import {
@@ -1218,14 +1219,12 @@ const PaymentVouchers = () => {
                                 </td>
                               )}
                               <td className="px-1 py-1">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
+                                <CurrencyInput
+                                  prefix={null}
                                   value={line.amount}
                                   onChange={(e) => updateLine(line.key, { amount: e.target.value })}
                                   placeholder="0.00"
-                                  className={`${VOUCHER_INPUT} h-7 text-right font-bold tabular-nums`}
+                                  inputClassName={`${VOUCHER_INPUT} h-7 text-right font-bold tabular-nums`}
                                 />
                               </td>
                               <td className="px-1 py-1">

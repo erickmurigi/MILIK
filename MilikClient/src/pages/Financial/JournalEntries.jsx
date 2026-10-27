@@ -37,6 +37,7 @@ import { useTabState } from "../../hooks/useTabState";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
+import CurrencyInput from '../../components/common/CurrencyInput';
 import StatusBadge from '../../components/common/StatusBadge';
 import { useTerms } from "../../hooks/useTerm";
 
@@ -104,6 +105,23 @@ const APPROVAL_LABELS = {
 
 const getJournalTypePresentation = (journalType) =>
   JOURNAL_TYPES.find((type) => type.value === journalType) || JOURNAL_TYPES[0];
+
+const SOURCE_MODULE_LABELS = {
+  propertyManagement: "PMS",
+  hr: "HR",
+  carwash: "Car Wash",
+  propertySale: "Property Sale",
+  inventory: "Inventory",
+  clients: "Clients",
+  accounts: "Accounts",
+  general: "General",
+};
+
+const fmtPersonDate = (person, date) => {
+  if (!person && !date) return null;
+  const name = [person?.surname, person?.otherNames].filter(Boolean).join(" ");
+  return { name: name || "—", date: date ? new Date(date).toLocaleDateString("en-GB") : "" };
+};
 
 const isLandlordPayableAccountRecord = (account = {}) => {
   const code = String(account?.code || account?.accountCode || "").trim().toUpperCase();
@@ -635,25 +653,32 @@ const JournalEntries = () => {
 
             <MilikTable
               columns={[
-                { label: "Journal #", width: "9%" },
-                { label: "Date", width: "8%" },
-                { label: "Type", width: "13%" },
-                { label: "Accounts", width: "24%" },
-                { label: "Narration / Reference", width: "22%" },
-                { label: "Amount (KES)", align: "right", width: "12%" },
-                { label: "Status", align: "center", width: "8%" },
+                { label: "Journal #", width: "8%" },
+                { label: "Date", width: "7%" },
+                { label: "Type", width: "11%" },
+                { label: "Source", width: "7%" },
+                { label: "Accounts", width: "19%" },
+                { label: "Narration / Reference", width: "16%" },
+                { label: "Amount (KES)", align: "right", width: "10%" },
+                { label: "Status", align: "center", width: "9%" },
+                { label: "Posted By", width: "11%" },
               ]}
               rows={journals}
               rowKey="_id"
               loading={loading}
               empty="No journals found."
-              minWidth="1100px"
+              minWidth="1300px"
               onRowClick={(journal) => openJournalPage(journal)}
-              renderRow={(journal) => (
+              renderRow={(journal) => {
+                const postedInfo = fmtPersonDate(journal.postedBy, journal.postedAt);
+                const createdInfo = fmtPersonDate(journal.createdBy, journal.createdAt);
+                const personInfo = journal.status === "draft" ? createdInfo : postedInfo;
+                return (
                 <>
                   <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-[#0B3B2E] whitespace-nowrap" title={buildJournalTitle(journal)}>{journal.journalNo}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 whitespace-nowrap">{journal.date ? new Date(journal.date).toLocaleDateString("en-GB") : "—"}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 truncate">{getJournalTypePresentation(journal.journalType)?.label || journal.journalType}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 truncate">{SOURCE_MODULE_LABELS[journal.sourceModule] || journal.sourceModule || "—"}</td>
                   <td className="px-3 py-1.5 border-r border-gray-100">
                     {journal.lines?.length ? (
                       <span className="font-semibold text-slate-600">{journal.lines.length} lines</span>
@@ -676,11 +701,25 @@ const JournalEntries = () => {
                     {journal.narration || journal.reference || "—"}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900">{Number(journal.amount || 0).toLocaleString()}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-center" title={journal.approvalStatus && journal.approvalStatus !== "not_required" ? (APPROVAL_LABELS[journal.approvalStatus] || journal.approvalStatus) : undefined}>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
                     <StatusBadge status={journal.status} map={STATUS_STYLES} />
+                    {journal.approvalStatus && journal.approvalStatus !== "not_required" && (
+                      <div className="mt-0.5">
+                        <StatusBadge status={journal.approvalStatus} map={APPROVAL_STYLES} />
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 max-w-[130px] truncate">
+                    {personInfo ? (
+                      <>
+                        {personInfo.name}
+                        {personInfo.date && <span className="ml-1 text-[10px] text-slate-400">{personInfo.date}</span>}
+                      </>
+                    ) : "—"}
                   </td>
                 </>
-              )}
+                );
+              }}
               renderActions={(journal) => {
                 const busyPost = rowActionKey === `${journal._id}:post`;
                 const busyReverse = rowActionKey === `${journal._id}:reverse`;
@@ -802,14 +841,11 @@ const JournalEntries = () => {
 
                 {/* Amount */}
                 <div>
-                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Amount (KES)</p>
-                  <input
-                    type="number"
-                    min="0"
+                  <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-400">Amount</p>
+                  <CurrencyInput
                     value={form.amount}
                     onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    placeholder="0.00"
-                    className="w-full border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-[#0B3B2E]"
+                    inputClassName="w-full border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm text-slate-900 outline-none focus:border-[#0B3B2E]"
                   />
                 </div>
 

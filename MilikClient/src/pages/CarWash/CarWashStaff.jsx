@@ -17,6 +17,7 @@ import { inputClass, labelClass } from "../../utils/formStyles";
 import { fmtDate } from "../../utils/dates";
 
 import Modal from "../../components/common/Modal";
+import CurrencyInput from "../../components/common/CurrencyInput";
 
 const GRN = "#0B3B2E";
 const emptyForm = { name: "", phone: "", role: "", startDate: "", active: true, branch: "", commissionEligible: true };
@@ -51,11 +52,14 @@ const SavingsPayoutModal = ({ staff, balance, cashbooks, onClose, onSuccess }) =
 
   const submit = async (e) => {
     e.preventDefault();
+    const amt = Number(amount);
+    if (!(amt >= 1)) return toast.error("Enter an amount of at least 1.");
+    if (amt > balance) return toast.error(`Amount cannot exceed the available balance of ${fmt(balance)}.`);
     setSaving(true);
     try {
       await carWashApi.createSavingsPayout({
         staff:           staff._id,
-        amount:          Number(amount),
+        amount:          amt,
         cashbookAccount: cashbook,
         notes,
       });
@@ -88,10 +92,9 @@ const SavingsPayoutModal = ({ staff, balance, cashbooks, onClose, onSuccess }) =
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className={labelClass}>Amount (Ksh) *</label>
-            <input
-              type="number" min="1" max={balance} step="1" required
-              className={inputClass}
+            <label className={labelClass}>Amount <span className="text-red-500">*</span></label>
+            <CurrencyInput
+              required
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
             />
@@ -512,7 +515,7 @@ const CarWashStaff = () => {
         >
           <form id="carwash-staff-form" onSubmit={submit} className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className={labelClass}>Name *</label>
+              <label className={labelClass}>Name <span className="text-red-500">*</span></label>
               <input className={inputClass} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required autoFocus />
             </div>
             <div>
@@ -524,7 +527,7 @@ const CarWashStaff = () => {
               <input className={inputClass} value={form.role} onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))} />
             </div>
             <div>
-              <label className={labelClass}>Start Date *</label>
+              <label className={labelClass}>Start Date <span className="text-red-500">*</span></label>
               <input type="date" className={inputClass} value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} required />
             </div>
             <div>

@@ -18,6 +18,20 @@ const BankReconciliationSchema = new Schema(
     notes:       { type: String, default: "" },
     reconciledAt: { type: Date },
     reconciledBy: { type: Schema.Types.ObjectId, ref: "User" },
+    // Full history of every time this reconciliation was unlocked after being finalised — an
+    // admin-only, audited escape hatch (never a silent edit) for correcting a genuine mistake
+    // without needing a manual correcting journal. reconciledAt/reconciledBy above always reflect
+    // the MOST RECENT finalise, so a reopened-then-refinalised reconciliation still shows who
+    // last locked it; this array is the permanent trail of every unlock in between.
+    reopenHistory: [{
+      reopenedAt: { type: Date, required: true },
+      reopenedBy: { type: Schema.Types.ObjectId, ref: "User" },
+      reason:     { type: String, required: true, trim: true },
+      // What this reconciliation's state was at the moment it got reopened — lets an auditor see
+      // exactly what was undone (which balances, which difference) without having to reconstruct it.
+      previousReconciledAt: { type: Date },
+      previousDifference:   { type: Number },
+    }],
   },
   { timestamps: true }
 );

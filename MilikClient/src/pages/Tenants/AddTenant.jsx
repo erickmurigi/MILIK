@@ -39,6 +39,7 @@ import { isSelfManagingLandlordCompany } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import { useTerms } from "../../hooks/useTerm";
 import {
   buildRecurringInvoiceDescription,
@@ -1683,15 +1684,12 @@ useEffect(() => {
                       <label className={labelClass}>
                         Monthly {termRent} (Ksh) <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="number"
+                      <CurrencyInput
                         name="rent"
                         value={formData.rent}
                         onChange={handleInputChange}
-                        placeholder="30000"
-                        step="0.01"
-                        min="0"
-                        className={`${inputClass} ${fieldErrors.rent ? "border-red-500" : ""}`}
+                        placeholder="30,000.00"
+                        inputClassName={`${inputClass.replace("px-2.5", "pl-10 pr-2.5")} ${fieldErrors.rent ? "border-red-500" : ""}`}
                       />
                       {fieldErrors.rent && (
                         <p className="mt-1 text-xs text-red-600">{fieldErrors.rent}</p>
@@ -1702,15 +1700,12 @@ useEffect(() => {
                       <label className={labelClass}>
                         Deposit Amount (Ksh) <span className="text-red-500">*</span>
                       </label>
-                      <input
-                        type="number"
+                      <CurrencyInput
                         name="depositAmount"
                         value={formData.depositAmount}
                         onChange={handleInputChange}
-                        placeholder="30000"
-                        step="0.01"
-                        min="0"
-                        className={`${inputClass} ${fieldErrors.depositAmount ? "border-red-500" : ""}`}
+                        placeholder="30,000.00"
+                        inputClassName={`${inputClass.replace("px-2.5", "pl-10 pr-2.5")} ${fieldErrors.depositAmount ? "border-red-500" : ""}`}
                       />
                       {fieldErrors.depositAmount && (
                         <p className="mt-1 text-xs text-red-600">{fieldErrors.depositAmount}</p>
@@ -1837,15 +1832,12 @@ useEffect(() => {
                               {isLettingProperty ? "Letting Fee Amount (Ksh)" : `${termLease} / Agreement Fee Amount (Ksh)`}{" "}
                               <span className="text-red-500">*</span>
                             </label>
-                            <input
-                              type="number"
+                            <CurrencyInput
                               name="leaseFeeAmount"
                               value={formData.leaseFeeAmount}
                               onChange={handleInputChange}
-                              placeholder="5000"
-                              step="0.01"
-                              min="0"
-                              className={`${inputClass} ${fieldErrors.leaseFeeAmount ? "border-red-500" : ""}`}
+                              placeholder="5,000.00"
+                              inputClassName={`${inputClass.replace("px-2.5", "pl-10 pr-2.5")} ${fieldErrors.leaseFeeAmount ? "border-red-500" : ""}`}
                             />
                             {isLettingProperty && computedLettingFee > 0 && (
                               <p className="mt-1 text-xs text-slate-500">
@@ -1909,13 +1901,10 @@ useEffect(() => {
                           <div className="mt-2 pt-2 border-t border-slate-200">
                             <label className="block text-xs font-bold text-slate-800 mb-1">First month bill (Ksh) — editable</label>
                             <div className="flex items-center gap-2">
-                              <input
-                                type="number"
+                              <CurrencyInput
                                 value={proratedOverride !== "" ? proratedOverride : proratedInfo.proratedAmount.toFixed(2)}
                                 onChange={(e) => setProratedOverride(e.target.value)}
-                                step="0.01"
-                                min="0"
-                                className="h-9 w-48 border border-[#0B3B2E]/30 bg-white px-3 text-sm font-bold text-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/40"
+                                inputClassName="h-9 w-48 border border-[#0B3B2E]/30 bg-white pl-10 pr-3 text-sm font-bold text-[#0B3B2E] focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]/40"
                               />
                               {proratedOverride !== "" && (
                                 <button
@@ -1984,16 +1973,12 @@ useEffect(() => {
 
                           <div>
                             <label className={labelClass}>Charge (Ksh)</label>
-                            <input
-                              type="number"
+                            <CurrencyInput
                               value={util.unitCharge}
                               onChange={(e) =>
                                 updateAdditionalUtility(idx, "unitCharge", e.target.value)
                               }
-                              placeholder="0.00"
-                              step="0.01"
-                              min="0"
-                              className={inputClass}
+                              inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")}
                             />
                           </div>
 

@@ -9,12 +9,16 @@ import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
+import StatusBadge from "../../components/common/StatusBadge";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import {
   getFixedAssets, createFixedAsset, updateFixedAsset,
   disposeFixedAsset, getChartOfAccounts,
 } from "../../redux/apiCalls";
 
 const GRN = "#0B3B2E";
+const labelCls = "mb-1 block text-xs font-bold text-slate-900";
+const inputCls = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition border-slate-300 focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
 
 const METHODS = [
   { value: "straight_line",    label: "Straight Line" },
@@ -26,20 +30,11 @@ const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: c }));
 
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const methodLabel = (m) => METHODS.find((x) => x.value === m)?.label || m;
 
-const statusPill = (status) => {
-  const map = {
-    active:            "bg-emerald-50 text-emerald-700",
-    disposed:          "bg-red-50 text-red-600",
-    fully_depreciated: "bg-slate-100 text-slate-500",
-  };
-  const labels = { active: "Active", disposed: "Disposed", fully_depreciated: "Fully Dep." };
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${map[status] || "bg-slate-100 text-slate-500"}`}>
-      {labels[status] || status}
-    </span>
-  );
+const ASSET_STATUS_MAP = {
+  active:            "border-emerald-200 bg-emerald-50 text-emerald-700",
+  disposed:          "border-red-200 bg-red-50 text-red-600",
+  fully_depreciated: "border-slate-200 bg-slate-100 text-slate-500",
 };
 
 const emptyForm = () => ({
@@ -243,7 +238,12 @@ const FixedAssets = () => {
 
         {/* ── Toolbar ── */}
         <ListToolbar>
-          <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Asset Register</p>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Active: {totals.count}
+          </span>
+          <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+            Book Value: KES {fmt(totals.bookValue)}
+          </span>
 
           <ListToolbar.Divider />
 
@@ -277,12 +277,6 @@ const FixedAssets = () => {
             placeholder="Search name or code…"
           />
 
-          {/* Summary pills */}
-          <ListToolbar.Divider />
-          <span className="text-[9px] font-semibold text-slate-400">
-            {totals.count} active · BV KES {fmt(totals.bookValue)}
-          </span>
-
           <div className="flex-1" />
 
           <ListToolbar.Button icon={FaPlus} onClick={openAdd}>
@@ -297,225 +291,216 @@ const FixedAssets = () => {
           </ListToolbar.Button>
         </ListToolbar>
 
-        {/* ── Add / Edit form panel ── */}
-        {showForm && (
-          <div className="shrink-0 overflow-y-auto border-b border-slate-200 bg-slate-50 px-4 py-3 max-h-[55vh]">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
-                {editingAsset ? "Edit Asset" : "New Fixed Asset"}
-              </p>
-              <button onClick={closeForm} className="text-slate-400 hover:text-slate-600">
-                <FaTimes size={12} />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3 lg:grid-cols-4">
-              {/* Row 1 */}
-              <div className="col-span-2 sm:col-span-1">
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Asset Name *</label>
-                <input value={form.name} onChange={(e) => fc("name", e.target.value)} placeholder="e.g. Dell Laptop"
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Code</label>
-                <input value={form.code} onChange={(e) => fc("code", e.target.value)} placeholder="FA-001"
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Category</label>
-                <AppSelect
-                  size="sm"
-                  clearable
-                  placeholder="Select…"
-                  value={form.category}
-                  onChange={(v) => fc("category", v ?? "")}
-                  options={CATEGORY_OPTIONS}
-                />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Purchase Date *</label>
-                <input type="date" value={form.purchaseDate} onChange={(e) => fc("purchaseDate", e.target.value)}
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-
-              {/* Row 2 */}
-              <div>
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Cost (KES) *</label>
-                <input type="number" value={form.purchaseCost} onChange={(e) => fc("purchaseCost", e.target.value)} placeholder="0.00" min="0"
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Residual (KES)</label>
-                <input type="number" value={form.residualValue} onChange={(e) => fc("residualValue", e.target.value)} placeholder="0.00" min="0"
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <div>
-                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Dep. Method</label>
-                <AppSelect
-                  size="sm"
-                  value={form.depreciationMethod}
-                  onChange={(v) => fc("depreciationMethod", v ?? "straight_line")}
-                  options={METHODS.map((m) => ({ value: m.value, label: m.label }))}
-                />
-              </div>
-
-              {form.depreciationMethod === "straight_line" && (
-                <div>
-                  <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">
-                    Useful Life (yrs)
-                    {previewMonthly !== null && <span className="ml-1 font-normal text-slate-400 normal-case">· KES {fmt(previewMonthly)}/mo</span>}
-                  </label>
-                  <input type="number" value={form.usefulLifeYears} onChange={(e) => fc("usefulLifeYears", e.target.value)} min="1"
-                    className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+        {/* ── Table + side form panel ── */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <MilikTable
+              columns={[
+                { label: "Code" },
+                { label: "Asset Name" },
+                { label: "Category" },
+                { label: "Purchase Date" },
+                { label: "Cost (KES)", align: "right" },
+                { label: "Acc. Dep. (KES)", align: "right" },
+                { label: "Book Value (KES)", align: "right" },
+                { label: "Status", align: "center" },
+                { label: "Last Dep." },
+              ]}
+              rows={filteredAssets}
+              rowKey="_id"
+              loading={loading && !assets.length}
+              empty="No assets found"
+              renderFooter={filteredAssets.length > 0 ? () => (
+                <>
+                  <td colSpan={4} className="px-4 py-2">Filtered total · {filteredAssets.length} rows</td>
+                  <td className="px-4 py-2 text-right font-mono">
+                    {fmt(filteredAssets.reduce((s, a) => s + Number(a.purchaseCost || 0), 0))}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono text-rose-500">
+                    {fmt(filteredAssets.reduce((s, a) => s + Number(a.accumulatedDepreciation || 0), 0))}
+                  </td>
+                  <td className="px-4 py-2 text-right font-mono" style={{ color: GRN }}>
+                    {fmt(filteredAssets.reduce((s, a) => s + Number(a.bookValue || 0), 0))}
+                  </td>
+                  <td colSpan={2} />
+                </>
+              ) : undefined}
+              renderActions={(asset) => (
+                <div className="flex items-center justify-end gap-2">
+                  {asset.status !== "disposed" && (
+                    <button onClick={() => openEdit(asset)} className="p-1 text-slate-600 hover:bg-slate-100 hover:text-slate-900" title="Edit">
+                      <FaEdit size={12} />
+                    </button>
+                  )}
+                  {asset.status === "active" && (
+                    <button onClick={() => openDispose(asset)} className="p-1 text-red-600 hover:bg-red-50 hover:text-red-800" title="Dispose">
+                      <FaTrash size={11} />
+                    </button>
+                  )}
                 </div>
               )}
-              {form.depreciationMethod === "reducing_balance" && (
-                <div>
-                  <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">
-                    Annual Rate (%)
-                    {previewMonthly !== null && <span className="ml-1 font-normal text-slate-400 normal-case">· KES {fmt(previewMonthly)}/mo</span>}
-                  </label>
-                  <input type="number" value={form.depreciationRate} onChange={(e) => fc("depreciationRate", e.target.value)} min="0" max="100"
-                    className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                </div>
+              renderRow={(asset) => (
+                <>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-mono font-bold text-[#0B3B2E]">{asset.code || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800">{asset.name}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{asset.category || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
+                    {asset.purchaseDate
+                      ? new Date(asset.purchaseDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—"}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(asset.purchaseCost)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono text-rose-500">{fmt(asset.accumulatedDepreciation)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-semibold" style={{ color: GRN }}>{fmt(asset.bookValue)}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center"><StatusBadge status={asset.status} map={ASSET_STATUS_MAP} /></td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-400">
+                    {asset.lastDepreciationDate
+                      ? new Date(asset.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
+                      : "—"}
+                  </td>
+                </>
               )}
-            </div>
-
-            {/* GL Accounts */}
-            <div className="mt-3 border-t border-slate-200 pt-3">
-              <p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-400">GL Account Mapping</p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <div>
-                  <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Asset Account *</label>
-                  <AppSelect
-                    size="sm"
-                    searchable
-                    placeholder="Select account…"
-                    value={form.assetAccount}
-                    onChange={(v) => fc("assetAccount", v ?? "")}
-                    options={accountOptions}
-                  />
-                </div>
-                {form.depreciationMethod !== "none" && (
-                  <>
-                    <div>
-                      <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Dep. Expense Account *</label>
-                      <AppSelect
-                        size="sm"
-                        searchable
-                        placeholder="Select account…"
-                        value={form.depreciationExpenseAccount}
-                        onChange={(v) => fc("depreciationExpenseAccount", v ?? "")}
-                        options={accountOptions}
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Accum. Dep. Account *</label>
-                      <AppSelect
-                        size="sm"
-                        searchable
-                        placeholder="Select account…"
-                        value={form.accumulatedDepreciationAccount}
-                        onChange={(v) => fc("accumulatedDepreciationAccount", v ?? "")}
-                        options={accountOptions}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {formError && (
-              <p className="mt-2 text-xs font-medium text-red-600">{formError}</p>
-            )}
-
-            <div className="mt-3 flex items-center gap-2">
-              <button onClick={handleSave} disabled={saving}
-                className="flex h-7 items-center gap-1.5 rounded px-4 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: GRN }}>
-                {saving ? <FaSyncAlt size={9} className="animate-spin" /> : null}
-                {saving ? "Saving…" : editingAsset ? "Update Asset" : "Create Asset"}
-              </button>
-              <button onClick={closeForm}
-                className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                Cancel
-              </button>
-            </div>
+            />
           </div>
-        )}
 
-        {/* ── Table ── */}
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
-          <MilikTable
-            columns={[
-              { label: "Code" },
-              { label: "Asset Name" },
-              { label: "Category" },
-              { label: "Method" },
-              { label: "Cost (KES)", align: "right" },
-              { label: "Acc. Dep. (KES)", align: "right" },
-              { label: "Book Value (KES)", align: "right" },
-              { label: "Status", align: "center" },
-              { label: "Last Dep." },
-            ]}
-            rows={filteredAssets}
-            rowKey="_id"
-            loading={loading && !assets.length}
-            empty="No assets found"
-            renderFooter={filteredAssets.length > 0 ? () => (
-              <>
-                <td colSpan={4} className="px-4 py-2">Filtered total · {filteredAssets.length} rows</td>
-                <td className="px-4 py-2 text-right font-mono">
-                  {fmt(filteredAssets.reduce((s, a) => s + Number(a.purchaseCost || 0), 0))}
-                </td>
-                <td className="px-4 py-2 text-right font-mono text-rose-500">
-                  {fmt(filteredAssets.reduce((s, a) => s + Number(a.accumulatedDepreciation || 0), 0))}
-                </td>
-                <td className="px-4 py-2 text-right font-mono" style={{ color: GRN }}>
-                  {fmt(filteredAssets.reduce((s, a) => s + Number(a.bookValue || 0), 0))}
-                </td>
-                <td colSpan={2} />
-              </>
-            ) : undefined}
-            renderActions={(asset) => (
-              <div className="flex items-center justify-end gap-2">
-                {asset.status !== "disposed" && (
-                  <button onClick={() => openEdit(asset)} className="text-slate-300 hover:text-slate-600" title="Edit">
-                    <FaEdit size={12} />
-                  </button>
-                )}
-                {asset.status === "active" && (
-                  <button onClick={() => openDispose(asset)} className="text-slate-300 hover:text-red-500" title="Dispose">
-                    <FaTrash size={11} />
-                  </button>
-                )}
+          {/* ── Add / Edit form side panel ── */}
+          {showForm && (
+            <div className="w-96 shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden shadow-lg">
+              {/* Panel header */}
+              <div className="bg-[#0B3B2E] px-4 py-3 shrink-0 flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                    {editingAsset ? "Edit Asset" : "New Asset"}
+                  </p>
+                  <p className="text-sm font-bold text-white mt-0.5 truncate max-w-[280px]">
+                    {editingAsset ? (form.name || "…") : "Fixed Asset Register"}
+                  </p>
+                </div>
+                <button onClick={closeForm} className="text-white/50 hover:text-white mt-0.5">
+                  <FaTimes size={14} />
+                </button>
               </div>
-            )}
-            renderRow={(asset) => (
-              <>
-                <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{asset.code || "—"}</td>
-                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{asset.name}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{asset.category || "—"}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{methodLabel(asset.depreciationMethod)}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(asset.purchaseCost)}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-rose-500">{fmt(asset.accumulatedDepreciation)}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold" style={{ color: GRN }}>{fmt(asset.bookValue)}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-center">{statusPill(asset.status)}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-slate-400">
-                  {asset.lastDepreciationDate
-                    ? new Date(asset.lastDepreciationDate).toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" })
-                    : "—"}
-                </td>
-              </>
-            )}
-          />
+
+              {/* Form body */}
+              <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-auto p-4 space-y-4">
+
+                  <div>
+                    <label className={labelCls}>Asset Name <span className="text-red-500">*</span></label>
+                    <input value={form.name} onChange={(e) => fc("name", e.target.value)} placeholder="e.g. Dell Laptop" autoFocus className={inputCls} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Code</label>
+                      <input value={form.code} onChange={(e) => fc("code", e.target.value)} placeholder="FA-001" className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Category</label>
+                      <AppSelect size="sm" clearable placeholder="Select…" value={form.category} onChange={(v) => fc("category", v ?? "")} options={CATEGORY_OPTIONS} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Purchase Date <span className="text-red-500">*</span></label>
+                      <input type="date" value={form.purchaseDate} onChange={(e) => fc("purchaseDate", e.target.value)} className={inputCls} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Cost <span className="text-red-500">*</span></label>
+                      <CurrencyInput value={form.purchaseCost} onChange={(e) => fc("purchaseCost", e.target.value)} />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className={labelCls}>Residual Value</label>
+                      <CurrencyInput value={form.residualValue} onChange={(e) => fc("residualValue", e.target.value)} />
+                    </div>
+                    <div>
+                      <label className={labelCls}>Dep. Method</label>
+                      <AppSelect size="sm" value={form.depreciationMethod} onChange={(v) => fc("depreciationMethod", v ?? "straight_line")} options={METHODS} />
+                    </div>
+                  </div>
+
+                  {form.depreciationMethod === "straight_line" && (
+                    <div>
+                      <label className={labelCls}>
+                        Useful Life (yrs)
+                        {previewMonthly !== null && <span className="ml-1 font-normal normal-case text-slate-400">· KES {fmt(previewMonthly)}/mo</span>}
+                      </label>
+                      <input type="number" value={form.usefulLifeYears} onChange={(e) => fc("usefulLifeYears", e.target.value)} min="1" className={inputCls} />
+                    </div>
+                  )}
+                  {form.depreciationMethod === "reducing_balance" && (
+                    <div>
+                      <label className={labelCls}>
+                        Annual Rate (%)
+                        {previewMonthly !== null && <span className="ml-1 font-normal normal-case text-slate-400">· KES {fmt(previewMonthly)}/mo</span>}
+                      </label>
+                      <input type="number" value={form.depreciationRate} onChange={(e) => fc("depreciationRate", e.target.value)} min="0" max="100" className={inputCls} />
+                    </div>
+                  )}
+
+                  {/* Divider */}
+                  <div className="border-t border-slate-100" />
+
+                  {/* GL Accounts */}
+                  <div>
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">GL Account Mapping</p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className={labelCls}>Asset Account <span className="text-red-500">*</span></label>
+                        <AppSelect size="sm" searchable placeholder="Select account…" value={form.assetAccount} onChange={(v) => fc("assetAccount", v ?? "")} options={accountOptions} />
+                      </div>
+                      {form.depreciationMethod !== "none" && (
+                        <>
+                          <div>
+                            <label className={labelCls}>Dep. Expense Account <span className="text-red-500">*</span></label>
+                            <AppSelect size="sm" searchable placeholder="Select account…" value={form.depreciationExpenseAccount} onChange={(v) => fc("depreciationExpenseAccount", v ?? "")} options={accountOptions} />
+                          </div>
+                          <div>
+                            <label className={labelCls}>Accum. Dep. Account <span className="text-red-500">*</span></label>
+                            <AppSelect size="sm" searchable placeholder="Select account…" value={form.accumulatedDepreciationAccount} onChange={(v) => fc("accumulatedDepreciationAccount", v ?? "")} options={accountOptions} />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {formError && (
+                    <p className="text-xs font-medium text-red-600">{formError}</p>
+                  )}
+                </div>
+
+                {/* Form footer */}
+                <div className="shrink-0 border-t border-slate-200 px-4 py-3 flex gap-2 bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={closeForm}
+                    className="flex-1 h-8 border border-slate-300 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="flex-1 h-8 bg-[#0B3B2E] hover:bg-[#0A3127] text-white text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {saving ? "Saving…" : editingAsset ? "Save Changes" : "Create Asset"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
       {/* ── Dispose Modal ─────────────────────────────────────────────────────── */}
       {disposeTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white shadow-2xl">
+          <div className="w-full max-w-md bg-white shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <p className="text-sm font-black text-slate-800">Dispose Asset</p>
               <button onClick={() => setDisposeTarget(null)} className="text-slate-400 hover:text-slate-700">
@@ -523,7 +508,7 @@ const FixedAssets = () => {
               </button>
             </div>
             <div className="space-y-3 p-5">
-              <div className="rounded-lg bg-red-50 px-4 py-3">
+              <div className="bg-red-50 px-4 py-3">
                 <p className="text-xs font-bold text-red-700">{disposeTarget.name}</p>
                 <p className="mt-0.5 text-[11px] text-red-500">
                   Book value: KES {fmt(disposeTarget.bookValue)} — posts clearing GL entries. Cannot be undone.
@@ -534,13 +519,13 @@ const FixedAssets = () => {
                   <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Disposal Date</label>
                   <input type="date" value={disposeForm.disposalDate}
                     onChange={(e) => setDisposeForm((p) => ({ ...p, disposalDate: e.target.value }))}
-                    className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
+                    className="h-7 w-full border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
                 </div>
                 <div>
-                  <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Proceeds (KES)</label>
-                  <input type="number" value={disposeForm.disposalProceeds} min="0" placeholder="0.00"
+                  <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">Proceeds</label>
+                  <CurrencyInput value={disposeForm.disposalProceeds}
                     onChange={(e) => setDisposeForm((p) => ({ ...p, disposalProceeds: e.target.value }))}
-                    className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
+                    inputClassName="h-7 w-full border border-slate-200 bg-white pl-9 pr-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
                 </div>
               </div>
               <div>
@@ -548,15 +533,15 @@ const FixedAssets = () => {
                 <input value={disposeForm.disposalNotes}
                   onChange={(e) => setDisposeForm((p) => ({ ...p, disposalNotes: e.target.value }))}
                   placeholder="Reason for disposal…"
-                  className="h-7 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
+                  className="h-7 w-full border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-red-400" />
               </div>
               <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
                 <button onClick={() => setDisposeTarget(null)}
-                  className="flex h-7 items-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                  className="flex h-7 items-center border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
                   Cancel
                 </button>
                 <button onClick={handleDispose} disabled={disposing}
-                  className="flex h-7 items-center gap-1.5 rounded bg-red-600 px-4 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
+                  className="flex h-7 items-center gap-1.5 bg-red-600 px-4 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50">
                   {disposing ? <FaSyncAlt size={9} className="animate-spin" /> : null}
                   {disposing ? "Disposing…" : "Confirm Disposal"}
                 </button>

@@ -8,6 +8,7 @@ import { clearCredentials } from '../../../redux/slices/authSlice';
 import { RootState } from '../../../redux/store';
 import { Colors } from '../../../constants/colors';
 import { STORAGE_KEYS } from '../../../constants';
+import { unregisterPushNotifications } from '../../../services/pushNotifications';
 
 type MenuItem = {
   icon: string;
@@ -27,6 +28,7 @@ export default function MoreScreen() {
       {
         text: 'Sign Out', style: 'destructive',
         onPress: async () => {
+          await unregisterPushNotifications();
           await Promise.all([
             AsyncStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN),
             AsyncStorage.removeItem(STORAGE_KEYS.USER),

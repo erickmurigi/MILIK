@@ -2,6 +2,17 @@ import mongoose from "mongoose";
 const { Schema, model } = mongoose;
 const ObjectId = Schema.Types.ObjectId;
 
+// A line's budgetedAmount is always the authoritative period total — when monthlyAmounts is
+// present (opt-in "spread by month"), the server recomputes budgetedAmount as its sum rather
+// than trusting a client-sent total, so the two can never drift apart.
+const MonthlyAmountSchema = new Schema(
+  {
+    month:  { type: String, required: true }, // "YYYY-MM"
+    amount: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
 const BudgetLineSchema = new Schema(
   {
     account:       { type: ObjectId, ref: "ChartOfAccount", required: true },
@@ -9,6 +20,7 @@ const BudgetLineSchema = new Schema(
     accountName:   { type: String, default: "" },
     accountType:   { type: String, default: "" }, // income | expense | asset | liability | equity
     budgetedAmount: { type: Number, required: true, min: 0 },
+    monthlyAmounts: { type: [MonthlyAmountSchema], default: [] },
   },
   { _id: true }
 );

@@ -11,6 +11,22 @@ import { currentUserId, generateSequentialNumber, resolveActiveBusinessId } from
 import { agentFilter } from "../middleware/agentScope.js";
 import { andInto, wordsSearchFilter } from "../services/saleSearch.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
+import SaleAgent from "../models/SaleAgent.js";
+import { sendPushToUsers } from "../../../utils/pushNotify.js";
+
+const notifyAgentOfLead = (agentId, lead) => {
+  if (!agentId) return;
+  SaleAgent.findById(agentId).select("userId fullName").lean()
+    .then((agent) => {
+      if (!agent?.userId) return;
+      return sendPushToUsers([agent.userId], {
+        title: "New lead assigned to you",
+        body: `${lead.fullName || "A new lead"}${lead.phone ? ` · ${lead.phone}` : ""}`,
+        data: { type: "new_lead", leadId: String(lead._id) },
+      });
+    })
+    .catch(() => {});
+};
 
 // Stage names from Sale Settings become status values the same way the client builds them (lowercase, spaces -> _)
 const statusValueOf = (name) => String(name || "").toLowerCase().replace(/\s+/g, "_");
@@ -115,6 +131,7 @@ export const createLead = async (req, res, next) => {
     if (req.saleAgentId) body.assignedAgent = req.saleAgentId;
     if (body.status && !(await isKnownLeadStatus(business, body.status))) return next(createError(400, `Unknown lead status "${body.status}"`));
     const lead = await SaleLead.create({ ...body, business, leadNumber, createdBy: userId, updatedBy: userId });
+    notifyAgentOfLead(lead.assignedAgent, lead);
     res.status(201).json(lead);
   } catch (err) { next(err); }
 };
@@ -145,12 +162,19 @@ export const updateLead = async (req, res, next) => {
         delete updates.status;
       }
     }
+    let previousAgent = null;
+    if ("assignedAgent" in updates) {
+      previousAgent = (await SaleLead.findOne({ _id: req.params.id, business }).select("assignedAgent").lean())?.assignedAgent || null;
+    }
     const lead = await SaleLead.findOneAndUpdate(
       { _id: req.params.id, business, ...agentFilter(req, "assignedAgent") },
       { ...updates, updatedBy: userId },
       { new: true, runValidators: true }
     ).populate("assignedAgent", "fullName").lean();
     if (!lead) return next(createError(404, "Lead not found"));
+    if ("assignedAgent" in updates && String(updates.assignedAgent || "") !== String(previousAgent || "")) {
+      notifyAgentOfLead(lead.assignedAgent?._id || lead.assignedAgent, lead);
+    }
     res.status(200).json(lead);
   } catch (err) { next(err); }
 };

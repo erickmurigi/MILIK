@@ -3,7 +3,7 @@ import FixedAsset from "../../models/FixedAsset.js";
 import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { toObjectId } from "../../utils/db.js";
-import { resolveBusinessId } from "../../utils/requestContext.js";
+import { resolveBusinessId, currentUserId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
 import { round2 } from "../../utils/math.js";
 
@@ -33,6 +33,78 @@ const calcMonthlyDepreciation = (asset) => {
   }
 
   return 0;
+};
+
+// ─── Catch-up depreciation (the month(s) actually owed, not just "one month") ─────────────
+// A run is keyed to an "as-of" date, not a period the caller has to get right. The first-ever
+// charge starts the month of purchase; every run after that resumes the month AFTER the last
+// one actually charged (asset.lastDepreciationDate), so re-running — even with an overlapping
+// or wider date range — can never recharge a month twice. This replaces the old design, which
+// always posted exactly one month's charge no matter how wide the selected period was (silently
+// under-posting any backdated asset) and deduplicated only by exact period-date match (so a
+// slightly different date range on a second run would double-post a month already charged).
+const monthStart = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+
+const nextDueMonthStart = (asset) => {
+  if (asset.lastDepreciationDate) {
+    const last = new Date(asset.lastDepreciationDate);
+    return new Date(last.getFullYear(), last.getMonth() + 1, 1);
+  }
+  return monthStart(new Date(asset.purchaseDate));
+};
+
+const monthsDueThrough = (asset, asOfDate) => {
+  const due = nextDueMonthStart(asset);
+  const asOf = monthStart(asOfDate);
+  const months = (asOf.getFullYear() - due.getFullYear()) * 12 + (asOf.getMonth() - due.getMonth()) + 1;
+  return Math.max(0, months);
+};
+
+// Walks month by month (not a flat multiply) so reducing-balance catch-up compounds correctly
+// and a catch-up that crosses into full depreciation stops exactly at the residual value, even
+// mid-run.
+const calcCatchUpDepreciation = (asset, asOfDate) => {
+  const result = { amount: 0, monthsCharged: 0, periodStart: null, periodEnd: null };
+  const totalMonthsDue = monthsDueThrough(asset, asOfDate);
+  if (totalMonthsDue <= 0 || asset.depreciationMethod === "none") return result;
+
+  const cost = Number(asset.purchaseCost || 0);
+  const residual = Number(asset.residualValue || 0);
+  let accumulated = Number(asset.accumulatedDepreciation || 0);
+  const dueStart = nextDueMonthStart(asset);
+
+  let total = 0;
+  let charged = 0;
+  for (let i = 0; i < totalMonthsDue; i++) {
+    const bookValue = round2(Math.max(0, cost - accumulated));
+    if (bookValue <= residual) break;
+
+    let monthly = 0;
+    if (asset.depreciationMethod === "straight_line") {
+      const years = Number(asset.usefulLifeYears || 0);
+      if (years <= 0) break;
+      monthly = round2(Math.min((cost - residual) / years / 12, bookValue - residual));
+    } else if (asset.depreciationMethod === "reducing_balance") {
+      const rate = Number(asset.depreciationRate || 0);
+      if (rate <= 0) break;
+      monthly = round2(Math.min((bookValue * rate) / 100 / 12, bookValue - residual));
+    } else {
+      break;
+    }
+
+    if (monthly <= 0) break;
+    accumulated = round2(accumulated + monthly);
+    total = round2(total + monthly);
+    charged++;
+  }
+
+  if (charged > 0) {
+    result.amount = total;
+    result.monthsCharged = charged;
+    result.periodStart = dueStart;
+    result.periodEnd = new Date(dueStart.getFullYear(), dueStart.getMonth() + charged, 0, 23, 59, 59, 999);
+  }
+  return result;
 };
 
 // ─── List fixed assets ─────────────────────────────────────────────────────────
@@ -126,7 +198,7 @@ export const createFixedAsset = async (req, res, next) => {
       accumulatedDepreciationAccount: toObjectId(accumulatedDepreciationAccount),
       accumulatedDepreciation: 0,
       status: "active",
-      createdBy: req.user?._id || req.user?.id || null,
+      createdBy: currentUserId(req),
     });
 
     return res.status(201).json(asset);
@@ -174,15 +246,21 @@ export const updateFixedAsset = async (req, res, next) => {
 };
 
 // ─── Preview depreciation (dry run) ───────────────────────────────────────────
+// `asOf` is "run depreciation through this date" — defaults to today. Shows exactly how many
+// months are owed per asset (could be more than one for a backdated/never-run asset) and the
+// real total about to post, not a flat one-month-per-asset guess.
 export const previewDepreciation = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
 
+    const asOfDate = req.query.asOf ? new Date(req.query.asOf) : new Date();
+    if (Number.isNaN(asOfDate.getTime())) return next(createError(400, "Invalid asOf date"));
+
     const assets = await FixedAsset.find({ business: businessId, status: "active" }).lean();
 
     const preview = assets.map((a) => {
-      const monthly = calcMonthlyDepreciation(a);
+      const catchUp = calcCatchUpDepreciation(a, asOfDate);
       const bookValue = round2(Math.max(0, Number(a.purchaseCost || 0) - Number(a.accumulatedDepreciation || 0)));
       return {
         _id: a._id,
@@ -192,33 +270,40 @@ export const previewDepreciation = async (req, res, next) => {
         purchaseCost: a.purchaseCost,
         accumulatedDepreciation: a.accumulatedDepreciation,
         bookValue,
-        monthlyDepreciation: monthly,
+        monthlyDepreciation: calcMonthlyDepreciation(a), // current single-month rate, informational
+        amountDue: catchUp.amount,                       // what will actually post on this run
+        monthsDue: catchUp.monthsCharged,
+        periodStart: catchUp.periodStart,
+        periodEnd: catchUp.periodEnd,
         depreciationMethod: a.depreciationMethod,
         lastDepreciationDate: a.lastDepreciationDate,
       };
     });
 
-    const totalDepreciation = round2(preview.reduce((sum, p) => sum + p.monthlyDepreciation, 0));
-    return res.status(200).json({ preview, totalDepreciation });
+    const totalDepreciation = round2(preview.reduce((sum, p) => sum + p.amountDue, 0));
+    return res.status(200).json({ preview, totalDepreciation, asOf: asOfDate });
   } catch (err) {
     next(err);
   }
 };
 
-// ─── Run depreciation for a given period ──────────────────────────────────────
+// ─── Run depreciation through a given date ────────────────────────────────────
+// Posts one catch-up journal per asset covering every month owed since its lastDepreciationDate
+// (or purchaseDate, first run) through `asOf` — in one balanced entry, not one-per-month. Safe to
+// re-run any time: lastDepreciationDate is the only source of truth for what's already charged,
+// so a second run (even with an earlier/overlapping `asOf`) always computes 0 months due instead
+// of recharging.
 export const runDepreciation = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
 
-    const userId = req.user?._id || req.user?.id;
-    const { periodStart, periodEnd, assetIds } = req.body;
+    const userId = currentUserId(req);
+    const { asOf, assetIds } = req.body;
 
-    if (!periodStart || !periodEnd) return next(createError(400, "periodStart and periodEnd are required"));
-
-    const start = new Date(periodStart);
-    const end = new Date(periodEnd);
-    end.setHours(23, 59, 59, 999);
+    if (!asOf) return next(createError(400, "asOf date is required"));
+    const asOfDate = new Date(asOf);
+    if (Number.isNaN(asOfDate.getTime())) return next(createError(400, "Invalid asOf date"));
 
     const filter = { business: businessId, status: "active" };
     if (Array.isArray(assetIds) && assetIds.length) {
@@ -231,41 +316,21 @@ export const runDepreciation = async (req, res, next) => {
       .populate("accumulatedDepreciationAccount", "_id code name")
       .lean();
 
-    // Batch-check which assets already have depreciation posted for this period (avoids N+1)
-    const eligibleAssetIds = assets
-      .filter((a) => calcMonthlyDepreciation(a) > 0)
-      .map((a) => String(a._id));
-    const alreadyPostedSet = new Set();
-    if (eligibleAssetIds.length) {
-      const postedEntries = await FinancialLedgerEntry.find({
-        business: businessId,
-        sourceTransactionType: "fixed_asset_depreciation",
-        sourceTransactionId: { $in: eligibleAssetIds },
-        statementPeriodStart: start,
-        statementPeriodEnd: end,
-      }).select("sourceTransactionId").lean();
-      for (const e of postedEntries) alreadyPostedSet.add(String(e.sourceTransactionId));
-    }
-
     const results = [];
     const touchedAccounts = new Set();
     const bulkOps = [];
 
     await Promise.all(
       assets.map(async (asset) => {
-        const monthly = calcMonthlyDepreciation(asset);
-        if (monthly <= 0) {
-          results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "No depreciation to post" });
-          return;
-        }
-
-        if (alreadyPostedSet.has(String(asset._id))) {
-          results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "Already posted for this period" });
+        const catchUp = calcCatchUpDepreciation(asset, asOfDate);
+        if (catchUp.amount <= 0) {
+          results.push({ assetId: asset._id, name: asset.name, skipped: true, reason: "No depreciation due through this date" });
           return;
         }
 
         const journalGroupId = new mongoose.Types.ObjectId();
-        const transactionDate = end;
+        const transactionDate = catchUp.periodEnd;
+        const monthsLabel = `${catchUp.monthsCharged} month${catchUp.monthsCharged !== 1 ? "s" : ""}`;
 
         const basePayload = {
           business: businessId,
@@ -273,16 +338,16 @@ export const runDepreciation = async (req, res, next) => {
           sourceTransactionType: "fixed_asset_depreciation",
           sourceTransactionId: asset._id,
           transactionDate,
-          statementPeriodStart: start,
-          statementPeriodEnd: end,
+          statementPeriodStart: catchUp.periodStart,
+          statementPeriodEnd: catchUp.periodEnd,
           category: "DEPRECIATION",
           journalGroupId,
-          amount: monthly,
+          amount: catchUp.amount,
           createdBy: userId,
           approvedBy: userId,
           approvedAt: new Date(),
           status: "approved",
-          notes: `Depreciation — ${asset.name} (${String(asset.code || "").trim()}) for period ${periodStart} to ${periodEnd}`,
+          notes: `Depreciation — ${asset.name} (${String(asset.code || "").trim()}) · ${monthsLabel} through ${transactionDate.toISOString().split("T")[0]}`,
         };
 
         // DR Depreciation Expense and CR Accumulated Depreciation in parallel
@@ -294,7 +359,7 @@ export const runDepreciation = async (req, res, next) => {
         touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
         touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
 
-        const newAccumulated = round2(Number(asset.accumulatedDepreciation || 0) + monthly);
+        const newAccumulated = round2(Number(asset.accumulatedDepreciation || 0) + catchUp.amount);
         const bookValue = round2(Math.max(0, Number(asset.purchaseCost || 0) - newAccumulated));
         const residual = round2(Number(asset.residualValue || 0));
         const updateFields = {
@@ -304,7 +369,11 @@ export const runDepreciation = async (req, res, next) => {
         };
 
         bulkOps.push({ updateOne: { filter: { _id: asset._id }, update: { $set: updateFields } } });
-        results.push({ assetId: asset._id, name: asset.name, depreciation: monthly, newBookValue: bookValue });
+        results.push({
+          assetId: asset._id, name: asset.name,
+          depreciation: catchUp.amount, monthsCharged: catchUp.monthsCharged,
+          newBookValue: bookValue,
+        });
       })
     );
 
@@ -313,7 +382,7 @@ export const runDepreciation = async (req, res, next) => {
       await aggregateChartOfAccountBalances(businessId, [...touchedAccounts]);
     }
 
-    return res.status(200).json({ success: true, periodStart, periodEnd, results });
+    return res.status(200).json({ success: true, asOf, results });
   } catch (err) {
     next(err);
   }
@@ -330,7 +399,7 @@ export const disposeFixedAsset = async (req, res, next) => {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
 
-    const userId = req.user?._id || req.user?.id;
+    const userId = currentUserId(req);
     const asset = await FixedAsset.findOne({ _id: req.params.id, business: businessId })
       .populate("assetAccount", "_id code name")
       .populate("accumulatedDepreciationAccount", "_id code name")

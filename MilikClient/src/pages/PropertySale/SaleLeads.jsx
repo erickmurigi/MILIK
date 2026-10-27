@@ -15,6 +15,7 @@ import { useConfirm } from "../../context/ConfirmContext";
 import useDebounce from "../../hooks/useDebounce";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import SaleFilterBar, { FilterSearch, FilterDateRange } from "./SaleFilterBar";
 import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
@@ -139,12 +140,12 @@ function LeadFormModal({ editingId, initial, saving, sourceOptions, statusOption
             <input type="date" value={form.nextFollowUpDate} onChange={(e) => setForm((f) => ({ ...f, nextFollowUpDate: e.target.value }))} className={`${modalInputCls} h-8`} />
           </div>
           <div>
-            <label className={labelClass}>Budget Min (KES)</label>
-            <input type="number" value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} className={`${modalInputCls} h-8`} />
+            <label className={labelClass}>Budget Min</label>
+            <CurrencyInput value={form.budgetMin} onChange={(e) => setForm((f) => ({ ...f, budgetMin: e.target.value }))} inputClassName={`${modalInputCls} h-8 pl-10`} />
           </div>
           <div>
-            <label className={labelClass}>Budget Max (KES)</label>
-            <input type="number" value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} className={`${modalInputCls} h-8`} />
+            <label className={labelClass}>Budget Max</label>
+            <CurrencyInput value={form.budgetMax} onChange={(e) => setForm((f) => ({ ...f, budgetMax: e.target.value }))} inputClassName={`${modalInputCls} h-8 pl-10`} />
           </div>
           {form.status === "lost" && (
             <div className="col-span-2">
@@ -229,7 +230,7 @@ function ConvertOfferModal({ leadName, listingOptions, agentOptions, converting,
           </div>
           <div>
             <label className={labelClass}>{T.saleOffer} Amount (KES)<Required /></label>
-            <input type="number" min="0" step="1" value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} className={`${modalInputCls} h-8`} />
+            <CurrencyInput value={offerForm.offerAmount} onChange={(e) => setOfferForm((f) => ({ ...f, offerAmount: e.target.value }))} inputClassName={`${modalInputCls} h-8 pl-10`} />
           </div>
           <div>
             <label className={labelClass}>Valid Until</label>

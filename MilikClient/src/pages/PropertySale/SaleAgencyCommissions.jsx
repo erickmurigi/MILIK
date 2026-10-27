@@ -19,6 +19,7 @@ import { exportAfterFetch, fetchAllPages, money, printAfterFetch } from "./saleP
 import { fmtDate } from "../../utils/dates";
 import MilikTable from "../../components/common/MilikTable";
 import { inputClass, labelClass } from "../../utils/formStyles";
+import CurrencyInput from "../../components/common/CurrencyInput";
 
 // The company's own agency commission for selling on an owner's behalf — structurally parallel to
 // Broker Commissions but simpler: no WHT, and no manual approve/pay/reverse action exists, since this
@@ -182,7 +183,7 @@ function AgencyPayoutModal({ commission, cashbookOptions, saving, onClose, onSub
       <div className="flex flex-col gap-3">
         <div>
           <label className={labelClass}>Amount Received Now</label>
-          <input type="number" min="0" max={commission.agencyOutstanding} value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className={inputClass} />
+          <CurrencyInput value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
         </div>
         <div>
           <label className={labelClass}>Date</label>
@@ -273,6 +274,7 @@ const SaleAgencyCommissions = () => {
   const handlePayout = async (payForm) => {
     const amount = Number(payForm.amount);
     if (!Number.isFinite(amount) || amount <= 0) return toast.warning("Enter an amount greater than 0");
+    if (amount > showPayout.agencyOutstanding) return toast.warning(`Amount cannot exceed the outstanding balance of ${fmtKES(showPayout.agencyOutstanding)}`);
     setPaySaving(true);
     try {
       await saleApi.createAgencyCommissionPayout({

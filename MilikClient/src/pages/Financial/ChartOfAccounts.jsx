@@ -950,7 +950,7 @@ const ChartOfAccounts = () => {
 
                   {/* Name */}
                   <div>
-                    <label className={labelCls}>Account Name *</label>
+                    <label className={labelCls}>Account Name <span className="text-red-500">*</span></label>
                     <input
                       value={formData.name}
                       onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
@@ -962,7 +962,7 @@ const ChartOfAccounts = () => {
 
                   {/* Type */}
                   <div>
-                    <label className={labelCls}>Type *</label>
+                    <label className={labelCls}>Type <span className="text-red-500">*</span></label>
                     {parentAccountForForm ? (
                       <p className="text-xs text-slate-500 italic bg-slate-50 border border-slate-200 px-2.5 py-1.5">
                         Inherited from parent: <span className="font-bold capitalize text-slate-700">{effectiveType}</span>

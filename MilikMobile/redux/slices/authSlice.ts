@@ -33,8 +33,15 @@ const authSlice = createSlice({
     setLoading(state, action: PayloadAction<boolean>) {
       state.loading = action.payload;
     },
+    // Silent token refresh updates only the token — /auth/refresh's response carries the
+    // raw decoded JWT payload (id/email/role/company/exp/...), not the full user profile
+    // object login returns, so overwriting state.user with it here would quietly drop
+    // profile fields the rest of the app relies on.
+    setToken(state, action: PayloadAction<string>) {
+      state.token = action.payload;
+    },
   },
 });
 
-export const { setCredentials, clearCredentials, setLoading } = authSlice.actions;
+export const { setCredentials, clearCredentials, setLoading, setToken } = authSlice.actions;
 export default authSlice.reducer;

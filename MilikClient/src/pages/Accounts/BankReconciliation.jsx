@@ -3,18 +3,25 @@ import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
-  FaCheck, FaCheckSquare, FaFileDownload, FaFilePdf, FaLock,
-  FaPlus, FaSearch, FaSyncAlt, FaTimes, FaTrash, FaUndo,
+  FaCheck, FaCheckSquare, FaChevronDown, FaChevronRight, FaFileDownload, FaFileImport, FaFilePdf, FaLink, FaLock, FaLockOpen,
+  FaPlus, FaSearch, FaSyncAlt, FaTimes, FaTrash, FaUndo, FaUnlink,
 } from "react-icons/fa";
 import { printTabularList } from "../../utils/printList";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import ListToolbar from "../../components/common/ListToolbar";
 import AppSelect from "../../components/common/AppSelect";
 import MilikTable from "../../components/common/MilikTable";
+import StatusBadge from "../../components/common/StatusBadge";
+import CurrencyInput from "../../components/common/CurrencyInput";
+import ImportModal from "../../components/Modals/ImportModal";
+import { parseBankStatementCsv } from "../../utils/parseBankStatementCsv";
 import {
   getBankReconciliationAccounts, getReconciliationEntries,
   getReconciliations, createReconciliation, saveReconciliation,
-  finalizeReconciliation, deleteReconciliation,
+  finalizeReconciliation, reopenReconciliation, deleteReconciliation,
+  importBankStatementLines, getStatementLines, matchStatementLine,
+  unmatchStatementLine, createTransactionFromStatementLine,
+  getChartOfAccounts,
 } from "../../redux/apiCalls";
 import { fmtDate } from "../../utils/dates";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -22,6 +29,16 @@ const fmt = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigit
 const localDate = (d) => { const dt = new Date(d); const y = dt.getFullYear(); const m = String(dt.getMonth()+1).padStart(2,"0"); const day = String(dt.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; };
 const todayStr  = () => localDate(new Date());
 const firstOfMonth = () => { const d = new Date(); return localDate(new Date(d.getFullYear(), d.getMonth(), 1)); };
+const addDay = (dateStr) => { const d = new Date(dateStr); d.setDate(d.getDate() + 1); return localDate(d); };
+
+// House standard — square corners, fixed h-7 height — matching AddLandlord.jsx/CarWashAddJob.jsx.
+const labelCls = "mb-1 block text-xs font-bold text-slate-900";
+const inputCls = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition border-slate-300 focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20";
+
+const RECON_STATUS_MAP = {
+  reconciled: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  draft:      "border-blue-200 bg-blue-50 text-blue-600",
+};
 
 // ── Views: LIST or RECONCILE ──────────────────────────────────────────────────
 const VIEW = { LIST: "list", RECONCILE: "reconcile" };
@@ -33,7 +50,8 @@ const BankReconciliation = () => {
 
   // ── Global state ──────────────────────────────────────────────────────────
   const [view,     setView]     = useTabState("/accounts/bank-reconciliation:view", VIEW.LIST);
-  const [accounts, setAccounts] = useState([]);
+  const [accounts, setAccounts] = useState([]); // postable asset accounts — the ones reconcilable
+  const [allAccounts, setAllAccounts] = useState([]); // every postable account — for picking the "other side" of a transaction created from a statement line
   const [history,  setHistory]  = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
@@ -45,6 +63,18 @@ const BankReconciliation = () => {
   const [saving,        setSaving]        = useState(false);
   const [search,        setSearch]        = useTabState("/accounts/bank-reconciliation:search", "");
 
+  // ── Statement import + matching ────────────────────────────────────────────
+  const [statementLines,        setStatementLines]        = useState([]);
+  const [loadingStatementLines, setLoadingStatementLines] = useState(false);
+  const [showImportModal,       setShowImportModal]       = useState(false);
+  const [showStatementLines,    setShowStatementLines]    = useState(true);
+  const [lineActionBusy,        setLineActionBusy]        = useState(""); // statement-line _id currently processing
+
+  // ── Reopen (undo a finalised reconciliation) ───────────────────────────────
+  const [reopening,     setReopening]     = useState(false);
+  const [reopenReason,  setReopenReason]  = useState("");
+  const [reopeningBusy, setReopeningBusy] = useState(false);
+
   // ── New reconciliation form ────────────────────────────────────────────────
   const [formAccount,   setFormAccount]   = useState("");
   const [formFrom,      setFormFrom]      = useState(firstOfMonth());
@@ -54,6 +84,28 @@ const BankReconciliation = () => {
   const [formNotes,     setFormNotes]     = useState("");
   const [creating,      setCreating]      = useState(false);
   const [showNewForm,   setShowNewForm]   = useState(false);
+  const [lastRecon,     setLastRecon]     = useState(null); // most recent recon for the selected account — continuity hint
+
+  // Continuity: when an account is picked, prefill Period From (day after the last reconciliation's
+  // period end) and Opening Balance (that reconciliation's closing balance) so periods never gap or
+  // overlap and the opening figure is never hand-typed wrong. Still fully editable afterward.
+  useEffect(() => {
+    if (!formAccount || !businessId) { setLastRecon(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const list = await getReconciliations({ business: businessId, account: formAccount });
+        if (cancelled) return;
+        const last = Array.isArray(list) && list.length ? list[0] : null; // already sorted periodEnd desc
+        setLastRecon(last);
+        if (last) {
+          setFormFrom(addDay(localDate(last.periodEnd)));
+          setFormOpenBal(String(last.statementClosingBalance ?? 0));
+        }
+      } catch { /* silent — continuity is a convenience, not a hard requirement */ }
+    })();
+    return () => { cancelled = true; };
+  }, [formAccount, businessId]);
 
   // ── Fetch all paginated entry pages and accumulate ────────────────────────
   const fetchAllEntries = useCallback(async ({ business, account, from, to }, initial = [], initialCursor = null) => {
@@ -67,17 +119,39 @@ const BankReconciliation = () => {
     return all;
   }, []);
 
+  // ── Statement lines: load + keep clearedEntries/difference in sync with the server after
+  //    any match/unmatch/create-transaction action (those mutate the reconciliation server-side) ──
+  const loadStatementLines = useCallback(async (reconId) => {
+    setLoadingStatementLines(true);
+    try {
+      const lines = await getStatementLines(reconId);
+      setStatementLines(Array.isArray(lines) ? lines : []);
+    } catch {
+      toast.error("Failed to load statement lines");
+    } finally {
+      setLoadingStatementLines(false);
+    }
+  }, []);
+
+  const syncReconFromServer = useCallback((recon) => {
+    if (!recon) return;
+    setActiveRecon((prev) => ({ ...prev, ...recon }));
+    setCleared(new Set((recon.clearedEntries || []).map(String)));
+  }, []);
+
   // ── Load accounts + history ───────────────────────────────────────────────
   const loadInitial = useCallback(async () => {
     if (!businessId) return;
     setLoadingHistory(true);
     try {
-      const [accs, hist] = await Promise.all([
+      const [accs, hist, allAccs] = await Promise.all([
         getBankReconciliationAccounts({ business: businessId }),
         getReconciliations({ business: businessId }),
+        getChartOfAccounts({ business: businessId }),
       ]);
       setAccounts(Array.isArray(accs)  ? accs  : []);
       setHistory( Array.isArray(hist)  ? hist  : []);
+      setAllAccounts((Array.isArray(allAccs) ? allAccs : []).filter((a) => a?.isPosting !== false && a?.isHeader !== true));
     } catch {
       toast.error("Failed to load reconciliation data");
     } finally {
@@ -106,12 +180,13 @@ const BankReconciliation = () => {
       setCleared(new Set((full.clearedEntries || []).map(String)));
       setSearch("");
       setView(VIEW.RECONCILE);
+      loadStatementLines(full._id);
     } catch {
       toast.error("Failed to load reconciliation");
     } finally {
       setLoadingEntries(false);
     }
-  }, [businessId, fetchAllEntries]);
+  }, [businessId, fetchAllEntries, loadStatementLines]);
 
   // ── Create new reconciliation ──────────────────────────────────────────────
   const handleCreate = useCallback(async () => {
@@ -148,6 +223,7 @@ const BankReconciliation = () => {
       setActiveRecon({ ...recon, entries: allEnts });
       setEntries(allEnts);
       setCleared(new Set());
+      setStatementLines([]);
       setSearch("");
       setShowNewForm(false);
       setView(VIEW.RECONCILE);
@@ -291,8 +367,85 @@ const BankReconciliation = () => {
     setActiveRecon(null);
     setEntries([]);
     setCleared(new Set());
+    setStatementLines([]);
+    setReopening(false);
+    setReopenReason("");
     setView(VIEW.LIST);
   }, []);
+
+  // ── Reopen (undo a finalised reconciliation) ───────────────────────────────
+  const handleReopen = useCallback(async () => {
+    if (!activeRecon?._id || !reopenReason.trim()) return;
+    setReopeningBusy(true);
+    try {
+      const updated = await reopenReconciliation(activeRecon._id, { reason: reopenReason.trim() });
+      setActiveRecon((prev) => ({ ...prev, ...updated }));
+      setReopening(false);
+      setReopenReason("");
+      toast.success("Reconciliation reopened — back to draft");
+      const hist = await getReconciliations({ business: businessId });
+      setHistory(Array.isArray(hist) ? hist : []);
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to reopen reconciliation");
+    } finally {
+      setReopeningBusy(false);
+    }
+  }, [activeRecon, reopenReason, businessId]);
+
+  // ── Statement line actions ─────────────────────────────────────────────────
+  const handleMatchLine = useCallback(async (lineId, entryId) => {
+    if (!activeRecon?._id) return;
+    setLineActionBusy(lineId);
+    try {
+      const { line, reconciliation } = await matchStatementLine(activeRecon._id, lineId, entryId);
+      setStatementLines((prev) => prev.map((l) => (l._id === lineId ? { ...l, ...line } : l)));
+      syncReconFromServer(reconciliation);
+      toast.success("Matched");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to match");
+    } finally {
+      setLineActionBusy("");
+    }
+  }, [activeRecon, syncReconFromServer]);
+
+  const handleUnmatchLine = useCallback(async (lineId) => {
+    if (!activeRecon?._id) return;
+    setLineActionBusy(lineId);
+    try {
+      const { line, reconciliation } = await unmatchStatementLine(activeRecon._id, lineId);
+      setStatementLines((prev) => prev.map((l) => (l._id === lineId ? { ...l, ...line } : l)));
+      syncReconFromServer(reconciliation);
+      toast.success("Unmatched");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to unmatch");
+    } finally {
+      setLineActionBusy("");
+    }
+  }, [activeRecon, syncReconFromServer]);
+
+  const handleCreateTransactionFromLine = useCallback(async (lineId, offsetAccountId) => {
+    if (!activeRecon?._id || !offsetAccountId) return;
+    setLineActionBusy(lineId);
+    try {
+      const { line, reconciliation } = await createTransactionFromStatementLine(activeRecon._id, lineId, { offsetAccount: offsetAccountId });
+      setStatementLines((prev) => prev.map((l) => (l._id === lineId ? { ...l, ...line } : l)));
+      syncReconFromServer(reconciliation);
+      // The new journal entry needs to show up in the main entries table too, not just be cleared —
+      // simplest correct way is to reload the period's entries from the server.
+      const accountId = activeRecon.account?._id || activeRecon.account;
+      const entriesParams = { business: businessId, account: accountId, from: localDate(activeRecon.periodStart), to: localDate(activeRecon.periodEnd) };
+      const firstPage = await getReconciliationEntries(entriesParams);
+      const allEnts = firstPage.hasMore
+        ? await fetchAllEntries(entriesParams, firstPage.entries || [], firstPage.nextCursor)
+        : (firstPage.entries || []);
+      setEntries(allEnts);
+      toast.success("Transaction posted and matched");
+    } catch (err) {
+      toast.error(err?.response?.data?.message || "Failed to post transaction");
+    } finally {
+      setLineActionBusy("");
+    }
+  }, [activeRecon, businessId, fetchAllEntries, syncReconFromServer]);
 
   // ── Escaping for PDF ──────────────────────────────────────────────────────
   // ── Print PDF ────────────────────────────────────────────────────────
@@ -347,8 +500,8 @@ const BankReconciliation = () => {
             <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
               <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">New Reconciliation</p>
               <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-0.5 min-w-[220px]">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Account</label>
+                <div className="min-w-[220px]">
+                  <label className={labelCls}>Account</label>
                   <AppSelect
                     value={formAccount}
                     onChange={(v) => setFormAccount(v ?? "")}
@@ -358,53 +511,48 @@ const BankReconciliation = () => {
                     size="sm"
                   />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period From</label>
-                  <input type="date" value={formFrom} onChange={(e) => setFormFrom(e.target.value)}
-                    className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
+                <div>
+                  <label className={labelCls}>Period From</label>
+                  <input type="date" value={formFrom} onChange={(e) => setFormFrom(e.target.value)} className={inputCls} />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Period To</label>
-                  <input type="date" value={formTo} onChange={(e) => setFormTo(e.target.value)}
-                    className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
+                <div>
+                  <label className={labelCls}>Period To</label>
+                  <input type="date" value={formTo} onChange={(e) => setFormTo(e.target.value)} className={inputCls} />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Opening Bal (KES)</label>
-                  <input type="number" value={formOpenBal} onChange={(e) => setFormOpenBal(e.target.value)}
-                    placeholder="0.00"
-                    className="w-32 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
+                <div className="w-32">
+                  <label className={labelCls}>Opening Bal</label>
+                  <CurrencyInput prefix={null} value={formOpenBal} onChange={(e) => setFormOpenBal(e.target.value)} inputClassName={inputCls} />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Closing Bal (KES) <span className="text-red-500">*</span></label>
-                  <input type="number" value={formCloseBal} onChange={(e) => setFormCloseBal(e.target.value)}
-                    placeholder="0.00"
-                    className="w-32 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
+                <div className="w-32">
+                  <label className={labelCls}>Closing Bal <span className="text-red-500">*</span></label>
+                  <CurrencyInput prefix={null} value={formCloseBal} onChange={(e) => setFormCloseBal(e.target.value)} inputClassName={inputCls} />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="mb-0.5 block text-xs font-semibold text-slate-700">Notes</label>
-                  <input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)}
-                    placeholder="Optional notes…"
-                    className="w-44 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
-                  />
+                <div className="w-44">
+                  <label className={labelCls}>Notes</label>
+                  <input type="text" value={formNotes} onChange={(e) => setFormNotes(e.target.value)} placeholder="Optional notes…" className={inputCls} />
                 </div>
                 <button
                   onClick={handleCreate} disabled={creating}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#0B3B2E] px-3 py-1.5 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
+                  className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"
                 >
                   {creating ? <FaSyncAlt size={9} className="animate-spin" /> : <FaCheck size={9} />}
                   {creating ? "Creating…" : "Start"}
                 </button>
                 <button
                   onClick={() => setShowNewForm(false)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-100"
                 >
                   <FaTimes size={9} /> Cancel
                 </button>
               </div>
+              {formAccount && lastRecon && (
+                <p className="mt-2 text-[10px] text-slate-500">
+                  Continuing from the last reconciliation for this account, ended {fmtDate(lastRecon.periodEnd)} (closing balance KES {fmt(lastRecon.statementClosingBalance)}) — Period From and Opening Balance were prefilled from it.
+                </p>
+              )}
+              {formAccount && !lastRecon && (
+                <p className="mt-2 text-[10px] text-slate-500">No prior reconciliation found for this account — enter the opening balance manually.</p>
+              )}
             </div>
           )}
 
@@ -417,6 +565,7 @@ const BankReconciliation = () => {
                 { label: "Statement Balance (KES)", align: "right" },
                 { label: "Difference (KES)", align: "right" },
                 { label: "Status", align: "center" },
+                { label: "Finalised By" },
                 { label: "Notes" },
               ]}
               rows={history}
@@ -427,7 +576,7 @@ const BankReconciliation = () => {
               renderActions={(r) => r.status !== "reconciled" && (
                 <button
                   onClick={(e) => handleDelete(r._id, e)}
-                  className="rounded p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
+                  className="p-1 text-slate-300 hover:bg-red-50 hover:text-red-500"
                   title="Delete draft"
                 >
                   <FaTrash size={10} />
@@ -435,31 +584,31 @@ const BankReconciliation = () => {
               )}
               renderRow={(r) => (
                 <>
-                  <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">
+                  <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-800">
                     <span className="font-mono text-slate-400 mr-1">{r.accountCode || r.account?.code}</span>
                     {r.accountName || r.account?.name}
                   </td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
                     {fmtDate(r.periodStart)} — {fmtDate(r.periodEnd)}
                   </td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-semibold text-slate-700">
                     {fmt(r.statementClosingBalance)}
                   </td>
-                  <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${Math.abs(r.difference) < 0.005 ? "text-emerald-600" : "text-red-600"}`}>
+                  <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-mono font-semibold ${Math.abs(r.difference) < 0.005 ? "text-emerald-600" : "text-red-600"}`}>
                     {fmt(r.difference)}
                   </td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-center">
-                    {r.status === "reconciled" ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
-                        <FaLock size={8} /> Finalised
-                      </span>
-                    ) : (
-                      <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-600">
-                        Draft
-                      </span>
-                    )}
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
+                    <StatusBadge status={r.status === "reconciled" ? "reconciled" : "draft"} map={RECON_STATUS_MAP} />
                   </td>
-                  <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-400" title={r.notes}>{r.notes || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
+                    {r.status === "reconciled" && r.reconciledBy ? (
+                      <>
+                        {[r.reconciledBy.surname, r.reconciledBy.otherNames].filter(Boolean).join(" ")}
+                        <span className="ml-1 text-[10px] text-slate-400">{fmtDate(r.reconciledAt)}</span>
+                      </>
+                    ) : "—"}
+                  </td>
+                  <td className="max-w-[160px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-400" title={r.notes}>{r.notes || "—"}</td>
                 </>
               )}
             />
@@ -491,11 +640,42 @@ const BankReconciliation = () => {
               {fmtDate(activeRecon?.periodStart)} — {fmtDate(activeRecon?.periodEnd)}
             </span>
             {isLocked && (
-              <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
+              <span className="ml-2 inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
                 <FaLock size={7} /> Finalised
               </span>
             )}
           </div>
+
+          <ListToolbar.Divider />
+
+          {isLocked && !reopening && (
+            <ListToolbar.Button variant="outline" icon={FaLockOpen} onClick={() => setReopening(true)}>
+              Reopen
+            </ListToolbar.Button>
+          )}
+          {isLocked && reopening && (
+            <>
+              <ListToolbar.Input
+                width="w-56"
+                placeholder="Reason for reopening…"
+                value={reopenReason}
+                onChange={(e) => setReopenReason(e.target.value)}
+                autoFocus
+              />
+              <ListToolbar.Button variant="danger" disabled={reopeningBusy || !reopenReason.trim()} onClick={handleReopen}>
+                {reopeningBusy ? <FaSyncAlt size={7} className="animate-spin" /> : null} Confirm Reopen
+              </ListToolbar.Button>
+              <ListToolbar.Button variant="outline" onClick={() => { setReopening(false); setReopenReason(""); }}>
+                Cancel
+              </ListToolbar.Button>
+            </>
+          )}
+
+          {!isLocked && (
+            <ListToolbar.Button variant="outline" icon={FaFileImport} onClick={() => setShowImportModal(true)}>
+              Import Statement
+            </ListToolbar.Button>
+          )}
 
           <ListToolbar.Divider />
 
@@ -522,7 +702,6 @@ const BankReconciliation = () => {
             <>
               <ListToolbar.Button
                 variant="outline"
-                className="border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                 onClick={handleSave}
                 disabled={saving}
               >
@@ -530,9 +709,9 @@ const BankReconciliation = () => {
                 Save Progress
               </ListToolbar.Button>
               <ListToolbar.Button
+                variant="primary"
                 onClick={handleFinalize}
                 disabled={saving || Math.abs(summary.difference) > 0.005}
-                className={Math.abs(summary.difference) < 0.005 ? "!bg-emerald-600 hover:!bg-emerald-700" : "!bg-slate-400"}
                 title={Math.abs(summary.difference) > 0.005 ? "Clear all matching entries first (difference must be 0)" : "Finalise reconciliation"}
               >
                 <FaLock size={7} /> Finalise
@@ -562,6 +741,42 @@ const BankReconciliation = () => {
             </div>
           ))}
         </div>
+
+        {/* Statement Lines — imported bank statement, auto/manually matched against the ledger */}
+        {statementLines.length > 0 && (
+          <div className="shrink-0 border-b border-slate-200 bg-white">
+            <button
+              type="button"
+              onClick={() => setShowStatementLines((p) => !p)}
+              className="flex w-full items-center gap-2 px-4 py-2 text-left hover:bg-slate-50"
+            >
+              {showStatementLines ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Imported Statement Lines ({statementLines.length})
+              </span>
+              <span className="text-[10px] text-slate-400">
+                {statementLines.filter((l) => l.status === "unmatched").length} unmatched
+              </span>
+            </button>
+            {showStatementLines && (
+              <div className="max-h-64 overflow-y-auto border-t border-slate-100">
+                {statementLines.map((line) => (
+                  <StatementLineRow
+                    key={line._id}
+                    line={line}
+                    accounts={allAccounts}
+                    busy={lineActionBusy === line._id}
+                    readOnly={isLocked}
+                    stillCleared={!line.matchedEntry || cleared.has(String(line.matchedEntry))}
+                    onMatch={(entryId) => handleMatchLine(line._id, entryId)}
+                    onUnmatch={() => handleUnmatchLine(line._id)}
+                    onCreateTransaction={(offsetAccountId) => handleCreateTransactionFromLine(line._id, offsetAccountId)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Entries table */}
         <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -605,18 +820,18 @@ const BankReconciliation = () => {
               const amt = Number(e.amount || 0);
               return (
                 <>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
-                  <td className="max-w-[240px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={e.notes}>{e.notes || "—"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-400 capitalize">{(e.sourceTransactionType || "").replace(/_/g, " ")}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
+                  <td className="max-w-[240px] truncate px-3 py-1.5 border-r border-gray-100 text-slate-700" title={e.notes}>{e.notes || "—"}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-slate-400 capitalize">{(e.sourceTransactionType || "").replace(/_/g, " ")}</td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-semibold">
                     {e.direction === "debit" ? <span className="text-emerald-700">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
                   </td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold">
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono font-semibold">
                     {e.direction === "credit" ? <span className="text-red-600">{fmt(amt)}</span> : <span className="text-slate-200">—</span>}
                   </td>
-                  <td className="px-3 py-1 text-center">
+                  <td className="px-3 py-1.5 text-center">
                     {isClear && (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700">
                         <FaCheck size={7} /> Cleared
                       </span>
                     )}
@@ -627,7 +842,129 @@ const BankReconciliation = () => {
           />
         </div>
       </div>
+
+      {showImportModal && (
+        <ImportModal
+          isOpen={showImportModal}
+          onClose={() => setShowImportModal(false)}
+          title="Import Bank Statement"
+          entityName="statement line"
+          parseFile={parseBankStatementCsv}
+          accept=".csv"
+          submitColorClass="bg-[#0B3B2E] hover:bg-[#0A3127]"
+          previewCols={[
+            { header: "Date", render: (r) => fmtDate(r.date) },
+            { header: "Description", render: (r) => r.description || "—" },
+            { header: "Direction", render: (r) => r.direction },
+            { header: "Amount (KES)", render: (r) => fmt(r.amount) },
+          ]}
+          onImport={async (rows) => {
+            const result = await importBankStatementLines(activeRecon._id, rows);
+            await loadStatementLines(activeRecon._id);
+            const full = await getReconciliations({ id: activeRecon._id });
+            syncReconFromServer(full);
+            if (result.autoMatched) toast.info(`${result.autoMatched} of ${result.imported} line(s) auto-matched to existing entries`);
+            return { successful: result.lines, failed: [] };
+          }}
+        />
+      )}
     </DashboardLayout>
+  );
+};
+
+// ─── One imported statement line: shows its match status and the action available for it ───────
+const StatementLineRow = ({ line, accounts, busy, readOnly, stillCleared, onMatch, onUnmatch, onCreateTransaction }) => {
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [offsetAccount, setOffsetAccount] = useState("");
+
+  const confirmCreate = () => {
+    if (!offsetAccount) return;
+    onCreateTransaction(offsetAccount);
+    setShowCreateForm(false);
+    setOffsetAccount("");
+  };
+
+  return (
+    <div className="border-b border-slate-100 px-4 py-2 last:border-0">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="w-20 shrink-0 text-[11px] text-slate-500">{fmtDate(line.date)}</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-slate-700" title={line.description}>{line.description || "—"}</span>
+        <span className={`w-28 shrink-0 text-right font-mono text-xs font-bold ${line.direction === "debit" ? "text-emerald-700" : "text-red-600"}`}>
+          {line.direction === "debit" ? "+" : "−"}{fmt(line.amount)}
+        </span>
+
+        {line.status === "matched" && (
+          <span className={`inline-flex shrink-0 items-center gap-1 border px-2 py-0.5 text-[10px] font-bold ${stillCleared ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+            <FaLink size={8} /> Matched
+          </span>
+        )}
+        {line.status === "created" && (
+          <span className={`inline-flex shrink-0 items-center gap-1 border px-2 py-0.5 text-[10px] font-bold ${stillCleared ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
+            <FaPlus size={8} /> Posted
+          </span>
+        )}
+        {!stillCleared && (line.status === "matched" || line.status === "created") && (
+          <span className="shrink-0 text-[9px] italic text-amber-600" title="This entry was unticked in the table below — it's no longer counted as cleared, even though it's still linked here.">
+            ⚠ unticked below
+          </span>
+        )}
+        {!readOnly && line.status === "matched" && (
+          <button type="button" disabled={busy} onClick={onUnmatch} className="shrink-0 p-1 text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40" title="Undo this match">
+            <FaUnlink size={10} />
+          </button>
+        )}
+
+        {!readOnly && line.status === "unmatched" && !showCreateForm && (
+          <div className="flex shrink-0 items-center gap-1">
+            {line.suggestions?.length > 0 ? (
+              <AppSelect
+                size="sm"
+                placeholder={`${line.suggestions.length} possible match${line.suggestions.length !== 1 ? "es" : ""}…`}
+                value=""
+                onChange={(entryId) => entryId && onMatch(entryId)}
+                options={line.suggestions.map((s) => ({
+                  value: s._id,
+                  label: `KES ${fmt(s.amount)} · ${fmtDate(s.transactionDate)}${s.notes ? ` · ${s.notes}` : ""}`,
+                }))}
+                className="w-64"
+                disabled={busy}
+              />
+            ) : (
+              <span className="text-[10px] italic text-slate-400">No match found in books</span>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setShowCreateForm(true)}
+              className="whitespace-nowrap border border-slate-300 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+            >
+              <FaPlus size={8} className="inline -mt-0.5 mr-1" />Create Transaction
+            </button>
+          </div>
+        )}
+      </div>
+
+      {showCreateForm && (
+        <div className="mt-1.5 ml-20 flex items-center gap-2 border border-slate-200 bg-slate-50 p-2">
+          <span className="text-[10px] font-semibold text-slate-500">Other side of this transaction:</span>
+          <AppSelect
+            size="sm"
+            placeholder="Select offset account…"
+            value={offsetAccount}
+            onChange={(v) => setOffsetAccount(v ?? "")}
+            options={accounts.map((a) => ({ value: a._id, label: `${a.code} — ${a.name}` }))}
+            searchable
+            className="w-56"
+          />
+          <button type="button" disabled={busy || !offsetAccount} onClick={confirmCreate} className="border border-[#0B3B2E] bg-[#0B3B2E] px-2 py-1 text-[10px] font-bold text-white hover:bg-[#0A3127] disabled:opacity-40">
+            {busy ? "Posting…" : "Post & Match"}
+          </button>
+          <button type="button" onClick={() => setShowCreateForm(false)} className="border border-slate-300 bg-white px-2 py-1 text-[10px] font-bold text-slate-700 hover:bg-slate-50">
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -84,6 +84,11 @@ const LeaseSchema = new mongoose.Schema(
     noticePeriodDays: { type: Number, default: 30, min: 0 },
     lateFee: { type: Number, default: 0, min: 0 },
     terms: { type: String, trim: true, default: "" },
+    expiryRemindersSent: {
+      days30: { type: Date, default: null },
+      days7:  { type: Date, default: null },
+      days1:  { type: Date, default: null },
+    },
     status: {
       type: String,
       enum: [

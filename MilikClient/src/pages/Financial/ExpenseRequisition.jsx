@@ -32,6 +32,7 @@ import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
@@ -565,7 +566,7 @@ const ExpenseRequisition = () => {
             </div>
             <div className="grid gap-2 p-6 md:grid-cols-2 xl:grid-cols-3">
               <label className="block xl:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title <span className="text-red-500">*</span></span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span><input type="number" value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
+              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span><CurrencyInput value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1" inputClassName="w-full rounded border border-slate-200 bg-white pl-10 pr-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
               <AppSelect
                 label={termProperty}
                 value={form.property}

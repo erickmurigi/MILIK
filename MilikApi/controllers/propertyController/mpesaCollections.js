@@ -12,6 +12,7 @@ import { createAutoReceipt } from "./rentPayment.js";
 import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
 import { round2 } from "../../utils/math.js";
+import { sendPushToUsers, resolveUsersWithModuleAccess } from "../../utils/pushNotify.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const escapeRegExp = (value = "") => String(value || "").replace(/[|\\{}()\[\]^$+*?.]/g, "\\$&");
@@ -834,6 +835,14 @@ const attemptAutoReceipt = async ({ stored, config }) => {
     await MpesaCollection.findByIdAndUpdate(stored._id, {
       $set: { matchingStatus: "captured", matchedReceipt: receipt._id, "metadata.autoReceiptSkipReason": "" },
     });
+
+    resolveUsersWithModuleAccess(stored.business, "propertyMgmt")
+      .then((userIds) => sendPushToUsers(userIds, {
+        title: "Rent payment received",
+        body: `KES ${round2(stored.amount).toLocaleString()} from ${tenant.name || "a tenant"} via M-Pesa`,
+        data: { type: "rent_payment_received", tenantId: String(tenant._id) },
+      }))
+      .catch(() => {});
   } catch (err) {
     if (err.isDuplicate) {
       await MpesaCollection.findByIdAndUpdate(stored._id, {

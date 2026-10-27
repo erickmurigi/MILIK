@@ -14,6 +14,7 @@ import { postInvoiceJournal } from "./tenantInvoices.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
+import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
 import { round2 } from "../../utils/math.js";
 
@@ -1159,7 +1160,7 @@ export const voidOrphanedJournalGroup = async (req, res, next) => {
 // GET /api/ledger/entries?businessId=X&sourceType=Y&sourceId=Z
 export const getEntriesBySource = async (req, res, next) => {
   const { sourceType, sourceId } = req.query;
-  const businessId = req.user?.company;
+  const businessId = resolveBusinessId(req);
   if (!businessId || !sourceType || !sourceId) {
     return next(createError(400, "businessId, sourceType, and sourceId are required"));
   }

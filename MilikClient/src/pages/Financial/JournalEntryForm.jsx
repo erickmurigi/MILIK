@@ -3,11 +3,12 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
-  FaArrowLeft, FaBalanceScale, FaBook, FaCheckCircle, FaCopy, FaExclamationTriangle, FaPlus, FaSave, FaTag, FaTimes, FaTrash, FaUndo,
+  FaBalanceScale, FaBook, FaCheckCircle, FaCopy, FaExclamationTriangle, FaPlus, FaSave, FaTag, FaTimes, FaTrash, FaUndo,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
+import StatusBadge from "../../components/common/StatusBadge";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import {
@@ -35,12 +36,18 @@ const LINE_TYPES = [
 const TYPE_LABELS = Object.fromEntries(LINE_TYPES.map((t) => [t.value, t.label]));
 const STATUS_STYLES = {
   draft: "bg-slate-100 text-slate-700 border-slate-200",
-  posted: "bg-green-100 text-green-700 border-green-200",
+  posted: "bg-emerald-50 text-emerald-700 border-emerald-200",
   reversed: "bg-amber-100 text-amber-700 border-amber-200",
 };
+const APPROVAL_STYLES = {
+  pending_review: "bg-amber-50 text-amber-700 border-amber-200",
+  reviewed:       "bg-blue-50 text-blue-700 border-blue-200",
+  approved:       "bg-emerald-50 text-emerald-700 border-emerald-200",
+  rejected:       "bg-red-50 text-red-700 border-red-200",
+};
 const GRID = "grid grid-cols-[2rem_minmax(230px,2.2fr)_minmax(150px,1.6fr)_9.5rem_9.5rem_5.5rem_4.5rem] items-start gap-x-2";
-const inputCls = "h-8 w-full rounded border border-slate-200 bg-white px-2 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E] disabled:bg-slate-50";
-const labelCls = "mb-1 block text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500";
+const inputCls = "h-8 w-full border border-slate-200 bg-white px-2 text-xs text-slate-900 outline-none placeholder:text-slate-300 focus:border-[#0B3B2E] disabled:bg-slate-50";
+const labelCls = "mb-1 block text-xs font-bold text-slate-900";
 
 const today = () => new Date().toISOString().split("T")[0];
 let lineSeq = 0;
@@ -126,6 +133,7 @@ const JournalEntryForm = () => {
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [accounts, setAccounts] = useState([]);
   const [tagData, setTagData] = useState({ projects: [], agents: [], listings: [], deals: [], loaded: false });
+  const [focusedAmount, setFocusedAmount] = useState(null); // `${line.key}:${side}` while editing — shows raw digits; comma-formatted otherwise
   const formRef = useRef(null);
 
   // a stored draft from the session may hold lines created before a reload: keep line keys unique
@@ -401,29 +409,17 @@ const JournalEntryForm = () => {
     return chips;
   };
 
-  const title = isNew ? "New journal entry" : saved ? `Journal ${saved.journalNo}` : "Journal entry";
-
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100">
-        {/* header */}
+        {!isNew && saved && (
         <div className="flex flex-none flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
           <div className="flex items-center gap-3">
-            <button type="button" onClick={discard} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 hover:text-slate-900">
-              <FaArrowLeft /> Journals
-            </button>
-            <div className="h-4 w-px bg-slate-200" />
-            <h1 className="text-sm font-black text-slate-900">{title}</h1>
-            {!isNew && saved && (
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[status] || STATUS_STYLES.draft}`}>{status}</span>
-            )}
-            {saved?.approvalStatus && saved.approvalStatus !== "not_required" && (
-              <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700">
-                {String(saved.approvalStatus).replace(/_/g, " ")}
-              </span>
+            <StatusBadge status={status} map={STATUS_STYLES} />
+            {saved.approvalStatus && saved.approvalStatus !== "not_required" && (
+              <StatusBadge status={saved.approvalStatus} map={APPROVAL_STYLES} />
             )}
           </div>
-          {!isNew && saved && (
             <div className="flex flex-wrap items-center gap-2">
               {status === "draft" && !legacy && can.update && (
                 <>
@@ -431,43 +427,43 @@ const JournalEntryForm = () => {
                     rejecting ? (
                       <>
                         <input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason for sending back" className={`${inputCls} w-56`} autoFocus />
-                        <button type="button" disabled={!!busy || !rejectReason.trim()} onClick={() => approval("reject")} className="inline-flex h-8 items-center rounded border border-red-300 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">Send back</button>
+                        <button type="button" disabled={!!busy || !rejectReason.trim()} onClick={() => approval("reject")} className="inline-flex h-8 items-center border border-red-300 bg-red-50 px-3 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">Send back</button>
                         <button type="button" onClick={() => setRejecting(false)} className="text-xs font-bold text-slate-500 hover:underline">Cancel</button>
                       </>
                     ) : (
                       <>
                         {saved.approvalStatus === "pending_review" && (
-                          <button type="button" disabled={!!busy} onClick={() => approval("review")} className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Mark reviewed</button>
+                          <button type="button" disabled={!!busy} onClick={() => approval("review")} className="inline-flex h-8 items-center border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Mark reviewed</button>
                         )}
-                        {can.post && <button type="button" disabled={!!busy} onClick={() => approval("approve")} className="inline-flex h-8 items-center rounded border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">Approve</button>}
-                        <button type="button" disabled={!!busy} onClick={() => setRejecting(true)} className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Send back</button>
+                        {can.post && <button type="button" disabled={!!busy} onClick={() => approval("approve")} className="inline-flex h-8 items-center border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800 hover:bg-emerald-100 disabled:opacity-50">Approve</button>}
+                        <button type="button" disabled={!!busy} onClick={() => setRejecting(true)} className="inline-flex h-8 items-center border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Send back</button>
                       </>
                     )
                   ) : saved.approvalStatus !== "approved" && (
-                    <button type="button" disabled={!!busy} onClick={() => approval("submit")} className="inline-flex h-8 items-center rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50" title="Ask a colleague to review and approve before posting">
+                    <button type="button" disabled={!!busy} onClick={() => approval("submit")} className="inline-flex h-8 items-center border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50" title="Ask a colleague to review and approve before posting">
                       {busy === "submit" ? "Submitting…" : "Submit for review"}
                     </button>
                   )}
                 </>
               )}
               {status === "posted" && (
-                <button type="button" onClick={() => setLedgerOpen(true)} className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={() => setLedgerOpen(true)} className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   <FaBook size={11} /> Ledger entries
                 </button>
               )}
               {!legacy && (
-                <button type="button" onClick={() => navigate(`${base}/new`, { state: { copyFrom: saved } })} className="inline-flex h-8 items-center gap-1.5 rounded border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                <button type="button" onClick={() => navigate(`${base}/new`, { state: { copyFrom: saved } })} className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   <FaCopy size={11} /> Copy as new
                 </button>
               )}
               {status === "posted" && can.reverse && (
-                <button type="button" disabled={!!busy} onClick={reverse} className="inline-flex h-8 items-center gap-1.5 rounded border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50">
+                <button type="button" disabled={!!busy} onClick={reverse} className="inline-flex h-8 items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50">
                   <FaUndo size={11} /> {busy === "reverse" ? "Reversing…" : "Reverse"}
                 </button>
               )}
             </div>
-          )}
         </div>
+        )}
 
         {loading ? (
           <div className="flex flex-1 items-center justify-center text-sm text-slate-500">Loading journal…</div>
@@ -527,7 +523,7 @@ const JournalEntryForm = () => {
             {/* lines */}
             <div className="overflow-x-auto border border-slate-200 bg-white shadow-sm">
               <div className="min-w-[860px]">
-                <div className={`${GRID} border-b border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-bold uppercase tracking-[0.1em] text-slate-500`}>
+                <div className={`${GRID} bg-[#0B3B2E] px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white`}>
                   <span>#</span><span>Account</span><span>Description</span>
                   <span className="text-right">Debit</span><span className="text-right">Credit</span><span className="text-center">Tags</span><span />
                 </div>
@@ -557,26 +553,30 @@ const JournalEntryForm = () => {
                         ) : (
                           <input value={line.description} maxLength={200} onChange={(e) => patchLine(line.key, { description: e.target.value })} placeholder="Line note (optional)" className={inputCls} />
                         )}
-                        {["debit", "credit"].map((side) => (
-                          readOnly ? (
+                        {["debit", "credit"].map((side) => {
+                          const cellId = `${line.key}:${side}`;
+                          const isFocused = focusedAmount === cellId;
+                          return readOnly ? (
                             <div key={side} className="py-1.5 text-right text-xs font-bold tabular-nums text-slate-900">{cents(line[side]) ? money(cents(line[side])) : ""}</div>
                           ) : (
-                            <input key={side} inputMode="decimal" value={line[side]} placeholder="0.00"
+                            <input key={side} inputMode="decimal"
+                              value={isFocused ? line[side] : (cents(line[side]) ? money(cents(line[side])) : "")}
+                              placeholder="0.00"
                               onChange={(e) => setAmount(line, side, e.target.value)}
-                              onBlur={() => formatAmount(line, side)}
-                              onFocus={(e) => e.target.select()}
+                              onBlur={() => { formatAmount(line, side); setFocusedAmount(null); }}
+                              onFocus={(e) => { setFocusedAmount(cellId); e.target.select(); }}
                               onKeyDown={(e) => {
                                 if (e.key === "Enter" && index === doc.lines.length - 1 && side === "credit") { e.preventDefault(); addLine(); }
                               }}
                               className={`${inputCls} text-right font-semibold tabular-nums ${issue === "Enter a debit or a credit" ? "border-red-400" : ""}`} />
-                          )
-                        ))}
+                          );
+                        })}
                         <div className="flex justify-center pt-0.5">
                           {readOnly ? (
                             <span className="pt-1 text-[10px] text-slate-400">{tagCount ? `${tagCount}` : "—"}</span>
                           ) : (
                             <button type="button" onClick={() => patchLine(line.key, { tagsOpen: !line.tagsOpen })} title="Tag this line (project, unit, deal, agent, cost centre…)"
-                              className={`inline-flex h-8 items-center gap-1 rounded border px-2 text-[11px] font-bold ${line.tagsOpen || tagCount ? "border-[#0B3B2E] bg-emerald-50 text-[#0B3B2E]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
+                              className={`inline-flex h-8 items-center gap-1 border px-2 text-[11px] font-bold ${line.tagsOpen || tagCount ? "border-[#0B3B2E] bg-emerald-50 text-[#0B3B2E]" : "border-slate-200 text-slate-500 hover:bg-slate-50"}`}>
                               <FaTag size={10} />{tagCount || ""}
                             </button>
                           )}
@@ -584,8 +584,8 @@ const JournalEntryForm = () => {
                         <div className="flex justify-end gap-0.5 pt-0.5">
                           {!readOnly && (
                             <>
-                              <button type="button" onClick={() => duplicateLine(line)} title="Duplicate line" className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><FaCopy size={11} /></button>
-                              <button type="button" onClick={() => removeLine(line.key)} disabled={doc.lines.length <= 2} title="Remove line" className="rounded p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30"><FaTrash size={11} /></button>
+                              <button type="button" onClick={() => duplicateLine(line)} title="Duplicate line" className="p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><FaCopy size={11} /></button>
+                              <button type="button" onClick={() => removeLine(line.key)} disabled={doc.lines.length <= 2} title="Remove line" className="p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:opacity-30"><FaTrash size={11} /></button>
                             </>
                           )}
                         </div>
@@ -597,7 +597,7 @@ const JournalEntryForm = () => {
                       {!line.tagsOpen && tagCount > 0 && (
                         <div className="ml-10 mt-1 flex flex-wrap gap-1">
                           {chips.map(([k, v]) => (
-                            <span key={k} className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600"><b className="font-bold text-slate-500">{k}:</b> {v}</span>
+                            <span key={k} className="border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600"><b className="font-bold text-slate-500">{k}:</b> {v}</span>
                           ))}
                         </div>
                       )}
@@ -656,14 +656,14 @@ const JournalEntryForm = () => {
               <div><p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Total credit</p><p className="text-sm font-black tabular-nums text-slate-900">{readOnly ? money(cents(saved?.amount)) : money(totals.credit)}</p></div>
               {!readOnly && (
                 totals.diff === 0 && filled.length ? (
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"><FaCheckCircle /> Balanced</span>
+                  <span className="inline-flex items-center gap-1.5 border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700"><FaCheckCircle /> Balanced</span>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
+                    <span className="inline-flex items-center gap-1.5 border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
                       <FaExclamationTriangle /> {filled.length ? `Out by ${money(Math.abs(totals.diff))}` : "Enter the lines"}
                     </span>
                     {filled.length > 0 && (
-                      <button type="button" onClick={balanceIt} className="inline-flex h-7 items-center gap-1.5 rounded border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
+                      <button type="button" onClick={balanceIt} className="inline-flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-2.5 text-[11px] font-bold text-slate-700 hover:bg-slate-50">
                         <FaBalanceScale size={11} /> Balance it
                       </button>
                     )}
@@ -674,19 +674,19 @@ const JournalEntryForm = () => {
             <div className="flex items-center gap-2">
               {!readOnly ? (
                 <>
-                  <button type="button" onClick={discard} className="inline-flex h-9 items-center gap-1.5 rounded border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaTimes size={11} /> {isNew ? "Discard" : "Close"}</button>
-                  <button type="button" disabled={!!busy || !canEditNow} onClick={() => save(false)} className="inline-flex h-9 items-center gap-1.5 rounded border border-[#0B3B2E] bg-white px-4 text-xs font-bold text-[#0B3B2E] hover:bg-emerald-50 disabled:opacity-50">
+                  <button type="button" onClick={discard} className="inline-flex h-9 items-center gap-1.5 border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50"><FaTimes size={11} /> {isNew ? "Discard" : "Close"}</button>
+                  <button type="button" disabled={!!busy || !canEditNow} onClick={() => save(false)} className="inline-flex h-9 items-center gap-1.5 border border-[#0B3B2E] bg-white px-4 text-xs font-bold text-[#0B3B2E] hover:bg-emerald-50 disabled:opacity-50">
                     <FaSave size={11} /> {busy === "save" ? "Saving…" : "Save draft"}
                   </button>
-                  <button type="button" disabled={!!busy || !canEditNow || !can.post} onClick={() => save(true)} className="inline-flex h-9 items-center gap-1.5 rounded bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50">
+                  <button type="button" disabled={!!busy || !canEditNow || !can.post} onClick={() => save(true)} className="inline-flex h-9 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50">
                     <FaCheckCircle size={11} /> {busy === "post" ? "Posting…" : "Save & post"}
                   </button>
                 </>
               ) : (
                 <>
-                  <button type="button" onClick={() => navigate(base)} className="inline-flex h-9 items-center rounded border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50">Back to journals</button>
+                  <button type="button" onClick={() => navigate(base)} className="inline-flex h-9 items-center border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50">Back to journals</button>
                   {status === "draft" && !legacy && can.post && (
-                    <button type="button" disabled={!!busy} onClick={postDraft} className="inline-flex h-9 items-center gap-1.5 rounded bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50"><FaCheckCircle size={11} /> Post</button>
+                    <button type="button" disabled={!!busy} onClick={postDraft} className="inline-flex h-9 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-50"><FaCheckCircle size={11} /> Post</button>
                   )}
                 </>
               )}

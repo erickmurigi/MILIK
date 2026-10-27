@@ -14,6 +14,7 @@ import MilikTable from "../../components/common/MilikTable";
 import StatusBadge from "../../components/common/StatusBadge";
 
 import Modal from "../../components/common/Modal";
+import CurrencyInput from "../../components/common/CurrencyInput";
 
 const SERVICE_STATUS_MAP = {
   active: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -492,7 +493,7 @@ const CarWashServices = () => {
             {/* Basic fields */}
             <div className="grid gap-3 md:grid-cols-2">
               <div className="md:col-span-2">
-                <label className={labelClass}>Service Name *</label>
+                <label className={labelClass}>Service Name <span className="text-red-500">*</span></label>
                 <input className={inputClass} value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} required autoFocus />
               </div>
               <div>
@@ -586,9 +587,9 @@ const CarWashServices = () => {
 
               <div>
                 <label className={labelClass}>
-                  {form.pricingType === "per_sqft" ? "Rate per sq ft (KES) *" : "Default / Fallback Price (KES) *"}
+                  {form.pricingType === "per_sqft" ? "Rate per sq ft" : "Default / Fallback Price"} <span className="text-red-500">*</span>
                 </label>
-                <input className={inputClass} type="number" min="0" value={form.defaultPrice} onChange={(e) => setForm((p) => ({ ...p, defaultPrice: e.target.value }))} required />
+                <CurrencyInput value={form.defaultPrice} onChange={(e) => setForm((p) => ({ ...p, defaultPrice: e.target.value }))} required />
                 <p className="mt-0.5 text-[10px] text-slate-400">
                   {form.pricingType === "per_sqft"
                     ? "Price = area (sq ft) × this rate. Staff enters dimensions when creating a job."
@@ -697,11 +698,8 @@ const CarWashServices = () => {
                           />
                         </td>
                         <td className="px-3 py-1.5">
-                          <input
-                            className="h-9 w-full border border-slate-300 px-2 text-right text-sm font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
-                            type="number"
-                            min="0"
-                            step="1"
+                          <CurrencyInput
+                            inputClassName="h-9 w-full border border-slate-300 pl-10 pr-2 text-right text-sm font-bold text-slate-900 focus:border-[#0B3B2E] focus:outline-none"
                             value={tier.price}
                             onChange={(e) => updateTier(i, "price", e.target.value)}
                             placeholder="Enter price"

@@ -3,7 +3,7 @@
     "name": "Milik",
     "slug": "milik-mobile",
     "version": "1.0.2",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "scheme": "milik",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "com.milik.mobile",
-      "versionCode": 8,
+      "versionCode": 10,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",

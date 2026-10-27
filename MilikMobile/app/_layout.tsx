@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { AppState } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,6 +9,8 @@ import { store } from '../redux/store';
 import { setCredentials, clearCredentials } from '../redux/slices/authSlice';
 import { STORAGE_KEYS } from '../constants';
 import { Colors } from '../constants/colors';
+import { refreshAuthToken } from '../services/api';
+import { registerForPushNotificationsAsync, attachNotificationResponseListener } from '../services/pushNotifications';
 
 function AuthRestorer() {
   const dispatch = useDispatch();
@@ -27,6 +30,8 @@ function AuthRestorer() {
             user:    JSON.parse(userRaw),
             company: JSON.parse(companyRaw),
           }));
+          refreshAuthToken();
+          registerForPushNotificationsAsync();
         } else {
           dispatch(clearCredentials());
         }
@@ -34,6 +39,18 @@ function AuthRestorer() {
         dispatch(clearCredentials());
       }
     })();
+
+    // Keeps an active user's session alive indefinitely — re-check whenever they bring
+    // the app back to the foreground, not just on a fresh launch (the common case for a
+    // mobile app is resuming from background, not relaunching from a killed state).
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') refreshAuthToken();
+    });
+    const removeNotificationListener = attachNotificationResponseListener();
+    return () => {
+      sub.remove();
+      removeNotificationListener();
+    };
   }, []);
 
   return null;

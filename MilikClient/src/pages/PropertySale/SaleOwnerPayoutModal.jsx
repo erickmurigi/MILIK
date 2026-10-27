@@ -4,6 +4,7 @@ import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { FaPlus } from "react-icons/fa";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import Modal from "../../components/common/Modal";
 import { saleApi } from "../../services/propertySaleApi";
 import { useTerms } from "../../hooks/useTerm";
@@ -147,7 +148,7 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
             </div>
             <div>
               <label className={labelClass}>Amount<Required /></label>
-              <input type="number" min="0" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className={inputClass} />
+              <CurrencyInput value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
             </div>
             <div>
               <label className={labelClass}>Date</label>
@@ -192,11 +193,11 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
                   <div key={d.dealId} className="flex items-center gap-2">
                     <div className="flex-1 truncate text-xs font-semibold text-slate-700">{d.listingLabel}</div>
                     <div className="w-28 shrink-0 text-right text-[11px] text-slate-400">avail. {Number(d.available).toLocaleString()}</div>
-                    <input
-                      type="number" min="0" max={d.available}
+                    <CurrencyInput
+                      prefix={null}
                       value={dealAllocations[d.dealId] || ""}
                       onChange={(e) => setDealAllocations((p) => ({ ...p, [d.dealId]: e.target.value }))}
-                      className={`${inputClass} w-28 shrink-0`}
+                      inputClassName={`${inputClass} w-28 shrink-0`}
                       placeholder="0"
                     />
                   </div>
@@ -216,7 +217,7 @@ const RecordOwnerPayoutModal = ({ ownerOptions, initialOwnerId = "", initialAmou
           <div className="grid gap-2.5 md:grid-cols-2">
             <div>
               <label className={labelClass}>CGT Withheld</label>
-              <input type="number" min="0" value={form.cgtAmount} onChange={(e) => setForm((p) => ({ ...p, cgtAmount: e.target.value }))} className={inputClass} />
+              <CurrencyInput value={form.cgtAmount} onChange={(e) => setForm((p) => ({ ...p, cgtAmount: e.target.value }))} inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
             </div>
             <div>
               <label className={labelClass}>CGT Reference</label>

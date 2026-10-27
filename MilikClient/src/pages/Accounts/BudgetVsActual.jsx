@@ -4,7 +4,7 @@ import { useLocation } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
-  FaChartPie, FaCheck, FaEdit, FaPlus, FaSyncAlt, FaTimes, FaTrash,
+  FaCalendarAlt, FaChartPie, FaCheck, FaChevronDown, FaChevronRight, FaEdit, FaPlus, FaSearch, FaSyncAlt, FaTimes, FaTrash,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import ListToolbar from "../../components/common/ListToolbar";
@@ -14,11 +14,32 @@ import {
   deleteBudget, getChartOfAccounts,
 } from "../../redux/apiCalls";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
+import Modal from "../../components/common/Modal";
 import { fmtDate } from "../../utils/dates";
 import { useConfirm } from "../../context/ConfirmContext";
 
-const GRN = "#0B3B2E";
 const fmt  = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const round2 = (n) => Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+const monthLabel = (ym) => {
+  const [y, m] = String(ym || "").split("-").map(Number);
+  if (!y || !m) return ym;
+  return new Date(y, m - 1, 1).toLocaleDateString("en-KE", { month: "short", year: "2-digit" });
+};
+
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+const tableInputClass = "h-7 w-full border bg-white px-2 text-xs text-slate-900 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+
+const Section = ({ title, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white ${className}`}>
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
 
 const VIEW = { LIST: "list", DETAIL: "detail" };
 
@@ -52,6 +73,11 @@ const BudgetVsActual = () => {
   const [view,       setView]       = useTabState("/accounts/budget:view", VIEW.LIST);
   const [budgets,    setBudgets]    = useState([]);
   const [accounts,   setAccounts]   = useState([]);
+
+  // ── List filters ─────────────────────────────────────────────────────────────
+  const [searchInput, setSearchInput] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [yearFilter,   setYearFilter]   = useState("");
   const [activeBudget, setActiveBudget] = useTabState("/accounts/budget:activeBudget", null);
   const [loadingList,  setLoadingList]  = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -70,6 +96,10 @@ const BudgetVsActual = () => {
   const [addAccount,   setAddAccount]     = useState("");
   const [addAmount,    setAddAmount]      = useState("");
   const [savingLines,  setSavingLines]    = useState(false);
+  const [expandedLineIdx, setExpandedLineIdx] = useState(null);
+
+  // ── Variance report: expanded monthly breakdown per line ────────────────────
+  const [expandedVarianceLines, setExpandedVarianceLines] = useState(() => new Set());
 
   // ── Status editor ────────────────────────────────────────────────────────────
   const [savingStatus, setSavingStatus] = useState(false);
@@ -106,6 +136,8 @@ const BudgetVsActual = () => {
       setActiveBudget(full);
       setDraftLines((full.lines || []).map((l) => ({ ...l, account: String(l.account) })));
       setEditingLines(false);
+      setExpandedLineIdx(null);
+      setExpandedVarianceLines(new Set());
       setView(VIEW.DETAIL);
     } catch {
       toast.error("Failed to load budget details");
@@ -241,6 +273,74 @@ const BudgetVsActual = () => {
   const usedIds = useMemo(() => new Set(draftLines.map((l) => l.account)), [draftLines]);
   const availableAccounts = useMemo(() => accounts.filter((a) => !usedIds.has(a._id)), [accounts, usedIds]);
 
+  // ── Months the active budget's period spans, for monthly-spread editing ────
+  const periodMonths = useMemo(() => {
+    if (!activeBudget?.periodStart || !activeBudget?.periodEnd) return [];
+    const start = new Date(activeBudget.periodStart);
+    const end = new Date(activeBudget.periodEnd);
+    const months = [];
+    const cursor = new Date(start.getFullYear(), start.getMonth(), 1);
+    const last = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (cursor <= last) {
+      months.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, "0")}`);
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return months;
+  }, [activeBudget]);
+
+  // ── Toggle a line between a flat total and an editable monthly spread ──────
+  const toggleMonthlySpread = (idx) => {
+    setDraftLines((p) => p.map((l, i) => {
+      if (i !== idx) return l;
+      if (l.monthlyAmounts?.length) {
+        const { monthlyAmounts, ...rest } = l;
+        return rest;
+      }
+      const n = periodMonths.length || 1;
+      const even = round2(Number(l.budgetedAmount || 0) / n);
+      const monthlyAmounts = periodMonths.map((month, mi) => ({
+        month,
+        amount: mi === n - 1 ? round2(Number(l.budgetedAmount || 0) - even * (n - 1)) : even,
+      }));
+      return { ...l, monthlyAmounts };
+    }));
+    setExpandedLineIdx((p) => (p === idx ? null : idx));
+  };
+
+  const updateMonthlyAmount = (idx, month, value) => {
+    setDraftLines((p) => p.map((l, i) => {
+      if (i !== idx) return l;
+      const monthlyAmounts = (l.monthlyAmounts || []).map((m) => (m.month === month ? { ...m, amount: Number(value) || 0 } : m));
+      return { ...l, monthlyAmounts, budgetedAmount: round2(monthlyAmounts.reduce((s, m) => s + Number(m.amount || 0), 0)) };
+    }));
+  };
+
+  const toggleVarianceLine = (key) => {
+    setExpandedVarianceLines((p) => {
+      const next = new Set(p);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  };
+
+  // ── List filters ─────────────────────────────────────────────────────────────
+  const yearOptions = useMemo(() => {
+    const years = new Set(budgets.map((b) => new Date(b.periodStart).getFullYear()).filter((y) => !Number.isNaN(y)));
+    return Array.from(years).sort((a, b) => b - a).map((y) => ({ value: String(y), label: String(y) }));
+  }, [budgets]);
+
+  const filteredBudgets = useMemo(() => {
+    const q = searchInput.trim().toLowerCase();
+    return budgets.filter((b) => {
+      if (q && !b.name?.toLowerCase().includes(q)) return false;
+      if (statusFilter && b.status !== statusFilter) return false;
+      if (yearFilter && String(new Date(b.periodStart).getFullYear()) !== yearFilter) return false;
+      return true;
+    });
+  }, [budgets, searchInput, statusFilter, yearFilter]);
+
+  const resetFilters = () => { setSearchInput(""); setStatusFilter(""); setYearFilter(""); };
+
   // ════════════════════════════════════════════════════════════════════════════
   // LIST VIEW
   // ════════════════════════════════════════════════════════════════════════════
@@ -252,11 +352,49 @@ const BudgetVsActual = () => {
           {/* Toolbar */}
           <ListToolbar>
             <FaChartPie size={10} className="text-slate-400" />
-            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Budget vs Actual</p>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              Budgets: {filteredBudgets.length}
+            </span>
+            <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+              Active: {filteredBudgets.filter((b) => b.status === "active").length}
+            </span>
+
+            <ListToolbar.Divider />
+
+            <div className="relative shrink-0">
+              <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+              <ListToolbar.Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Search budget name…"
+                width="w-44"
+                className="pl-6"
+              />
+            </div>
+
+            <AppSelect
+              size="sm"
+              clearable
+              placeholder="All Statuses"
+              value={statusFilter}
+              onChange={(v) => setStatusFilter(v ?? "")}
+              options={[{ value: "draft", label: "Draft" }, { value: "active", label: "Active" }, { value: "closed", label: "Closed" }]}
+            />
+
+            <AppSelect
+              size="sm"
+              clearable
+              placeholder="All Years"
+              value={yearFilter}
+              onChange={(v) => setYearFilter(v ?? "")}
+              options={yearOptions}
+            />
+
+            {(searchInput || statusFilter || yearFilter) && (
+              <ListToolbar.Button variant="outline" onClick={resetFilters}>Reset</ListToolbar.Button>
+            )}
+
             <div className="flex-1" />
-            <ListToolbar.Button icon={FaPlus} onClick={() => setShowNewForm(true)}>
-              New Budget
-            </ListToolbar.Button>
             <ListToolbar.Button
               variant="outline"
               onClick={() => { fetchedRef.current = false; loadList(); }}
@@ -264,45 +402,53 @@ const BudgetVsActual = () => {
             >
               <FaSyncAlt size={7} className={loadingList ? "animate-spin" : ""} />
             </ListToolbar.Button>
+            <ListToolbar.Divider />
+            <ListToolbar.Button icon={FaPlus} onClick={() => setShowNewForm(true)}>
+              New Budget
+            </ListToolbar.Button>
           </ListToolbar>
 
-          {/* New budget form */}
+          {/* New budget modal */}
           {showNewForm && (
-            <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">New Budget</p>
-              <div className="flex flex-wrap items-end gap-3">
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Name *</label>
-                  <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. FY 2026 Annual"
-                    className="h-7 w-52 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+            <Modal
+              title="New Budget"
+              icon={<FaChartPie size={12} />}
+              onClose={() => setShowNewForm(false)}
+              footer={
+                <>
+                  <button type="button" onClick={() => setShowNewForm(false)}
+                    className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                    Cancel
+                  </button>
+                  <button type="submit" form="new-budget-form" disabled={creating}
+                    className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                    {creating ? <FaSyncAlt size={10} className="animate-spin" /> : <FaCheck size={10} />}
+                    {creating ? "Creating…" : "Create Budget"}
+                  </button>
+                </>
+              }
+            >
+              <form id="new-budget-form" onSubmit={(e) => { e.preventDefault(); handleCreate(); }} className="space-y-3">
+                <div>
+                  <label className={labelClass}>Budget Name<Required /></label>
+                  <input className={inputClass} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. FY 2026 Annual" autoFocus />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Period Start *</label>
-                  <input type="date" value={newStart} onChange={(e) => setNewStart(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Period Start<Required /></label>
+                    <input type="date" className={inputClass} value={newStart} onChange={(e) => setNewStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Period End<Required /></label>
+                    <input type="date" className={inputClass} value={newEnd} onChange={(e) => setNewEnd(e.target.value)} />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Period End *</label>
-                  <input type="date" value={newEnd} onChange={(e) => setNewEnd(e.target.value)}
-                    className="h-7 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
+                <div>
+                  <label className={labelClass}>Notes</label>
+                  <input className={inputClass} value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="Optional…" />
                 </div>
-                <div className="flex flex-col gap-0.5">
-                  <label className="text-[9px] font-semibold uppercase text-slate-400">Notes</label>
-                  <input value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="Optional…"
-                    className="h-7 w-40 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                </div>
-                <button onClick={handleCreate} disabled={creating}
-                  className="flex h-7 items-center gap-1.5 rounded px-3 text-xs font-semibold text-white disabled:opacity-50"
-                  style={{ backgroundColor: GRN }}>
-                  {creating ? <FaSyncAlt size={9} className="animate-spin" /> : <FaCheck size={9} />}
-                  {creating ? "Creating…" : "Create"}
-                </button>
-                <button onClick={() => setShowNewForm(false)}
-                  className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-50">
-                  <FaTimes size={9} /> Cancel
-                </button>
-              </div>
-            </div>
+              </form>
+            </Modal>
           )}
 
           {/* List */}
@@ -316,10 +462,10 @@ const BudgetVsActual = () => {
                 { label: "Total Budgeted (KES)", align: "right" },
                 { label: "Notes" },
               ]}
-              rows={budgets}
+              rows={filteredBudgets}
               rowKey="_id"
-              loading={loadingList}
-              empty="No budgets yet. Click “New Budget” to get started."
+              loading={loadingList && budgets.length === 0}
+              empty={budgets.length === 0 ? "No budgets yet. Click “New Budget” to get started." : "No budgets match these filters."}
               onRowClick={openBudget}
               renderActions={(b) => b.status === "draft" && (
                 <button onClick={(e) => handleDelete(b._id, e)}
@@ -401,78 +547,121 @@ const BudgetVsActual = () => {
 
         {/* Line editor panel */}
         {editingLines && (
-          <div className="shrink-0 border-b border-slate-200 bg-slate-50 px-4 py-3">
-            <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Edit Budget Lines</p>
-
-            {/* Add line row */}
-            <div className="mb-3 flex flex-wrap items-end gap-2">
-              <div className="flex flex-col gap-0.5">
-                <label className="text-[9px] font-semibold uppercase text-slate-400">Account</label>
-                <AppSelect
-                  value={addAccount}
-                  onChange={(v) => setAddAccount(v ?? "")}
-                  options={availableAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name} (${a.type})` }))}
-                  placeholder="Select account…"
-                  searchable
-                  size="sm"
-                />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <label className="text-[9px] font-semibold uppercase text-slate-400">Budgeted Amount (KES)</label>
-                <input type="number" value={addAmount} onChange={(e) => setAddAmount(e.target.value)} placeholder="0.00" min="0"
-                  className="h-7 w-40 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <button onClick={handleAddLine}
-                className="flex h-7 items-center gap-1.5 rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
-                <FaPlus size={9} /> Add Line
-              </button>
-            </div>
-
-            {/* Draft lines mini table */}
-            {draftLines.length > 0 && (
-              <div className="mb-3 overflow-x-auto rounded border border-slate-200 bg-white">
-                <table className="min-w-full text-[11px] border-collapse">
-                  <thead>
-                    <tr className="bg-[#0B3B2E] text-white">
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
-                      <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
-                      <th className="px-3 py-1 text-right font-bold border-r border-white/10">Budgeted (KES)</th>
-                      <th className="px-3 py-1 font-bold" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {draftLines.map((line, idx) => (
-                      <tr key={line.account} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                        <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{line.accountName}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{line.accountType}</td>
-                        <td className="px-3 py-1 border-r border-gray-100 text-right">
-                          <input type="number" value={line.budgetedAmount} min="0"
-                            onChange={(e) => setDraftLines((p) => p.map((l, i) => i === idx ? { ...l, budgetedAmount: Number(e.target.value) } : l))}
-                            className="h-6 w-32 rounded border border-slate-200 px-2 text-right text-xs focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-                        </td>
-                        <td className="px-3 py-1 text-right">
-                          <button onClick={() => setDraftLines((p) => p.filter((_, i) => i !== idx))}
-                            className="text-slate-300 hover:text-red-500"><FaTimes size={10} /></button>
-                        </td>
+          <div className="shrink-0 border-b border-slate-200 bg-slate-50 p-3">
+            <Section title="Edit Budget Lines">
+              {/* Draft lines table */}
+              {draftLines.length > 0 && (
+                <div className="mb-2.5 overflow-x-auto border border-slate-200">
+                  <table className="min-w-full text-[11px] border-collapse">
+                    <thead>
+                      <tr className="bg-[#0B3B2E] text-white">
+                        <th className="w-6 px-1 py-1 border-r border-white/10" />
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
+                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
+                        <th className="px-3 py-1 text-right font-bold border-r border-white/10">Budgeted (KES)</th>
+                        <th className="px-3 py-1 font-bold" />
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    </thead>
+                    <tbody>
+                      {draftLines.map((line, idx) => {
+                        const isSpread = line.monthlyAmounts?.length > 0;
+                        const isExpanded = expandedLineIdx === idx;
+                        return (
+                          <React.Fragment key={line.account}>
+                            <tr className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
+                              <td className="px-1 py-1 border-r border-gray-100 text-center">
+                                <button type="button" onClick={() => setExpandedLineIdx((p) => (p === idx ? null : idx))}
+                                  className="p-0.5 text-slate-400 hover:text-slate-700">
+                                  {isExpanded ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                                </button>
+                              </td>
+                              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{line.accountName}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{line.accountType}</td>
+                              <td className="px-3 py-1 border-r border-gray-100 text-right">
+                                {isSpread ? (
+                                  <span className="font-mono font-semibold text-slate-700">{fmt(line.budgetedAmount)}</span>
+                                ) : (
+                                  <CurrencyInput prefix={null} value={line.budgetedAmount}
+                                    onChange={(e) => setDraftLines((p) => p.map((l, i) => i === idx ? { ...l, budgetedAmount: Number(e.target.value) } : l))}
+                                    inputClassName={`${tableInputClass} text-right`} />
+                                )}
+                              </td>
+                              <td className="px-3 py-1 text-right">
+                                <button onClick={() => setDraftLines((p) => p.filter((_, i) => i !== idx))}
+                                  className="p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><FaTimes size={10} /></button>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="border-b border-gray-100 bg-slate-50/80">
+                                <td colSpan={6} className="px-3 py-2">
+                                  <div className="mb-1.5 flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                                      <FaCalendarAlt size={9} /> Monthly Spread
+                                    </span>
+                                    <button type="button" onClick={() => toggleMonthlySpread(idx)}
+                                      className="text-[10px] font-bold text-[#0B3B2E] underline hover:no-underline">
+                                      {isSpread ? "Clear spread (use flat total)" : "Spread evenly across period"}
+                                    </button>
+                                  </div>
+                                  {isSpread && (
+                                    <div className="flex flex-wrap gap-2">
+                                      {line.monthlyAmounts.map((m) => (
+                                        <div key={m.month} className="w-24">
+                                          <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">{monthLabel(m.month)}</label>
+                                          <CurrencyInput prefix={null} value={m.amount}
+                                            onChange={(e) => updateMonthlyAmount(idx, m.month, e.target.value)}
+                                            inputClassName={`${tableInputClass} text-right`} />
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
-            <div className="flex items-center gap-2">
-              <button onClick={handleSaveLines} disabled={savingLines}
-                className="flex h-7 items-center gap-1.5 rounded px-4 text-xs font-semibold text-white disabled:opacity-50"
-                style={{ backgroundColor: GRN }}>
-                {savingLines ? <FaSyncAlt size={9} className="animate-spin" /> : <FaCheck size={9} />}
-                {savingLines ? "Saving…" : "Save Lines"}
-              </button>
+              {/* Add line row */}
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="min-w-[220px] flex-1">
+                  <label className={labelClass}>Account</label>
+                  <AppSelect
+                    value={addAccount}
+                    onChange={(v) => setAddAccount(v ?? "")}
+                    options={availableAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name} (${a.type})` }))}
+                    placeholder="Select account…"
+                    searchable
+                    size="sm"
+                  />
+                </div>
+                <div className="w-40">
+                  <label className={labelClass}>Budgeted Amount</label>
+                  <CurrencyInput value={addAmount} onChange={(e) => setAddAmount(e.target.value)} placeholder="0.00"
+                    inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
+                </div>
+                <button onClick={handleAddLine}
+                  className="flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
+                  <FaPlus size={9} /> Add Line
+                </button>
+              </div>
+            </Section>
+
+            <div className="mt-2.5 flex items-center justify-end gap-2">
               <button onClick={() => setEditingLines(false)}
-                className="flex h-7 items-center rounded border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
                 Cancel
+              </button>
+              <button onClick={handleSaveLines} disabled={savingLines}
+                className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                {savingLines ? <FaSyncAlt size={10} className="animate-spin" /> : <FaCheck size={10} />}
+                {savingLines ? "Saving…" : "Save Lines"}
               </button>
             </div>
           </div>
@@ -493,6 +682,7 @@ const BudgetVsActual = () => {
             <table className="min-w-full text-[11px] border-collapse">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0B3B2E] text-white">
+                  <th className="w-6 px-1 py-1 border-r border-white/10" />
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
                   <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
                   <th className="px-3 py-1 text-right font-bold border-r border-white/10">Budgeted (KES)</th>
@@ -506,43 +696,95 @@ const BudgetVsActual = () => {
                   <React.Fragment key={type}>
                     {/* Group header */}
                     <tr className="bg-slate-100/80">
-                      <td colSpan={6} className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                      <td colSpan={7} className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
                         {TYPE_LABEL[type] || type}
                       </td>
                     </tr>
                     {lines.map((line, lineIdx) => {
                       const varColor = varianceColor(line.accountType, line.variance);
                       const pct = line.pctUsed;
+                      const hasMonthly = line.monthly?.length > 0;
+                      const lineKey = String(line.account);
+                      const isExpanded = expandedVarianceLines.has(lineKey);
                       return (
-                        <tr key={String(line.account)} className={`border-b border-gray-100 ${lineIdx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
-                          <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{line.accountName}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(line.budgeted ?? line.budgetedAmount)}</td>
-                          <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(line.actual)}</td>
-                          <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${varColor}`}>
-                            {line.variance > 0 ? "+" : ""}{fmt(line.variance)}
-                          </td>
-                          <td className="px-3 py-1 text-right">
-                            {pct !== null ? (
-                              <div className="flex items-center justify-end gap-2">
-                                <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
-                                  <div
-                                    className={`h-full rounded-full ${pct > 100 ? "bg-red-400" : pct > 80 ? "bg-amber-400" : "bg-emerald-400"}`}
-                                    style={{ width: `${Math.min(pct, 100)}%` }}
-                                  />
+                        <React.Fragment key={lineKey}>
+                          <tr className={`border-b border-gray-100 ${lineIdx % 2 === 0 ? "bg-white hover:bg-blue-50/40" : "bg-slate-50/60 hover:bg-blue-50/40"}`}>
+                            <td className="px-1 py-1 border-r border-gray-100 text-center">
+                              {hasMonthly && (
+                                <button type="button" onClick={() => toggleVarianceLine(lineKey)} className="p-0.5 text-slate-400 hover:text-slate-700">
+                                  {isExpanded ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                                </button>
+                              )}
+                            </td>
+                            <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-800">{line.accountName}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(line.budgeted ?? line.budgetedAmount)}</td>
+                            <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-700">{fmt(line.actual)}</td>
+                            <td className={`px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold ${varColor}`}>
+                              {line.variance > 0 ? "+" : ""}{fmt(line.variance)}
+                            </td>
+                            <td className="px-3 py-1 text-right">
+                              {pct !== null ? (
+                                <div className="flex items-center justify-end gap-2">
+                                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                                    <div
+                                      className={`h-full rounded-full ${pct > 100 ? "bg-red-400" : pct > 80 ? "bg-amber-400" : "bg-emerald-400"}`}
+                                      style={{ width: `${Math.min(pct, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className={`w-10 text-right font-mono text-[11px] font-semibold ${pct > 100 ? "text-red-600" : "text-slate-600"}`}>
+                                    {pct.toFixed(0)}%
+                                  </span>
                                 </div>
-                                <span className={`w-10 text-right font-mono text-[11px] font-semibold ${pct > 100 ? "text-red-600" : "text-slate-600"}`}>
-                                  {pct.toFixed(0)}%
-                                </span>
-                              </div>
-                            ) : "—"}
-                          </td>
-                        </tr>
+                              ) : "—"}
+                            </td>
+                          </tr>
+                          {isExpanded && hasMonthly && (
+                            <tr className="border-b border-gray-100 bg-slate-50/80">
+                              <td colSpan={7} className="px-3 py-2">
+                                <div className="overflow-x-auto">
+                                  <table className="border-collapse text-[10px]">
+                                    <thead>
+                                      <tr>
+                                        <th className="px-2 py-0.5 text-left font-bold text-slate-500" />
+                                        {line.monthly.map((m) => (
+                                          <th key={m.month} className="px-2 py-0.5 text-right font-bold text-slate-500">{monthLabel(m.month)}</th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      <tr>
+                                        <td className="px-2 py-0.5 font-semibold text-slate-500">Budgeted</td>
+                                        {line.monthly.map((m) => (
+                                          <td key={m.month} className="px-2 py-0.5 text-right font-mono text-slate-700">{fmt(m.budgeted)}</td>
+                                        ))}
+                                      </tr>
+                                      <tr>
+                                        <td className="px-2 py-0.5 font-semibold text-slate-500">Actual</td>
+                                        {line.monthly.map((m) => (
+                                          <td key={m.month} className="px-2 py-0.5 text-right font-mono text-slate-700">{fmt(m.actual)}</td>
+                                        ))}
+                                      </tr>
+                                      <tr>
+                                        <td className="px-2 py-0.5 font-semibold text-slate-500">Variance</td>
+                                        {line.monthly.map((m) => (
+                                          <td key={m.month} className={`px-2 py-0.5 text-right font-mono font-semibold ${varianceColor(line.accountType, m.variance)}`}>
+                                            {m.variance > 0 ? "+" : ""}{fmt(m.variance)}
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       );
                     })}
                     {/* Group subtotal */}
                     <tr className="bg-slate-50/40 text-[10px] font-bold text-slate-500">
-                      <td colSpan={2} className="px-3 py-1 text-right uppercase tracking-wide">Subtotal</td>
+                      <td colSpan={3} className="px-3 py-1 text-right uppercase tracking-wide">Subtotal</td>
                       <td className="px-3 py-1 text-right font-mono">{fmt(lines.reduce((s, l) => s + Number(l.budgeted ?? l.budgetedAmount ?? 0), 0))}</td>
                       <td className="px-3 py-1 text-right font-mono">{fmt(lines.reduce((s, l) => s + Number(l.actual || 0), 0))}</td>
                       <td className={`px-3 py-1 text-right font-mono ${varianceColor(type, lines.reduce((s, l) => s + Number(l.variance || 0), 0))}`}>
@@ -555,7 +797,7 @@ const BudgetVsActual = () => {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-slate-200 bg-slate-50 text-[10px] font-black text-slate-600">
-                  <td colSpan={2} className="px-4 py-2.5 uppercase tracking-wide">Grand Total</td>
+                  <td colSpan={3} className="px-4 py-2.5 uppercase tracking-wide">Grand Total</td>
                   <td className="px-4 py-2.5 text-right font-mono">{fmt(grandTotals.budgeted)}</td>
                   <td className="px-4 py-2.5 text-right font-mono">{fmt(grandTotals.actual)}</td>
                   <td className={`px-4 py-2.5 text-right font-mono ${Math.abs(grandTotals.variance) < 0.005 ? "text-slate-400" : grandTotals.variance > 0 ? "text-emerald-600" : "text-red-600"}`}>

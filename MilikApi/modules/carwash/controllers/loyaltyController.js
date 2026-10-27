@@ -16,6 +16,7 @@ import { resolveCarWashSmsBody } from '../services/carwashSmsService.js';
 import { postCarWashLoyaltyDiscountLedger } from '../services/carwashAccountingService.js';
 import { normalizePlate, buildPlateRegex } from '../utils/plateUtils.js';
 import { recomputeCustomerStats } from '../services/customerStatsService.js';
+import { sendPushToUsers, resolveCarwashRecipients } from '../../../utils/pushNotify.js';
 
 
 const sendLoyaltySms = async (business, phone, body, templateKey, recipientName = '') => {
@@ -809,6 +810,14 @@ export const sendPaymentConfirmationSms = async ({ business, job, amount, remain
       // Real phone not yet known â€” send to hashed MSISDN via AT's masked-number endpoint
       sendAdHocSmsToMasked({ businessId: business, maskedNumber: maskedMsisdn, body, templateKey: 'carwash_payment_confirmed', recipientName: customerName }).catch(() => {});
     }
+
+    resolveCarwashRecipients(business, job.branch)
+      .then((userIds) => sendPushToUsers(userIds, {
+        title: 'Car wash payment received',
+        body: `KES ${round2(Number(amount || 0)).toLocaleString()} for ${plate} from ${customerName}`,
+        data: { type: 'carwash_payment_received', jobId: String(job._id) },
+      }))
+      .catch(() => {});
   } catch (_err) {
     console.error('[CW Loyalty] sendPaymentConfirmationSms failed: %s', _err?.message || _err);
   }

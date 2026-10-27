@@ -15,6 +15,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import AppSelect from "../../components/common/AppSelect";
+import CurrencyInput from "../../components/common/CurrencyInput";
 import { buildTenantOption, getTenantName } from "../../utils/tenantUtils";
 import { createRentPayment, getTenantInvoices, getChartOfAccounts } from "../../redux/apiCalls";
 import { getProperties } from "../../redux/propertyRedux";
@@ -811,10 +812,6 @@ const AddReceipt = () => {
   };
 
 
-  const preventWheelValueChange = (event) => {
-    event.currentTarget.blur();
-  };
-
   const handleSubmit = useCallback(async () => {
     if (isSaving) return;
     if (!canSaveReceipt) {
@@ -1044,16 +1041,11 @@ const AddReceipt = () => {
 
                   {/* Amount */}
                   <div>
-                    <label className={labelClass}>Amount *</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      inputMode="decimal"
+                    <label className={labelClass}>Amount <span className="text-red-500">*</span></label>
+                    <CurrencyInput
                       value={formData.amount}
                       onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
-                      onWheel={preventWheelValueChange}
-                      className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                      inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")}
                     />
                     {isDepositApplied && (
                       <p className="mt-1 text-[10px] font-bold text-slate-400 uppercase tracking-wide">
@@ -1543,11 +1535,7 @@ const AddReceipt = () => {
                                   />
                                 </div>
                                 <div className="w-36">
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    inputMode="decimal"
+                                  <CurrencyInput
                                     value={line.amount}
                                     onChange={(e) => {
                                       const val = parseFloat(e.target.value) || 0;
@@ -1557,8 +1545,7 @@ const AddReceipt = () => {
                                         return updated;
                                       });
                                     }}
-                                    onWheel={preventWheelValueChange}
-                                    className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                                    inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")}
                                   />
                                 </div>
                                 {prepaymentLines.length > 1 && (

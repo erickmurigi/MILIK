@@ -38,3 +38,29 @@ export const deleteReconciliation = async (id, params = {}) => {
   const res = await adminRequests.delete(`/bank-reconciliation/${id}${q ? `?${q}` : ""}`);
   return res.data;
 };
+export const reopenReconciliation = async (id, data) => {
+  const res = await adminRequests.post(`/bank-reconciliation/${id}/reopen`, data);
+  return res.data;
+};
+
+// ─── Bank Statement Import + Matching ──────────────────────────────────────────
+export const importBankStatementLines = async (id, lines) => {
+  const res = await adminRequests.post(`/bank-reconciliation/${id}/statement-lines`, { lines });
+  return res.data;
+};
+export const getStatementLines = async (id) => {
+  const res = await adminRequests.get(`/bank-reconciliation/${id}/statement-lines`);
+  return res.data;
+};
+export const matchStatementLine = async (id, lineId, entryId) => {
+  const res = await adminRequests.post(`/bank-reconciliation/${id}/statement-lines/${lineId}/match`, { entryId });
+  return res.data;
+};
+export const unmatchStatementLine = async (id, lineId) => {
+  const res = await adminRequests.post(`/bank-reconciliation/${id}/statement-lines/${lineId}/unmatch`);
+  return res.data;
+};
+export const createTransactionFromStatementLine = async (id, lineId, data) => {
+  const res = await adminRequests.post(`/bank-reconciliation/${id}/statement-lines/${lineId}/create-transaction`, data);
+  return res.data;
+};

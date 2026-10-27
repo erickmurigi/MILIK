@@ -28,6 +28,7 @@ import SaleSettings from "../models/SaleSettings.js";
 import { calcWithholding, clampWhtRate } from "../../../utils/withholdingTax.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import Company from "../../../models/Company.js";
+import { sendPushToUsers } from "../../../utils/pushNotify.js";
 import { sendAdHocSms, sendAdHocEmail } from "../../../services/communicationService.js";
 import { deleteDocumentFile } from "../middleware/dealDocumentUpload.js";
 import { agentFilter } from "../middleware/agentScope.js";
@@ -577,6 +578,16 @@ export const closeDeal = async (req, res, next) => {
       return next(createError(422, `GL posting failed during deal close: ${glErr.message}. Deal has been rolled back to active.`));
     }
     await SaleCommission.updateMany({ business, deal: deal._id, status: "pending" }, { status: "approved" });
+
+    if (deal.agent) {
+      SaleAgent.findById(deal.agent).select("userId").lean()
+        .then((agent) => agent?.userId && sendPushToUsers([agent.userId], {
+          title: "Deal closed",
+          body: `Deal #${deal.dealNumber || ""} closed at KES ${round2(deal.agreedPrice).toLocaleString()}`,
+          data: { type: "deal_closed", dealId: String(deal._id) },
+        }))
+        .catch(() => {});
+    }
 
     res.status(200).json({ ...deal.toObject(), totalPaid, balance: 0 });
   } catch (err) {
