@@ -1,12 +1,15 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { selectAllProperties } from "../../redux/selectors";
 import { toast } from "react-toastify";
 import {
+  FaArrowDown,
+  FaArrowUp,
   FaBook,
   FaBoxOpen,
-  FaCheck,
+  FaCog,
   FaMoneyBillWave,
   FaPrint,
   FaPlus,
@@ -17,7 +20,7 @@ import {
 import { printPettyCashVoucher, printReplenishmentSummary } from "../../utils/printPettyCash";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import JournalEntriesDrawer from "../../components/Accounting/JournalEntriesDrawer";
-import { getChartOfAccounts } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 import { getProperties } from "../../redux/propertyRedux";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { useTabState } from "../../hooks/useTabState";
@@ -27,23 +30,48 @@ import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
 import { fmtDate } from "../../utils/dates";
 import Modal from "../../components/common/Modal";
-import { inputClass, labelClass } from "../../utils/formStyles";
 import CurrencyInput from "../../components/common/CurrencyInput";
 import {
   approvePettyCashReplenishment,
-  createPettyCashAccount,
   createPettyCashDisbursement,
   getPettyCashAccounts,
-  getPettyCashDisbursements,
-  getPettyCashReplenishments,
+  getPettyCashLedger,
   postPettyCashReplenishment,
   rejectPettyCashReplenishment,
   requestPettyCashReplenishment,
   voidPettyCashDisbursement,
 } from "../../redux/pettyCashApi";
 
-const MILIK_GREEN = "bg-[#0B3B2E]";
-const MILIK_GREEN_HOVER = "hover:bg-[#0A3127]";
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+
+const Section = ({ title, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white ${className}`}>
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
+
+const FOOTER_VARIANTS = {
+  default: "bg-[#0B3B2E] hover:bg-[#0A3127]",
+  danger: "bg-red-600 hover:bg-red-700",
+  amber: "bg-amber-600 hover:bg-amber-700",
+};
+
+const ModalFooter = ({ onCancel, submitting, submitLabel, savingLabel, formId, variant = "default" }) => (
+  <div className="flex items-center justify-end gap-2">
+    <button type="button" onClick={onCancel} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+      Cancel
+    </button>
+    <button type="submit" form={formId} disabled={submitting}
+      className={`inline-flex h-8 items-center gap-1.5 px-4 text-xs font-black text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${FOOTER_VARIANTS[variant] || FOOTER_VARIANTS.default}`}>
+      {submitting ? savingLabel : submitLabel}
+    </button>
+  </div>
+);
 
 const DEFAULT_PAGE_SIZE = 25;
 
@@ -80,10 +108,17 @@ const STATUS_COLORS = {
   rejected: "bg-red-100 text-red-700",
 };
 
+const STATUS_OPTIONS = [
+  { value: "active", label: "Active" },
+  { value: "void", label: "Void" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+  { value: "posted", label: "Posted" },
+  { value: "rejected", label: "Rejected" },
+];
+
 const fmt = (n) =>
   Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-
 
 // ─── Modal wrapper (preserves open prop) ─────────────────────────────────────
 const PettyCashModal = ({ open, ...props }) => {
@@ -91,7 +126,7 @@ const PettyCashModal = ({ open, ...props }) => {
   return <Modal {...props} />;
 };
 
-// ─── Balance pill ─────────────────────────────────────────────────────────────
+// ─── Balance chip — neutral at rest; color is reserved for the genuine "running low" warning ──
 const BalancePill = ({ account }) => {
   if (!account) return null;
   const balance = Number(account.currentBalance || 0);
@@ -99,58 +134,63 @@ const BalancePill = ({ account }) => {
   const pct = floatAmt > 0 ? Math.min(100, (balance / floatAmt) * 100) : 0;
   const isLow = pct < 25;
   return (
-    <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${isLow ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
-      <FaWallet size={10} />
+    <span className={`shrink-0 flex items-center gap-1 border px-1.5 py-0.5 text-[10px] font-bold ${isLow ? "border-red-200 bg-red-50 text-red-700" : "border-slate-200 bg-white text-slate-700"}`}>
+      <FaWallet size={9} />
       Balance: KES {fmt(balance)}
-      {isLow && <span className="ml-1 text-red-500">(Low)</span>}
-    </div>
+      {isLow && " (Low)"}
+    </span>
   );
 };
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
+// A real cash register shows money out and money in together, chronologically, with a running
+// balance — this page used to split that into two tabs (Disbursements / Replenishments), which
+// made it hard to answer "does this box's balance match what I expect right now." It's now one
+// unified ledger backed by getPettyCashLedger, which merges and sorts both server-side. Account
+// setup (create/edit petty cash boxes) moved to its own page — PettyCashAccounts.jsx — since
+// that's a different task from day-to-day transaction entry.
 const PettyCash = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const currentCompany = useSelector((s) => s.company?.currentCompany);
   const currentUser = useSelector((s) => s.auth?.currentUser);
   const properties = useSelector(selectAllProperties);
   const { propertiesLoaded } = useEntityCache(currentCompany?._id);
 
-  const [activeTab, setActiveTab] = useTabState("/accounts/petty-cash:activeTab", "disbursements");
   const [accounts, setAccounts] = useState([]);
   const [selectedAccountId, setSelectedAccountId] = useTabState("/accounts/petty-cash:selectedAccountId", "");
-  const [disbursements, setDisbursements] = useState([]);
-  const [replenishments, setReplenishments] = useState([]);
+  const [ledgerRows, setLedgerRows] = useState([]);
+  const [ledgerAccount, setLedgerAccount] = useState(null);
   const [coas, setCoas] = useState([]);
   const [loading, setLoading] = useState(false);
   const [glEntry, setGlEntry] = useState(null);
 
   // draft filters (apply on Search)
   const [draftSearch, setDraftSearch] = useState("");
+  const [draftType, setDraftType] = useState("any");
   const [draftCategory, setDraftCategory] = useState("any");
   const [draftStatus, setDraftStatus] = useState("any");
   const [draftFrom, setDraftFrom] = useState("");
   const [draftTo, setDraftTo] = useState("");
   // applied filters
   const [search, setSearch] = useTabState("/accounts/petty-cash:search", "");
+  const [filterType, setFilterType] = useTabState("/accounts/petty-cash:filterType", "any");
   const [filterCategory, setFilterCategory] = useTabState("/accounts/petty-cash:filterCategory", "any");
   const [filterStatus, setFilterStatus] = useTabState("/accounts/petty-cash:filterStatus", "any");
   const [filterFrom, setFilterFrom] = useTabState("/accounts/petty-cash:filterFrom", "");
   const [filterTo, setFilterTo] = useTabState("/accounts/petty-cash:filterTo", "");
 
   // Modals
-  const [showNewAccount, setShowNewAccount] = useState(false);
   const [showNewDisbursement, setShowNewDisbursement] = useState(false);
   const [showReplenishment, setShowReplenishment] = useState(false);
   const [showVoidModal, setShowVoidModal] = useState(null);
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [pageSize, setPageSize] = useTabState("/accounts/petty-cash:pageSize", DEFAULT_PAGE_SIZE);
-  const [disbPage, setDisbPage] = useTabState("/accounts/petty-cash:disbPage", 1);
-  const [repPage, setRepPage] = useTabState("/accounts/petty-cash:repPage", 1);
-  const [disbTotal, setDisbTotal] = useState(0);
-  const [disbPages, setDisbPages] = useState(1);
-  const [repTotal, setRepTotal] = useState(0);
-  const [repPages, setRepPages] = useState(1);
+  const [page, setPage] = useTabState("/accounts/petty-cash:page", 1);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
 
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "pettyCash", "create", "accounts");
   const canApprove = hasCompanyPermission(currentUser, currentCompany, "pettyCash", "approve", "accounts");
@@ -158,22 +198,25 @@ const PettyCash = () => {
   const businessId = currentCompany?._id;
 
   const _uid = currentUser?._id || currentUser?.id;
-  const _pcAccountDraftKey = (businessId && _uid) ? `milik:draft:pc-account:${businessId}:${_uid}` : null;
   const _pcDisbDraftKey = (businessId && _uid) ? `milik:draft:pc-disb:${businessId}:${_uid}` : null;
   const _pcRepDraftKey = (businessId && _uid) ? `milik:draft:pc-rep:${businessId}:${_uid}` : null;
-  const _pcAccountDraftRestored = useRef(false);
   const _pcDisbDraftRestored = useRef(false);
   const _pcRepDraftRestored = useRef(false);
+
+  // A ?account= link (e.g. "View Ledger" from the Accounts page) selects that account once.
+  const _accountParamApplied = useRef(false);
+  useEffect(() => {
+    if (_accountParamApplied.current) return;
+    const fromUrl = searchParams.get("account");
+    if (fromUrl) { setSelectedAccountId(fromUrl); _accountParamApplied.current = true; }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load COAs + properties
   useEffect(() => {
     if (!businessId) return;
     if (!propertiesLoaded) dispatch(getProperties({ business: businessId }));
-    getChartOfAccounts({ business: businessId })
-      .then((res) => {
-        const list = Array.isArray(res) ? res : res?.data || [];
-        setCoas(list.filter((a) => !a.isHeader && a.active !== false && a.isActive !== false));
-      })
+    getCachedChartOfAccounts(businessId)
+      .then((list) => setCoas(list.filter((a) => !a.isHeader && a.active !== false && a.isActive !== false)))
       .catch(() => {});
   }, [businessId, dispatch]);
 
@@ -188,40 +231,30 @@ const PettyCash = () => {
 
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
 
-  const loadTransactions = useCallback(async () => {
+  const loadLedger = useCallback(async () => {
     if (!businessId || !selectedAccountId) return;
     setLoading(true);
     try {
-      const [d, r] = await Promise.all([
-        getPettyCashDisbursements({
-          business: businessId,
-          pettyCashAccountId: selectedAccountId,
-          status: filterStatus !== "any" ? filterStatus : undefined,
-          category: filterCategory !== "any" ? filterCategory : undefined,
-          startDate: filterFrom || undefined,
-          endDate: filterTo || undefined,
-          search: search || undefined,
-          page: disbPage,
-          limit: pageSize,
-        }),
-        getPettyCashReplenishments({
-          business: businessId,
-          pettyCashAccountId: selectedAccountId,
-          page: repPage,
-          limit: pageSize,
-        }),
-      ]);
-      setDisbursements(d.data ?? d);
-      setDisbTotal(d.total ?? 0);
-      setDisbPages(d.pages ?? 1);
-      setReplenishments(r.data ?? r);
-      setRepTotal(r.total ?? 0);
-      setRepPages(r.pages ?? 1);
-    } catch { toast.error("Failed to load transactions"); }
+      const res = await getPettyCashLedger(selectedAccountId, {
+        business: businessId,
+        type: filterType !== "any" ? filterType : undefined,
+        category: filterCategory !== "any" ? filterCategory : undefined,
+        status: filterStatus !== "any" ? filterStatus : undefined,
+        startDate: filterFrom || undefined,
+        endDate: filterTo || undefined,
+        search: search || undefined,
+        page,
+        limit: pageSize,
+      });
+      setLedgerRows(res.data);
+      setTotal(res.total);
+      setPages(res.pages);
+      setLedgerAccount(res.account);
+    } catch { toast.error("Failed to load petty cash ledger"); }
     finally { setLoading(false); }
-  }, [businessId, selectedAccountId, filterStatus, filterCategory, filterFrom, filterTo, search, disbPage, repPage, pageSize]);
+  }, [businessId, selectedAccountId, filterType, filterCategory, filterStatus, filterFrom, filterTo, search, page, pageSize]);
 
-  useEffect(() => { loadTransactions(); }, [loadTransactions]);
+  useEffect(() => { loadLedger(); }, [loadLedger]);
 
   const selectedAccount = useMemo(
     () => accounts.find((a) => String(a._id) === selectedAccountId) || null,
@@ -231,30 +264,18 @@ const PettyCash = () => {
   // ── Apply / reset filters
   const applySearch = () => {
     setSearch(draftSearch);
+    setFilterType(draftType);
     setFilterCategory(draftCategory);
     setFilterStatus(draftStatus);
     setFilterFrom(draftFrom);
     setFilterTo(draftTo);
-    setDisbPage(1);
-    setRepPage(1);
+    setPage(1);
   };
   const resetFilters = () => {
-    setDraftSearch(""); setDraftCategory("any"); setDraftStatus("any"); setDraftFrom(""); setDraftTo("");
-    setSearch(""); setFilterCategory("any"); setFilterStatus("any"); setFilterFrom(""); setFilterTo("");
-    setDisbPage(1);
-    setRepPage(1);
+    setDraftSearch(""); setDraftType("any"); setDraftCategory("any"); setDraftStatus("any"); setDraftFrom(""); setDraftTo("");
+    setSearch(""); setFilterType("any"); setFilterCategory("any"); setFilterStatus("any"); setFilterFrom(""); setFilterTo("");
+    setPage(1);
   };
-
-  // ── Filtered disbursements
-  // Filters are now pushed server-side in loadTransactions — disbursements is already filtered
-  const filteredDisbursements = disbursements;
-
-  // Replenishments still filtered client-side (low volume, no server-side filter params yet)
-  const filteredReplenishments = replenishments;
-
-  // Server already paginates — these are direct aliases
-  const pagedDisbursements = filteredDisbursements;
-  const pagedReplenishments = filteredReplenishments;
 
   // ── Account helpers
   const bankAccounts = useMemo(
@@ -262,49 +283,6 @@ const PettyCash = () => {
     [coas]
   );
   const expenseAccounts = useMemo(() => coas.filter((a) => a.isActive !== false && String(a.type).toLowerCase() === "expense"), [coas]);
-  const assetAccounts = useMemo(() => coas.filter((a) => a.isActive !== false && String(a.type).toLowerCase() === "asset"), [coas]);
-
-  // ── Totals
-  const activeDisbTotal = useMemo(
-    () => filteredDisbursements.filter((d) => d.status === "active").reduce((s, d) => s + Number(d.amount || 0), 0),
-    [filteredDisbursements]
-  );
-  const pendingRepTotal = useMemo(
-    () => replenishments.filter((r) => r.status === "pending").reduce((s, r) => s + Number(r.amount || 0), 0),
-    [replenishments]
-  );
-
-  // ─── New Account form
-  const [accountForm, setAccountForm] = useState({ name: "", custodianName: "", floatAmount: "", glAccountId: "", voucherPrefix: "PCV", notes: "" });
-  const handleCreateAccount = async (e) => {
-    e.preventDefault();
-    if (!accountForm.name.trim()) return toast.error("Account name is required");
-    if (!accountForm.floatAmount || Number(accountForm.floatAmount) <= 0) return toast.error("Float amount must be greater than zero");
-    setSubmitting(true);
-    try {
-      const created = await createPettyCashAccount({ ...accountForm, business: businessId });
-      toast.success("Petty cash account created");
-      closeAccountModal();
-      setAccountForm({ name: "", custodianName: "", floatAmount: "", glAccountId: "", voucherPrefix: "PCV", notes: "" });
-      await loadAccounts();
-      setSelectedAccountId(String(created._id || created.data?._id || ""));
-    } catch (err) { toast.error(err.message); }
-    finally { setSubmitting(false); }
-  };
-
-  useEffect(() => {
-    if (!_pcAccountDraftKey || _pcAccountDraftRestored.current) return;
-    _pcAccountDraftRestored.current = true;
-    try {
-      const raw = window.sessionStorage.getItem(_pcAccountDraftKey);
-      if (raw) { const { form: s } = JSON.parse(raw); if (s) { setAccountForm(s); setShowNewAccount(true); } }
-    } catch {}
-  }, [_pcAccountDraftKey]);
-
-  useEffect(() => {
-    if (!_pcAccountDraftKey || !_pcAccountDraftRestored.current || !showNewAccount) return;
-    try { window.sessionStorage.setItem(_pcAccountDraftKey, JSON.stringify({ form: accountForm })); } catch {}
-  }, [_pcAccountDraftKey, accountForm, showNewAccount]);
 
   // ─── Disbursement form
   const today = new Date().toISOString().split("T")[0];
@@ -313,13 +291,15 @@ const PettyCash = () => {
     e.preventDefault();
     if (!disbForm.amount || Number(disbForm.amount) <= 0) return toast.error("Amount is required");
     if (!disbForm.description.trim()) return toast.error("Description is required");
+    if (!disbForm.expenseAccountId) return toast.error("Expense account is required — it's where this disbursement posts to in the ledger");
     setSubmitting(true);
     try {
       const res = await createPettyCashDisbursement({ ...disbForm, business: businessId, pettyCashAccountId: selectedAccountId });
       toast.success(`Voucher ${res?.data?.voucherNumber || ""} recorded`);
       closeDisbModal();
       setDisbForm({ date: today, amount: "", description: "", category: "maintenance", propertyId: "", expenseAccountId: "", receiptAttached: false, receiptNote: "" });
-      await Promise.all([loadTransactions(), loadAccounts()]);
+      setPage(1);
+      await Promise.all([loadLedger(), loadAccounts()]);
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
@@ -367,13 +347,15 @@ const PettyCash = () => {
   const handleRequestReplenishment = async (e) => {
     e.preventDefault();
     if (!repForm.amount || Number(repForm.amount) <= 0) return toast.error("Amount is required");
+    if (!repForm.bankAccountId) return toast.error("Funding bank account is required");
     setSubmitting(true);
     try {
       await requestPettyCashReplenishment({ ...repForm, business: businessId, pettyCashAccountId: selectedAccountId });
       toast.success("Replenishment request submitted");
       closeRepModal();
       setRepForm({ amount: "", bankAccountId: "", notes: "" });
-      await loadTransactions();
+      setPage(1);
+      await loadLedger();
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
@@ -387,7 +369,7 @@ const PettyCash = () => {
       await voidPettyCashDisbursement(showVoidModal._id, { business: businessId, voidReason });
       toast.success("Disbursement voided");
       setShowVoidModal(null); setVoidReason("");
-      await Promise.all([loadTransactions(), loadAccounts()]);
+      await Promise.all([loadLedger(), loadAccounts()]);
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
@@ -398,7 +380,7 @@ const PettyCash = () => {
     try {
       await approvePettyCashReplenishment(repId, { business: businessId });
       toast.success("Replenishment approved");
-      await loadTransactions();
+      await loadLedger();
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
@@ -409,7 +391,7 @@ const PettyCash = () => {
     try {
       await postPettyCashReplenishment(repId, { business: businessId });
       toast.success("Replenishment posted to ledger");
-      await Promise.all([loadTransactions(), loadAccounts()]);
+      await Promise.all([loadLedger(), loadAccounts()]);
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
@@ -423,15 +405,11 @@ const PettyCash = () => {
       await rejectPettyCashReplenishment(showRejectModal._id, { business: businessId, rejectionReason: rejectReason });
       toast.success("Replenishment rejected");
       setShowRejectModal(null); setRejectReason("");
-      await loadTransactions();
+      await loadLedger();
     } catch (err) { toast.error(err.message); }
     finally { setSubmitting(false); }
   };
 
-  const closeAccountModal = () => {
-    if (_pcAccountDraftKey) { try { window.sessionStorage.removeItem(_pcAccountDraftKey); } catch {} }
-    setShowNewAccount(false);
-  };
   const closeDisbModal = () => {
     if (_pcDisbDraftKey) { try { window.sessionStorage.removeItem(_pcDisbDraftKey); } catch {} }
     setShowNewDisbursement(false);
@@ -441,22 +419,21 @@ const PettyCash = () => {
     setShowReplenishment(false);
   };
 
-  const pendingRepCount = replenishments.filter((r) => r.status === "pending").length;
-
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
         <div className="mx-auto flex h-full w-full max-w-none flex-col overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
 
             {/* ── Sticky toolbar ───────────────────────────────────────────── */}
             <ListToolbar>
-              <span className="shrink-0 text-[9px] font-black text-slate-800">Petty Cash</span>
+              <FaWallet size={10} className="shrink-0 text-slate-400" />
+              <span className="shrink-0 text-[9px] font-black uppercase tracking-widest text-slate-400">Petty Cash Ledger</span>
               {accounts.length > 0 && (
                 <AppSelect
                   value={selectedAccountId}
-                  onChange={(v) => setSelectedAccountId(v ?? "")}
+                  onChange={(v) => { setSelectedAccountId(v ?? ""); setPage(1); }}
                   options={accounts.map((a) => ({ value: String(a._id), label: a.name }))}
                   searchable
                   clearable
@@ -465,81 +442,71 @@ const PettyCash = () => {
               )}
               {selectedAccount && <BalancePill account={selectedAccount} />}
               {selectedAccount && (
-                <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-600">
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
                   Float: KES {fmt(selectedAccount.floatAmount)}
                 </span>
               )}
               {selectedAccount?.custodianName && (
-                <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] text-slate-500">
-                  Custodian: <span className="font-semibold text-slate-700">{selectedAccount.custodianName}</span>
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                  Custodian: <span className="font-normal text-slate-500">{selectedAccount.custodianName}</span>
                 </span>
               )}
-              {activeTab === "disbursements" && filteredDisbursements.length > 0 && (
-                <span className="shrink-0 border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-semibold text-blue-700">
-                  {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""} · KES {fmt(activeDisbTotal)}
+              {total > 0 && (
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
+                  {total} transaction{total !== 1 ? "s" : ""}
                 </span>
               )}
-              {activeTab === "replenishments" && pendingRepCount > 0 && (
-                <span className="shrink-0 border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-semibold text-amber-700">
-                  {pendingRepCount} pending · KES {fmt(pendingRepTotal)}
-                </span>
-              )}
+
               <ListToolbar.Divider />
-              {[
-                { id: "disbursements", label: "Disbursements" },
-                { id: "replenishments", label: "Replenishments", badge: pendingRepCount },
-              ].map((tab) => (
-                <ListToolbar.Button
-                  key={tab.id}
-                  variant={activeTab === tab.id ? "primary" : "outline"}
-                  onClick={() => { setActiveTab(tab.id); resetFilters(); setDisbPage(1); setRepPage(1); }}
-                >
-                  {tab.label}
-                  {tab.badge > 0 && (
-                    <span className="rounded-full bg-amber-500 px-1 text-[8px] font-bold text-white">{tab.badge}</span>
-                  )}
-                </ListToolbar.Button>
-              ))}
-              <ListToolbar.Divider />
-              <ListToolbar.Input
-                type="text"
-                placeholder={activeTab === "disbursements" ? "Search voucher, description…" : "Search ref no…"}
-                value={draftSearch}
-                onChange={(e) => setDraftSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && applySearch()}
-                width="w-40"
-              />
-              {activeTab === "disbursements" && (
-                <AppSelect
-                  value={draftCategory !== "any" ? draftCategory : ""}
-                  onChange={(v) => setDraftCategory(v ?? "any")}
-                  options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
-                  placeholder="Category"
-                  searchable
-                  clearable
-                  compact
+              <div className="relative shrink-0">
+                <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+                <ListToolbar.Input
+                  type="text"
+                  placeholder="Search ref no., description…"
+                  value={draftSearch}
+                  onChange={(e) => setDraftSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && applySearch()}
+                  width="w-44"
+                  className="pl-6"
                 />
-              )}
+              </div>
+              <AppSelect
+                value={draftType !== "any" ? draftType : ""}
+                onChange={(v) => setDraftType(v ?? "any")}
+                options={[{ value: "disbursement", label: "Expenses" }, { value: "replenishment", label: "Top-ups" }]}
+                placeholder="All Types"
+                clearable
+                compact
+              />
+              <AppSelect
+                value={draftCategory !== "any" ? draftCategory : ""}
+                onChange={(v) => setDraftCategory(v ?? "any")}
+                options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+                placeholder="Category"
+                searchable
+                clearable
+                compact
+              />
               <AppSelect
                 value={draftStatus !== "any" ? draftStatus : ""}
                 onChange={(v) => setDraftStatus(v ?? "any")}
-                options={activeTab === "disbursements"
-                  ? [{ value: "active", label: "Active" }, { value: "void", label: "Void" }]
-                  : [{ value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "posted", label: "Posted" }, { value: "rejected", label: "Rejected" }]}
+                options={STATUS_OPTIONS}
                 placeholder="Status"
                 clearable
                 compact
               />
               <ListToolbar.Input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} title="From date" />
               <ListToolbar.Input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} title="To date" />
+              <ListToolbar.Divider />
               <ListToolbar.Button icon={FaSearch} variant="accent" onClick={applySearch}>Search</ListToolbar.Button>
               <ListToolbar.Button icon={FaRedoAlt} onClick={resetFilters}>Reset</ListToolbar.Button>
               <ListToolbar.Divider />
-              <ListToolbar.Button icon={FaPlus} variant="outline" disabled={!canCreate} onClick={() => setShowNewAccount(true)}>
-                New Account
+              <ListToolbar.Button icon={FaCog} variant="outline" onClick={() => navigate("/accounts/petty-cash/accounts")}>
+                Manage Accounts
               </ListToolbar.Button>
               {selectedAccountId && (
                 <>
+                  <ListToolbar.Divider />
                   <ListToolbar.Button
                     icon={FaMoneyBillWave}
                     className="!border !border-amber-300 !bg-amber-50 !text-amber-800 hover:!bg-amber-100"
@@ -561,66 +528,62 @@ const PettyCash = () => {
                 <div className="flex h-full flex-col items-center justify-center py-24 text-center">
                   <FaBoxOpen className="mb-3 text-5xl text-slate-300" />
                   <p className="text-sm font-semibold text-slate-600">No petty cash accounts yet</p>
-                  <p className="mt-1 text-xs text-slate-400">Create your first account to start tracking petty cash</p>
+                  <p className="mt-1 text-xs text-slate-400">Set one up to start tracking petty cash</p>
                   {canCreate && (
                     <button
-                      onClick={() => setShowNewAccount(true)}
-                      className={`mt-5 flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER}`}
+                      onClick={() => navigate("/accounts/petty-cash/accounts")}
+                      className="mt-5 inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127]"
                     >
-                      <FaPlus /> Create Account
+                      <FaPlus size={10} /> Create Account
                     </button>
                   )}
                 </div>
-              ) : activeTab === "disbursements" ? (
+              ) : (
 
-                /* ── Disbursements table */
+                /* ── Unified ledger: disbursements (money out) + replenishments (money in) ── */
                 <MilikTable
                   columns={[
-                    { label: "Voucher No." },
+                    { label: "Type", align: "center" },
                     { label: "Date" },
+                    { label: "Ref No." },
                     { label: "Description" },
                     { label: "Category" },
-                    { label: "Property" },
-                    { label: "Amount (KES)", align: "right" },
-                    { label: "Receipt", align: "center" },
+                    { label: "Money Out (KES)", align: "right" },
+                    { label: "Money In (KES)", align: "right" },
+                    { label: "Balance (KES)", align: "right" },
                     { label: "Status", align: "center" },
                   ]}
-                  rows={pagedDisbursements}
+                  rows={ledgerRows}
                   rowKey="_id"
-                  loading={loading}
-                  empty="No disbursements found"
-                  rowClassName={(row) => row.status === "void" ? "opacity-40" : ""}
-                  renderFooter={() => (
-                    <>
-                      <td colSpan={5} className="px-3 py-1 font-semibold text-slate-600">
-                        {filteredDisbursements.length} voucher{filteredDisbursements.length !== 1 ? "s" : ""}
-                      </td>
-                      <td className="px-3 py-1 text-right font-mono font-bold text-slate-800">
-                        {fmt(activeDisbTotal)}
-                      </td>
-                      <td colSpan={2} />
-                    </>
-                  )}
+                  loading={loading && ledgerRows.length === 0}
+                  empty="No transactions found"
+                  rowClassName={(row) => (row.status === "void" || row.status === "rejected") ? "opacity-40" : ""}
                   renderRow={(row) => (
                     <>
-                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.voucherNumber}</td>
+                      <td className="px-2 py-1 border-r border-gray-100 text-center">
+                        {row.kind === "disbursement"
+                          ? <FaArrowDown className="mx-auto text-red-500" size={10} title="Expense" />
+                          : <FaArrowUp className="mx-auto text-emerald-600" size={10} title="Top-up" />}
+                      </td>
                       <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.date)}</td>
-                      <td className="max-w-[220px] px-3 py-1 border-r border-gray-100 text-slate-700">
-                        <span className="line-clamp-2">{row.description}</span>
+                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.ref}</td>
+                      <td className="max-w-[260px] px-3 py-1 border-r border-gray-100 text-slate-700">
+                        <span className="line-clamp-1">{row.description}</span>
                       </td>
                       <td className="px-3 py-1 border-r border-gray-100">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
-                          {CATEGORY_LABELS[row.category] || row.category}
-                        </span>
+                        {row.kind === "disbursement" && row.category ? (
+                          <span className={`inline-flex rounded-full border px-1.5 py-0 text-[9px] font-semibold ${CATEGORY_COLORS[row.category] || "bg-gray-100 text-gray-700 border-gray-200"}`}>
+                            {CATEGORY_LABELS[row.category] || row.category}
+                          </span>
+                        ) : "—"}
                       </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.property?.propertyName || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-center">
-                        {row.receiptAttached
-                          ? <FaCheck className="mx-auto text-emerald-600" size={10} />
-                          : <span className="text-[10px] text-slate-400">{row.receiptNote ? "Noted" : "—"}</span>
-                        }
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-red-600">
+                        {row.amountOut > 0 ? fmt(row.amountOut) : "—"}
                       </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-emerald-600">
+                        {row.amountIn > 0 ? fmt(row.amountIn) : "—"}
+                      </td>
+                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-bold text-slate-800">{fmt(row.balanceAfter)}</td>
                       <td className="px-3 py-1 border-r border-gray-100 text-center">
                         <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
                           {row.status}
@@ -631,108 +594,54 @@ const PettyCash = () => {
                   renderActions={(row) => (
                     <div className="flex items-center justify-center gap-2">
                       <button
-                        onClick={() => printPettyCashVoucher({ disbursement: row, account: selectedAccount, company: currentCompany, user: currentUser })}
+                        onClick={() => row.kind === "disbursement"
+                          ? printPettyCashVoucher({ disbursement: { ...row, voucherNumber: row.ref, amount: row.amountOut }, account: selectedAccount, company: currentCompany, user: currentUser })
+                          : printReplenishmentSummary({ replenishment: { ...row, replenishmentNumber: row.ref, requestDate: row.date, amount: row.amountIn }, account: selectedAccount, company: currentCompany, user: currentUser })}
                         className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
-                        title="Print voucher"
+                        title="Print"
                       >
                         <FaPrint size={9} />
                       </button>
                       <button
-                        onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_disbursement" })}
+                        onClick={() => setGlEntry({ data: row, sourceType: row.kind === "disbursement" ? "petty_cash_disbursement" : "petty_cash_replenishment" })}
                         className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
                         title="View GL Entries"
                       >
                         <FaBook size={10} />
                       </button>
-                      {row.status === "active" && canApprove && (
+                      {row.kind === "disbursement" && row.status === "active" && canApprove && (
                         <button
-                          onClick={() => setShowVoidModal(row)}
+                          onClick={() => setShowVoidModal({ ...row, voucherNumber: row.ref, amount: row.amountOut })}
                           className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50"
                         >
                           Void
                         </button>
                       )}
-                    </div>
-                  )}
-                />
-
-              ) : (
-
-                /* ── Replenishments table */
-                <MilikTable
-                  columns={[
-                    { label: "Ref No." },
-                    { label: "Request Date" },
-                    { label: "Balance Before", align: "right" },
-                    { label: "Amount (KES)", align: "right" },
-                    { label: "Bank Account" },
-                    { label: "Requested By" },
-                    { label: "Status", align: "center" },
-                  ]}
-                  rows={pagedReplenishments}
-                  rowKey="_id"
-                  loading={loading}
-                  empty="No replenishments yet"
-                  renderRow={(row) => (
-                    <>
-                      <td className="px-3 py-1 border-r border-gray-100 font-mono font-semibold text-slate-700">{row.replenishmentNumber}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{fmtDate(row.requestDate)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono text-slate-600">{fmt(row.balanceBeforeReplenishment)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-semibold text-slate-800">{fmt(row.amount)}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">
-                        {row.bankAccountId
-                          ? `${row.bankAccountId.code ? row.bankAccountId.code + " — " : ""}${row.bankAccountId.name}`
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{row.requestedBy?.name || "—"}</td>
-                      <td className="px-3 py-1 border-r border-gray-100 text-center">
-                        <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "bg-gray-100 text-gray-600 border-gray-200"}`}>
-                          {row.status}
-                        </span>
-                      </td>
-                    </>
-                  )}
-                  renderActions={(row) => (
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => printReplenishmentSummary({ replenishment: row, disbursements, account: selectedAccount, company: currentCompany, user: currentUser })}
-                        className="rounded px-2 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-100"
-                        title="Print reimbursement form"
-                      >
-                        <FaPrint size={9} />
-                      </button>
-                      <button
-                        onClick={() => setGlEntry({ data: row, sourceType: "petty_cash_replenishment" })}
-                        className="rounded p-1 text-teal-600 hover:bg-teal-50 hover:text-teal-800"
-                        title="View GL Entries"
-                      >
-                        <FaBook size={10} />
-                      </button>
-                      {row.status === "pending" && canApprove && (
-                        <button
-                          disabled={submitting}
-                          onClick={() => handleApproveReplenishment(row._id)}
-                          className="rounded px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
-                        >
-                          Approve
-                        </button>
+                      {row.kind === "replenishment" && row.status === "pending" && canApprove && (
+                        <>
+                          <button
+                            disabled={submitting}
+                            onClick={() => handleApproveReplenishment(row._id)}
+                            className="rounded px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          <button
+                            disabled={submitting}
+                            onClick={() => setShowRejectModal({ ...row, replenishmentNumber: row.ref, amount: row.amountIn })}
+                            className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </>
                       )}
-                      {row.status === "approved" && canApprove && (
+                      {row.kind === "replenishment" && row.status === "approved" && canApprove && (
                         <button
                           disabled={submitting}
                           onClick={() => handlePostReplenishment(row._id)}
                           className="rounded px-2 py-0.5 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                         >
                           Post
-                        </button>
-                      )}
-                      {row.status === "pending" && canApprove && (
-                        <button
-                          disabled={submitting}
-                          onClick={() => setShowRejectModal(row)}
-                          className="rounded px-2 py-0.5 text-[10px] font-semibold text-red-600 hover:bg-red-50 disabled:opacity-50"
-                        >
-                          Reject
                         </button>
                       )}
                     </div>
@@ -742,28 +651,16 @@ const PettyCash = () => {
             </div>
 
             {/* ── Pagination ──────────────────────────────────────────────── */}
-            {activeTab === "disbursements" && filteredDisbursements.length > 0 && (
+            {total > 0 && (
               <PaginationBar
-                page={disbPage}
-                pages={disbPages}
-                total={disbTotal}
+                page={page}
+                pages={pages}
+                total={total}
                 pageSize={pageSize}
-                onPageChange={setDisbPage}
-                onPageSizeChange={(n) => { setPageSize(n); setDisbPage(1); setRepPage(1); }}
+                onPageChange={setPage}
+                onPageSizeChange={(n) => { setPageSize(n); setPage(1); }}
                 loading={loading}
-                label="disbursements"
-              />
-            )}
-            {activeTab === "replenishments" && repTotal > 0 && (
-              <PaginationBar
-                page={repPage}
-                pages={repPages}
-                total={repTotal}
-                pageSize={pageSize}
-                onPageChange={setRepPage}
-                onPageSizeChange={(n) => { setPageSize(n); setDisbPage(1); setRepPage(1); }}
-                loading={loading}
-                label="replenishments"
+                label="transactions"
               />
             )}
           </div>
@@ -772,174 +669,142 @@ const PettyCash = () => {
 
       {/* ═══ Modals ═══════════════════════════════════════════════════════════ */}
 
-      {/* New Account */}
-      <PettyCashModal open={showNewAccount} title="New Petty Cash Account" onClose={() => closeAccountModal()}>
-        <form onSubmit={handleCreateAccount} className="space-y-3">
-          <div>
-            <label className={labelClass}>Account Name <span className="text-red-500">*</span></label>
-            <input className={inputClass} value={accountForm.name} onChange={(e) => setAccountForm((p) => ({ ...p, name: e.target.value }))} placeholder="e.g. Head Office Petty Cash" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Custodian Name</label>
-              <input className={inputClass} value={accountForm.custodianName} onChange={(e) => setAccountForm((p) => ({ ...p, custodianName: e.target.value }))} placeholder="Person responsible" />
-            </div>
-            <div>
-              <label className={labelClass}>Voucher Prefix</label>
-              <input className={inputClass} value={accountForm.voucherPrefix} onChange={(e) => setAccountForm((p) => ({ ...p, voucherPrefix: e.target.value.toUpperCase().slice(0, 10) }))} placeholder="PCV" maxLength={10} />
-            </div>
-          </div>
-          <div>
-            <label className={labelClass}>Float Amount <span className="text-red-500">*</span></label>
-            <CurrencyInput value={accountForm.floatAmount} onChange={(e) => setAccountForm((p) => ({ ...p, floatAmount: e.target.value }))} placeholder="e.g. 10000" inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
-          </div>
-          <div>
-            <label className={labelClass}>Petty Cash Asset Account (GL)</label>
-            <AppSelect
-              value={accountForm.glAccountId}
-              onChange={(v) => setAccountForm((p) => ({ ...p, glAccountId: v ?? "" }))}
-              options={assetAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
-              placeholder="— Select account —"
-              searchable
-              clearable
-              size="md"
-              className="w-full"
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Notes</label>
-            <textarea className={inputClass} rows={2} value={accountForm.notes} onChange={(e) => setAccountForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes" />
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => closeAccountModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={submitting} className={`rounded-lg px-5 py-1.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}>
-              {submitting ? "Saving…" : "Create Account"}
-            </button>
-          </div>
-        </form>
-      </PettyCashModal>
-
       {/* New Disbursement */}
-      <PettyCashModal open={showNewDisbursement} title="Record Disbursement" onClose={() => closeDisbModal()}>
-        <form onSubmit={handleCreateDisbursement} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Date <span className="text-red-500">*</span></label>
-              <input type="date" className={inputClass} value={disbForm.date} onChange={(e) => setDisbForm((p) => ({ ...p, date: e.target.value }))} />
+      <PettyCashModal
+        open={showNewDisbursement}
+        title="Record Disbursement"
+        onClose={() => closeDisbModal()}
+        footer={<ModalFooter onCancel={() => closeDisbModal()} submitting={submitting} submitLabel="Record Disbursement" savingLabel="Saving…" formId="pc-disb-form" />}
+      >
+        <form id="pc-disb-form" onSubmit={handleCreateDisbursement} className="space-y-2.5">
+          <Section title="Disbursement Details">
+            <div className="space-y-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className={labelClass}>Date<Required /></label>
+                  <input type="date" className={inputClass} value={disbForm.date} onChange={(e) => setDisbForm((p) => ({ ...p, date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className={labelClass}>Amount<Required /></label>
+                  <CurrencyInput value={disbForm.amount} onChange={(e) => setDisbForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Description<Required /></label>
+                <input className={inputClass} value={disbForm.description} onChange={(e) => setDisbForm((p) => ({ ...p, description: e.target.value }))} placeholder="What was this expense for?" />
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div>
+                  <label className={labelClass}>Category<Required /></label>
+                  <AppSelect
+                    value={disbForm.category}
+                    onChange={(v) => setDisbForm((p) => ({ ...p, category: v ?? "maintenance" }))}
+                    options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
+                    searchable
+                    size="sm"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Property (optional)</label>
+                  <AppSelect
+                    value={disbForm.propertyId}
+                    onChange={(v) => setDisbForm((p) => ({ ...p, propertyId: v ?? "" }))}
+                    options={properties.map((p) => ({ value: String(p._id), label: p.propertyName }))}
+                    placeholder="— None —"
+                    searchable
+                    clearable
+                    size="sm"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>Expense Account (GL)<Required /></label>
+                <AppSelect
+                  value={disbForm.expenseAccountId}
+                  onChange={(v) => setDisbForm((p) => ({ ...p, expenseAccountId: v ?? "" }))}
+                  options={expenseAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
+                  placeholder="— Select account —"
+                  searchable
+                  clearable
+                  size="sm"
+                  className="w-full"
+                />
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Amount <span className="text-red-500">*</span></label>
-              <CurrencyInput value={disbForm.amount} onChange={(e) => setDisbForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
+          </Section>
+          <Section title="Receipt">
+            <div className="space-y-2.5">
+              <label className="flex items-center gap-2 border border-slate-200 bg-slate-50 px-3 py-1.5">
+                <input type="checkbox" checked={disbForm.receiptAttached} onChange={(e) => setDisbForm((p) => ({ ...p, receiptAttached: e.target.checked }))} className="h-3.5 w-3.5 border-slate-300 text-[#0B3B2E]" />
+                <span className="text-xs font-bold text-slate-700">Receipt attached</span>
+              </label>
+              {!disbForm.receiptAttached && (
+                <div>
+                  <label className={labelClass}>Reason (no receipt)</label>
+                  <input className={inputClass} value={disbForm.receiptNote} onChange={(e) => setDisbForm((p) => ({ ...p, receiptNote: e.target.value }))} placeholder="e.g. Receipt lost, purchase below KES 200" />
+                </div>
+              )}
             </div>
-          </div>
-          <div>
-            <label className={labelClass}>Description <span className="text-red-500">*</span></label>
-            <input className={inputClass} value={disbForm.description} onChange={(e) => setDisbForm((p) => ({ ...p, description: e.target.value }))} placeholder="What was this expense for?" />
-          </div>
-          <div>
-            <label className={labelClass}>Category <span className="text-red-500">*</span></label>
-            <AppSelect
-              value={disbForm.category}
-              onChange={(v) => setDisbForm((p) => ({ ...p, category: v ?? "maintenance" }))}
-              options={Object.entries(CATEGORY_LABELS).map(([v, l]) => ({ value: v, label: l }))}
-              searchable
-              size="md"
-              className="w-full"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Property (optional)</label>
-              <AppSelect
-                value={disbForm.propertyId}
-                onChange={(v) => setDisbForm((p) => ({ ...p, propertyId: v ?? "" }))}
-                options={properties.map((p) => ({ value: String(p._id), label: p.propertyName }))}
-                placeholder="— None —"
-                searchable
-                clearable
-                size="md"
-                className="w-full"
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Expense Account (GL)</label>
-              <AppSelect
-                value={disbForm.expenseAccountId}
-                onChange={(v) => setDisbForm((p) => ({ ...p, expenseAccountId: v ?? "" }))}
-                options={expenseAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
-                placeholder="— Auto / None —"
-                searchable
-                clearable
-                size="md"
-                className="w-full"
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <input type="checkbox" id="rcptAttached" checked={disbForm.receiptAttached} onChange={(e) => setDisbForm((p) => ({ ...p, receiptAttached: e.target.checked }))} className="h-3.5 w-3.5 rounded border-slate-300 text-emerald-600" />
-            <label htmlFor="rcptAttached" className="text-xs font-semibold text-slate-700">Receipt attached</label>
-          </div>
-          {!disbForm.receiptAttached && (
-            <div>
-              <label className={labelClass}>Reason (no receipt)</label>
-              <input className={inputClass} value={disbForm.receiptNote} onChange={(e) => setDisbForm((p) => ({ ...p, receiptNote: e.target.value }))} placeholder="e.g. Receipt lost, purchase below KES 200" />
-            </div>
-          )}
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => closeDisbModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={submitting} className={`rounded-lg px-5 py-1.5 text-xs font-semibold text-white shadow-sm ${MILIK_GREEN} ${MILIK_GREEN_HOVER} disabled:opacity-50`}>
-              {submitting ? "Saving…" : "Record Disbursement"}
-            </button>
-          </div>
+          </Section>
         </form>
       </PettyCashModal>
 
       {/* Replenishment Request */}
-      <PettyCashModal open={showReplenishment} title="Request Replenishment" onClose={() => closeRepModal()}>
-        <form onSubmit={handleRequestReplenishment} className="space-y-3">
+      <PettyCashModal
+        open={showReplenishment}
+        title="Request Replenishment"
+        onClose={() => closeRepModal()}
+        footer={<ModalFooter onCancel={() => closeRepModal()} submitting={submitting} submitLabel="Submit Request" savingLabel="Submitting…" formId="pc-rep-form" variant="amber" />}
+      >
+        <form id="pc-rep-form" onSubmit={handleRequestReplenishment} className="space-y-2.5">
           {selectedAccount && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-xs">
-              <p className="font-semibold text-amber-900">Current balance: KES {fmt(selectedAccount.currentBalance)}</p>
+            <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-xs">
+              <p className="font-bold text-amber-900">Current balance: KES {fmt(selectedAccount.currentBalance)}</p>
               <p className="text-amber-700">Float target: KES {fmt(selectedAccount.floatAmount)}</p>
-              {suggestedAmount > 0 && <p className="mt-1 font-semibold text-amber-800">Suggested top-up: KES {fmt(suggestedAmount)}</p>}
+              {suggestedAmount > 0 && <p className="mt-1 font-bold text-amber-800">Suggested top-up: KES {fmt(suggestedAmount)}</p>}
             </div>
           )}
-          <div>
-            <label className={labelClass}>Amount to Top Up <span className="text-red-500">*</span></label>
-            <CurrencyInput value={repForm.amount} onChange={(e) => setRepForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" inputClassName={inputClass.replace("px-3", "pl-10 pr-3")} />
-          </div>
-          <div>
-            <label className={labelClass}>Draw From (Bank Account)</label>
-            <AppSelect
-              value={repForm.bankAccountId}
-              onChange={(v) => setRepForm((p) => ({ ...p, bankAccountId: v ?? "" }))}
-              options={bankAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
-              placeholder="— Select bank account —"
-              searchable
-              clearable
-              size="md"
-              className="w-full"
-            />
-          </div>
-          <div>
-            <label className={labelClass}>Notes</label>
-            <textarea className={inputClass} rows={2} value={repForm.notes} onChange={(e) => setRepForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes for approver" />
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button type="button" onClick={() => closeRepModal()} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-            <button type="submit" disabled={submitting} className="rounded-lg bg-amber-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-50 shadow-sm">
-              {submitting ? "Submitting…" : "Submit Request"}
-            </button>
-          </div>
+          <Section title="Replenishment Details">
+            <div className="space-y-2.5">
+              <div>
+                <label className={labelClass}>Amount to Top Up<Required /></label>
+                <CurrencyInput value={repForm.amount} onChange={(e) => setRepForm((p) => ({ ...p, amount: e.target.value }))} placeholder="0.00" inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
+              </div>
+              <div>
+                <label className={labelClass}>Draw From (Bank Account)<Required /></label>
+                <AppSelect
+                  value={repForm.bankAccountId}
+                  onChange={(v) => setRepForm((p) => ({ ...p, bankAccountId: v ?? "" }))}
+                  options={bankAccounts.map((a) => ({ value: String(a._id), label: `${a.code ? a.code + " — " : ""}${a.name}` }))}
+                  placeholder="— Select bank account —"
+                  searchable
+                  clearable
+                  size="sm"
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Notes</label>
+                <textarea className={`${inputClass.replace("h-7", "h-auto")} py-1.5`} rows={2} value={repForm.notes} onChange={(e) => setRepForm((p) => ({ ...p, notes: e.target.value }))} placeholder="Optional notes for approver" />
+              </div>
+            </div>
+          </Section>
         </form>
       </PettyCashModal>
 
       {/* Void Disbursement */}
-      <PettyCashModal open={!!showVoidModal} title="Void Disbursement" onClose={() => { setShowVoidModal(null); setVoidReason(""); }}>
+      <PettyCashModal
+        open={!!showVoidModal}
+        title="Void Disbursement"
+        onClose={() => { setShowVoidModal(null); setVoidReason(""); }}
+        footer={<ModalFooter onCancel={() => { setShowVoidModal(null); setVoidReason(""); }} submitting={submitting} submitLabel="Void" savingLabel="Voiding…" formId="pc-void-form" variant="danger" />}
+      >
         {showVoidModal && (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs">
-              <p className="font-semibold text-red-900">{showVoidModal.voucherNumber} — KES {fmt(showVoidModal.amount)}</p>
+          <form id="pc-void-form" onSubmit={(e) => { e.preventDefault(); handleVoid(); }} className="space-y-2.5">
+            <div className="border border-red-200 bg-red-50 px-3 py-2 text-xs">
+              <p className="font-bold text-red-900">{showVoidModal.voucherNumber} — KES {fmt(showVoidModal.amount)}</p>
               <p className="mt-0.5 text-red-700">{showVoidModal.description}</p>
               <p className="mt-2 text-red-600">This reverses the ledger entry and restores the balance. Cannot be undone.</p>
             </div>
@@ -947,34 +812,27 @@ const PettyCash = () => {
               <label className={labelClass}>Void Reason</label>
               <input className={inputClass} value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder="Reason for voiding" />
             </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowVoidModal(null); setVoidReason(""); }} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleVoid} disabled={submitting} className="rounded-lg bg-red-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 shadow-sm">
-                {submitting ? "Voiding…" : "Void"}
-              </button>
-            </div>
-          </div>
+          </form>
         )}
       </PettyCashModal>
 
       {/* Reject Replenishment */}
-      <PettyCashModal open={!!showRejectModal} title="Reject Replenishment" onClose={() => { setShowRejectModal(null); setRejectReason(""); }}>
+      <PettyCashModal
+        open={!!showRejectModal}
+        title="Reject Replenishment"
+        onClose={() => { setShowRejectModal(null); setRejectReason(""); }}
+        footer={<ModalFooter onCancel={() => { setShowRejectModal(null); setRejectReason(""); }} submitting={submitting} submitLabel="Reject" savingLabel="Rejecting…" formId="pc-reject-form" variant="danger" />}
+      >
         {showRejectModal && (
-          <div className="space-y-3">
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs">
-              <p className="font-semibold text-red-900">{showRejectModal.replenishmentNumber} — KES {fmt(showRejectModal.amount)}</p>
+          <form id="pc-reject-form" onSubmit={(e) => { e.preventDefault(); handleReject(); }} className="space-y-2.5">
+            <div className="border border-red-200 bg-red-50 px-3 py-2 text-xs">
+              <p className="font-bold text-red-900">{showRejectModal.replenishmentNumber} — KES {fmt(showRejectModal.amount)}</p>
             </div>
             <div>
               <label className={labelClass}>Rejection Reason</label>
               <input className={inputClass} value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Why is this being rejected?" />
             </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowRejectModal(null); setRejectReason(""); }} className="rounded-lg border border-slate-200 bg-white px-4 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={handleReject} disabled={submitting} className="rounded-lg bg-red-600 px-5 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 shadow-sm">
-                {submitting ? "Rejecting…" : "Reject"}
-              </button>
-            </div>
-          </div>
+          </form>
         )}
       </PettyCashModal>
 
@@ -982,14 +840,14 @@ const PettyCash = () => {
         open={!!glEntry}
         onClose={() => setGlEntry(null)}
         title={glEntry?.sourceType === "petty_cash_replenishment" ? "Petty Cash Replenishment" : "Petty Cash Disbursement"}
-        transactionRef={glEntry?.data?.voucherNumber || glEntry?.data?.replenishmentNumber || glEntry?.data?._id}
-        date={glEntry ? new Date(glEntry.data.date || glEntry.data.requestDate || glEntry.data.createdAt).toLocaleDateString("en-GB") : ""}
-        amount={glEntry?.data?.amount}
+        transactionRef={glEntry?.data?.ref}
+        date={glEntry ? fmtDate(glEntry.data.date) : ""}
+        amount={glEntry?.data?.amountOut || glEntry?.data?.amountIn}
         status={glEntry?.data?.status}
-        statusColors={glEntry?.data?.status === "active" ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-700 border-slate-200"}
+        statusColors={(glEntry?.data?.status === "active" || glEntry?.data?.status === "posted") ? "bg-emerald-100 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-700 border-slate-200"}
         contextFields={glEntry ? [
-          { label: "Category", value: glEntry.data.category },
-          { label: "Description", value: glEntry.data.description || glEntry.data.narration },
+          { label: "Category", value: CATEGORY_LABELS[glEntry.data.category] },
+          { label: "Description", value: glEntry.data.description },
           { label: "Requested By", value: glEntry.data.requestedBy?.name || glEntry.data.createdBy?.name },
         ].filter((f) => f.value) : []}
         businessId={currentCompany?._id}

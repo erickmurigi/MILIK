@@ -24,12 +24,12 @@ import { getProperties } from "../../redux/propertyRedux";
 import {
   createJournalEntry,
   deleteJournalEntry,
-  getChartOfAccounts,
   getJournalEntries,
   postJournalEntry,
   reverseJournalEntry,
   updateJournalEntry,
 } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 import { hasCompanyPermission } from "../../utils/permissions";
 import useScopedSessionDraft, { buildScopedDraftKey } from "../../hooks/useScopedSessionDraft";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -222,7 +222,7 @@ const JournalEntries = () => {
     const loadAccounts = async () => {
       if (!currentCompany?._id) return;
       try {
-        const rows = await getChartOfAccounts({ business: currentCompany._id });
+        const rows = await getCachedChartOfAccounts(currentCompany._id);
         setAccounts(
           Array.isArray(rows)
             ? rows.filter((row) => row?.isPosting !== false && row?.isHeader !== true)
@@ -665,7 +665,7 @@ const JournalEntries = () => {
               ]}
               rows={journals}
               rowKey="_id"
-              loading={loading}
+              loading={loading && journals.length === 0}
               empty="No journals found."
               minWidth="1300px"
               onRowClick={(journal) => openJournalPage(journal)}

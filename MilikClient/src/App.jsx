@@ -136,6 +136,7 @@ const AccountsDashboard     = lazy(() => import("./pages/Accounts/AccountsDashbo
 // Financial
 const PaymentVouchers       = lazy(() => import("./pages/Financial/PaymentVouchers"));
 const PettyCash             = lazy(() => import("./pages/Financial/PettyCash"));
+const PettyCashAccounts     = lazy(() => import("./pages/Financial/PettyCashAccounts"));
 const ServiceProviders      = lazy(() => import("./pages/Financial/ServiceProviders"));
 const ExpenseRequisition    = lazy(() => import("./pages/Financial/ExpenseRequisition"));
 const ChartOfAccounts       = lazy(() => import("./pages/Financial/ChartOfAccounts"));
@@ -724,6 +725,7 @@ function App() {
             <Route path="/accounts/payment-vouchers"                       element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
             <Route path="/accounts/payment-vouchers/new"                   element={<Guard moduleKey="accounts" resource="paymentVouchers"><PaymentVouchers /></Guard>} />
             <Route path="/accounts/petty-cash"                             element={<Guard moduleKey="accounts" resource="pettyCash"><PettyCash /></Guard>} />
+            <Route path="/accounts/petty-cash/accounts"                    element={<Guard moduleKey="accounts" resource="pettyCash"><PettyCashAccounts /></Guard>} />
             <Route path="/accounts/expenses"                               element={<Guard moduleKey="accounts" resource="expenses"><ExpenseRequisition /></Guard>} />
             <Route path="/accounts/service-providers"                      element={<Guard moduleKey="accounts" resource="expenses"><ServiceProviders /></Guard>} />
             <Route path="/accounts/trial-balance"                          element={<Guard moduleKey="accounts" resource="financialReports"><TrialBalanceReport /></Guard>} />

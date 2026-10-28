@@ -12,9 +12,10 @@ import StatusBadge from "../../components/common/StatusBadge";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { getProperties } from "../../redux/propertyRedux";
 import {
-  approveJournalEntry, createJournalEntry, getChartOfAccounts, getJournalEntry, postJournalEntry, rejectJournalEntry, reverseJournalEntry,
+  approveJournalEntry, createJournalEntry, getJournalEntry, postJournalEntry, rejectJournalEntry, reverseJournalEntry,
   reviewJournalEntry, submitJournalForReview, updateJournalEntry,
 } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 import { saleApi } from "../../services/propertySaleApi";
 import { hasCompanyModule } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -144,7 +145,7 @@ const JournalEntryForm = () => {
   useEffect(() => {
     if (!company?._id) return;
     let live = true;
-    getChartOfAccounts({ business: company._id })
+    getCachedChartOfAccounts(company._id)
       .then((rows) => live && setAccounts((Array.isArray(rows) ? rows : []).filter((r) => r?.isPosting !== false && r?.isHeader !== true && r?.active !== false && r?.isActive !== false)))
       .catch((e) => toast.error(e?.response?.data?.message || "Failed to load chart of accounts"));
     if (hasPM) dispatch(getProperties({ business: company._id }));

@@ -78,6 +78,7 @@ const PRELOAD_ENTRIES = [
   ['/accounts/journals',                  () => import('../pages/Financial/JournalEntries')],
   ['/accounts/payment-vouchers',          () => import('../pages/Financial/PaymentVouchers')],
   ['/accounts/petty-cash',                () => import('../pages/Financial/PettyCash')],
+  ['/accounts/petty-cash/accounts',       () => import('../pages/Financial/PettyCashAccounts')],
   ['/accounts/expenses',                  () => import('../pages/Financial/ExpenseRequisition')],
   ['/accounts/service-providers',         () => import('../pages/Financial/ServiceProviders')],
   ['/accounts/trial-balance',             () => import('../pages/Reports/TrialBalanceReport')],

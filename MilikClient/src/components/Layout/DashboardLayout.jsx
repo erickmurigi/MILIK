@@ -843,6 +843,7 @@ const TopToolbar = ({
         "acc-journals":          "/accounts/journals",
         "acc-payment-vouchers":  "/accounts/payment-vouchers",
         "acc-petty-cash":        "/accounts/petty-cash",
+        "acc-petty-cash-accounts": "/accounts/petty-cash/accounts",
         "acc-expenses":          "/accounts/expenses",
         "acc-service-providers": "/accounts/service-providers",
         "acc-trial-balance":     "/accounts/trial-balance",
@@ -1293,7 +1294,8 @@ const TopToolbar = ({
           icon: FaCreditCard,
           submenu: [
             { id: "acc-payment-vouchers",  label: "Payment Vouchers",     icon: FaCreditCard },
-            { id: "acc-petty-cash",        label: "Petty Cash",           icon: FaWallet },
+            { id: "acc-petty-cash",        label: "Petty Cash Ledger",    icon: FaWallet },
+            { id: "acc-petty-cash-accounts", label: "Petty Cash Accounts", icon: FaCog },
             { type: "separator" },
             { id: "acc-expenses",          label: "Expense Requisitions", icon: FaFileInvoice },
             { id: "acc-service-providers", label: "Service Providers",    icon: FaCog },

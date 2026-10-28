@@ -35,12 +35,12 @@ import { fmtDate } from "../../utils/dates";
 import {
   createPaymentVoucher,
   deletePaymentVoucher,
-  getChartOfAccounts,
   getPaymentVouchers,
   getServiceProviders,
   updatePaymentVoucher,
   updatePaymentVoucherStatus,
 } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 import { getProperties } from "../../redux/propertyRedux";
 import { saleApi } from "../../services/propertySaleApi";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
@@ -468,7 +468,7 @@ const PaymentVouchers = () => {
       if (!currentCompany?._id) return;
       try {
         const [rows, spData] = await Promise.all([
-          getChartOfAccounts({ business: currentCompany._id }),
+          getCachedChartOfAccounts(currentCompany._id),
           getServiceProviders({ business: currentCompany._id, active: "true", limit: 200 }).catch(() => null),
         ]);
         const postingAccounts = Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false && row?.isActive !== false) : [];
@@ -1422,11 +1422,6 @@ const PaymentVouchers = () => {
               <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Paid: KES {stats.paid.toLocaleString()}</span>
               <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Draft: {stats.draft}</span>
               <ListToolbar.Divider />
-              <span className="shrink-0 text-[9px] text-slate-400">Due</span>
-              <ListToolbar.Input type="date" value={filters.startDate} onChange={setFilter("startDate")} />
-              <span className="shrink-0 text-[9px] text-slate-400">—</span>
-              <ListToolbar.Input type="date" value={filters.endDate} onChange={setFilter("endDate")} />
-              <ListToolbar.Divider />
               <div className="relative shrink-0">
                 <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
                 <ListToolbar.Input
@@ -1470,14 +1465,19 @@ const PaymentVouchers = () => {
                   searchable
                 />
               )}
+              <span className="shrink-0 text-[9px] text-slate-400">Due</span>
+              <ListToolbar.Input type="date" value={filters.startDate} onChange={setFilter("startDate")} />
+              <span className="shrink-0 text-[9px] text-slate-400">—</span>
+              <ListToolbar.Input type="date" value={filters.endDate} onChange={setFilter("endDate")} />
+              <ListToolbar.Divider />
               <ListToolbar.Button icon={FaFilter} variant="outline" onClick={() => setFilters({ search: "", category: "all", status: "all", propertyId: "all", startDate: "", endDate: "" })}>
                 Reset
               </ListToolbar.Button>
               <ListToolbar.Divider />
               <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrintList}>Print</ListToolbar.Button>
               <ListToolbar.Button icon={FaDownload} variant="outline" onClick={handleExportCsv}>Export</ListToolbar.Button>
+              <ListToolbar.Button variant="danger" disabled={selectedIds.length === 0} onClick={bulkDeleteSelected}>Delete Selected</ListToolbar.Button>
               <ListToolbar.Divider />
-              <ListToolbar.Button variant="danger" onClick={bulkDeleteSelected}>Delete Selected</ListToolbar.Button>
               <ListToolbar.Button icon={FaPlus} disabled={!canCreateVoucher} onClick={openCreate}>New Voucher</ListToolbar.Button>
             </ListToolbar>
             <MilikTable
@@ -1494,7 +1494,7 @@ const PaymentVouchers = () => {
               ]}
               rows={filtered}
               rowKey="_id"
-              loading={loading}
+              loading={loading && filtered.length === 0}
               empty="No payment vouchers found."
               minWidth="1200px"
               checkboxes

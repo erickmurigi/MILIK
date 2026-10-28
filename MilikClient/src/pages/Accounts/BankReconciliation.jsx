@@ -21,8 +21,8 @@ import {
   finalizeReconciliation, reopenReconciliation, deleteReconciliation,
   importBankStatementLines, getStatementLines, matchStatementLine,
   unmatchStatementLine, createTransactionFromStatementLine,
-  getChartOfAccounts,
 } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 import { fmtDate } from "../../utils/dates";
 import { useConfirm } from "../../context/ConfirmContext";
 const fmt = (v) => Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -147,7 +147,7 @@ const BankReconciliation = () => {
       const [accs, hist, allAccs] = await Promise.all([
         getBankReconciliationAccounts({ business: businessId }),
         getReconciliations({ business: businessId }),
-        getChartOfAccounts({ business: businessId }),
+        getCachedChartOfAccounts(businessId),
       ]);
       setAccounts(Array.isArray(accs)  ? accs  : []);
       setHistory( Array.isArray(hist)  ? hist  : []);
@@ -570,7 +570,7 @@ const BankReconciliation = () => {
               ]}
               rows={history}
               rowKey="_id"
-              loading={loadingHistory}
+              loading={loadingHistory && history.length === 0}
               empty="No reconciliations yet. Click “New Reconciliation” to get started."
               onRowClick={openRecon}
               renderActions={(r) => r.status !== "reconciled" && (
@@ -791,7 +791,7 @@ const BankReconciliation = () => {
             ]}
             rows={filteredEntries}
             rowKey="_id"
-            loading={loadingEntries}
+            loading={loadingEntries && filteredEntries.length === 0}
             empty="No ledger entries found for this account and period"
             checkboxes={!isLocked}
             allChecked={allVisibleCleared}

@@ -8,7 +8,7 @@ import {
 import {
   FaArchive, FaArrowDown, FaArrowUp, FaBalanceScale, FaBook, FaCalendarAlt, FaChartLine, FaChartPie,
   FaCoins, FaCreditCard, FaExclamationTriangle, FaFileContract, FaFileInvoice, FaFileInvoiceDollar, FaHourglassHalf,
-  FaLayerGroup, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers,
+  FaLayerGroup, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers, FaWallet,
 } from "react-icons/fa";
 import { selectCurrentCompany } from "../../redux/selectors";
 import ModuleShell from "../../components/Layout/ModuleShell";
@@ -39,7 +39,8 @@ const QUICK_GROUPS = [
     links: [
       { label: "Creditors Ledger",     to: "/accounts/creditor-ledger",   Icon: FaFileContract },
       { label: "Payment Vouchers",     to: "/accounts/payment-vouchers",  Icon: FaCreditCard },
-      { label: "Petty Cash",           to: "/accounts/petty-cash",        Icon: FaCoins },
+      { label: "Petty Cash Ledger",    to: "/accounts/petty-cash",        Icon: FaCoins },
+      { label: "Petty Cash Accounts",  to: "/accounts/petty-cash/accounts", Icon: FaWallet },
       { label: "Expense Requisitions", to: "/accounts/expenses",          Icon: FaFileInvoice },
       { label: "Service Providers",    to: "/accounts/service-providers", Icon: FaUsers },
     ],

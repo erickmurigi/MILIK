@@ -36,11 +36,56 @@ import CurrencyInput from "../../components/common/CurrencyInput";
 import PaginationBar from '../../components/PaginationBar';
 import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
+import Modal from "../../components/common/Modal";
 import { useTerms } from "../../hooks/useTerm";
 
 const DEFAULT_PAGE_SIZE = 50;
 
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+
+const Section = ({ title, children, className = "" }) => (
+  <div className={`border border-slate-200 bg-white ${className}`}>
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5">
+      <h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3>
+    </div>
+    <div className="p-2.5">{children}</div>
+  </div>
+);
+
+const FOOTER_VARIANTS = {
+  default: "bg-[#0B3B2E] hover:bg-[#0A3127]",
+  danger: "bg-red-600 hover:bg-red-700",
+  amber: "bg-amber-600 hover:bg-amber-700",
+  success: "bg-emerald-600 hover:bg-emerald-700",
+};
+
+const ModalFooter = ({ onCancel, submitting, submitLabel, savingLabel, formId, variant = "default", cancelLabel = "Cancel" }) => (
+  <div className="flex items-center justify-end gap-2">
+    <button type="button" onClick={onCancel} disabled={submitting} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+      {cancelLabel}
+    </button>
+    <button type="submit" form={formId} disabled={submitting}
+      className={`inline-flex h-8 items-center gap-1.5 px-4 text-xs font-black text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${FOOTER_VARIANTS[variant] || FOOTER_VARIANTS.default}`}>
+      {submitting ? savingLabel : submitLabel}
+    </button>
+  </div>
+);
+
+const ActionIcon = ({ icon: Icon, title, onClick, danger }) => (
+  <button
+    type="button"
+    title={title}
+    onClick={onClick}
+    className={`p-1 ${danger ? "text-red-600 hover:bg-red-50 hover:text-red-800" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+  >
+    <Icon size={12} />
+  </button>
+);
+
 const todayIso = () => new Date().toISOString().split("T")[0];
+const fmt = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const blankForm = {
   title: "",
@@ -162,7 +207,6 @@ const ExpenseRequisition = () => {
       total: serverTotal,
       submitted: rows.filter((row) => row.status === "submitted").length,
       approvedReady: rows.filter((row) => row.status === "approved" && !row.linkedVoucher).length,
-      converted: rows.filter((row) => row.status === "converted").length,
     }),
     [rows, serverTotal]
   );
@@ -370,91 +414,35 @@ const ExpenseRequisition = () => {
   const renderActions = (row) => {
     const rowStatus = String(row?.status || "draft");
     return (
-      <div className="inline-flex flex-wrap justify-end gap-2">
+      <div className="flex items-center justify-end gap-1">
         {rowStatus === "draft" && (
           <>
-            <button
-              onClick={() => openEdit(row)}
-              className="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-700"
-            >
-              <FaEdit /> Edit
-            </button>
-            <button
-              onClick={() => handleStatus(row, "submitted")}
-              className="inline-flex items-center gap-1 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-700"
-            >
-              <FaCheck /> Submit
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
-            >
-              <FaTrash /> Delete
-            </button>
+            <ActionIcon icon={FaEdit} title="Edit" onClick={() => openEdit(row)} />
+            <ActionIcon icon={FaCheck} title="Submit for approval" onClick={() => handleStatus(row, "submitted")} />
+            <ActionIcon icon={FaTrash} title="Delete" danger onClick={() => handleDelete(row)} />
           </>
         )}
 
         {rowStatus === "submitted" && (
           <>
-            {canApprove && (
-              <button
-                onClick={() => handleStatus(row, "approved")}
-                className="inline-flex items-center gap-1 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700"
-              >
-                <FaCheck /> Approve
-              </button>
-            )}
-            {canApprove && (
-              <button
-                onClick={() => handleStatus(row, "rejected")}
-                className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-black text-amber-700"
-              >
-                <FaTimes /> Reject
-              </button>
-            )}
-            {canUpdate && (
-              <button
-                onClick={() => handleStatus(row, "draft")}
-                className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
-              >
-                <FaUndo /> Recall
-              </button>
-            )}
+            {canApprove && <ActionIcon icon={FaCheck} title="Approve" onClick={() => handleStatus(row, "approved")} />}
+            {canApprove && <ActionIcon icon={FaTimes} title="Reject" onClick={() => handleStatus(row, "rejected")} />}
+            {canUpdate && <ActionIcon icon={FaUndo} title="Recall to draft" onClick={() => handleStatus(row, "draft")} />}
           </>
         )}
 
         {rowStatus === "approved" && !row.linkedVoucher && (
-          <button
-            onClick={() => handleCreateVoucher(row)}
-            className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700"
-          >
-            <FaFileInvoiceDollar /> Create Voucher
-          </button>
+          <ActionIcon icon={FaFileInvoiceDollar} title="Create payment voucher" onClick={() => handleCreateVoucher(row)} />
         )}
 
         {row.linkedVoucher && (
-          <button
-            onClick={() => openLinkedVoucher(row)}
-            className="inline-flex items-center gap-1 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-black text-violet-700"
-          >
-            <FaExternalLinkAlt /> Voucher
-          </button>
+          <ActionIcon icon={FaExternalLinkAlt} title="View linked voucher" onClick={() => openLinkedVoucher(row)} />
         )}
 
         {["rejected", "cancelled"].includes(rowStatus) && (
           <>
-            <button
-              onClick={() => handleStatus(row, "draft")}
-              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-black text-slate-700"
-            >
-              <FaUndo /> Reopen Draft
-            </button>
-            <button
-              onClick={() => handleDelete(row)}
-              className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-black text-rose-700"
-            >
-              <FaTrash /> Delete
-            </button>
+            <ActionIcon icon={FaUndo} title="Reopen as draft" onClick={() => handleStatus(row, "draft")} />
+            <ActionIcon icon={FaTrash} title="Delete" danger onClick={() => handleDelete(row)} />
           </>
         )}
       </div>
@@ -465,10 +453,16 @@ const ExpenseRequisition = () => {
     <DashboardLayout lockContentScroll>
       <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2">
         <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
             <ListToolbar>
-              <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-bold text-slate-600">Selected: {selectedIds.length}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Requisitions: {stats.total}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Submitted: {stats.submitted}</span>
+              {stats.approvedReady > 0 && (
+                <span className="shrink-0 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">Ready to Pay: {stats.approvedReady}</span>
+              )}
+
               <ListToolbar.Divider />
+
               <div className="relative shrink-0">
                 <FaSearch className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-[8px] text-slate-400" />
                 <ListToolbar.Input
@@ -503,10 +497,16 @@ const ExpenseRequisition = () => {
                 compact
                 clearable
               />
+
+              <ListToolbar.Divider />
               <ListToolbar.Button icon={FaUndo} variant="outline" onClick={() => setFilters({ search: "", status: "all", propertyId: "all" })}>Reset</ListToolbar.Button>
-              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows} />
-              <ListToolbar.Button icon={FaTrash} variant="danger" disabled={!canDelete} onClick={handleBulkDelete}>Delete</ListToolbar.Button>
-              <ListToolbar.Button icon={FaPlus} variant="accent" disabled={!canCreate} onClick={openCreate}>New Requisition</ListToolbar.Button>
+              <ListToolbar.Button icon={FaRedoAlt} variant="outline" onClick={loadRows} title="Refresh" />
+
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaTrash} variant="danger" disabled={!canDelete || selectedIds.length === 0} onClick={handleBulkDelete}>Delete</ListToolbar.Button>
+
+              <ListToolbar.Divider />
+              <ListToolbar.Button icon={FaPlus} disabled={!canCreate} onClick={openCreate}>New Requisition</ListToolbar.Button>
             </ListToolbar>
 
             <MilikTable
@@ -519,7 +519,7 @@ const ExpenseRequisition = () => {
               ]}
               rows={rows}
               rowKey="_id"
-              loading={loading}
+              loading={loading && rows.length === 0}
               empty="No expense requisitions found."
               minWidth="1120px"
               checkboxes
@@ -534,7 +534,7 @@ const ExpenseRequisition = () => {
                   <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-[10px] text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[10px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
                   <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || `No ${termProperty.toLowerCase()}`}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
                   <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-black text-slate-900">KES {Number(row.amount || 0).toLocaleString()}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-bold text-slate-900">KES {fmt(row.amount)}</td>
                   <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
                 </>
               )}
@@ -549,135 +549,158 @@ const ExpenseRequisition = () => {
               onPageSizeChange={(n) => { setPageSize(n); setCurrentPage(1); }}
               loading={loading}
               label="requisitions"
+              leftExtra={selectedIds.length > 0 && (
+                <span className="shrink-0 border border-[#0B3B2E] bg-[#F1F6F3] px-1.5 py-0.5 text-[10px] font-bold text-[#0B3B2E]">Selected {selectedIds.length}</span>
+              )}
             />
           </div>
         </div>
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-slate-900/45 px-3 py-2 sm:items-center sm:p-6">
-          <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
-            <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between bg-[#0B3B2E] px-6 py-4 text-white">
-              <div>
-                <p className="text-xs font-black uppercase tracking-[0.18em] text-emerald-100">Expense Requisition</p>
-                <h3 className="text-xl font-black">{editingId ? "Edit Draft Requisition" : "New Requisition"}</h3>
+        <Modal
+          title={editingId ? "Edit Draft Requisition" : "New Requisition"}
+          icon={<FaFileInvoiceDollar size={12} />}
+          onClose={closeModal}
+          size="extraWide"
+          footer={
+            <>
+              <button type="button" onClick={closeModal} disabled={saving} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+                Cancel
+              </button>
+              <button type="button" onClick={() => handleSave("draft")} disabled={saving} className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60">
+                <FaSave size={10} /> {saving ? "Saving…" : editingId ? "Update Draft" : "Save Draft"}
+              </button>
+              <button type="button" onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+                <FaCheck size={10} /> {saving ? "Saving…" : editingId ? "Update & Submit" : "Save & Submit"}
+              </button>
+            </>
+          }
+        >
+          <div className="space-y-2.5">
+            <Section title="Requisition Details">
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="col-span-2">
+                    <label className={labelClass}>Title<Required /></label>
+                    <input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Amount<Required /></label>
+                    <CurrencyInput value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <AppSelect
+                    label={termProperty}
+                    value={form.property}
+                    onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
+                    options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
+                    placeholder="Select property"
+                    size="sm"
+                    searchable
+                  />
+                  <AppSelect
+                    label="Service Provider"
+                    value={form.serviceProvider}
+                    onChange={(v) => setForm((prev) => ({ ...prev, serviceProvider: v ?? "" }))}
+                    options={providers.map((p) => ({ value: p._id, label: `${p.providerCode} - ${p.name}` }))}
+                    placeholder="Select provider"
+                    size="sm"
+                    searchable
+                    clearable
+                  />
+                  <AppSelect
+                    label="Priority"
+                    value={form.priority}
+                    onChange={(v) => setForm((prev) => ({ ...prev, priority: v ?? "normal" }))}
+                    options={[
+                      { value: "low", label: "Low" },
+                      { value: "normal", label: "Normal" },
+                      { value: "high", label: "High" },
+                      { value: "urgent", label: "Urgent" },
+                    ]}
+                    size="sm"
+                  />
+                </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <AppSelect
+                    label="Category"
+                    value={form.category}
+                    onChange={(v) => setForm((prev) => ({ ...prev, category: v ?? "general" }))}
+                    options={[
+                      { value: "general", label: "General" },
+                      { value: "maintenance", label: "Maintenance" },
+                      { value: "repair", label: "Repair" },
+                      { value: "utility", label: "Utility" },
+                      { value: "tax", label: "Tax" },
+                      { value: "insurance", label: "Insurance" },
+                      { value: "supplies", label: "Supplies" },
+                      { value: "other", label: "Other" },
+                    ]}
+                    size="sm"
+                  />
+                  <div>
+                    <label className={labelClass}>Request Date</label>
+                    <input type="date" value={form.requestDate} onChange={(e) => setForm((prev) => ({ ...prev, requestDate: e.target.value }))} className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Needed By</label>
+                    <input type="date" value={form.neededBy} onChange={(e) => setForm((prev) => ({ ...prev, neededBy: e.target.value }))} className={inputClass} />
+                  </div>
+                </div>
               </div>
-              <button onClick={closeModal} className="rounded-full border border-white/30 p-2 hover:bg-white/10"><FaTimes /></button>
-            </div>
-            <div className="grid gap-2 p-6 md:grid-cols-2 xl:grid-cols-3">
-              <label className="block xl:col-span-2"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Title <span className="text-red-500">*</span></span><input value={form.title} onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Amount <span className="text-red-500">*</span></span><CurrencyInput value={form.amount} onChange={(e) => setForm((prev) => ({ ...prev, amount: e.target.value }))} className="mt-1" inputClassName="w-full rounded border border-slate-200 bg-white pl-10 pr-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <AppSelect
-                label={termProperty}
-                value={form.property}
-                onChange={(v) => setForm((prev) => ({ ...prev, property: v ?? "" }))}
-                options={properties.map((p) => ({ value: p._id, label: `${p.propertyCode ? `[${p.propertyCode}] ` : ""}${p.propertyName || p.name}` }))}
-                placeholder="Select property"
-                size="md"
-                searchable
-              />
-              <AppSelect
-                label="Service Provider"
-                value={form.serviceProvider}
-                onChange={(v) => setForm((prev) => ({ ...prev, serviceProvider: v ?? "" }))}
-                options={providers.map((p) => ({ value: p._id, label: `${p.providerCode} - ${p.name}` }))}
-                placeholder="Select provider"
-                size="md"
-                searchable
-                clearable
-              />
-              <AppSelect
-                label="Priority"
-                value={form.priority}
-                onChange={(v) => setForm((prev) => ({ ...prev, priority: v ?? "normal" }))}
-                options={[
-                  { value: "low", label: "Low" },
-                  { value: "normal", label: "Normal" },
-                  { value: "high", label: "High" },
-                  { value: "urgent", label: "Urgent" },
-                ]}
-                size="md"
-              />
-              <AppSelect
-                label="Category"
-                value={form.category}
-                onChange={(v) => setForm((prev) => ({ ...prev, category: v ?? "general" }))}
-                options={[
-                  { value: "general", label: "General" },
-                  { value: "maintenance", label: "Maintenance" },
-                  { value: "repair", label: "Repair" },
-                  { value: "utility", label: "Utility" },
-                  { value: "tax", label: "Tax" },
-                  { value: "insurance", label: "Insurance" },
-                  { value: "supplies", label: "Supplies" },
-                  { value: "other", label: "Other" },
-                ]}
-                size="md"
-              />
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Request Date</span><input type="date" value={form.requestDate} onChange={(e) => setForm((prev) => ({ ...prev, requestDate: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Needed By</span><input type="date" value={form.neededBy} onChange={(e) => setForm((prev) => ({ ...prev, neededBy: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Description</span><textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-              <label className="block xl:col-span-3"><span className="mb-0.5 block text-xs font-semibold text-slate-700">Internal Notes</span><textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className="mt-1 w-full rounded border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20" /></label>
-            </div>
-            <div className="sticky bottom-0 z-20 flex flex-wrap items-center justify-end gap-3 border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur-sm">
-              <button onClick={closeModal} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
-              <button onClick={() => handleSave("draft")} disabled={saving} className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"><FaSave /> {saving ? "Saving..." : editingId ? "Update Draft" : "Save Draft"}</button>
-              <button onClick={() => handleSave("submitted")} disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-[#0B3B2E] px-4 py-2 text-xs font-black text-white hover:bg-[#0A3127] disabled:opacity-60"><FaCheck /> {saving ? "Saving..." : editingId ? "Update & Submit" : "Save & Submit"}</button>
-            </div>
+            </Section>
+            <Section title="Additional Info">
+              <div className="space-y-2.5">
+                <div>
+                  <label className={labelClass}>Description</label>
+                  <textarea rows={3} value={form.description} onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))} className={`${inputClass.replace("h-7", "h-auto")} py-1.5`} />
+                </div>
+                <div>
+                  <label className={labelClass}>Internal Notes</label>
+                  <textarea rows={2} value={form.notes} onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))} className={`${inputClass.replace("h-7", "h-auto")} py-1.5`} />
+                </div>
+              </div>
+            </Section>
           </div>
-        </div>
+        </Modal>
       )}
 
       {statusModal.open && (() => {
         const isApprove  = statusModal.status === "approved";
         const isReject   = statusModal.status === "rejected";
-        const headerCls  = isApprove ? "bg-emerald-700" : isReject ? "bg-red-700" : "bg-amber-700";
-        const btnCls     = isApprove ? "bg-emerald-600 hover:bg-emerald-700" : isReject ? "bg-red-600 hover:bg-red-700" : "bg-amber-600 hover:bg-amber-700";
-        const bannerCls  = isApprove ? "bg-emerald-50 border-emerald-200 text-emerald-800" : isReject ? "bg-red-50 border-red-200 text-red-800" : "bg-amber-50 border-amber-200 text-amber-800";
-        const iconCls    = isApprove ? "text-emerald-500" : isReject ? "text-red-500" : "text-amber-500";
-        const Icon       = isApprove ? FaCheck : FaUndo;
+        const variant    = isApprove ? "success" : isReject ? "danger" : "amber";
+        const bannerCls  = isApprove ? "border-emerald-200 bg-emerald-50 text-emerald-800" : isReject ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-800";
         const label      = isApprove ? "Approve Requisition" : isReject ? "Reject Requisition" : "Cancel Requisition";
-        const fieldLabel = isApprove ? "Approval Note (optional)" : isReject ? "Rejection Reason *" : "Cancellation Reason";
+        const fieldLabel = isApprove ? "Approval Note (optional)" : isReject ? "Rejection Reason" : "Cancellation Reason";
         const btnLabel   = isApprove ? "Approve" : isReject ? "Reject" : "Cancel Requisition";
         const banner     = isApprove ? "Approving clears this requisition for payment settlement." : isReject ? "Rejecting will notify the requester. A reason is required." : "This will cancel the requisition. This action cannot be undone.";
+        const closeStatusModal = () => setStatusModal({ open: false, row: null, status: "", reason: "", loading: false });
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-              <div className={`${headerCls} px-6 py-4 flex items-center gap-3`}>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/15">
-                  <Icon className="text-white text-sm" />
-                </div>
-                <div>
-                  <h2 className="text-white font-semibold text-base leading-tight">{label}</h2>
-                  <p className="text-white/60 text-xs mt-0.5">{statusModal.row?.requisitionNumber || ""}</p>
-                </div>
+          <Modal
+            title={label}
+            icon={isApprove ? <FaCheck size={12} /> : isReject ? <FaTimes size={12} /> : <FaUndo size={12} />}
+            onClose={closeStatusModal}
+            footer={<ModalFooter onCancel={closeStatusModal} submitting={statusModal.loading} submitLabel={btnLabel} savingLabel="Saving…" formId="expense-status-form" variant={variant} cancelLabel="Cancel" />}
+          >
+            <form id="expense-status-form" onSubmit={(e) => { e.preventDefault(); handleStatusConfirm(); }} className="space-y-2.5">
+              <p className="text-xs font-bold text-slate-500">{statusModal.row?.requisitionNo || ""}</p>
+              <div className={`border px-3 py-2 text-xs ${bannerCls}`}>{banner}</div>
+              <div>
+                <label className={labelClass}>{fieldLabel}{isReject && <Required />}</label>
+                <textarea
+                  rows={3}
+                  autoFocus
+                  className={`${inputClass.replace("h-7", "h-auto")} py-1.5`}
+                  placeholder={isApprove ? "Optional approval note…" : isReject ? "Required — reason for rejection…" : "Reason for cancellation…"}
+                  value={statusModal.reason}
+                  onChange={(e) => setStatusModal((prev) => ({ ...prev, reason: e.target.value }))}
+                  disabled={statusModal.loading}
+                />
               </div>
-              <div className="px-6 py-5 space-y-4">
-                <div className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${bannerCls}`}>
-                  <FaRedoAlt className={`mt-0.5 shrink-0 ${iconCls}`} />
-                  <p className="text-sm">{banner}</p>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wide">{fieldLabel}</label>
-                  <textarea
-                    rows={3}
-                    autoFocus
-                    className="w-full resize-none rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/20"
-                    placeholder={isApprove ? "Optional approval note…" : isReject ? "Required — reason for rejection…" : "Reason for cancellation…"}
-                    value={statusModal.reason}
-                    onChange={(e) => setStatusModal((prev) => ({ ...prev, reason: e.target.value }))}
-                    disabled={statusModal.loading}
-                  />
-                </div>
-              </div>
-              <div className="px-6 pb-5 flex justify-end gap-3">
-                <button onClick={() => setStatusModal({ open: false, row: null, status: "", reason: "", loading: false })} disabled={statusModal.loading} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">Cancel</button>
-                <button onClick={handleStatusConfirm} disabled={statusModal.loading} className={`rounded-lg ${btnCls} px-5 py-2 text-sm font-semibold text-white transition-colors disabled:opacity-60 flex items-center gap-2`}>
-                  {statusModal.loading ? <><svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" /></svg>Saving…</> : <><Icon className="text-xs" />{btnLabel}</>}
-                </button>
-              </div>
-            </div>
-          </div>
+            </form>
+          </Modal>
         );
       })()}
     </DashboardLayout>

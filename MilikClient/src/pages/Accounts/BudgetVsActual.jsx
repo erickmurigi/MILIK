@@ -11,8 +11,9 @@ import ListToolbar from "../../components/common/ListToolbar";
 import MilikTable from "../../components/common/MilikTable";
 import {
   getBudgets, getBudget, createBudget, updateBudget,
-  deleteBudget, getChartOfAccounts,
+  deleteBudget,
 } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 import AppSelect from "../../components/common/AppSelect";
 import CurrencyInput from "../../components/common/CurrencyInput";
 import Modal from "../../components/common/Modal";
@@ -70,7 +71,11 @@ const BudgetVsActual = () => {
   const { pathname } = useLocation();
   const isAnalysisRoute = pathname === "/accounts/budget/analysis";
 
-  const [view,       setView]       = useTabState("/accounts/budget:view", VIEW.LIST);
+  // Keyed by the actual pathname (not a hardcoded literal) so the "Budget Plans" tab
+  // (/accounts/budget) and the "Budget vs Actual" tab (/accounts/budget/analysis) — both
+  // rendered by this same component — get independent view state instead of bleeding
+  // into each other on every tab switch.
+  const [view,       setView]       = useTabState(`${pathname}:view`, VIEW.LIST);
   const [budgets,    setBudgets]    = useState([]);
   const [accounts,   setAccounts]   = useState([]);
 
@@ -78,7 +83,7 @@ const BudgetVsActual = () => {
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [yearFilter,   setYearFilter]   = useState("");
-  const [activeBudget, setActiveBudget] = useTabState("/accounts/budget:activeBudget", null);
+  const [activeBudget, setActiveBudget] = useTabState(`${pathname}:activeBudget`, null);
   const [loadingList,  setLoadingList]  = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
@@ -93,8 +98,7 @@ const BudgetVsActual = () => {
   // ── Budget line editor ───────────────────────────────────────────────────────
   const [editingLines, setEditingLines]   = useState(false);
   const [draftLines,   setDraftLines]     = useState([]);
-  const [addAccount,   setAddAccount]     = useState("");
-  const [addAmount,    setAddAmount]      = useState("");
+  const [lineSearch,   setLineSearch]     = useState("");
   const [savingLines,  setSavingLines]    = useState(false);
   const [expandedLineIdx, setExpandedLineIdx] = useState(null);
 
@@ -113,7 +117,7 @@ const BudgetVsActual = () => {
     try {
       const [bList, accts] = await Promise.all([
         getBudgets({ business: businessId }),
-        getChartOfAccounts({ business: businessId }),
+        getCachedChartOfAccounts(businessId),
       ]);
       setBudgets(Array.isArray(bList) ? bList : []);
       setAccounts(Array.isArray(accts) ? accts.filter((a) => a.isPosting && !a.isHeader) : []);
@@ -197,11 +201,15 @@ const BudgetVsActual = () => {
   }, [businessId]);
 
   // ── Save lines ───────────────────────────────────────────────────────────────
+  // Only lines with a non-zero budgeted amount are sent — the grid shows every account so
+  // you can type into any of them, but a line nobody budgeted anything against isn't worth
+  // persisting (and "clearing" a line is just zeroing its amount, not a separate delete step).
   const handleSaveLines = useCallback(async () => {
     if (!activeBudget) return;
     setSavingLines(true);
     try {
-      await updateBudget(activeBudget._id, { business: businessId, lines: draftLines });
+      const linesToSave = draftLines.filter((l) => Number(l.budgetedAmount) > 0);
+      await updateBudget(activeBudget._id, { business: businessId, lines: linesToSave });
       const full = await getBudget(activeBudget._id, { business: businessId });
       setActiveBudget(full);
       setDraftLines((full.lines || []).map((l) => ({ ...l, account: String(l.account) })));
@@ -215,19 +223,6 @@ const BudgetVsActual = () => {
       setSavingLines(false);
     }
   }, [activeBudget, businessId, draftLines, loadList]);
-
-  // ── Add line ─────────────────────────────────────────────────────────────────
-  const handleAddLine = () => {
-    if (!addAccount) return toast.error("Select an account");
-    if (Number(addAmount) < 0) return toast.error("Amount must be 0 or more");
-    if (draftLines.some((l) => l.account === addAccount)) return toast.error("Account already in budget");
-    const acct = accounts.find((a) => a._id === addAccount);
-    setDraftLines((p) => [...p, {
-      account: addAccount, accountCode: acct?.code || "", accountName: acct?.name || "",
-      accountType: acct?.type || "", budgetedAmount: Number(addAmount || 0),
-    }]);
-    setAddAccount(""); setAddAmount("");
-  };
 
   // ── Status change ────────────────────────────────────────────────────────────
   const handleStatusChange = useCallback(async (newStatus) => {
@@ -269,9 +264,31 @@ const BudgetVsActual = () => {
     };
   }, [activeBudget]);
 
-  // ── Available accounts for add-line picker ──────────────────────────────────
-  const usedIds = useMemo(() => new Set(draftLines.map((l) => l.account)), [draftLines]);
-  const availableAccounts = useMemo(() => accounts.filter((a) => !usedIds.has(a._id)), [accounts, usedIds]);
+  // ── Build the full-COA grid: every posting account, pre-filled from the budget's ───
+  // existing lines, so editing means typing into any row rather than searching an
+  // account picker one at a time (matches QuickBooks' budget entry grid).
+  const buildFullGrid = useCallback(() => {
+    const existing = new Map((activeBudget?.lines || []).map((l) => [String(l.account), l]));
+    return accounts.map((a) => {
+      const ex = existing.get(String(a._id));
+      return {
+        account:        String(a._id),
+        accountCode:    a.code || "",
+        accountName:    a.name || "",
+        accountType:    a.type || "",
+        budgetedAmount: ex ? Number(ex.budgetedAmount || 0) : 0,
+        monthlyAmounts: ex?.monthlyAmounts?.length ? ex.monthlyAmounts.map((m) => ({ ...m })) : [],
+      };
+    });
+  }, [accounts, activeBudget]);
+
+  const toggleEditLines = () => {
+    setEditingLines((p) => {
+      const next = !p;
+      if (next) { setDraftLines(buildFullGrid()); setExpandedLineIdx(null); setLineSearch(""); }
+      return next;
+    });
+  };
 
   // ── Months the active budget's period spans, for monthly-spread editing ────
   const periodMonths = useMemo(() => {
@@ -534,7 +551,7 @@ const BudgetVsActual = () => {
             <ListToolbar.Button
               variant="outline"
               className={editingLines ? "border-slate-300 bg-slate-100" : ""}
-              onClick={() => setEditingLines((p) => !p)}
+              onClick={toggleEditLines}
             >
               <FaEdit size={7} /> {editingLines ? "Cancel Edit" : "Edit Lines"}
             </ListToolbar.Button>
@@ -545,81 +562,110 @@ const BudgetVsActual = () => {
           </ListToolbar.Button>
         </ListToolbar>
 
-        {/* Line editor panel */}
+        {/* Line editor panel — a full-COA grid: every posting account gets a row, type into */}
+        {/* any of them (QuickBooks-style budget entry) instead of adding accounts one at a time. */}
         {editingLines && (
-          <div className="shrink-0 border-b border-slate-200 bg-slate-50 p-3">
-            <Section title="Edit Budget Lines">
-              {/* Draft lines table */}
-              {draftLines.length > 0 && (
-                <div className="mb-2.5 overflow-x-auto border border-slate-200">
+          <div className="shrink-0 max-h-[55vh] overflow-y-auto border-b border-slate-200 bg-slate-50 p-3">
+            <Section
+              title={`Edit Budget Lines — ${draftLines.filter((l) => Number(l.budgetedAmount) > 0).length} of ${draftLines.length} accounts budgeted`}
+            >
+              <div className="relative mb-2.5 w-56 shrink-0">
+                <FaSearch className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-slate-400" />
+                <input value={lineSearch} onChange={(e) => setLineSearch(e.target.value)} placeholder="Search accounts…"
+                  className={`${inputClass} pl-6`} />
+              </div>
+
+              {accounts.length === 0 ? (
+                <p className="text-xs text-slate-400">No postable accounts found. Add accounts in Chart of Accounts first.</p>
+              ) : (
+                <div className="border border-slate-200">
                   <table className="min-w-full text-[11px] border-collapse">
-                    <thead>
+                    <thead className="sticky top-0 z-10">
                       <tr className="bg-[#0B3B2E] text-white">
                         <th className="w-6 px-1 py-1 border-r border-white/10" />
                         <th className="px-3 py-1 text-left font-bold border-r border-white/10">Code</th>
                         <th className="px-3 py-1 text-left font-bold border-r border-white/10">Account</th>
-                        <th className="px-3 py-1 text-left font-bold border-r border-white/10">Type</th>
                         <th className="px-3 py-1 text-right font-bold border-r border-white/10">Budgeted (KES)</th>
-                        <th className="px-3 py-1 font-bold" />
+                        <th className="w-8 px-1 py-1 font-bold" />
                       </tr>
                     </thead>
                     <tbody>
-                      {draftLines.map((line, idx) => {
-                        const isSpread = line.monthlyAmounts?.length > 0;
-                        const isExpanded = expandedLineIdx === idx;
+                      {TYPE_ORDER.filter((t) => draftLines.some((l) => (l.accountType || "other") === t)).map((type) => {
+                        const q = lineSearch.trim().toLowerCase();
+                        const rows = draftLines
+                          .map((line, idx) => ({ line, idx }))
+                          .filter(({ line }) => (line.accountType || "other") === type)
+                          .filter(({ line }) => !q || line.accountCode.toLowerCase().includes(q) || line.accountName.toLowerCase().includes(q));
+                        if (!rows.length) return null;
                         return (
-                          <React.Fragment key={line.account}>
-                            <tr className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}>
-                              <td className="px-1 py-1 border-r border-gray-100 text-center">
-                                <button type="button" onClick={() => setExpandedLineIdx((p) => (p === idx ? null : idx))}
-                                  className="p-0.5 text-slate-400 hover:text-slate-700">
-                                  {isExpanded ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
-                                </button>
-                              </td>
-                              <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-700">{line.accountName}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 capitalize text-slate-500">{line.accountType}</td>
-                              <td className="px-3 py-1 border-r border-gray-100 text-right">
-                                {isSpread ? (
-                                  <span className="font-mono font-semibold text-slate-700">{fmt(line.budgetedAmount)}</span>
-                                ) : (
-                                  <CurrencyInput prefix={null} value={line.budgetedAmount}
-                                    onChange={(e) => setDraftLines((p) => p.map((l, i) => i === idx ? { ...l, budgetedAmount: Number(e.target.value) } : l))}
-                                    inputClassName={`${tableInputClass} text-right`} />
-                                )}
-                              </td>
-                              <td className="px-3 py-1 text-right">
-                                <button onClick={() => setDraftLines((p) => p.filter((_, i) => i !== idx))}
-                                  className="p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><FaTimes size={10} /></button>
+                          <React.Fragment key={type}>
+                            <tr className="bg-slate-100/80">
+                              <td colSpan={5} className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                {TYPE_LABEL[type] || type}
                               </td>
                             </tr>
-                            {isExpanded && (
-                              <tr className="border-b border-gray-100 bg-slate-50/80">
-                                <td colSpan={6} className="px-3 py-2">
-                                  <div className="mb-1.5 flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
-                                      <FaCalendarAlt size={9} /> Monthly Spread
-                                    </span>
-                                    <button type="button" onClick={() => toggleMonthlySpread(idx)}
-                                      className="text-[10px] font-bold text-[#0B3B2E] underline hover:no-underline">
-                                      {isSpread ? "Clear spread (use flat total)" : "Spread evenly across period"}
-                                    </button>
-                                  </div>
-                                  {isSpread && (
-                                    <div className="flex flex-wrap gap-2">
-                                      {line.monthlyAmounts.map((m) => (
-                                        <div key={m.month} className="w-24">
-                                          <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">{monthLabel(m.month)}</label>
-                                          <CurrencyInput prefix={null} value={m.amount}
-                                            onChange={(e) => updateMonthlyAmount(idx, m.month, e.target.value)}
-                                            inputClassName={`${tableInputClass} text-right`} />
+                            {rows.map(({ line, idx }) => {
+                              const isBudgeted = Number(line.budgetedAmount) > 0;
+                              const isSpread = line.monthlyAmounts?.length > 0;
+                              const isExpanded = expandedLineIdx === idx;
+                              return (
+                                <React.Fragment key={line.account}>
+                                  <tr className={`border-b border-gray-100 ${isBudgeted ? (idx % 2 === 0 ? "bg-white" : "bg-slate-50/60") : "bg-white opacity-50"} hover:bg-blue-50/30 hover:opacity-100`}>
+                                    <td className="px-1 py-1 border-r border-gray-100 text-center">
+                                      <button type="button" onClick={() => setExpandedLineIdx((p) => (p === idx ? null : idx))}
+                                        className="p-0.5 text-slate-400 hover:text-slate-700">
+                                        {isExpanded ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}
+                                      </button>
+                                    </td>
+                                    <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-400">{line.accountCode || "—"}</td>
+                                    <td className={`px-3 py-1 border-r border-gray-100 ${isBudgeted ? "font-semibold text-slate-700" : "text-slate-500"}`}>{line.accountName}</td>
+                                    <td className="px-3 py-1 border-r border-gray-100 text-right">
+                                      {isSpread ? (
+                                        <span className="font-mono font-semibold text-slate-700">{fmt(line.budgetedAmount)}</span>
+                                      ) : (
+                                        <CurrencyInput prefix={null} value={line.budgetedAmount}
+                                          onChange={(e) => setDraftLines((p) => p.map((l, i) => i === idx ? { ...l, budgetedAmount: Number(e.target.value) } : l))}
+                                          inputClassName={`${tableInputClass} text-right`} />
+                                      )}
+                                    </td>
+                                    <td className="px-1 py-1 text-right">
+                                      {(isBudgeted || isSpread) && (
+                                        <button type="button" title="Clear this line"
+                                          onClick={() => setDraftLines((p) => p.map((l, i) => i === idx ? { ...l, budgetedAmount: 0, monthlyAmounts: [] } : l))}
+                                          className="p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"><FaTimes size={10} /></button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {isExpanded && (
+                                    <tr className="border-b border-gray-100 bg-slate-50/80">
+                                      <td colSpan={5} className="px-3 py-2">
+                                        <div className="mb-1.5 flex items-center justify-between">
+                                          <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-slate-500">
+                                            <FaCalendarAlt size={9} /> Monthly Spread
+                                          </span>
+                                          <button type="button" onClick={() => toggleMonthlySpread(idx)}
+                                            className="text-[10px] font-bold text-[#0B3B2E] underline hover:no-underline">
+                                            {isSpread ? "Clear spread (use flat total)" : "Spread evenly across period"}
+                                          </button>
                                         </div>
-                                      ))}
-                                    </div>
+                                        {isSpread && (
+                                          <div className="flex flex-wrap gap-2">
+                                            {line.monthlyAmounts.map((m) => (
+                                              <div key={m.month} className="w-24">
+                                                <label className="mb-0.5 block text-[9px] font-semibold uppercase text-slate-400">{monthLabel(m.month)}</label>
+                                                <CurrencyInput prefix={null} value={m.amount}
+                                                  onChange={(e) => updateMonthlyAmount(idx, m.month, e.target.value)}
+                                                  inputClassName={`${tableInputClass} text-right`} />
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </td>
+                                    </tr>
                                   )}
-                                </td>
-                              </tr>
-                            )}
+                                </React.Fragment>
+                              );
+                            })}
                           </React.Fragment>
                         );
                       })}
@@ -627,30 +673,6 @@ const BudgetVsActual = () => {
                   </table>
                 </div>
               )}
-
-              {/* Add line row */}
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[220px] flex-1">
-                  <label className={labelClass}>Account</label>
-                  <AppSelect
-                    value={addAccount}
-                    onChange={(v) => setAddAccount(v ?? "")}
-                    options={availableAccounts.map((a) => ({ value: a._id, label: `${a.code ? `${a.code} — ` : ""}${a.name} (${a.type})` }))}
-                    placeholder="Select account…"
-                    searchable
-                    size="sm"
-                  />
-                </div>
-                <div className="w-40">
-                  <label className={labelClass}>Budgeted Amount</label>
-                  <CurrencyInput value={addAmount} onChange={(e) => setAddAmount(e.target.value)} placeholder="0.00"
-                    inputClassName={inputClass.replace("px-2.5", "pl-10 pr-2.5")} />
-                </div>
-                <button onClick={handleAddLine}
-                  className="flex h-7 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50">
-                  <FaPlus size={9} /> Add Line
-                </button>
-              </div>
             </Section>
 
             <div className="mt-2.5 flex items-center justify-end gap-2">

@@ -17,6 +17,17 @@ const STATUS_BADGE = {
   void:     "bg-rose-100   text-rose-700   border-rose-200",
 };
 
+// scheduleSummary chip colors — a static map, not string interpolation: Tailwind's JIT compiler
+// only emits classes it can find literally in source, so `border-${color}-200` would silently
+// produce no styling at all in the production build no matter what color was passed.
+const SUMMARY_CHIP_COLORS = {
+  blue:   "border-blue-200 bg-blue-50 text-blue-700",
+  emerald:"border-emerald-200 bg-emerald-50 text-emerald-700",
+  amber:  "border-amber-200 bg-amber-50 text-amber-700",
+  red:    "border-red-200 bg-red-50 text-red-700",
+  slate:  "border-slate-200 bg-slate-50 text-slate-700",
+};
+
 const CATEGORY_SHORT = {
   COMMISSION_CHARGE:        "Commission",
   LANDLORD_PAYABLE:         "Payable",
@@ -125,7 +136,7 @@ const JournalEntriesDrawer = ({
               )}
             </div>
           </div>
-          <button onClick={onClose} className="mt-0.5 text-white/50 hover:text-white transition">
+          <button onClick={onClose} className="p-1 text-white/80 hover:bg-white/10 hover:text-white transition">
             <FaTimes size={14} />
           </button>
         </div>
@@ -173,7 +184,7 @@ const JournalEntriesDrawer = ({
                   Loading GL entries…
                 </div>
               ) : error ? (
-                <div className="flex items-center gap-2 p-4 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-[12px]">
+                <div className="flex items-center gap-2 p-4 border border-rose-200 bg-rose-50 text-rose-700 text-[12px]">
                   <FaExclamationTriangle size={12} /> {error}
                 </div>
               ) : entries.length === 0 ? (
@@ -181,23 +192,23 @@ const JournalEntriesDrawer = ({
                   No GL entries have been posted for this transaction yet.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <div className="overflow-x-auto border border-slate-200">
                   <table className="w-full min-w-[680px] text-[11px] border-collapse">
                     <thead className="bg-[#0B3B2E] text-white sticky top-0">
                       <tr>
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">Date</th>
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">Account</th>
-                        <th className="px-3 py-2 text-left font-bold border-r border-white/10">Category</th>
-                        <th className="px-3 py-2 text-right font-bold border-r border-white/10">Debit</th>
-                        <th className="px-3 py-2 text-right font-bold border-r border-white/10">Credit</th>
-                        <th className="px-3 py-2 text-center font-bold">Status</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10">Date</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10">Account</th>
+                        <th className="px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest border-r border-white/10">Category</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest border-r border-white/10">Debit</th>
+                        <th className="px-3 py-2 text-right text-[10px] font-black uppercase tracking-widest border-r border-white/10">Credit</th>
+                        <th className="px-3 py-2 text-center text-[10px] font-black uppercase tracking-widest">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {entries.map((e, idx) => (
                         <tr
                           key={String(e._id)}
-                          className={`border-b border-gray-100 ${e.reversalOf ? "opacity-60 line-through" : ""} ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}
+                          className={`border-b border-gray-100 hover:bg-[#EBF5EF] ${e.reversalOf ? "opacity-60 line-through" : ""} ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"}`}
                           title={e.notes || undefined}
                         >
                           <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700 whitespace-nowrap">{fmtDate(e.transactionDate)}</td>
@@ -206,8 +217,8 @@ const JournalEntriesDrawer = ({
                             <span className="text-slate-900">{e.accountName}</span>
                           </td>
                           <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">{CATEGORY_SHORT[e.category] || e.category}</td>
-                          <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono text-slate-900">{e.debit  ? fmt(e.debit)  : "—"}</td>
-                          <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono text-slate-900">{e.credit ? fmt(e.credit) : "—"}</td>
+                          <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums text-slate-900">{e.debit  ? fmt(e.debit)  : "—"}</td>
+                          <td className="px-3 py-1.5 border-r border-gray-100 text-right font-mono tabular-nums text-slate-900">{e.credit ? fmt(e.credit) : "—"}</td>
                           <td className="px-3 py-1.5 text-center">
                             <span className={`inline-flex rounded-full border px-2 py-0.5 text-[9px] font-bold ${STATUS_BADGE[e.status] || STATUS_BADGE.draft}`}>
                               {e.status}
@@ -217,8 +228,8 @@ const JournalEntriesDrawer = ({
                       ))}
                       <tr className="bg-slate-100 font-bold text-[11px]">
                         <td colSpan={3} className="px-3 py-1.5 text-slate-700">Totals</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-slate-900">{fmt(totals.totalDebit)}</td>
-                        <td className="px-3 py-1.5 text-right font-mono text-slate-900">{fmt(totals.totalCredit)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-900">{fmt(totals.totalDebit)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-900">{fmt(totals.totalCredit)}</td>
                         <td />
                       </tr>
                     </tbody>
@@ -243,7 +254,7 @@ const JournalEntriesDrawer = ({
                   {scheduleSummary.map(({ label, value, color = "blue" }) => (
                     <span
                       key={label}
-                      className={`rounded border border-${color}-200 bg-${color}-50 px-2.5 py-1 text-[11px] font-bold text-${color}-700`}
+                      className={`border px-2.5 py-1 text-[11px] font-bold ${SUMMARY_CHIP_COLORS[color] || SUMMARY_CHIP_COLORS.blue}`}
                     >
                       {label}: {value}
                     </span>
@@ -256,14 +267,14 @@ const JournalEntriesDrawer = ({
                   No schedule entries found.
                 </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-slate-200">
+                <div className="overflow-x-auto border border-slate-200">
                   <table className="w-full text-[11px] border-collapse">
                     <thead className="bg-[#0B3B2E] text-white">
                       <tr>
                         {scheduleColumns.map((col) => (
                           <th
                             key={col.key}
-                            className={`px-3 py-2 font-bold border-r border-white/10 ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}`}
+                            className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest border-r border-white/10 ${col.align === "right" ? "text-right" : col.align === "center" ? "text-center" : "text-left"}`}
                           >
                             {col.label}
                           </th>
@@ -272,11 +283,11 @@ const JournalEntriesDrawer = ({
                     </thead>
                     <tbody>
                       {schedule.map((row, idx) => (
-                        <tr key={row._id || idx} className={`border-b border-gray-100 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} ${row._rowClass || ""}`}>
+                        <tr key={row._id || idx} className={`border-b border-gray-100 hover:bg-[#EBF5EF] ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/60"} ${row._rowClass || ""}`}>
                           {scheduleColumns.map((col) => (
                             <td
                               key={col.key}
-                              className={`px-3 py-1.5 border-r border-gray-100 ${col.align === "right" ? "text-right font-mono" : col.align === "center" ? "text-center" : ""} ${col.bold ? "font-bold text-slate-900" : "text-slate-700"}`}
+                              className={`px-3 py-1.5 border-r border-gray-100 ${col.align === "right" ? "text-right font-mono tabular-nums" : col.align === "center" ? "text-center" : ""} ${col.bold ? "font-bold text-slate-900" : "text-slate-700"}`}
                             >
                               {row[col.key] ?? "—"}
                             </td>

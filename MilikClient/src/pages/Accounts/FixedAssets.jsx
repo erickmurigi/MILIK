@@ -13,8 +13,9 @@ import StatusBadge from "../../components/common/StatusBadge";
 import CurrencyInput from "../../components/common/CurrencyInput";
 import {
   getFixedAssets, createFixedAsset, updateFixedAsset,
-  disposeFixedAsset, getChartOfAccounts,
+  disposeFixedAsset,
 } from "../../redux/apiCalls";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 
 const GRN = "#0B3B2E";
 const labelCls = "mb-1 block text-xs font-bold text-slate-900";
@@ -77,7 +78,7 @@ const FixedAssets = () => {
     try {
       const [assetsData, accts] = await Promise.all([
         getFixedAssets({ business: businessId }),
-        getChartOfAccounts({ business: businessId }),
+        getCachedChartOfAccounts(businessId),
       ]);
       setAssets(Array.isArray(assetsData) ? assetsData : []);
       setAccounts(Array.isArray(accts) ? accts.filter((a) => a.isPosting && !a.isHeader) : []);

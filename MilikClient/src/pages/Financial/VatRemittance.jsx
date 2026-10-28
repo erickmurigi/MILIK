@@ -82,7 +82,7 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid, canVoid, loading
     ]}
     rows={rows}
     rowKey="_id"
-    loading={loading}
+    loading={loading && rows.length === 0}
     empty="No remittances recorded"
     rowClassName={(r) => (r.status === "voided" ? "opacity-50" : "")}
     renderActions={(r) => r.status !== "voided" && canVoid && (

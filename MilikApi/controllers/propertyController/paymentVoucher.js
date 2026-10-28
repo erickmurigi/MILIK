@@ -31,6 +31,7 @@ import { resolveWhtPayableAccount } from "../../services/withholdingTaxService.j
 import { assertVoucherReferenceUnused } from "../../services/voucherReference.js";
 import { cleanVoucherReference, voucherReferenceKey } from "../../utils/voucherReference.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { resolveBusinessId as resolveActiveBusinessId } from "../../utils/requestContext.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
@@ -323,23 +324,15 @@ const resolveVoucherPostingDate = ({ voucher = {}, statementDate = null } = {}) 
   return new Date();
 };
 
-// req.user.company is always trusted first — a client-supplied business/company
-// value is only used as a fallback for requests with no authenticated company
-// context (mirrors resolveBusinessId in controllers/propertyController/
-// statementController.js). Previously the client-supplied value was checked
-// FIRST, so any authenticated user could read/create/approve/pay another
-// company's payment vouchers just by passing its id.
+// Delegates to the shared resolver (utils/requestContext.js) — the same x-active-company-id
+// header + canAccessCompanyId-gated explicit-id handling every other module uses, so a company
+// switch here behaves identically to everywhere else in the app rather than only picking it up
+// once a fresh JWT round-trips. Falls back to the voucher's own business (by :id) when neither
+// the header/JWT nor an explicit business/company param resolves anything — covers requests
+// (e.g. a stale/odd client) that otherwise carry no company context at all.
 const resolveBusinessId = async (req) => {
-  const direct =
-    req?.user?.company?._id ||
-    req?.user?.company ||
-    req?.query?.business ||
-    req?.query?.company ||
-    req?.body?.business ||
-    req?.body?.company ||
-    null;
-
-  if (direct) return direct;
+  const active = resolveActiveBusinessId(req);
+  if (active) return active;
 
   if (req?.params?.id && isValidObjectId(req.params.id)) {
     const existing = await PaymentVoucher.findById(req.params.id).select("business").lean();

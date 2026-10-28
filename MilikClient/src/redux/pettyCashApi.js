@@ -130,3 +130,22 @@ export const rejectPettyCashReplenishment = async (id, payload = {}) => {
     throw extractApiError(err);
   }
 };
+
+// ─── Unified ledger ───────────────────────────────────────────────────────────
+
+export const getPettyCashLedger = async (accountId, params = {}) => {
+  try {
+    const qs = buildParams(params);
+    const res = await adminRequests.get(`/petty-cash/accounts/${accountId}/ledger${qs ? `?${qs}` : ""}`);
+    const d = res.data;
+    return {
+      data: Array.isArray(d?.data) ? d.data : [],
+      total: d?.total ?? 0,
+      page: d?.page ?? 1,
+      pages: d?.pages ?? 1,
+      account: d?.account || null,
+    };
+  } catch (err) {
+    throw extractApiError(err);
+  }
+};
