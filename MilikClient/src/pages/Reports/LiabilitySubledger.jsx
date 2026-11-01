@@ -408,7 +408,9 @@ const LiabilitySubledger = () => {
   const isEmpty = !loading && groups.length === 0;
 
   return (
-    <DashboardLayout pageKey="acc-liability-subledger">
+    <DashboardLayout lockContentScroll pageKey="acc-liability-subledger">
+    <div className="flex h-full flex-col overflow-hidden">
+    <div className="shrink-0">
 
       {/* ── Header banner ── */}
       <div
@@ -520,6 +522,9 @@ const LiabilitySubledger = () => {
         )}
       </div>
 
+    </div>
+    <div className="flex-1 overflow-y-auto">
+
       {/* ── Loading ── */}
       {loading && (
         <div className="flex flex-col items-center justify-center gap-2 py-20 text-slate-400">
@@ -574,6 +579,8 @@ const LiabilitySubledger = () => {
           </div>
         </div>
       )}
+    </div>
+    </div>
     </DashboardLayout>
   );
 };
