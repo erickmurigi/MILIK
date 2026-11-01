@@ -18,13 +18,18 @@ import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
 import { COMPANY_PRINT_FIELDS } from "../../utils/printCompanyFields.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { resolveBusinessId as resolveActiveBusinessId } from "../../utils/requestContext.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 
+// This module's own pre-hotfix resolver — missed by the "unified resolveBusinessId" audit —
+// only ever checked req.user.company, never the x-active-company-id/x-company-id header the
+// frontend sends when a system admin has switched into a company. Delegating to the canonical
+// resolver (utils/requestContext.js) fixes that, and also drops the old unchecked
+// body/query businessId fallback in favor of one that verifies canAccessCompanyId first.
 const resolveBusinessId = async (req, propertyId = null) => {
-  if (req.user?.company && isValidObjectId(req.user.company)) return String(req.user.company);
-  if (req.body?.businessId && isValidObjectId(req.body.businessId)) return String(req.body.businessId);
-  if (req.query?.businessId && isValidObjectId(req.query.businessId)) return String(req.query.businessId);
+  const activeId = resolveActiveBusinessId(req);
+  if (activeId && isValidObjectId(activeId)) return activeId;
   if (propertyId && isValidObjectId(propertyId)) {
     const property = await Property.findById(propertyId).select('business').lean();
     if (property?.business) return String(property.business);

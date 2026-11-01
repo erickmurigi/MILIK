@@ -96,6 +96,10 @@ export function buildPublicHomeUrl() {
   return sanitizeBaseUrl(resolveFrontendBaseUrl(), "/home");
 }
 
+export function buildLandlordPortalLoginUrl() {
+  return `${normalizeUrl(resolveFrontendBaseUrl())}/landlord-portal/login`;
+}
+
 export function buildTemporaryPassword(email = "") {
   const localPart = String(email || "")
     .split("@")[0]

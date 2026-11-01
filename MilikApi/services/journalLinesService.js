@@ -10,6 +10,7 @@ import SaleProject from "../modules/propertySale/models/SaleProject.js";
 import SaleDeal from "../modules/propertySale/models/SaleDeal.js";
 import SaleListing from "../modules/propertySale/models/SaleListing.js";
 import SaleAgent from "../modules/propertySale/models/SaleAgent.js";
+import CostCentre from "../models/CostCentre.js";
 import { postEntry, postReversal } from "./ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "./chartAccountAggregationService.js";
 
@@ -26,8 +27,8 @@ const fromCents = (c) => c / 100;
 const blank = (v) => v === undefined || v === null || v === "";
 
 // Tag kinds -> the model that must own the id (all scoped to the company)
-const TAG_MODELS = { project: SaleProject, deal: SaleDeal, listing: SaleListing, agent: SaleAgent, property: Property };
-const TAG_LABELS = { project: "Project", deal: "Deal", listing: "Listing / unit", agent: "Agent", property: "Property" };
+const TAG_MODELS = { project: SaleProject, deal: SaleDeal, listing: SaleListing, agent: SaleAgent, property: Property, costCentre: CostCentre };
+const TAG_LABELS = { project: "Project", deal: "Deal", listing: "Listing / unit", agent: "Agent", property: "Property", costCentre: "Cost centre" };
 
 /**
  * Checks and normalises the lines of a journal. Returns { lines, totalDebit, totalCredit } or throws a 400.
@@ -45,7 +46,7 @@ export const validateJournalLines = async ({ businessId, lines }) => {
     .lean();
   const accountById = new Map(accounts.map((a) => [String(a._id), a]));
 
-  const tagIds = { project: new Set(), deal: new Set(), listing: new Set(), agent: new Set(), property: new Set() };
+  const tagIds = { project: new Set(), deal: new Set(), listing: new Set(), agent: new Set(), property: new Set(), costCentre: new Set() };
   const out = [];
   let debitCents = 0;
   let creditCents = 0;
@@ -84,9 +85,6 @@ export const validateJournalLines = async ({ businessId, lines }) => {
       dimensions[kind] = String(value);
       tagIds[kind].add(String(value));
     }
-    const costCentre = String(source.costCentre ?? "").trim().slice(0, 40);
-    if (costCentre) dimensions.costCentre = costCentre;
-
     debitCents += cents(debit);
     creditCents += cents(credit);
     out.push({

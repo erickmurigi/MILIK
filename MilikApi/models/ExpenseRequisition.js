@@ -11,7 +11,10 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
     property: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Property",
-      required: true,
+      // Not required for a vendor take-on (opening) balance — a lot of vendors (auditors, software
+      // subscriptions, company-wide contractors) aren't tied to any one property.
+      required: function () { return !this.isTakeOnBalance; },
+      default: null,
       index: true,
     },
     unit: {
@@ -29,6 +32,16 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
     serviceProvider: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "ServiceProvider",
+      default: null,
+      index: true,
+    },
+    // The real Chart-of-Accounts line this requisition is drawn against. Replaces the old
+    // regex-guessed-from-category account used only at GL-posting time — this is now the single
+    // account used both for GL posting AND for matching against Budget's account-keyed lines, so
+    // the two can never silently disagree.
+    expenseAccount: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ChartOfAccount",
       default: null,
       index: true,
     },
@@ -169,6 +182,42 @@ const ExpenseRequisitionSchema = new mongoose.Schema(
       type: String,
       trim: true,
       default: "",
+      index: true,
+    },
+    // Snapshot of the budget-headroom check at the moment of the last submit/approve — kept for
+    // audit (what the requester/approver actually saw), not re-derived on every read.
+    budgetCheck: {
+      type: new mongoose.Schema(
+        {
+          budgetId: { type: mongoose.Schema.Types.ObjectId, ref: "Budget", default: null },
+          lineId: { type: mongoose.Schema.Types.ObjectId, default: null },
+          period: { type: String, default: "" }, // budget name, or "YYYY-MM" when a monthly line matched
+          budgeted: { type: Number, default: 0 },
+          committed: { type: Number, default: 0 },
+          actual: { type: Number, default: 0 },
+          available: { type: Number, default: 0 },
+          overBudget: { type: Boolean, default: false },
+          checkedAt: { type: Date, default: null },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
+    // Required when an approver pushes a requisition through despite overBudget being true at
+    // approval time — the point isn't to block the spend, it's to make sure the override is on record.
+    approvalOverrideNote: {
+      type: String,
+      default: "",
+      trim: true,
+    },
+    // A vendor opening/take-on balance — created pre-approved (bypassing the normal
+    // draft/submit/approve workflow and budget check) to record a payable that already existed
+    // before this vendor was onboarded here. Otherwise behaves like any other requisition: shows
+    // up in the normal list, posts the same accrual GL entry, and is corrected the normal way
+    // (cancel, which reverses the GL entry, then delete).
+    isTakeOnBalance: {
+      type: Boolean,
+      default: false,
       index: true,
     },
   },

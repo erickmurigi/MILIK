@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
+import { useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -32,20 +33,23 @@ const firstDayOfMonth = () => { const d = new Date(); return toLocalDateString(n
 const todayString = () => toLocalDateString(new Date());
 
 // ─── Section row with proportion bar ─────────────────────────────────────────
-const AccountRow = React.memo(({ row, sectionTotal, accentColor }) => {
+const AccountRow = React.memo(({ row, sectionTotal, accentColor, onClick }) => {
   const share = pctNum(row.amount, sectionTotal);
   const shareStr = pctStr(row.amount, sectionTotal);
 
   return (
-    <div className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/80">
+    <div
+      className={`group border-b border-slate-50 last:border-0 hover:bg-slate-50/80 ${onClick ? "cursor-pointer" : ""}`}
+      onClick={onClick}
+    >
       <div className="flex items-center gap-2 px-3 py-1.5">
         <span className="w-10 shrink-0 font-mono text-[9px] font-semibold text-slate-400">{row.code}</span>
         <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700" title={row.name}>{row.name}</span>
         {/* Proportion bar */}
         <div className="hidden w-20 shrink-0 sm:block">
-          <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+          <div className="h-1.5 overflow-hidden bg-slate-100">
             <div
-              className="h-full rounded-full transition-all duration-500"
+              className="h-full transition-all duration-500"
               style={{ width: `${share}%`, backgroundColor: accentColor, opacity: 0.55 }}
             />
           </div>
@@ -60,7 +64,7 @@ const AccountRow = React.memo(({ row, sectionTotal, accentColor }) => {
 });
 
 // ─── Collapsible section ──────────────────────────────────────────────────────
-const Section = React.memo(({ label, rows = [], total, categoryTotal, accentColor }) => {
+const Section = React.memo(({ label, rows = [], total, categoryTotal, accentColor, onRowClick }) => {
   const [open, setOpen] = useState(true);
   const share    = pctNum(total, categoryTotal);
   const shareStr = pctStr(total, categoryTotal);
@@ -109,6 +113,7 @@ const Section = React.memo(({ label, rows = [], total, categoryTotal, accentColo
               row={row}
               sectionTotal={total}
               accentColor={accentColor}
+              onClick={row._id ? () => onRowClick?.(row) : undefined}
             />
           ))}
           {/* Section subtotal */}
@@ -151,6 +156,7 @@ const WaterfallRow = React.memo(({ label, value, color, isTotal, barPct }) => (
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const IncomeStatementReport = () => {
+  const navigate        = useNavigate();
   const dispatch       = useDispatch();
   const currentUser    = useSelector((s) => s.auth?.currentUser);
   const currentCompany = useSelector((s) => s.company?.currentCompany);
@@ -297,6 +303,13 @@ const IncomeStatementReport = () => {
     if (!printed) toast.error("Popup blocked. Allow popups to print.");
   };
 
+  const handleRowClick = (row) => {
+    if (!row?._id) return;
+    navigate(`/accounts/chart-of-accounts/${row._id}/activity`, {
+      state: { incomeStatementDrillDown: { startDate: filters.startDate, endDate: filters.endDate, propertyId: filters.propertyId || "" } },
+    });
+  };
+
   const netProfit     = Number(report.summary?.netProfit    || 0);
   const totalIncome   = Number(report.summary?.totalIncome  || 0);
   const totalExpenses = Number(report.summary?.totalExpenses || 0);
@@ -391,32 +404,32 @@ const IncomeStatementReport = () => {
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 overflow-hidden border-b border-slate-200 bg-white shadow-sm">
           {/* Total Income */}
-          <div className="flex flex-1 flex-col border-r border-slate-200 bg-emerald-50 px-5 py-3">
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-600/70">Total Income</div>
-            <div className="text-lg font-black tabular-nums text-emerald-700">KES {fmt(totalIncome)}</div>
-            <div className="mt-0.5 text-[10px] font-medium text-emerald-600/60">
-              {report.income.count} account{report.income.count !== 1 ? "s" : ""}
-            </div>
+          <div className="flex flex-1 items-center gap-2 border-r border-slate-200 bg-emerald-50 px-4 py-1.5">
+            <span className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-600/70">Total Income</span>
+            <span className="ml-auto font-mono text-sm font-black tabular-nums text-emerald-700">KES {fmt(totalIncome)}</span>
+            <span className="text-[9px] font-medium text-emerald-600/50">
+              {report.income.count} acct{report.income.count !== 1 ? "s" : ""}
+            </span>
           </div>
 
           {/* Total Expenses */}
-          <div className="flex flex-1 flex-col border-r border-slate-200 bg-red-50 px-5 py-3">
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-red-600/70">Total Expenses</div>
-            <div className="text-lg font-black tabular-nums text-red-700">KES {fmt(totalExpenses)}</div>
-            <div className="mt-0.5 text-[10px] font-medium text-red-600/60">
-              {report.expenses.count} account{report.expenses.count !== 1 ? "s" : ""}
-            </div>
+          <div className="flex flex-1 items-center gap-2 border-r border-slate-200 bg-red-50 px-4 py-1.5">
+            <span className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600/70">Total Expenses</span>
+            <span className="ml-auto font-mono text-sm font-black tabular-nums text-red-700">KES {fmt(totalExpenses)}</span>
+            <span className="text-[9px] font-medium text-red-600/50">
+              {report.expenses.count} acct{report.expenses.count !== 1 ? "s" : ""}
+            </span>
           </div>
 
           {/* Net Profit */}
-          <div className={`flex flex-1 flex-col px-5 py-3 ${netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"}`}>
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: netColor, opacity: 0.7 }}>
+          <div className={`flex flex-1 items-center gap-2 px-4 py-1.5 ${netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"}`}>
+            <span className="text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: netColor, opacity: 0.7 }}>
               {report.summary?.resultLabel || "Net Profit"}
-            </div>
-            <div className="text-lg font-black tabular-nums" style={{ color: netColor }}>KES {fmt(netProfit)}</div>
-            <div className="mt-0.5 text-[10px] font-bold" style={{ color: netColor, opacity: 0.7 }}>
-              {netMargin.toFixed(1)}% net margin
-            </div>
+            </span>
+            <span className="ml-auto font-mono text-sm font-black tabular-nums" style={{ color: netColor }}>KES {fmt(netProfit)}</span>
+            <span className="text-[9px] font-bold" style={{ color: netColor, opacity: 0.5 }}>
+              {netMargin.toFixed(1)}%
+            </span>
           </div>
         </div>
 
@@ -434,7 +447,10 @@ const IncomeStatementReport = () => {
                 {/* Income column */}
                 <div>
                   <div className="mb-1.5 flex items-center gap-2 px-3 py-2" style={{ background: GRN }}>
-                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">Income</span>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">Income</span>
+                      <p className="text-[9px] font-medium text-white/60">Click an account to view its ledger activity</p>
+                    </div>
                     <span className="ml-auto font-mono text-[11px] font-black tabular-nums text-white">
                       KES {fmt(totalIncome)}
                     </span>
@@ -448,6 +464,7 @@ const IncomeStatementReport = () => {
                         total={s.total}
                         categoryTotal={totalIncome}
                         accentColor={INC_C}
+                        onRowClick={handleRowClick}
                       />
                     ))
                   ) : (
@@ -460,7 +477,10 @@ const IncomeStatementReport = () => {
                 {/* Expenses column */}
                 <div>
                   <div className="mb-1.5 flex items-center gap-2 px-3 py-2" style={{ background: GRN }}>
-                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">Expenses</span>
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">Expenses</span>
+                      <p className="text-[9px] font-medium text-white/60">Click an account to view its ledger activity</p>
+                    </div>
                     <span className="ml-auto font-mono text-[11px] font-black tabular-nums text-white">
                       KES {fmt(totalExpenses)}
                     </span>
@@ -474,6 +494,7 @@ const IncomeStatementReport = () => {
                         total={s.total}
                         categoryTotal={totalExpenses}
                         accentColor={EXP_C}
+                        onRowClick={handleRowClick}
                       />
                     ))
                   ) : (

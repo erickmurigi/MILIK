@@ -22,6 +22,9 @@ const ServiceProviderSchema = new mongoose.Schema(
     branchName: { type: String, trim: true, default: "" },
     accountName: { type: String, trim: true, default: "" },
     mobileNumber: { type: String, trim: true, default: "" }, // M-Pesa number, 0XXXXXXXXX
+    // Pre-fills (never forces) the expense account on a new requisition/voucher line for this
+    // provider, so a user doesn't have to re-pick the same GL account every time they pay this vendor.
+    defaultExpenseAccount: { type: mongoose.Schema.Types.ObjectId, ref: "ChartOfAccount", default: null },
     subjectToWht: { type: Boolean, default: false },
     whtRate:      { type: Number, min: 0, max: WHT_MAX_RATE, default: 0 },
     whtCategory:  { type: String, trim: true, default: "" },

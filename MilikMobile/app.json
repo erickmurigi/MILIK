@@ -18,7 +18,8 @@
     },
     "android": {
       "package": "com.milik.mobile",
-      "versionCode": 10,
+      "googleServicesFile": "./google-services.json",
+      "versionCode": 11,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",

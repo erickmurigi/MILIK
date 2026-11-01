@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import {
   FaArchive, FaArrowDown, FaArrowUp, FaBalanceScale, FaBook, FaCalendarAlt, FaChartLine, FaChartPie,
-  FaCoins, FaCreditCard, FaExclamationTriangle, FaFileContract, FaFileInvoice, FaFileInvoiceDollar, FaHourglassHalf,
+  FaCoins, FaCreditCard, FaExclamationTriangle, FaFileInvoice, FaFileInvoiceDollar, FaHourglassHalf,
   FaLayerGroup, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers, FaWallet,
 } from "react-icons/fa";
 import { selectCurrentCompany } from "../../redux/selectors";
@@ -37,7 +37,6 @@ const QUICK_GROUPS = [
   {
     title: "Payables & Expenses",
     links: [
-      { label: "Creditors Ledger",     to: "/accounts/creditor-ledger",   Icon: FaFileContract },
       { label: "Payment Vouchers",     to: "/accounts/payment-vouchers",  Icon: FaCreditCard },
       { label: "Petty Cash Ledger",    to: "/accounts/petty-cash",        Icon: FaCoins },
       { label: "Petty Cash Accounts",  to: "/accounts/petty-cash/accounts", Icon: FaWallet },

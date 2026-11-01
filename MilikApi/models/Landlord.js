@@ -68,6 +68,11 @@ const LandlordSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Self-service portal login — mirrors HREmployee.essPassword. Set only via the
+    // portal-invite/reset flow, never via the generic updateLandlord body.
+    portalPassword: { type: String, default: null, select: false },
+    portalLastLogin: { type: Date, default: null },
+
     // Address Information
     postalAddress: { type: String, default: "", trim: true },
 

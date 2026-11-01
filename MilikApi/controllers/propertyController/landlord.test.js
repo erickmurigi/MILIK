@@ -108,6 +108,25 @@ describe("updateLandlord", () => {
     );
     expect(linkedEntry.name).toBe("New Name");
   });
+
+  it("never lets the generic update body set portal credentials directly", async () => {
+    const company = await createTestCompany();
+    const { landlord } = await createTestLandlord({ company });
+    const user = await createTestUser({ company });
+
+    const { statusCode } = await callController(updateLandlord, {
+      user,
+      params: { id: String(landlord._id) },
+      body: { landlordName: "Still Fine", portalPassword: "$2a$10$attackerSuppliedHashValueXXXXXXXXXXXXXXXXXXXXXXXXXXXXX", portalAccess: "Enabled" },
+    });
+
+    expect(statusCode).toBe(200);
+    const Landlord = (await import("../../models/Landlord.js")).default;
+    const refreshed = await Landlord.findById(landlord._id).select("+portalPassword").lean();
+    // portalAccess alone is an intentionally whitelisted field (used to disable access) —
+    // only portalPassword must be impossible to set this way.
+    expect(refreshed.portalPassword).toBeNull();
+  });
 });
 
 describe("deleteLandlord", () => {

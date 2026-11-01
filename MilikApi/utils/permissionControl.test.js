@@ -69,4 +69,25 @@ describe("hasCompanyActionPermission", () => {
     });
     expect(hasCompanyActionPermission({ user, company, moduleKey: "propertySale", resource: "sale-deals", action: "view" })).toBe(false);
   });
+
+  // Regression: normalizeAction lowercases/strips an action before the nested-permission lookup
+  // (e.g. "approveHighValue" -> "approvehighvalue"), but sanitizePermissionMap stores the nested
+  // key with the DEFINITIONS action's exact casing ("approveHighValue"). Every action before this
+  // one was a single lowercase word, so the mismatch was invisible until expenses.approveHighValue
+  // (the expense-requisition approval tier) became the first camelCase action in the matrix.
+  it("reads an explicit true grant for a camelCase action (approveHighValue) even under View only", () => {
+    const user = makeUser({
+      moduleAccess: { accounts: "View only" },
+      permissions: { expenses: { approveHighValue: true } },
+    });
+    expect(hasCompanyActionPermission({ user, company, moduleKey: "accounts", resource: "expenses", action: "approveHighValue" })).toBe(true);
+  });
+
+  it("reads an explicit false denial for a camelCase action (approveHighValue) even under Full access", () => {
+    const user = makeUser({
+      moduleAccess: { accounts: "Full access" },
+      permissions: { expenses: { approveHighValue: false } },
+    });
+    expect(hasCompanyActionPermission({ user, company, moduleKey: "accounts", resource: "expenses", action: "approveHighValue" })).toBe(false);
+  });
 });

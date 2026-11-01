@@ -139,6 +139,7 @@ const MENU_PERMISSION_MAP = {
   "inv-payment-methods":   { resource: "inv-locations",   action: "view",   moduleKey: "inventory" },
   "inv-pos-settings":      { resource: "inv-locations",   action: "view",   moduleKey: "inventory" },
   "acc-chart-of-accounts": { resource: "chartOfAccounts", action: "view", moduleKey: "accounts" },
+  "acc-cost-centres":      { resource: "costCentres",     action: "view", moduleKey: "accounts" },
   "acc-journals":          { resource: "journals",        action: "view", moduleKey: "accounts" },
   "acc-payment-vouchers":  { resource: "paymentVouchers", action: "view", moduleKey: "accounts" },
   "acc-expenses":          { resource: "expenses",        action: "view", moduleKey: "accounts" },
@@ -159,7 +160,6 @@ const MENU_PERMISSION_MAP = {
   "acc-fixed-assets-depreciation": { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-budget":                    { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-budget-analysis":           { resource: "financialReports", action: "view", moduleKey: "accounts" },
-  "acc-creditor-ledger":           { resource: "expenses",         action: "view", moduleKey: "accounts" },
   "acc-accounting-periods":        { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-gl-integrity":              { resource: "financialReports", action: "view", moduleKey: "accounts" },
   "acc-year-end-close":            { resource: "financialReports", action: "view", moduleKey: "accounts" },
@@ -840,6 +840,7 @@ const TopToolbar = ({
       return {
         "acc-dashboard":         "/accounts/dashboard",
         "acc-chart-of-accounts": "/accounts/chart-of-accounts",
+        "acc-cost-centres":      "/accounts/cost-centres",
         "acc-journals":          "/accounts/journals",
         "acc-payment-vouchers":  "/accounts/payment-vouchers",
         "acc-petty-cash":        "/accounts/petty-cash",
@@ -862,7 +863,6 @@ const TopToolbar = ({
         "acc-fixed-assets-depreciation": "/accounts/fixed-assets/depreciation",
         "acc-budget":                    "/accounts/budget",
         "acc-budget-analysis":           "/accounts/budget/analysis",
-        "acc-creditor-ledger":           "/accounts/creditor-ledger",
         "acc-accounting-periods":        "/accounts/accounting-periods",
         "acc-gl-integrity":              "/accounts/gl-integrity",
         "acc-year-end-close":            "/accounts/year-end-close",
@@ -1266,6 +1266,7 @@ const TopToolbar = ({
           icon: FaBook,
           submenu: [
             { id: "acc-chart-of-accounts",  label: "Chart of Accounts",   icon: FaLayerGroup },
+            { id: "acc-cost-centres",       label: "Cost Centres",        icon: FaTag },
             { id: "acc-journals",           label: "Journal Entries",     icon: FaBook },
             { id: "acc-bank-reconciliation", label: "Bank Reconciliation", icon: FaUniversity },
           ],
@@ -1299,7 +1300,6 @@ const TopToolbar = ({
             { type: "separator" },
             { id: "acc-expenses",          label: "Expense Requisitions", icon: FaFileInvoice },
             { id: "acc-service-providers", label: "Service Providers",    icon: FaCog },
-            { id: "acc-creditor-ledger",   label: "Creditors Ledger",     icon: FaBook },
           ],
         },
         {

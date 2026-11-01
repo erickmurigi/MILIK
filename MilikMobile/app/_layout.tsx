@@ -7,6 +7,7 @@ import { Provider, useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { store } from '../redux/store';
 import { setCredentials, clearCredentials } from '../redux/slices/authSlice';
+import { setLandlordPortalCredentials, clearLandlordPortalCredentials } from '../redux/slices/landlordPortalAuthSlice';
 import { STORAGE_KEYS } from '../constants';
 import { Colors } from '../constants/colors';
 import { refreshAuthToken } from '../services/api';
@@ -40,6 +41,30 @@ function AuthRestorer() {
       }
     })();
 
+    // Hydrated in parallel, independently of the staff session above — a device can have
+    // either, both, or neither logged in at once.
+    (async () => {
+      try {
+        const [lpToken, lpLandlordRaw, lpCompanyRaw] = await Promise.all([
+          AsyncStorage.getItem(STORAGE_KEYS.LANDLORD_PORTAL_TOKEN),
+          AsyncStorage.getItem(STORAGE_KEYS.LANDLORD_PORTAL_LANDLORD),
+          AsyncStorage.getItem(STORAGE_KEYS.LANDLORD_PORTAL_COMPANY),
+        ]);
+
+        if (lpToken && lpLandlordRaw) {
+          dispatch(setLandlordPortalCredentials({
+            token:    lpToken,
+            landlord: JSON.parse(lpLandlordRaw),
+            company:  lpCompanyRaw ? JSON.parse(lpCompanyRaw) : null,
+          }));
+        } else {
+          dispatch(clearLandlordPortalCredentials());
+        }
+      } catch {
+        dispatch(clearLandlordPortalCredentials());
+      }
+    })();
+
     // Keeps an active user's session alive indefinitely — re-check whenever they bring
     // the app back to the foreground, not just on a fresh launch (the common case for a
     // mobile app is resuming from background, not relaunching from a killed state).
@@ -65,6 +90,7 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
+          <Stack.Screen name="(landlord-portal)" />
         </Stack>
       </Provider>
     </GestureHandlerRootView>

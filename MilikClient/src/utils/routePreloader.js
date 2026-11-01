@@ -93,7 +93,6 @@ const PRELOAD_ENTRIES = [
   ['/accounts/bank-reconciliation',       () => import('../pages/Accounts/BankReconciliation')],
   ['/accounts/fixed-assets',              () => import('../pages/Accounts/FixedAssets')],
   ['/accounts/budget',                    () => import('../pages/Accounts/BudgetVsActual')],
-  ['/accounts/creditor-ledger',           () => import('../pages/Accounts/CreditorLedger')],
   ['/accounts/gl-integrity',              () => import('../pages/Accounts/GLIntegrityReport')],
   ['/accounts/vat-remittance',            () => import('../pages/Financial/VatRemittance')],
   ['/accounts/wht-remittance',            () => import('../pages/Financial/WhtRemittance')],

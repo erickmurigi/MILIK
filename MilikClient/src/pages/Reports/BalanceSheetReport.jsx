@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTabState } from "../../hooks/useTabState";
 import { printTabularList } from "../../utils/printList";
 import { useSelector } from "react-redux";
@@ -23,8 +24,15 @@ const fmtSigned = (v) => {
 
 const todayString = () => new Date().toISOString().split("T")[0];
 
+// Each section's share-of-category % must be measured against the sum of every section's own size
+// (gross), never the category's net total — a category whose subsections partly offset each other
+// (e.g. Liabilities: Owner Payables sits at -480,000, a contra balance) can net to near zero even
+// though the sections themselves are large, which would blow the division up into the thousands of
+// percent. Summing absolute section sizes keeps every percentage in [0, 100] and makes them add to ~100%.
+const grossCategoryTotal = (sections = []) => sections.reduce((sum, s) => sum + Math.abs(s.total || 0), 0) || 1;
+
 // ─── Section block ────────────────────────────────────────────────────────────
-const SectionBlock = React.memo(({ section, categoryTotal, accentColor }) => {
+const SectionBlock = React.memo(({ section, categoryTotal, accentColor, onRowClick }) => {
   const [open, setOpen] = useState(true);
   const share = categoryTotal > 0
     ? Math.min(Math.abs(section.total / categoryTotal) * 100, 100)
@@ -63,18 +71,22 @@ const SectionBlock = React.memo(({ section, categoryTotal, accentColor }) => {
             <span className="flex-1 text-[8px] font-bold uppercase tracking-[0.12em] text-slate-300">Account</span>
             <span className="w-28 shrink-0 text-right text-[8px] font-bold uppercase tracking-[0.12em] text-slate-300">Amount</span>
           </div>
-          {section.rows.map((row) => (
-            <div
-              key={row._id || `${row.code}-${row.name}`}
-              className="flex items-center gap-2 border-b border-slate-50 px-3 py-1.5 last:border-0 hover:bg-slate-50"
-            >
-              <span className="w-10 shrink-0 font-mono text-[9px] font-semibold text-slate-400">{row.code}</span>
-              <span className="flex-1 min-w-0 truncate text-[11px] text-slate-700" title={row.name}>{row.name}</span>
-              <span className="w-28 shrink-0 text-right font-mono text-[11px] font-bold tabular-nums text-slate-800">
-                KES {fmtSigned(row.amount)}
-              </span>
-            </div>
-          ))}
+          {section.rows.map((row) => {
+            const clickable = Boolean(row._id) && !row.isComputed;
+            return (
+              <div
+                key={row._id || `${row.code}-${row.name}`}
+                onClick={clickable ? () => onRowClick?.(row) : undefined}
+                className={`flex items-center gap-2 border-b border-slate-50 px-3 py-1.5 last:border-0 hover:bg-slate-50 ${clickable ? "cursor-pointer" : ""}`}
+              >
+                <span className="w-10 shrink-0 font-mono text-[9px] font-semibold text-slate-400">{row.code}</span>
+                <span className={`flex-1 min-w-0 truncate text-[11px] ${clickable ? "text-blue-700 hover:underline" : "text-slate-700"}`} title={row.name}>{row.name}</span>
+                <span className="w-28 shrink-0 text-right font-mono text-[11px] font-bold tabular-nums text-slate-800">
+                  KES {fmtSigned(row.amount)}
+                </span>
+              </div>
+            );
+          })}
           {/* Subtotal */}
           <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5 border-t border-slate-100">
             <span className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: accentColor, opacity: 0.7 }}>
@@ -91,10 +103,13 @@ const SectionBlock = React.memo(({ section, categoryTotal, accentColor }) => {
 });
 
 // ─── Column card ──────────────────────────────────────────────────────────────
-const ColumnCard = React.memo(({ title, sections, total, totalColor, accentColor, categoryTotal }) => (
+const ColumnCard = React.memo(({ title, sections, total, totalColor, accentColor, categoryTotal, onRowClick }) => (
   <div className="flex flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
     <div className="flex items-center justify-between px-4 py-2.5" style={{ background: GRN }}>
-      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">{title}</span>
+      <div>
+        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-white">{title}</span>
+        <p className="text-[9px] font-medium text-white/60">Click an account to view its ledger activity</p>
+      </div>
       <span className="font-mono text-[11px] font-black tabular-nums text-white">KES {fmtSigned(total)}</span>
     </div>
     <div className="flex-1 p-2">
@@ -105,6 +120,7 @@ const ColumnCard = React.memo(({ title, sections, total, totalColor, accentColor
             section={s}
             categoryTotal={Math.abs(categoryTotal || total)}
             accentColor={accentColor}
+            onRowClick={onRowClick}
           />
         ))
       ) : (
@@ -127,6 +143,7 @@ const ColumnCard = React.memo(({ title, sections, total, totalColor, accentColor
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const BalanceSheetReport = () => {
+  const navigate = useNavigate();
   const currentUser    = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const properties     = useSelector(selectAllProperties);
@@ -263,6 +280,13 @@ const BalanceSheetReport = () => {
   const { summary = {} } = report;
   const isBalanced = summary.balanced !== false;
 
+  const handleRowClick = (row) => {
+    if (!row?._id || row.isComputed) return;
+    navigate(`/accounts/chart-of-accounts/${row._id}/activity`, {
+      state: { trialBalanceDrillDown: { endDate: filters.asOfDate } },
+    });
+  };
+
   return (
     <DashboardLayout lockContentScroll>
       {/* overflow-y-auto lives on the body div — toolbar + KPI are always visible */}
@@ -335,31 +359,31 @@ const BalanceSheetReport = () => {
 
         {/* ── KPI strip ─────────────────────────────────────────────────────── */}
         <div className="flex shrink-0 overflow-hidden border-b border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-1 flex-col border-r border-slate-200 bg-emerald-50 px-5 py-3">
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-emerald-700/60">Total Assets</div>
-            <div className="text-lg font-black tabular-nums text-emerald-700">KES {fmtSigned(summary.totalAssets)}</div>
-            <div className="mt-0.5 text-[10px] text-emerald-600/60">{report.assets?.count || 0} account(s)</div>
+          <div className="flex flex-1 items-center gap-2 border-r border-slate-200 bg-emerald-50 px-4 py-1.5">
+            <span className="text-[9px] font-black uppercase tracking-[0.12em] text-emerald-600/70">Total Assets</span>
+            <span className="ml-auto font-mono text-sm font-black tabular-nums text-emerald-700">KES {fmtSigned(summary.totalAssets)}</span>
+            <span className="text-[9px] font-medium text-emerald-600/50">{report.assets?.count || 0} acct{(report.assets?.count || 0) !== 1 ? "s" : ""}</span>
           </div>
-          <div className="flex flex-1 flex-col border-r border-slate-200 bg-red-50 px-5 py-3">
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-red-700/60">Total Liabilities</div>
-            <div className="text-lg font-black tabular-nums text-red-700">KES {fmtSigned(summary.totalLiabilities)}</div>
-            <div className="mt-0.5 text-[10px] text-red-600/60">{report.liabilities?.count || 0} account(s)</div>
+          <div className="flex flex-1 items-center gap-2 border-r border-slate-200 bg-red-50 px-4 py-1.5">
+            <span className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600/70">Total Liabilities</span>
+            <span className="ml-auto font-mono text-sm font-black tabular-nums text-red-700">KES {fmtSigned(summary.totalLiabilities)}</span>
+            <span className="text-[9px] font-medium text-red-600/50">{report.liabilities?.count || 0} acct{(report.liabilities?.count || 0) !== 1 ? "s" : ""}</span>
           </div>
-          <div className="flex flex-1 flex-col border-r border-slate-200 bg-green-50 px-5 py-3">
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em] text-green-700/60">Total Equity</div>
-            <div className="text-lg font-black tabular-nums text-green-700">KES {fmtSigned(summary.totalEquity)}</div>
-            <div className="mt-0.5 text-[10px] text-green-600/60">{report.equity?.count || 0} account(s)</div>
+          <div className="flex flex-1 items-center gap-2 border-r border-slate-200 bg-green-50 px-4 py-1.5">
+            <span className="text-[9px] font-black uppercase tracking-[0.12em] text-green-600/70">Total Equity</span>
+            <span className="ml-auto font-mono text-sm font-black tabular-nums text-green-700">KES {fmtSigned(summary.totalEquity)}</span>
+            <span className="text-[9px] font-medium text-green-600/50">{report.equity?.count || 0} acct{(report.equity?.count || 0) !== 1 ? "s" : ""}</span>
           </div>
-          <div className={`flex flex-1 flex-col px-5 py-3 ${isBalanced ? "bg-emerald-50" : "bg-red-50"}`}>
-            <div className="mb-0.5 text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: isBalanced ? "#166534" : RED, opacity: 0.6 }}>
+          <div className={`flex flex-1 items-center gap-2 px-4 py-1.5 ${isBalanced ? "bg-emerald-50" : "bg-red-50"}`}>
+            <span className="text-[9px] font-black uppercase tracking-[0.12em]" style={{ color: isBalanced ? "#166534" : RED, opacity: 0.7 }}>
               Status
-            </div>
-            <div className="text-lg font-black" style={{ color: isBalanced ? "#166534" : RED }}>
+            </span>
+            <span className="ml-auto text-sm font-black" style={{ color: isBalanced ? "#166534" : RED }}>
               {isBalanced ? "Balanced" : "Out of Balance"}
-            </div>
-            <div className="mt-0.5 text-[10px]" style={{ color: isBalanced ? "#166534" : RED, opacity: 0.6 }}>
+            </span>
+            <span className="text-[9px] font-bold" style={{ color: isBalanced ? "#166534" : RED, opacity: 0.5 }}>
               Diff: KES {fmtSigned(summary.difference)}
-            </div>
+            </span>
           </div>
         </div>
 
@@ -380,7 +404,8 @@ const BalanceSheetReport = () => {
                   total={summary.totalAssets || 0}
                   totalColor={GRN}
                   accentColor="#166534"
-                  categoryTotal={Math.abs(summary.totalAssets || 1)}
+                  categoryTotal={grossCategoryTotal(report.assets?.sections)}
+                  onRowClick={handleRowClick}
                 />
 
                 {/* Liabilities + Equity stacked */}
@@ -391,7 +416,8 @@ const BalanceSheetReport = () => {
                     total={summary.totalLiabilities || 0}
                     totalColor={RED}
                     accentColor="#991B1B"
-                    categoryTotal={Math.abs(summary.totalLiabilities || 1)}
+                    categoryTotal={grossCategoryTotal(report.liabilities?.sections)}
+                    onRowClick={handleRowClick}
                   />
                   <ColumnCard
                     title="Equity"
@@ -399,7 +425,8 @@ const BalanceSheetReport = () => {
                     total={summary.totalEquity || 0}
                     totalColor="#15803d"
                     accentColor="#15803d"
-                    categoryTotal={Math.abs(summary.totalEquity || 1)}
+                    categoryTotal={grossCategoryTotal(report.equity?.sections)}
+                    onRowClick={handleRowClick}
                   />
                 </div>
               </div>

@@ -14,6 +14,7 @@ import Unit from "../../models/Unit.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
 import PaymentVoucher from "../../models/PaymentVoucher.js";
 import { computeTenantInvoiceSnapshotsBatch } from "./tenantInvoices.js";
+import { computeVendorApAgingRows } from "./serviceProviders.js";
 import { round2 } from "../../utils/math.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
@@ -69,7 +70,7 @@ const resolveInvoiceDueDateForReports = (invoice = {}) => {
 // isOperatingIncomeAccount / isOperatingExpenseAccount imported from accountClassifiers.js
 
 const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, endDate = null, propertyId = null, dimensions = null }) => {
-  // aggregate() does not auto-cast strings â†’ ObjectId the way find() does.
+  // aggregate() does not auto-cast strings → ObjectId the way find() does.
   const businessOid = new mongoose.Types.ObjectId(String(businessId));
   const match = {
     business: businessOid,
@@ -91,7 +92,7 @@ const buildLedgerMap = async ({ businessId, asOfDate = null, startDate = null, e
     if (asOfDate) match.transactionDate.$lte = asOfDate;
   }
 
-  // Aggregate in MongoDB â€” avoids transferring every entry document to Node.js.
+  // Aggregate in MongoDB — avoids transferring every entry document to Node.js.
   // Mirrors the getEntryAmount + debit/credit fallback logic for legacy entries
   // that stored amount+direction instead of explicit debit/credit fields.
   const debitExpr = {
@@ -316,19 +317,18 @@ export const getIncomeStatementReport = async (req, res, next) => {
       return next(createError(400, "Start date cannot be after end date."));
     }
 
-    // Optional property scope â€” filters ledger entries by the property dimension.
+    // Optional property scope — filters ledger entries by the property dimension.
     // Accounts remain generic; only entries tagged with this property are included.
     const scopePropertyId = req.query.propertyId ? toObjectId(req.query.propertyId) : null;
 
     // Optional tag scope: a profit and loss for one project, unit, deal, agent or cost centre.
     const tagScope = {};
-    for (const [param, field] of [["projectId", "dimensions.saleProject"], ["dealId", "dimensions.saleDeal"], ["listingId", "dimensions.saleListing"], ["agentId", "dimensions.saleAgent"]]) {
+    for (const [param, field] of [["projectId", "dimensions.saleProject"], ["dealId", "dimensions.saleDeal"], ["listingId", "dimensions.saleListing"], ["agentId", "dimensions.saleAgent"], ["costCentreId", "dimensions.costCentre"]]) {
       if (!req.query[param]) continue;
       const oid = toObjectId(req.query[param]);
       if (!oid) return next(createError(400, `Invalid ${param}.`));
       tagScope[field] = oid;
     }
-    if (typeof req.query.costCentre === "string" && req.query.costCentre.trim()) tagScope["dimensions.costCentre"] = req.query.costCentre.trim();
 
     const accountQuery = {
       business: businessId,
@@ -384,8 +384,8 @@ export const getIncomeStatementReport = async (req, res, next) => {
 
     const exclusions = selfManaging
       ? [
-          "Commission income (not applicable â€” self-managed)",
-          "Management fee income (not applicable â€” self-managed)",
+          "Commission income (not applicable — self-managed)",
+          "Management fee income (not applicable — self-managed)",
           "Landlord remittance accounts (you are the landlord)",
         ]
       : company?.modules?.propertyManagement
@@ -595,7 +595,7 @@ const extractUtilityInvoiceName = (invoice) => {
     ""
   ).trim();
   if (fromMeta) return fromMeta;
-  const desc = String(invoice?.description || "").split(/[Â·\-â€“:,]/)[0].trim();
+  const desc = String(invoice?.description || "").split(/[·\-–:,]/)[0].trim();
   const match = desc.match(/^([A-Za-z][A-Za-z\s]+?)(?:\s+charge|\s+bill|\s+invoice|\s+for|\s+\d|$)/i);
   return ((match?.[1] || desc).trim().replace(/\s+/g, " ") || "Other").slice(0, 40);
 };
@@ -713,7 +713,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
       zonePropertyIds = zoneProps.map((p) => p._id);
     }
 
-    // RentPayment doesn't reliably carry a direct property field â€” resolve via unit.
+    // RentPayment doesn't reliably carry a direct property field — resolve via unit.
     // unitId is more specific and takes precedence; propertyId resolves to its unit IDs.
     if (req.query.unitId) {
       paymentQuery.unit = toObjectId(req.query.unitId);
@@ -748,7 +748,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
     if (req.query.unitId) invoiceQuery.unit = toObjectId(req.query.unitId);
     if (req.query.landlordId) invoiceQuery.landlord = toObjectId(req.query.landlordId);
 
-    // Run payment fetch and invoice aggregate in parallel â€” they are independent queries.
+    // Run payment fetch and invoice aggregate in parallel — they are independent queries.
     const [receipts, periodInvoiced] = await Promise.all([
       RentPayment.find(paymentQuery)
         .populate("tenant", "name tenantName")
@@ -860,7 +860,7 @@ export const getRentalCollectionReport = async (req, res, next) => {
 
     // Collection rate = operational cash collected / operational invoices raised.
     // Deposits are excluded from both sides: they are not billed as invoices and are
-    // not income â€” using totalCollected here would push the rate above 100%.
+    // not income — using totalCollected here would push the rate above 100%.
     summary.collectionRate = summary.periodInvoiced > 0
       ? round2((summary.operationalCollected / summary.periodInvoiced) * 100)
       : null;
@@ -920,7 +920,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const filterSearch = safeLower(req.query.search || "");
     const filterStatus = req.query.status && req.query.status !== "all" ? req.query.status : "";
 
-    // â”€â”€ Step 1: batch-fetch tenants, units, properties in 3 parallel queries â”€â”€
+    // ── Step 1: batch-fetch tenants, units, properties in 3 parallel queries ──
     // Avoids the N+1 problem of cursor+nested-populate (2 queries per tenant).
     const [allTenants, allUnits, allProperties] = await Promise.all([
       Tenant.find(tenantQuery).select("_id tenantName name unit additionalUnits").sort({ name: 1, createdAt: 1 }).limit(10000).lean(),
@@ -931,7 +931,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
     const unitMap = new Map(allUnits.map((u) => [String(u._id), u]));
     const propMap = new Map(allProperties.map((p) => [String(p._id), p]));
 
-    // â”€â”€ Step 2: build base rows â€” one row per tenant (all units combined) â”€â”€
+    // ── Step 2: build base rows — one row per tenant (all units combined) ──
     const baseRows = [];
     for (const tenant of allTenants) {
       const primaryUnit = unitMap.get(String(tenant.unit || "")) || {};
@@ -958,7 +958,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
       baseRows.push(row);
     }
 
-    // â”€â”€ Step 3: snapshot computation in chunks of 500 â”€â”€
+    // ── Step 3: snapshot computation in chunks of 500 ──
     const REPORT_CHUNK = 500;
     const allRows = [];
     const allUtilityTypesSet = new Set();
@@ -1019,7 +1019,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           }
         }
         previousArrears = round2(previousArrears);
-        // All invoices across all units combined â€” no per-unit split
+        // All invoices across all units combined — no per-unit split
         const invoices = allInvoices;
         // Receipts are always tenant-level
         const receipts = normalizeArray(snapshot.receiptAllocations);
@@ -1095,7 +1095,7 @@ export const getTenantPaidBalanceReport = async (req, res, next) => {
           }
         }
 
-        // BAL B/F = gross prior invoices âˆ’ gross prior receipts (signed; negative = credit carried forward)
+        // BAL B/F = gross prior invoices − gross prior receipts (signed; negative = credit carried forward)
         const balBF = fromDateMs ? round2(priorInvoiceTotal - priorReceiptTotal) : 0;
 
         const netBalance = round2(previousArrears + outstanding - unappliedCredit);
@@ -1247,7 +1247,7 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
     };
     if (propertyIds) invoiceMatch.property = { $in: propertyIds };
 
-    // Deposits are liabilities held in trust â€” they are NOT operating income.
+    // Deposits are liabilities held in trust — they are NOT operating income.
     // Exclude them from the collected total so net income is not overstated.
     const receiptMatch = {
       ...buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" }),
@@ -1280,7 +1280,7 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
           },
         },
       ]).allowDiskUse(true),
-      // RentPayment has no `property` field â€” resolved via unit lookup for grouping.
+      // RentPayment has no `property` field — resolved via unit lookup for grouping.
       // When propertyIds is set, receiptMatch.unit already constrains the initial $match,
       // so the post-lookup property filter is not needed.
       RentPayment.aggregate([
@@ -1602,7 +1602,7 @@ export const getCashFlowReport = async (req, res, next) => {
       const inflow = round2(row.debit || 0);
       const outflow = round2(row.credit || 0);
       const net = round2(inflow - outflow);
-      // Skip items where reversals fully cancel the original in the same period â€” net-zero has no cash flow impact.
+      // Skip items where reversals fully cancel the original in the same period — net-zero has no cash flow impact.
       if (Math.abs(net) < 0.01) continue;
       const label = CASH_FLOW_LABELS[sourceType] || sourceType;
       const item = { sourceType, label, inflow, outflow, net };
@@ -1677,7 +1677,7 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
       if (pid) propertyIds = [pid];
     }
 
-    // MRI = Monthly Rental Income tax â€” base is rental/utility income only.
+    // MRI = Monthly Rental Income tax — base is rental/utility income only.
     // Deposits are liability receipts, not rental income, and must be excluded.
     const receiptMatch = {
       ...buildEffectiveReceiptQuery({ businessId, startDate, endDate, dateField: "paymentDate" }),
@@ -1784,12 +1784,12 @@ export const getMRITaxSummaryReport = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ AR / AP Aging helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AR / AP Aging helpers ────────────────────────────────────────────────────
 const AGING_BUCKETS = [
   { key: "current",   label: "Current",    min: null, max: 0   },
-  { key: "d1_30",     label: "1â€“30 days",  min: 1,    max: 30  },
-  { key: "d31_60",    label: "31â€“60 days", min: 31,   max: 60  },
-  { key: "d61_90",    label: "61â€“90 days", min: 61,   max: 90  },
+  { key: "d1_30",     label: "1–30 days",  min: 1,    max: 30  },
+  { key: "d31_60",    label: "31–60 days", min: 31,   max: 60  },
+  { key: "d61_90",    label: "61–90 days", min: 61,   max: 90  },
   { key: "d90plus",   label: "90+ days",   min: 91,   max: null },
 ];
 
@@ -1801,7 +1801,7 @@ const assignBucket = (daysOverdue) => {
   return "d90plus";
 };
 
-// â”€â”€â”€ AR Aging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AR Aging ─────────────────────────────────────────────────────────────────
 export const getARAgingReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -1810,7 +1810,7 @@ export const getARAgingReport = async (req, res, next) => {
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     asOf.setHours(23, 59, 59, 999);
 
-    // Fetch outstanding invoices AND debit notes in parallel â€” both are receivable documents.
+    // Fetch outstanding invoices AND debit notes in parallel — both are receivable documents.
     const [invoices, debitNotes] = await Promise.all([
       TenantInvoice.find({
         business: businessId,
@@ -1885,9 +1885,9 @@ export const getARAgingReport = async (req, res, next) => {
         invoiceId: inv._id,
         invoiceNumber: inv.invoiceNumber,
         tenantId: inv.tenant?._id,
-        tenantName: inv.tenant?.tenantName || inv.tenant?.name || "â€”",
-        propertyName: inv.property?.propertyName || inv.property?.name || "â€”",
-        unitName: inv.unit?.unitNumber || inv.unit?.name || "â€”",
+        tenantName: inv.tenant?.tenantName || inv.tenant?.name || "—",
+        propertyName: inv.property?.propertyName || inv.property?.name || "—",
+        unitName: inv.unit?.unitNumber || inv.unit?.name || "—",
         invoiceDate: inv.invoiceDate,
         dueDate: inv.dueDate,
         amount: inv.amount,
@@ -1899,7 +1899,7 @@ export const getARAgingReport = async (req, res, next) => {
       });
     }
 
-    // Debit notes are separate receivable documents â€” include them in the aging schedule
+    // Debit notes are separate receivable documents — include them in the aging schedule
     for (const note of debitNotes) {
       const outstanding = outstandingMap.get(String(note._id));
       if (!outstanding || outstanding <= 0) continue;
@@ -1916,9 +1916,9 @@ export const getARAgingReport = async (req, res, next) => {
         invoiceId: note._id,
         invoiceNumber: note.noteNumber,
         tenantId: note.tenant?._id,
-        tenantName: note.tenant?.tenantName || note.tenant?.name || "â€”",
-        propertyName: note.property?.propertyName || note.property?.name || "â€”",
-        unitName: note.unit?.unitNumber || note.unit?.name || "â€”",
+        tenantName: note.tenant?.tenantName || note.tenant?.name || "—",
+        propertyName: note.property?.propertyName || note.property?.name || "—",
+        unitName: note.unit?.unitNumber || note.unit?.name || "—",
         invoiceDate: refDate,
         dueDate: refDate,
         amount: note.amount,
@@ -1939,7 +1939,16 @@ export const getARAgingReport = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ AP Aging â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AP Aging ─────────────────────────────────────────────────────────────────
+// Two genuinely different liability sources, both surfaced here:
+// - Landlord-category vouchers (maintenance, deposit refunds, other landlord dues) have no
+//   accrual-first pipeline of their own — the voucher itself is the earliest record of the
+//   liability, so draft/approved vouchers are still read directly for those.
+// - Vendor (ServiceProvider) payables now come from computeVendorApAgingRows, which ages the real
+//   GL accrual (ap_invoice_liability/liability_accrual), netted FIFO against settlements — the same
+//   ledger Outstanding/Statement already read. The previous approach read pending PaymentVoucher
+//   records directly, which missed any accrual never (yet) turned into a voucher — including every
+//   vendor take-on (opening) balance, which never gets a voucher at all.
 export const getAPAgingReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -1948,14 +1957,18 @@ export const getAPAgingReport = async (req, res, next) => {
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     asOf.setHours(23, 59, 59, 999);
 
-    const vouchers = await PaymentVoucher.find({
-      business: businessId,
-      status: { $in: ["draft", "approved"] },
-    })
-      .populate("property", "propertyName")
-      .populate("landlord", "name")
-      .limit(5000)
-      .lean();
+    const [vouchers, vendorAging] = await Promise.all([
+      PaymentVoucher.find({
+        business: businessId,
+        status: { $in: ["draft", "approved"] },
+        serviceProvider: null,
+      })
+        .populate("property", "propertyName")
+        .populate("landlord", "name")
+        .limit(5000)
+        .lean(),
+      computeVendorApAgingRows(businessId, asOf),
+    ]);
 
     const totals = { current: 0, d1_30: 0, d31_60: 0, d61_90: 0, d90plus: 0, total: 0 };
     const rows = [];
@@ -1973,17 +1986,24 @@ export const getAPAgingReport = async (req, res, next) => {
       rows.push({
         voucherId: v._id,
         reference: v.reference || v.voucherNo || String(v._id).slice(-6),
-        narration: v.narration || "â€”",
+        narration: v.narration || "—",
         category: v.category,
         status: v.status,
-        propertyName: v.property?.propertyName || "â€”",
-        landlordName: v.landlord?.name || "â€”",
+        propertyName: v.property?.propertyName || "—",
+        landlordName: v.landlord?.name || "—",
+        serviceProviderId: null,
+        vendorName: v.payeeName || null,
         dueDate: v.dueDate,
         amount: outstanding,
         daysOverdue,
         bucket,
       });
     }
+
+    for (const key of Object.keys(totals)) {
+      totals[key] = round2(totals[key] + (vendorAging.totals[key] || 0));
+    }
+    rows.push(...vendorAging.rows);
 
     rows.sort((a, b) => b.daysOverdue - a.daysOverdue);
 
@@ -1993,7 +2013,7 @@ export const getAPAgingReport = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ Cash Monthly Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Cash Monthly Summary ─────────────────────────────────────────────────────
 // Returns cashIn / cashOut per month for the last N months (default 6).
 // cashIn  = debits  to cashbook accounts (money received into cash/bank)
 // cashOut = credits from cashbook accounts (money paid out of cash/bank)
@@ -2061,7 +2081,7 @@ export const getCashMonthlySummary = async (req, res, next) => {
       },
     ]).allowDiskUse(true);
 
-    // Build lookup: "YYYY-M" â†’ { cashIn, cashOut }
+    // Build lookup: "YYYY-M" → { cashIn, cashOut }
     const map = {};
     for (const row of rows) {
       const key = `${row._id.y}-${row._id.m}`;
@@ -2082,7 +2102,7 @@ export const getCashMonthlySummary = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ TRIAL BALANCE EXCEPTIONS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── TRIAL BALANCE EXCEPTIONS ────────────────────────────────────────────────
 // Returns accounts with unusual/flagged balance conditions. Each flag has a
 // severity so the UI can colour-code: critical / warning / info.
 export const getTrialBalanceExceptions = async (req, res, next) => {
@@ -2156,7 +2176,7 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
         exceptions.push({
           severity: "info",
           flag: "zero_balance_with_activity",
-          message: `Account has ${row.entryCount} entries but net zero balance â€” may indicate matched reversal`,
+          message: `Account has ${row.entryCount} entries but net zero balance — may indicate matched reversal`,
           account: { id: row._id, code: acc.code, name: acc.name, type: acc.type },
           netBalance: netBal,
           entryCount: row.entryCount,
@@ -2193,7 +2213,7 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ FINANCIAL RATIOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── FINANCIAL RATIOS ─────────────────────────────────────────────────────────
 export const getFinancialRatios = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -2201,7 +2221,7 @@ export const getFinancialRatios = async (req, res, next) => {
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
 
-    // Get per-account net balances â€” use REPORT_LEDGER_STATUSES so reversed
+    // Get per-account net balances — use REPORT_LEDGER_STATUSES so reversed
     // originals and their corrections net to zero before ratio calculation.
     const [rows, accounts] = await Promise.all([
       FinancialLedgerEntry.aggregate([
@@ -2284,7 +2304,7 @@ export const getFinancialRatios = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ YEAR-END CLOSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── YEAR-END CLOSE ───────────────────────────────────────────────────────────
 // Closes all income/expense accounts for the given fiscal year into Retained
 // Earnings (account 3200). Posts a closing journal entry and locks the period.
 export const performYearEndClose = async (req, res, next) => {
@@ -2314,7 +2334,7 @@ export const performYearEndClose = async (req, res, next) => {
 
     // Sum income and expense ledger entries for the year.
     // Must use REPORT_LEDGER_STATUSES (approved + reversed) so that reversed
-    // originals and their correcting entries net to zero â€” same logic as every
+    // originals and their correcting entries net to zero — same logic as every
     // other financial report. Using "approved" only would double-count the
     // debit leg of a reversal while missing the original credit, understating income.
     const rows = await FinancialLedgerEntry.aggregate([
@@ -2354,7 +2374,7 @@ export const performYearEndClose = async (req, res, next) => {
     const netIncome = totalIncomeCredit - totalExpenseDebit;
     if (Math.abs(netIncome) < 0.01) {
       return res.status(400).json({
-        message: "Net income for the year is zero â€” nothing to close",
+        message: "Net income for the year is zero — nothing to close",
         netIncome,
       });
     }
@@ -2366,10 +2386,10 @@ export const performYearEndClose = async (req, res, next) => {
       return next(createError(400, "Retained Earnings account (3200) not found. Ensure your chart of accounts is set up correctly."));
     }
 
-    // Resolve an income summary account â€” we use retained earnings directly here
-    // (single-step close: net income â†’ retained earnings)
+    // Resolve an income summary account — we use retained earnings directly here
+    // (single-step close: net income → retained earnings)
     const userId = req.user?._id || req.user?.id;
-    const closeNarration = narration || `Year-end close ${year}: net income KES ${netIncome.toFixed(2)} â†’ Retained Earnings`;
+    const closeNarration = narration || `Year-end close ${year}: net income KES ${netIncome.toFixed(2)} → Retained Earnings`;
 
     // Post to retained earnings: debit if net loss, credit if net income
     const direction = netIncome >= 0 ? "credit" : "debit";
@@ -2420,7 +2440,7 @@ export const performYearEndClose = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ Liability Sub-Ledger â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Liability Sub-Ledger ──────────────────────────────────────────────────────
 // Breaks down each liability account into its constituent entries so the
 // Balance Sheet total can be reconciled to individual tenants / landlords.
 // tabs: deposits (2100) | landlord (2110) | unallocated (2130) | tax (2140) | wht (2141)
@@ -2469,7 +2489,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
       ],
     };
 
-    // â”€â”€ 2110 Landlord Payables â€” group by property â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── 2110 Landlord Payables — group by property ─────────────────────────────
     if (tab === "landlord") {
       const agg = await FinancialLedgerEntry.aggregate([
         { $match: glMatch },
@@ -2522,7 +2542,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
       return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
     }
 
-    // â”€â”€ 2140 Tax Payable â€” group by source transaction then by month â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── 2140 Tax Payable — group by source transaction then by month ──────────
     if (tab === "tax") {
       const agg = await FinancialLedgerEntry.aggregate([
         { $match: glMatch },
@@ -2611,7 +2631,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
       return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
     }
 
-    // â”€â”€ 2141 WHT Payable â€” group by source (voucher OR property-sale commission payout), then by month.
+    // ── 2141 WHT Payable — group by source (voucher OR property-sale commission payout), then by month.
     // sourceTransactionId isn't always a PaymentVoucher id: a commission payout's WHT leg
     // (postPropertySaleCommissionPayout) uses the composite id "<commissionId>:payout:<payoutId>" — that
     // string would fail ObjectId casting if ever handed to PaymentVoucher.find(), so the two source kinds
@@ -2674,7 +2694,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
         g.subtotal = round2(g.subtotal + r.balance);
         g.rows.push({
           sourceId:    String(r.sourceId),
-          voucherNo:   v?.voucherNo   || "â€”",
+          voucherNo:   v?.voucherNo   || "—",
           narration:   v?.narration   || "",
           vendor:      v?.serviceProvider?.name || "",
           property:    v?.property?.propertyName || "",
@@ -2695,7 +2715,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
         g.subtotal = round2(g.subtotal + r.balance);
         g.rows.push({
           sourceId:    String(r.sourceId),
-          voucherNo:   c?.commissionNumber || "â€”",
+          voucherNo:   c?.commissionNumber || "—",
           narration:   "Broker commission WHT",
           vendor:      c?.agent?.fullName || "",
           property:    c?.listing?.title || c?.listing?.listingNumber || "",
@@ -2712,7 +2732,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
       return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
     }
 
-    // â”€â”€ 2100 Deposits / 2130 Unallocated â€” group by tenant then by property â”€â”€â”€
+    // ── 2100 Deposits / 2130 Unallocated — group by tenant then by property ───
     const agg = await FinancialLedgerEntry.aggregate([
       { $match: glMatch },
       {
@@ -2755,7 +2775,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
 
     const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
 
-    // Build invoice map (first entry per tenant wins â€” sorted by date desc so newest first)
+    // Build invoice map (first entry per tenant wins — sorted by date desc so newest first)
     const invoiceMap = new Map();
     invs.forEach((inv) => {
       const key = String(inv.tenant);
@@ -2802,7 +2822,7 @@ export const getLiabilitySubledger = async (req, res, next) => {
 // Returns monthly income/expense/net totals for the last N months in a single DB query.
 // Used by AccountsDashboard to replace 6 individual income-statement calls.
 // Applies the same account classifiers as getIncomeStatementReport so the chart
-// matches the Income Statement â€” landlord pass-through accounts are excluded.
+// matches the Income Statement — landlord pass-through accounts are excluded.
 export const getIncomeMonthlySummary = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -3008,11 +3028,11 @@ export const getTenantSummaryReport = async (req, res, next) => {
       return {
         tenantId: String(tenant._id),
         tenantName: tenant.tenantName || tenant.name || "Unknown Tenant",
-        email: tenant.email || "â€”",
-        phone: tenant.phone || "â€”",
-        propertyName: prop.propertyName || prop.name || "â€”",
+        email: tenant.email || "—",
+        phone: tenant.phone || "—",
+        propertyName: prop.propertyName || prop.name || "—",
         propertyId: propId,
-        unitNumber: unit.unitNumber || unit.name || "â€”",
+        unitNumber: unit.unitNumber || unit.name || "—",
         totalInvoiced,
         totalPaid,
         balance,
@@ -3038,10 +3058,10 @@ export const getTenantSummaryReport = async (req, res, next) => {
   }
 };
 
-// â”€â”€â”€ Rental Aged Analysis â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Rental Aged Analysis ─────────────────────────────────────────────────────
 // Returns one row per tenant with outstanding receivables bucketed into aging
 // periods (current / 1-30 / 31-60 / 61-90 / 90+ days overdue).  All allocation
-// math runs inside MongoDB â€” the browser just renders the pre-computed rows.
+// math runs inside MongoDB — the browser just renders the pre-computed rows.
 export const getRentalAgedAnalysisReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -3050,7 +3070,7 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
 
     const now = new Date();
 
-    // â”€â”€ Build the base invoice match â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Build the base invoice match ──────────────────────────────────────────
     const match = {
       business: businessOid,
       category: { $in: ["RENT_CHARGE", "UTILITY_CHARGE", "LATE_PENALTY_CHARGE"] },
@@ -3062,7 +3082,7 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
       match.category = req.query.category;
     }
 
-    // Optional property filter â€” takes precedence over zone
+    // Optional property filter — takes precedence over zone
     if (req.query.propertyId) {
       match.property = toObjectId(req.query.propertyId);
     } else if (req.query.zone) {
@@ -3074,7 +3094,7 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
       match.property = { $in: zoneProps.map((p) => p._id) };
     }
 
-    // â”€â”€ Aggregation pipeline â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Aggregation pipeline ──────────────────────────────────────────────────
     const pipeline = [
       { $match: match },
 
@@ -3141,7 +3161,7 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
       // Release the potentially large payments array before subsequent stages.
       { $project: { _payments: 0 } },
 
-      // Effective due date: dueDate â†’ metadata chain â†’ invoiceDate
+      // Effective due date: dueDate → metadata chain → invoiceDate
       {
         $addFields: {
           _effectiveDueDate: {
@@ -3168,7 +3188,7 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
         },
       },
 
-      // Overdue days (whole days; 0 = not yet due or due today â†’ current bucket)
+      // Overdue days (whole days; 0 = not yet due or due today → current bucket)
       {
         $addFields: {
           _overdueDays: {
@@ -3259,7 +3279,7 @@ export const getRentalAgedAnalysisReport = async (req, res, next) => {
         },
       },
 
-      // Group by tenant â€” sum each aging bucket, track oldest effective due date
+      // Group by tenant — sum each aging bucket, track oldest effective due date
       {
         $group: {
           _id: "$tenant",

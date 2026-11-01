@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
+import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -19,6 +20,7 @@ const MILIK_RED = "#DC2626";
 const todayString = () => new Date().toISOString().split("T")[0];
 
 const TrialBalanceReport = () => {
+  const navigate = useNavigate();
   const currentUser = useSelector(selectCurrentUser);
   const currentCompany = useSelector(selectCurrentCompany);
   const properties = useSelector(selectAllProperties);
@@ -205,6 +207,13 @@ const TrialBalanceReport = () => {
   };
 
   const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";
+
+  const handleRowClick = (row) => {
+    if (!row?._id) return;
+    navigate(`/accounts/chart-of-accounts/${row._id}/activity`, {
+      state: { trialBalanceDrillDown: { endDate: filters.asOfDate } },
+    });
+  };
 
   return (
     <DashboardLayout lockContentScroll>
@@ -451,7 +460,10 @@ const TrialBalanceReport = () => {
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white shadow-sm">
             <div className="flex-shrink-0 bg-[#0B3B2E] px-3 py-2 text-white flex items-center justify-between">
-              <h3 className="text-sm font-extrabold tracking-wide">Trial Balance Details</h3>
+              <div>
+                <h3 className="text-sm font-extrabold tracking-wide">Trial Balance Details</h3>
+                <p className="text-[10px] font-medium text-white/70">Click a row to view its ledger activity</p>
+              </div>
               <div className="text-sm font-semibold opacity-95">
                 As at {new Date(report.asOfDate || filters.asOfDate).toLocaleDateString()}
               </div>
@@ -459,36 +471,37 @@ const TrialBalanceReport = () => {
             <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
               <MilikTable
                 columns={[
-                  { label: "Code" },
+                  { label: "Code", width: "80px" },
                   { label: "Account Name" },
-                  { label: "Type" },
-                  { label: "Group" },
-                  { label: "Sub Group" },
-                  { label: "Debit", align: "right" },
-                  { label: "Credit", align: "right" },
+                  { label: "Type", width: "90px" },
+                  { label: "Group", width: "140px" },
+                  { label: "Sub Group", width: "160px" },
+                  { label: "Debit", align: "right", width: "140px" },
+                  { label: "Credit", align: "right", width: "140px" },
                 ]}
                 rows={report.rows || []}
                 rowKey={(row) => row._id || `${row.code}-${row.name}`}
                 loading={loading}
+                onRowClick={handleRowClick}
                 empty="No trial balance rows found for the selected date."
                 renderFooter={report.rows?.length > 0 ? () => (
                   <>
-                    <td colSpan={5} className="px-6 py-4 text-sm font-extrabold text-gray-900 text-right">TOTAL</td>
-                    <td className="px-6 py-4 text-sm text-right font-extrabold text-gray-900">{formatMoney(report.totals?.debit)}</td>
-                    <td className="px-6 py-4 text-sm text-right font-extrabold text-gray-900">{formatMoney(report.totals?.credit)}</td>
+                    <td colSpan={5} className="px-3 py-1.5 border-r border-gray-100 text-right font-black text-slate-900 normal-case">TOTAL</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-black text-slate-900 tabular-nums">{formatMoney(report.totals?.debit)}</td>
+                    <td className="px-3 py-1.5 text-right font-black text-slate-900 tabular-nums">{formatMoney(report.totals?.credit)}</td>
                   </>
                 ) : undefined}
                 renderRow={(row) => (
                   <>
-                    <td className="px-6 py-4 text-sm font-bold text-gray-900">{row.code}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-800">{row.name}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-700 capitalize">{row.type}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-700">{row.group}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-gray-700">{row.subGroup || "-"}</td>
-                    <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-bold text-slate-900 normal-case">{row.code}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900 normal-case">{row.name}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-medium text-slate-600 capitalize">{row.type}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-medium text-slate-600 normal-case">{row.group}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-medium text-slate-600 normal-case">{row.subGroup || "-"}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-bold text-slate-900 tabular-nums">
                       {row.debitBalance ? formatMoney(row.debitBalance) : "-"}
                     </td>
-                    <td className="px-6 py-4 text-sm text-right font-bold text-gray-900">
+                    <td className="px-3 py-1.5 text-right font-bold text-slate-900 tabular-nums">
                       {row.creditBalance ? formatMoney(row.creditBalance) : "-"}
                     </td>
                   </>

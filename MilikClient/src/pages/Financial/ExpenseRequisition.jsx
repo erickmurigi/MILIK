@@ -15,7 +15,7 @@ import {
 } from "react-icons/fa";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
 import { useConfirm } from "../../context/ConfirmContext";
@@ -38,6 +38,7 @@ import MilikTable from '../../components/common/MilikTable';
 import ListToolbar from '../../components/common/ListToolbar';
 import Modal from "../../components/common/Modal";
 import { useTerms } from "../../hooks/useTerm";
+import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
 
 const DEFAULT_PAGE_SIZE = 50;
 
@@ -97,6 +98,7 @@ const blankForm = {
   category: "general",
   property: "",
   serviceProvider: "",
+  expenseAccount: "",
   notes: "",
   status: "draft",
 };
@@ -114,6 +116,12 @@ const ExpenseRequisition = () => {
   const confirm = useConfirm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
+  // This page is mounted at two routes (/accounts/expenses in the Financial Accounting module,
+  // /expenses/requisition in the Property Management module) — follow the module the user is
+  // actually in rather than hardcoding one, so "View linked voucher" / "Create payment voucher"
+  // don't drop a Financial Accounting user onto the PMS module's Payment Vouchers page.
+  const paymentVouchersPath = location.pathname.startsWith("/accounts") ? "/accounts/payment-vouchers" : "/expenses/payment-vouchers";
   const { property: termProperty } = useTerms("property");
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
@@ -123,6 +131,8 @@ const ExpenseRequisition = () => {
   const [serverTotal, setServerTotal] = useState(0);
   const [serverPages, setServerPages] = useState(1);
   const [providers, setProviders] = useState([]);
+  const [pinnedProvider, setPinnedProvider] = useState(null);
+  const [expenseAccounts, setExpenseAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -134,7 +144,7 @@ const ExpenseRequisition = () => {
   const setFilter = (key) => (e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }));
   const debouncedSearch = useDebounce(filters.search, 400);
   const [form, setForm] = useState(blankForm);
-  const [statusModal, setStatusModal] = useState({ open: false, row: null, status: "", reason: "", loading: false });
+  const [statusModal, setStatusModal] = useState({ open: false, row: null, status: "", reason: "", loading: false, overrideNote: "", budgetCheck: null });
 
   const canCreate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "create", "accounts");
   const canUpdate  = hasCompanyPermission(currentUser, currentCompany, "expenses", "update", "accounts");
@@ -195,12 +205,29 @@ const ExpenseRequisition = () => {
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    getServiceProviders({ business: currentCompany._id, company: currentCompany._id })
-      .then((data) => setProviders(Array.isArray(data) ? data : []))
+    // Only active vendors are offered for a new pick — a deactivated one stays picklable on a
+    // record that already references it, via the providerOptions fallback below.
+    getServiceProviders({ business: currentCompany._id, company: currentCompany._id, active: true, limit: 200 })
+      .then((result) => setProviders(Array.isArray(result?.data) ? result.data : []))
+      .catch(() => {});
+  }, [currentCompany?._id]);
+
+  useEffect(() => {
+    if (!currentCompany?._id) return;
+    getCachedChartOfAccounts(currentCompany._id)
+      .then((data) => setExpenseAccounts((Array.isArray(data) ? data : []).filter((a) => a.type === "expense" && a.isPosting !== false)))
       .catch(() => {});
   }, [currentCompany?._id]);
 
   const totalPages = Math.max(1, serverPages);
+
+  const providerOptions = useMemo(() => {
+    const options = providers.map((p) => ({ value: p._id, label: `${p.providerCode} - ${p.name}` }));
+    if (pinnedProvider?._id && !providers.some((p) => String(p._id) === String(pinnedProvider._id))) {
+      options.push({ value: pinnedProvider._id, label: `${pinnedProvider.providerCode ? `${pinnedProvider.providerCode} - ` : ""}${pinnedProvider.name} (Inactive)` });
+    }
+    return options;
+  }, [providers, pinnedProvider]);
 
   const stats = useMemo(
     () => ({
@@ -231,6 +258,7 @@ const ExpenseRequisition = () => {
     if (!canCreate) { toast.warning("You don't have permission to create expense requisitions"); return; }
     setEditingId("");
     setForm(blankForm);
+    setPinnedProvider(null);
     setShowModal(true);
   };
 
@@ -247,9 +275,13 @@ const ExpenseRequisition = () => {
       category: row.category || "general",
       property: row.property?._id || row.property || "",
       serviceProvider: row.serviceProvider?._id || row.serviceProvider || "",
+      expenseAccount: row.expenseAccount?._id || row.expenseAccount || "",
       notes: row.notes || "",
       status: row.status || "draft",
     });
+    // The active-only provider list can be missing a now-deactivated vendor this record
+    // already references — pin it so the picker still shows its name instead of going blank.
+    setPinnedProvider(row.serviceProvider && typeof row.serviceProvider === "object" ? row.serviceProvider : null);
     setShowModal(true);
   };
 
@@ -305,6 +337,12 @@ const ExpenseRequisition = () => {
             ? "Expense requisition submitted for approval"
             : "Expense requisition saved as draft"
       );
+      if (saved?.budgetCheck?.overBudget) {
+        toast.warning(
+          `This requisition exceeds the available budget for its expense account (available: KES ${fmt(saved.budgetCheck.available)}). An override note will be required to approve it.`,
+          { autoClose: 8000 }
+        );
+      }
     } catch (error) {
       toast.error(error?.response?.data?.message || "Failed to save expense requisition");
     } finally {
@@ -340,27 +378,44 @@ const ExpenseRequisition = () => {
       return;
     }
     const defaultReason = status === "approved" ? (row?.approvalNote || "") : status === "rejected" ? (row?.rejectionReason || "") : (row?.cancellationReason || "Cancelled");
-    setStatusModal({ open: true, row, status, reason: defaultReason, loading: false });
+    const knownOverBudget = status === "approved" && row?.budgetCheck?.overBudget ? row.budgetCheck : null;
+    setStatusModal({ open: true, row, status, reason: defaultReason, loading: false, overrideNote: row?.approvalOverrideNote || "", budgetCheck: knownOverBudget });
   };
 
   const handleStatusConfirm = async () => {
-    const { row, status, reason } = statusModal;
+    const { row, status, reason, overrideNote, budgetCheck } = statusModal;
     if (status === "rejected" && !String(reason || "").trim()) {
       toast.warning("Rejection reason is required");
       return;
     }
+    if (status === "approved" && budgetCheck && !String(overrideNote || "").trim()) {
+      toast.warning("A budget override note is required to approve an over-budget requisition");
+      return;
+    }
     const payload = { status, business: currentCompany?._id, company: currentCompany?._id };
-    if (status === "approved") payload.approvalNote = reason;
-    else payload.reason = reason;
+    if (status === "approved") {
+      payload.approvalNote = reason;
+      if (budgetCheck) payload.approvalOverrideNote = overrideNote;
+    } else {
+      payload.reason = reason;
+    }
     setStatusModal((prev) => ({ ...prev, loading: true }));
     try {
       const saved = await updateExpenseRequisitionStatus(row._id, payload);
       setRows((prev) => prev.map((item) => (item._id === row._id ? saved : item)));
       toast.success(`Requisition ${status}`);
-      setStatusModal({ open: false, row: null, status: "", reason: "", loading: false });
+      setStatusModal({ open: false, row: null, status: "", reason: "", loading: false, overrideNote: "", budgetCheck: null });
     } catch (error) {
+      const overBudgetCheck = error?.response?.data?.budgetCheck;
+      if (overBudgetCheck) {
+        // Discovered as over-budget only now (fresh server-side check at approve time) — reveal
+        // the override-note field instead of just erroring out, so the approver can act on it
+        // without losing their place.
+        setStatusModal((prev) => ({ ...prev, loading: false, budgetCheck: overBudgetCheck }));
+      } else {
+        setStatusModal((prev) => ({ ...prev, loading: false }));
+      }
       toast.error(error?.response?.data?.message || `Failed to mark requisition ${status}`);
-      setStatusModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -395,7 +450,7 @@ const ExpenseRequisition = () => {
   };
 
   const handleCreateVoucher = (row) => {
-    navigate("/expenses/payment-vouchers", {
+    navigate(paymentVouchersPath, {
       state: {
         openCreate: true,
         prefill: buildVoucherPrefill(row),
@@ -404,7 +459,7 @@ const ExpenseRequisition = () => {
   };
 
   const openLinkedVoucher = (row) => {
-    navigate("/expenses/payment-vouchers", {
+    navigate(paymentVouchersPath, {
       state: {
         search: row?.linkedVoucher?.voucherNo || row?.requisitionNo || "",
       },
@@ -511,17 +566,19 @@ const ExpenseRequisition = () => {
 
             <MilikTable
               columns={[
-                { label: "Requisition" },
-                { label: `${termProperty} / Provider` },
+                { label: "Requisition #" },
+                { label: "Title" },
+                { label: termProperty },
+                { label: "Provider" },
                 { label: "Needed By" },
                 { label: "Amount", align: "right" },
-                { label: "Status" },
+                { label: "Status", align: "center" },
               ]}
               rows={rows}
               rowKey="_id"
               loading={loading && rows.length === 0}
               empty="No expense requisitions found."
-              minWidth="1120px"
+              minWidth="1200px"
               checkboxes
               allChecked={selectedIds.length === rows.length && rows.length > 0}
               someChecked={selectedIds.length > 0 && selectedIds.length < rows.length}
@@ -531,11 +588,22 @@ const ExpenseRequisition = () => {
               onCheckRow={(row) => toggleSelect(row._id)}
               renderRow={(row) => (
                 <>
-                  <td className="px-3 py-1 border-r border-gray-100"><div className="font-black text-slate-900">{row.requisitionNo}</div><div className="text-[10px] text-slate-500">{row.title}</div>{row.linkedVoucher?.voucherNo ? <div className="mt-1 text-[10px] font-bold text-violet-600">Voucher: {row.linkedVoucher.voucherNo}</div> : null}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700"><div className="font-medium text-slate-900">{row.property?.propertyName || row.property?.name || `No ${termProperty.toLowerCase()}`}</div><div className="text-[10px] text-slate-500">{row.serviceProvider?.name || row.vendorName || "No provider"}</div></td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "-"}</td>
-                  <td className="px-3 py-1 border-r border-gray-100 text-right font-mono font-bold text-slate-900">KES {fmt(row.amount)}</td>
-                  <td className="px-3 py-1 border-r border-gray-100"><span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
+                  <td className="px-3 py-1 border-r border-gray-100 font-bold text-slate-900 whitespace-nowrap">
+                    {row.requisitionNo}
+                    {row.linkedVoucher?.voucherNo && <span className="ml-1.5 font-normal text-slate-500">· {row.linkedVoucher.voucherNo}</span>}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 max-w-[220px] truncate text-slate-700" title={row.title}>
+                    {row.isTakeOnBalance && <span className="mr-1.5 border border-sky-200 bg-sky-50 px-1 py-0 text-[9px] font-black text-sky-700 align-middle">OPENING BAL</span>}
+                    {row.title}
+                  </td>
+                  <td className="px-3 py-1 border-r border-gray-100 max-w-[160px] truncate text-slate-700">{row.property?.propertyName || row.property?.name || "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 max-w-[150px] truncate text-slate-700">{row.serviceProvider?.name || row.vendorName || "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-slate-700">{row.neededBy ? new Date(row.neededBy).toLocaleDateString() : "—"}</td>
+                  <td className="px-3 py-1 border-r border-gray-100 whitespace-nowrap text-right font-mono font-bold text-slate-900">
+                    KES {fmt(row.amount)}
+                    {row.budgetCheck?.overBudget && <span className="ml-1.5 border border-amber-200 bg-amber-50 px-1 py-0.5 text-[9px] font-black text-amber-700">OVER</span>}
+                  </td>
+                  <td className="px-3 py-1 text-center"><span className={`inline-flex border px-2 py-0.5 text-[10px] font-black ${statusPill[row.status] || statusPill.draft}`}>{row.status}</span></td>
                 </>
               )}
               renderActions={renderActions}
@@ -603,8 +671,18 @@ const ExpenseRequisition = () => {
                   <AppSelect
                     label="Service Provider"
                     value={form.serviceProvider}
-                    onChange={(v) => setForm((prev) => ({ ...prev, serviceProvider: v ?? "" }))}
-                    options={providers.map((p) => ({ value: p._id, label: `${p.providerCode} - ${p.name}` }))}
+                    onChange={(v) => {
+                      const spId = v ?? "";
+                      const picked = providers.find((p) => String(p._id) === spId);
+                      const defaultAccountId = picked?.defaultExpenseAccount?._id || picked?.defaultExpenseAccount || "";
+                      setForm((prev) => ({
+                        ...prev,
+                        serviceProvider: spId,
+                        // Pre-fill only — never overwrite an expense account the user already picked.
+                        expenseAccount: !prev.expenseAccount && defaultAccountId ? defaultAccountId : prev.expenseAccount,
+                      }));
+                    }}
+                    options={providerOptions}
                     placeholder="Select provider"
                     size="sm"
                     searchable
@@ -649,6 +727,21 @@ const ExpenseRequisition = () => {
                     <input type="date" value={form.neededBy} onChange={(e) => setForm((prev) => ({ ...prev, neededBy: e.target.value }))} className={inputClass} />
                   </div>
                 </div>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <div className="col-span-3">
+                    <AppSelect
+                      label="Expense Account (Chart of Accounts)"
+                      value={form.expenseAccount}
+                      onChange={(v) => setForm((prev) => ({ ...prev, expenseAccount: v ?? "" }))}
+                      options={expenseAccounts.map((a) => ({ value: a._id, label: `${a.code ? `[${a.code}] ` : ""}${a.name}` }))}
+                      placeholder="Select the GL account this will post against"
+                      size="sm"
+                      searchable
+                      clearable
+                    />
+                    <p className="mt-1 text-[10px] text-slate-500">Used to check this against the active budget and to post the GL entry on approval. Leave blank to fall back on the category.</p>
+                  </div>
+                </div>
               </div>
             </Section>
             <Section title="Additional Info">
@@ -676,7 +769,7 @@ const ExpenseRequisition = () => {
         const fieldLabel = isApprove ? "Approval Note (optional)" : isReject ? "Rejection Reason" : "Cancellation Reason";
         const btnLabel   = isApprove ? "Approve" : isReject ? "Reject" : "Cancel Requisition";
         const banner     = isApprove ? "Approving clears this requisition for payment settlement." : isReject ? "Rejecting will notify the requester. A reason is required." : "This will cancel the requisition. This action cannot be undone.";
-        const closeStatusModal = () => setStatusModal({ open: false, row: null, status: "", reason: "", loading: false });
+        const closeStatusModal = () => setStatusModal({ open: false, row: null, status: "", reason: "", loading: false, overrideNote: "", budgetCheck: null });
         return (
           <Modal
             title={label}
@@ -687,6 +780,14 @@ const ExpenseRequisition = () => {
             <form id="expense-status-form" onSubmit={(e) => { e.preventDefault(); handleStatusConfirm(); }} className="space-y-2.5">
               <p className="text-xs font-bold text-slate-500">{statusModal.row?.requisitionNo || ""}</p>
               <div className={`border px-3 py-2 text-xs ${bannerCls}`}>{banner}</div>
+              {isApprove && statusModal.budgetCheck && (
+                <div className="border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  <div className="font-black">Exceeds available budget</div>
+                  <div className="mt-0.5 font-mono">
+                    Budgeted KES {fmt(statusModal.budgetCheck.budgeted)} · Committed KES {fmt(statusModal.budgetCheck.committed)} · Actual KES {fmt(statusModal.budgetCheck.actual)} · Available KES {fmt(statusModal.budgetCheck.available)}
+                  </div>
+                </div>
+              )}
               <div>
                 <label className={labelClass}>{fieldLabel}{isReject && <Required />}</label>
                 <textarea
@@ -699,6 +800,19 @@ const ExpenseRequisition = () => {
                   disabled={statusModal.loading}
                 />
               </div>
+              {isApprove && statusModal.budgetCheck && (
+                <div>
+                  <label className={labelClass}>Budget Override Note<Required /></label>
+                  <textarea
+                    rows={2}
+                    className={`${inputClass.replace("h-7", "h-auto")} py-1.5`}
+                    placeholder="Required — why approve despite exceeding available budget…"
+                    value={statusModal.overrideNote}
+                    onChange={(e) => setStatusModal((prev) => ({ ...prev, overrideNote: e.target.value }))}
+                    disabled={statusModal.loading}
+                  />
+                </div>
+              )}
             </form>
           </Modal>
         );

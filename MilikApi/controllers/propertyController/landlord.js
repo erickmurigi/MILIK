@@ -1,14 +1,18 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
 import { getLastSentByRecord } from "../../utils/recordSendLookup.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import Landlord from "../../models/Landlord.js";
 import Property from "../../models/Property.js";
+import Company from "../../models/Company.js";
 import ProcessedStatement from "../../models/ProcessedStatement.js";
 import Unit from "../../models/Unit.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { parsePagination } from "../../utils/pagination.js";
 import { createError } from "../../utils/error.js";
+import { sendLandlordPortalInviteEmail } from "../../utils/landlordPortalMailer.js";
 
 // Generate unique landlord code within a company
 const generateLandlordCode = async (companyId) => {
@@ -106,7 +110,7 @@ const authorizeLandlordAccess = (req, landlord) => {
   return { allowed: true };
 };
 
-const buildLandlordPropertyMatch = (landlord) => ({
+export const buildLandlordPropertyMatch = (landlord) => ({
   business: landlord.company,
   $or: [
     { "landlords.landlordId": landlord._id },
@@ -420,6 +424,10 @@ export const updateLandlord = async (req, res, next) => {
       _id,
       createdAt,
       updatedAt,
+      // Portal credentials are only ever written by sendPortalInvite (hashed, audited,
+      // emailed) — never accept them from a generic edit-form body.
+      portalPassword,
+      portalLastLogin,
       ...updateData
     } = req.body;
 
@@ -833,6 +841,58 @@ export const bulkImportLandlords = async (req, res, next) => {
       success: !allFailed,
       message: `Import completed: ${results.successful.length} successful, ${results.failed.length} failed`,
       data: results,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Higher-entropy than utils/onboardingAccess.js's buildTemporaryPassword (email-localPart +
+// 3-digit number — fine for the original staff-onboarding email, which only a company
+// insider ever receives, but the landlord portal is reachable by an external, non-staff
+// party and the password itself is what gates it, so it's generated independently here).
+// Unambiguous alphabet (no 0/O/1/l/I) since a landlord is meant to read and retype this.
+const PORTAL_PASSWORD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+const buildLandlordPortalTemporaryPassword = () => {
+  const bytes = crypto.randomBytes(14);
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 1) out += PORTAL_PASSWORD_ALPHABET[bytes[i] % PORTAL_PASSWORD_ALPHABET.length];
+  return out;
+};
+
+// One endpoint for both first invite and reset — always regenerates a temp password,
+// emails it, and (re)enables portalAccess. Disabling access alone goes through the
+// generic updateLandlord endpoint (portalAccess is already a whitelisted field there).
+export const sendPortalInvite = async (req, res, next) => {
+  try {
+    const landlord = await Landlord.findById(req.params.id);
+    const access = authorizeLandlordAccess(req, landlord);
+    if (!access.allowed) return next(createError(access.status, access.message));
+
+    if (!landlord.email) {
+      return next(createError(400, "This landlord has no email on file — add one before inviting them to the portal."));
+    }
+
+    const company = await Company.findById(landlord.company).select("companyName companyCode").lean();
+    if (!company) return next(createError(404, "Company not found"));
+
+    const temporaryPassword = buildLandlordPortalTemporaryPassword();
+    // updateOne, not landlord.save() — a full-document save re-validates every required
+    // field on the record, so a legacy landlord with any unrelated data quirk would fail
+    // this entirely unrelated password reset with a confusing validation error.
+    await Landlord.updateOne(
+      { _id: landlord._id },
+      { $set: { portalPassword: await bcrypt.hash(temporaryPassword, 10), portalAccess: "Enabled" } }
+    );
+
+    const mailResult = await sendLandlordPortalInviteEmail({ landlord, company, temporaryPassword });
+
+    res.status(200).json({
+      success: true,
+      message: mailResult.sent
+        ? `Portal invite sent to ${landlord.email}`
+        : "Portal access enabled, but the invite email failed to send.",
+      data: { emailSent: mailResult.sent, ...(mailResult.sent ? {} : { temporaryPassword }) },
     });
   } catch (err) {
     next(err);

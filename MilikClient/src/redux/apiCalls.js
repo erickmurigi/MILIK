@@ -30,6 +30,7 @@ export * from "./apiCalls/chartOfAccounts";
 export * from "./apiCalls/landlordPayments";
 export * from "./apiCalls/expenseRequisitions";
 export * from "./apiCalls/creditors";
+export * from "./apiCalls/costCentres";
 export * from "./apiCalls/landlordStandingOrders";
 export * from "./apiCalls/landlordAdvancements";
 export * from "./apiCalls/statements";

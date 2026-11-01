@@ -117,7 +117,7 @@ const getActiveCompanyIdFromRequest = (req) => {
   return normalizeCompanyId(req.user?.company);
 };
 
-const attachResolvedCompany = async (req) => {
+export const attachResolvedCompany = async (req) => {
   if (req.companyContext) return req.companyContext;
 
   const companyId = getActiveCompanyIdFromRequest(req);
@@ -281,16 +281,20 @@ export const requireCompanyPermission = (resource, action = "view", moduleKey = 
   return async (req, _res, next) => {
     try {
       if (isSystemAdminUser(req.user)) return next();
+      // `action` may be a function of req when the permission needed depends on the request body
+      // (e.g. expense requisitions: one PUT /:id/status route covers submit/approve/reject/cancel,
+      // each needing a different permission) rather than being fixed per-route.
+      const resolvedAction = typeof action === "function" ? action(req) : action;
       const company = await attachResolvedCompany(req);
       const allowed = hasCompanyActionPermission({
         user: req.user,
         company,
         moduleKey,
         resource,
-        action,
+        action: resolvedAction,
       });
       if (!allowed) {
-        return next(createError(403, `Permission denied for ${resource}.${action}`));
+        return next(createError(403, `Permission denied for ${resource}.${resolvedAction}`));
       }
       next();
     } catch (error) {
@@ -308,9 +312,25 @@ export const loadCompanyContext = async (req, res, next) => {
   }
 };
 
+// Portal sessions (ESS employees, landlord-portal landlords, …) carry their own token
+// shape — no `company` claim, no isSystemAdmin — and are authorized entirely by their
+// own route-level middleware (verifyESS / verifyLandlordPortalToken), never this
+// staff-session company-scope check. Mirrors the same exemption enforceRoutePermissions
+// (utils/routePermissionGuard.js) already applies for "hrEmployee". Exempted by path too,
+// not just role — the portal LOGIN routes have no token of that shape yet, so a stray
+// staff cookie sent along for free on a same-origin request (the browser does this
+// automatically, no special config needed) must not be allowed to block them.
+const PORTAL_SESSION_ROLES = new Set(["hrEmployee", "landlordPortal"]);
+const PORTAL_SESSION_PATH_PREFIXES = ["/api/hr/ess", "/api/landlord-portal"];
+
 export const enforceRequestedCompanyScope = (req, _res, next) => {
   try {
-    if (!req.user || isSystemAdminUser(req.user)) {
+    if (
+      !req.user ||
+      isSystemAdminUser(req.user) ||
+      PORTAL_SESSION_ROLES.has(req.user?.role) ||
+      PORTAL_SESSION_PATH_PREFIXES.some((prefix) => req.path.startsWith(prefix))
+    ) {
       return next();
     }
 

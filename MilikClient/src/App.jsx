@@ -15,6 +15,7 @@ import { selectCurrentUser, selectCurrentCompany } from "./redux/selectors";
 import { GL_ACCESS_MODULES, hasAnyCompanyModule, hasCompanyModule, isPropertyManagerCompany, isSelfManagingLandlordCompany } from "./utils/companyModules";
 import { ConfirmProvider } from "./context/ConfirmContext";
 import { ESSContextProvider } from "./context/ESSContext";
+import { LandlordPortalContextProvider } from "./context/LandlordPortalContext";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 
 // ─── Page loader shown while lazy chunks are downloading ─────────────────────
@@ -61,6 +62,13 @@ const ESSAttendance = lazy(() => import("./pages/ESS/ESSAttendance"));
 const ESSLetters    = lazy(() => import("./pages/ESS/ESSLetters"));
 const ESSProfile      = lazy(() => import("./pages/ESS/ESSProfile"));
 const ESSAppraisals   = lazy(() => import("./pages/ESS/ESSAppraisals"));
+
+// Landlord Portal
+const LandlordPortalLogin      = lazy(() => import("./pages/LandlordPortal/LandlordPortalLogin"));
+const LandlordPortalLayout     = lazy(() => import("./pages/LandlordPortal/LandlordPortalLayout"));
+const LandlordPortalStatements = lazy(() => import("./pages/LandlordPortal/LandlordPortalStatements"));
+const LandlordPortalUnits      = lazy(() => import("./pages/LandlordPortal/LandlordPortalUnits"));
+const LandlordPortalTenants    = lazy(() => import("./pages/LandlordPortal/LandlordPortalTenants"));
 
 // Core
 const ModulesDashboard  = lazy(() => import("./pages/moduleDashboard/ModulesDashboard"));
@@ -140,6 +148,7 @@ const PettyCashAccounts     = lazy(() => import("./pages/Financial/PettyCashAcco
 const ServiceProviders      = lazy(() => import("./pages/Financial/ServiceProviders"));
 const ExpenseRequisition    = lazy(() => import("./pages/Financial/ExpenseRequisition"));
 const ChartOfAccounts       = lazy(() => import("./pages/Financial/ChartOfAccounts"));
+const CostCentres           = lazy(() => import("./pages/Financial/CostCentres"));
 const LedgerAccountActivity = lazy(() => import("./pages/Financial/LedgerAccountActivity"));
 const JournalEntries        = lazy(() => import("./pages/Financial/JournalEntries"));
 const JournalEntryForm      = lazy(() => import("./pages/Financial/JournalEntryForm"));
@@ -167,7 +176,6 @@ const BankReconciliation          = lazy(() => import("./pages/Accounts/BankReco
 const FixedAssets                 = lazy(() => import("./pages/Accounts/FixedAssets"));
 const FixedAssetsDepreciation     = lazy(() => import("./pages/Accounts/FixedAssetsDepreciation"));
 const BudgetVsActual              = lazy(() => import("./pages/Accounts/BudgetVsActual"));
-const CreditorLedger              = lazy(() => import("./pages/Accounts/CreditorLedger"));
 const GLIntegrityReport           = lazy(() => import("./pages/Accounts/GLIntegrityReport"));
 const AccountingPeriods           = lazy(() => import("./pages/Financial/AccountingPeriods"));
 const YearEndClose                = lazy(() => import("./pages/Financial/YearEndClose"));
@@ -457,6 +465,12 @@ function ESSProtectedRoute({ children }) {
   return children;
 }
 
+function LandlordPortalProtectedRoute({ children }) {
+  const token = localStorage.getItem('landlord_portal_token');
+  if (!token) return <Navigate to="/landlord-portal/login" replace />;
+  return children;
+}
+
 function SuperAdminRoute({ children }) {
   const currentUser = useSelector(selectCurrentUser);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -681,6 +695,7 @@ function App() {
 
   return (
     <ESSContextProvider>
+    <LandlordPortalContextProvider>
     <ConfirmProvider>
       <BrowserRouter>
         <ScrollToTop />
@@ -719,6 +734,7 @@ function App() {
             <Route path="/accounts/dashboard"                              element={<Guard moduleKey="accounts"><AccountsDashboard /></Guard>} />
             <Route path="/accounts/chart-of-accounts"                      element={<Guard moduleKey="accounts" resource="chartOfAccounts"><ChartOfAccounts /></Guard>} />
             <Route path="/accounts/chart-of-accounts/:accountId/activity"  element={<Guard moduleKey="accounts" resource="chartOfAccounts"><LedgerAccountActivity /></Guard>} />
+            <Route path="/accounts/cost-centres"                           element={<Guard moduleKey="accounts" resource="costCentres"><CostCentres /></Guard>} />
             <Route path="/accounts/journals"                               element={<Guard moduleKey="accounts" resource="journals"><JournalEntries /></Guard>} />
             <Route path="/accounts/journals/new"                           element={<Guard moduleKey="accounts" resource="journals" action="create"><JournalEntryForm /></Guard>} />
             <Route path="/accounts/journals/:id"                           element={<Guard moduleKey="accounts" resource="journals"><JournalEntryForm /></Guard>} />
@@ -742,7 +758,9 @@ function App() {
             <Route path="/accounts/fixed-assets/depreciation"              element={<Guard moduleKey="accounts" resource="fixedAssets" action="depreciate"><FixedAssetsDepreciation /></Guard>} />
             <Route path="/accounts/budget"                                 element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
             <Route path="/accounts/budget/analysis"                        element={<Guard moduleKey="accounts" resource="budgets"><BudgetVsActual /></Guard>} />
-            <Route path="/accounts/creditor-ledger"                        element={<Guard moduleKey="accounts" resource="creditorLedger"><CreditorLedger /></Guard>} />
+            {/* Retired — Service Providers now carries the Outstanding column, statement drill-down and
+                opening-balance flow this page used to duplicate, reading the same backend data. */}
+            <Route path="/accounts/creditor-ledger"                        element={<Navigate to="/accounts/service-providers" replace />} />
             <Route path="/accounts/gl-integrity"                           element={<Guard moduleKey="accounts" resource="financialReports"><GLIntegrityReport /></Guard>} />
             <Route path="/accounts/vat-remittance"                         element={<Guard moduleKey="accounts" resource="financialReports"><VatRemittance /></Guard>} />
             <Route path="/accounts/wht-remittance"                         element={<Guard moduleKey="accounts" resource="financialReports"><WhtRemittance /></Guard>} />
@@ -1021,12 +1039,22 @@ function App() {
               <Route path="profile"    element={<ESSProfile />} />
             </Route>
 
+            {/* ── Landlord Portal ──────────────────────────────────────── */}
+            <Route path="/landlord-portal/login" element={<LandlordPortalLogin />} />
+            <Route path="/landlord-portal" element={<LandlordPortalProtectedRoute><LandlordPortalLayout /></LandlordPortalProtectedRoute>}>
+              <Route index element={<Navigate to="/landlord-portal/statements" replace />} />
+              <Route path="statements" element={<LandlordPortalStatements />} />
+              <Route path="units"      element={<LandlordPortalUnits />} />
+              <Route path="tenants"    element={<LandlordPortalTenants />} />
+            </Route>
+
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>
         </ErrorBoundary>
       </BrowserRouter>
     </ConfirmProvider>
+    </LandlordPortalContextProvider>
     </ESSContextProvider>
   );
 }

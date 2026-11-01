@@ -15,7 +15,7 @@ import {
   FaSpinner,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { createLandlord, updateLandlord } from "../../redux/apiCalls";
+import { createLandlord, updateLandlord, sendLandlordPortalInvite } from "../../redux/apiCalls";
 import { selectAllLandlords, selectCurrentCompany, selectCurrentUser, selectLandlordIsFetching } from "../../redux/selectors";
 import { useTerms } from "../../hooks/useTerm";
 import BankDetailsFields from "../common/BankDetailsFields";
@@ -73,6 +73,9 @@ const AddLandlord = () => {
   const [formData, setFormData] = useState(INITIAL_FORM);
   const [fieldErrors, setFieldErrors] = useState({});
   const [attachments, setAttachments] = useState([]);
+  const [portalAccess, setPortalAccess] = useState(editLandlordData?.portalAccess || "Disabled");
+  const [portalLastLogin] = useState(editLandlordData?.portalLastLogin || null);
+  const [portalBusy, setPortalBusy] = useState(false);
   const draftReadyRef = useRef(false);
   const [draftReadyNonce, setDraftReadyNonce] = useState(0);
 
@@ -223,6 +226,41 @@ const AddLandlord = () => {
 
   const handleDeleteAttachment = (id) => {
     setAttachments((prev) => prev.filter((att) => att.id !== id));
+  };
+
+  const handlePortalInvite = async () => {
+    if (!editLandlordId) return;
+    setPortalBusy(true);
+    try {
+      const result = await dispatch(sendLandlordPortalInvite(editLandlordId));
+      const temporaryPassword = result?.data?.temporaryPassword;
+      if (temporaryPassword) {
+        // Email failed to send (or SMTP isn't configured) — the password was still
+        // generated and set, so hand it to the admin directly instead of losing it.
+        toast.success(`${result?.message || "Portal access enabled"} — temporary password: ${temporaryPassword}`, { autoClose: false });
+      } else {
+        toast.success(result?.message || "Portal invite sent");
+      }
+      setPortalAccess("Enabled");
+    } catch (err) {
+      toast.error(err.message || "Failed to send portal invite");
+    } finally {
+      setPortalBusy(false);
+    }
+  };
+
+  const handlePortalDisable = async () => {
+    if (!editLandlordId) return;
+    setPortalBusy(true);
+    try {
+      await dispatch(updateLandlord(editLandlordId, { portalAccess: "Disabled" }));
+      toast.success("Portal access disabled");
+      setPortalAccess("Disabled");
+    } catch (err) {
+      toast.error(err.message || "Failed to disable portal access");
+    } finally {
+      setPortalBusy(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -446,6 +484,48 @@ const AddLandlord = () => {
                 </ul>
               )}
             </Section>
+
+            {/* Portal Access — self-service login, separate from company Users (see Landlord.portalPassword) */}
+            {isEditMode && (
+              <Section title="Portal Access">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className={`inline-block border px-2 py-0.5 text-[11px] font-bold uppercase ${
+                      portalAccess === "Enabled"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-slate-200 bg-slate-50 text-slate-600"
+                    }`}>
+                      {portalAccess}
+                    </span>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {portalLastLogin
+                        ? `Last signed in ${new Date(portalLastLogin).toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" })}`
+                        : "Never signed in"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handlePortalInvite}
+                      disabled={portalBusy}
+                      className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {portalAccess === "Enabled" ? "Reset Access" : "Invite"}
+                    </button>
+                    {portalAccess === "Enabled" && (
+                      <button
+                        type="button"
+                        onClick={handlePortalDisable}
+                        disabled={portalBusy}
+                        className="inline-flex h-8 items-center gap-1.5 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Disable
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </Section>
+            )}
           </form>
         </div>
 

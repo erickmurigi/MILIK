@@ -151,11 +151,17 @@ export const enforceRoutePermissions = async (req, _res, next) => {
   try {
     if (!req.path?.startsWith("/api/")) return next();
     if (PUBLIC_PREFIXES.some((prefix) => req.path.startsWith(prefix))) return next();
-    // ESS (Employee Self Service) sessions are authenticated via a completely
-    // separate token shape (role: "hrEmployee", no company/isSystemAdmin — see
-    // verifyESS in modules/hr/routes/essPortal.js) — not the staff permission
-    // model this table enforces. Their own routes already gate access.
-    if (req.path.startsWith("/api/hr/ess") || req.user?.role === "hrEmployee") return next();
+    // ESS (Employee Self Service) and landlord-portal sessions are authenticated via
+    // their own completely separate token shapes (role: "hrEmployee" / "landlordPortal",
+    // no company/isSystemAdmin — see verifyESS in modules/hr/routes/essPortal.js and
+    // verifyLandlordPortalToken in middleware/landlordPortalAuth.js) — not the staff
+    // permission model this table enforces. Their own routes already gate access.
+    if (
+      req.path.startsWith("/api/hr/ess") ||
+      req.path.startsWith("/api/landlord-portal") ||
+      req.user?.role === "hrEmployee" ||
+      req.user?.role === "landlordPortal"
+    ) return next();
     if (!req.user) return next();
     if (req.user?.isSystemAdmin || req.user?.superAdminAccess) return next();
 

@@ -1339,6 +1339,39 @@ export const updateTaxConfiguration = async (req, res, next) => {
   }
 };
 
+export const updateExpenseApprovalSettings = async (req, res, next) => {
+  try {
+    const businessId = resolveAuthorizedBusinessId(req);
+    let settings = await findCompanySettings(businessId);
+    if (!settings) {
+      settings = await createSettingsIfMissing(businessId);
+    }
+
+    const { expenseApprovalThreshold } = req.body || {};
+    if (expenseApprovalThreshold !== undefined) {
+      if (expenseApprovalThreshold === null || expenseApprovalThreshold === "") {
+        settings.expenseApprovalThreshold = null;
+      } else {
+        const parsed = Number(expenseApprovalThreshold);
+        if (!Number.isFinite(parsed) || parsed < 0) {
+          return next(createError(400, "expenseApprovalThreshold must be a non-negative number, or empty to disable tiering."));
+        }
+        settings.expenseApprovalThreshold = parsed;
+      }
+    }
+
+    await settings.save();
+    invalidateSettingsCache(String(businessId));
+
+    res.status(200).json({
+      message: "Expense approval settings updated successfully",
+      expenseApprovalThreshold: settings.expenseApprovalThreshold,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const updateIncomeRules = async (req, res, next) => {
   try {
     const businessId = resolveAuthorizedBusinessId(req);

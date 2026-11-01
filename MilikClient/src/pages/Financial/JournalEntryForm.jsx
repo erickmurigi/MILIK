@@ -16,6 +16,7 @@ import {
   reviewJournalEntry, submitJournalForReview, updateJournalEntry,
 } from "../../redux/apiCalls";
 import { getCachedChartOfAccounts } from "../../utils/chartOfAccountsCache";
+import { getCostCentres } from "../../redux/apiCalls";
 import { saleApi } from "../../services/propertySaleApi";
 import { hasCompanyModule } from "../../utils/companyModules";
 import { hasCompanyPermission } from "../../utils/permissions";
@@ -94,6 +95,7 @@ const TAG_FIELDS = [
   { key: "deal", label: "Deal", module: "propertySale" },
   { key: "agent", label: "Agent", module: "propertySale" },
   { key: "property", label: "Property", module: "propertyManagement" },
+  { key: "costCentre", label: "Cost centre", module: null },
 ];
 
 const JournalEntryForm = () => {
@@ -118,7 +120,7 @@ const JournalEntryForm = () => {
 
   const hasSales = hasCompanyModule(company, "propertySale");
   const hasPM = hasCompanyModule(company, "propertyManagement");
-  const tagFields = useMemo(() => TAG_FIELDS.filter((f) => (f.module === "propertySale" ? hasSales : hasPM)), [hasSales, hasPM]);
+  const tagFields = useMemo(() => TAG_FIELDS.filter((f) => (f.module === null ? true : f.module === "propertySale" ? hasSales : hasPM)), [hasSales, hasPM]);
 
   // ---- document state (a new journal keeps its work in the session so a refresh or a tab switch loses nothing)
   const draftKey = buildScopedDraftKey({ page: "journal-form", companyId: company?._id, userId: user?._id || user?.id || user?.email, extra: "new" });
@@ -133,7 +135,7 @@ const JournalEntryForm = () => {
   const [showErrors, setShowErrors] = useState(false);
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [accounts, setAccounts] = useState([]);
-  const [tagData, setTagData] = useState({ projects: [], agents: [], listings: [], deals: [], loaded: false });
+  const [tagData, setTagData] = useState({ projects: [], agents: [], listings: [], deals: [], costCentres: [], loaded: false });
   const [focusedAmount, setFocusedAmount] = useState(null); // `${line.key}:${side}` while editing — shows raw digits; comma-formatted otherwise
   const formRef = useRef(null);
 
@@ -167,16 +169,20 @@ const JournalEntryForm = () => {
     return () => { live = false; };
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // sale tags are loaded the first time a tag panel opens (most journals never need them)
+  // Tag option lists are loaded the first time a tag panel opens (most journals never need them)
   const anyTagsOpen = (doc.lines || []).some((l) => l.tagsOpen);
   useEffect(() => {
-    if (!hasSales || !anyTagsOpen || tagData.loaded) return;
+    if (!anyTagsOpen || tagData.loaded) return;
     setTagData((p) => ({ ...p, loaded: true }));
     Promise.all([
-      saleApi.listProjects({ limit: 200 }), saleApi.listAgents({ limit: 200 }),
-      saleApi.listListings({ limit: 500 }), saleApi.listDeals({ limit: 200 }),
-    ]).then(([p, a, l, d]) => setTagData({ projects: p.data || [], agents: a.data || [], listings: l.data || [], deals: d.data || [], loaded: true }))
-      .catch(() => toast.error("Could not load project / deal tags"));
+      hasSales ? saleApi.listProjects({ limit: 200 }) : Promise.resolve({ data: [] }),
+      hasSales ? saleApi.listAgents({ limit: 200 }) : Promise.resolve({ data: [] }),
+      hasSales ? saleApi.listListings({ limit: 500 }) : Promise.resolve({ data: [] }),
+      hasSales ? saleApi.listDeals({ limit: 200 }) : Promise.resolve({ data: [] }),
+      getCostCentres({ status: "active" }),
+    ]).then(([p, a, l, d, cc]) => setTagData({
+      projects: p.data || [], agents: a.data || [], listings: l.data || [], deals: d.data || [], costCentres: cc || [], loaded: true,
+    })).catch(() => toast.error("Could not load journal tags"));
   }, [hasSales, anyTagsOpen, tagData.loaded]);
 
   const status = saved?.status || "draft";
@@ -195,6 +201,7 @@ const JournalEntryForm = () => {
     agent: tagData.agents.map((a) => ({ value: a._id, label: [a.agentNumber, a.fullName].filter(Boolean).join(" · ") })),
     deal: tagData.deals.map((d) => ({ value: d._id, label: d.dealNumber })),
     property: properties.map((p) => ({ value: p._id, label: p.propertyName || p.name || "Property" })),
+    costCentre: tagData.costCentres.map((c) => ({ value: c._id, label: c.code ? `${c.code} – ${c.name}` : c.name })),
   }), [tagData, properties]);
   const listingOptionsFor = (line) => tagData.listings
     .filter((l) => !line.tags.project || String(idOf(l.project)) === String(line.tags.project))
@@ -395,7 +402,7 @@ const JournalEntryForm = () => {
     if (src.deal?.dealNumber) chips.push(["Deal", src.deal.dealNumber]);
     if (src.agent?.fullName) chips.push(["Agent", src.agent.fullName]);
     if (src.property) chips.push(["Property", src.property.propertyName || src.property.name]);
-    if (line.tags.costCentre) chips.push(["Cost centre", line.tags.costCentre]);
+    if (src.costCentre?.name) chips.push(["Cost centre", src.costCentre.name]);
     return chips;
   };
   const editChips = (line) => {
@@ -406,7 +413,7 @@ const JournalEntryForm = () => {
     if (line.tags.deal) chips.push(["Deal", by(options.deal, line.tags.deal) || "…"]);
     if (line.tags.agent) chips.push(["Agent", by(options.agent, line.tags.agent) || "…"]);
     if (line.tags.property) chips.push(["Property", by(options.property, line.tags.property) || "…"]);
-    if (line.tags.costCentre) chips.push(["Cost centre", line.tags.costCentre]);
+    if (line.tags.costCentre) chips.push(["Cost centre", by(options.costCentre, line.tags.costCentre) || "…"]);
     return chips;
   };
 
@@ -610,13 +617,9 @@ const JournalEntryForm = () => {
                                 <label className={labelCls}>{f.label}</label>
                                 <AppSelect value={line.tags[f.key] || ""} onChange={(v) => setTag(line, f.key, v)}
                                   options={f.key === "listing" ? listingOptionsFor(line) : options[f.key]}
-                                  placeholder={hasSales && f.module === "propertySale" && !tagData.loaded ? "Loading…" : "None"} size="sm" searchable clearable />
+                                  placeholder={!tagData.loaded ? "Loading…" : "None"} size="sm" searchable clearable />
                               </div>
                             ))}
-                            <div>
-                              <label className={labelCls}>Cost centre</label>
-                              <input value={line.tags.costCentre || ""} maxLength={40} onChange={(e) => setTag(line, "costCentre", e.target.value)} placeholder="e.g. Head office" className={inputCls} />
-                            </div>
                           </div>
                           <div className="mt-2 flex items-center justify-between">
                             <p className="text-[10px] text-slate-500">Tags let reports show income and costs per module, project, unit, agent or cost centre.</p>

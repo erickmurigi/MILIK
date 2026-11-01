@@ -24,10 +24,12 @@ const DEFINITIONS = [
 
   // ─── Accounting & General Ledger ─────────────────────────────────────────
   { resource: 'chartOfAccounts',     moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'delete'] },
+  { resource: 'costCentres',         moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'delete'] },
   { resource: 'journals',            moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'approve', 'reverse', 'delete'] },
   { resource: 'bankReconciliation',  moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'process', 'reopen', 'delete'] },
   { resource: 'paymentVouchers',     moduleKey: 'accounts',         actions: ['view', 'process', 'approve', 'reverse'] },
-  { resource: 'expenses',            moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'update', 'delete'] },
+  { resource: 'expenses',            moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'approveHighValue', 'update', 'delete'] },
+  { resource: 'vendorTakeOnBalances',moduleKey: 'accounts',         actions: ['create'] },
   { resource: 'pettyCash',           moduleKey: 'accounts',         actions: ['view', 'create', 'approve', 'reverse'] },
   { resource: 'budgets',             moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'approve', 'delete'] },
   { resource: 'fixedAssets',         moduleKey: 'accounts',         actions: ['view', 'create', 'update', 'depreciate', 'dispose'] },

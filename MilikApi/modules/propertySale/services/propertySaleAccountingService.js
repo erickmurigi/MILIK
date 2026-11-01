@@ -63,6 +63,18 @@ const PS_ACCOUNT_TEMPLATES = {
 };
 
 
+// Tags revenue/commission ledger entries with the deal, listing and agent they belong to, so Profit by
+// Tag (Reports > Profit by Tag) has real data for this module without anyone hand-tagging a journal —
+// these auto-postings are the large majority of a sales company's actual GL volume, unlike the rare
+// manual journal entry, which is the only other place a line can pick up these tags.
+const dealDimensions = (doc = {}) => {
+  const dimensions = {};
+  if (doc.deal) dimensions.saleDeal = doc.deal;
+  if (doc.listing) dimensions.saleListing = doc.listing;
+  if (doc.agent) dimensions.saleAgent = doc.agent;
+  return dimensions;
+};
+
 const dayRange = (value = new Date()) => {
   const d = value ? new Date(value) : new Date();
   const safe = Number.isNaN(d.getTime()) ? new Date() : d;
@@ -238,6 +250,7 @@ export const postPropertySalePaymentLedger = async ({ businessId, payment, userI
     category: "PROPERTY_SALE_PAYMENT",
     createdBy: userId,
     allowUnscoped: true,
+    dimensions: dealDimensions(payment),
   };
 
   await Promise.all([
@@ -465,6 +478,7 @@ export const postPropertySaleCommissionAccrual = async ({ businessId, commission
     category: "PROPERTY_SALE_COMMISSION_ACCRUAL",
     createdBy: userId,
     allowUnscoped: true,
+    dimensions: dealDimensions(commission),
   };
 
   await postEntries([
@@ -558,6 +572,7 @@ export const postPropertySaleCommissionPayout = async ({ businessId, commission,
     category: "PROPERTY_SALE_COMMISSION_PAYOUT",
     createdBy: userId,
     allowUnscoped: true,
+    dimensions: dealDimensions(commission),
   };
 
   await postEntries([
@@ -654,6 +669,7 @@ export const postPropertySaleCommissionTierRelease = async ({ businessId, commis
     transactionDate: tierRelease.accruedAt || new Date(),
     statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
     category: "PROPERTY_SALE_COMMISSION_TIER_RELEASE", createdBy: userId, allowUnscoped: true,
+    dimensions: dealDimensions(commission),
   };
 
   await postEntries([
@@ -713,6 +729,7 @@ export const postPropertySaleOwnerCommissionTierRelease = async ({ businessId, o
     transactionDate: tierRelease.accruedAt || new Date(),
     statementPeriodStart: start, statementPeriodEnd: end, journalGroupId,
     category: "PROPERTY_SALE_OWNER_COMMISSION_TIER_RELEASE", createdBy: userId, allowUnscoped: true,
+    dimensions: dealDimensions(ownerCommission),
   };
 
   await postEntries([

@@ -8,6 +8,8 @@ import SaleProject from "../../modules/propertySale/models/SaleProject.js";
 import SaleDeal from "../../modules/propertySale/models/SaleDeal.js";
 import SaleListing from "../../modules/propertySale/models/SaleListing.js";
 import SaleAgent from "../../modules/propertySale/models/SaleAgent.js";
+import CostCentre from "../../models/CostCentre.js";
+import Zone from "../../models/Zone.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
 import { round2 } from "../../utils/math.js";
@@ -19,7 +21,12 @@ const GROUPINGS = {
   listing:    { field: "dimensions.saleListing", model: SaleListing, label: (r) => [r.listingNumber, r.unitNumber ? `Unit ${r.unitNumber}` : r.title].filter(Boolean).join(" · ") },
   agent:      { field: "dimensions.saleAgent",   model: SaleAgent,   label: (r) => [r.agentNumber, r.fullName].filter(Boolean).join(" · ") },
   property:   { field: "property",               model: Property,    label: (r) => r.propertyName || r.name },
-  costCentre: { field: "dimensions.costCentre",  model: null,        label: null },
+  costCentre: { field: "dimensions.costCentre",  model: CostCentre,  label: (r) => r.name },
+  // Not a real dimension on the ledger entry — reuses the "property" field, then regroups each property
+  // into its zone at report time (properties store their zone as a free-text zoneRegion matched against
+  // Zone.name, same case-insensitive join the Zones dashboard itself already uses — see zones.js). No
+  // posting change needed: every property-scoped entry already carries the property id for free.
+  zone:       { field: "property", model: null, label: null },
 };
 
 const parseDate = (value, endOfDay) => {
@@ -45,11 +52,10 @@ export const getTagSummaryReport = async (req, res, next) => {
     if (startDate > endDate) return next(createError(400, "Start date cannot be after end date."));
 
     const businessOid = new mongoose.Types.ObjectId(String(businessId));
-    const tagged = by === "costCentre" ? { $nin: [null, ""] } : { $type: "objectId" };
 
     // Sum debits and credits per (tag, account). Reversed entries stay in: their reversal entry offsets them.
     const rows = await FinancialLedgerEntry.aggregate([
-      { $match: { business: businessOid, status: { $in: ["approved", "reversed"] }, transactionDate: { $gte: startDate, $lte: endDate }, [grouping.field]: tagged } },
+      { $match: { business: businessOid, status: { $in: ["approved", "reversed"] }, transactionDate: { $gte: startDate, $lte: endDate }, [grouping.field]: { $type: "objectId" } } },
       {
         $group: {
           _id: { tag: `$${grouping.field}`, account: "$accountId" },
@@ -60,20 +66,39 @@ export const getTagSummaryReport = async (req, res, next) => {
     ]).allowDiskUse(true);
 
     const accountIds = [...new Set(rows.map((r) => String(r._id.account)))];
-    const tagIds = by === "costCentre" ? [] : [...new Set(rows.map((r) => String(r._id.tag)))];
-    const [accounts, tagDocs] = await Promise.all([
-      ChartOfAccount.find({ _id: { $in: accountIds }, business: businessId, type: { $in: ["income", "expense"] } }).select("_id type").lean(),
-      grouping.model && tagIds.length ? grouping.model.find({ _id: { $in: tagIds }, business: businessId }).lean() : [],
-    ]);
+    const tagIds = [...new Set(rows.map((r) => String(r._id.tag)))];
+
+    // Zone has no model of its own to look the tag ids (here, property ids) up against — it resolves
+    // each property to its zone instead (see the GROUPINGS comment above).
+    let resolveTag = (rawTagId) => ({ key: rawTagId, label: undefined });
+    if (by === "zone") {
+      const [propertiesInRows, zones] = await Promise.all([
+        tagIds.length ? Property.find({ _id: { $in: tagIds }, business: businessId }).select("zoneRegion").lean() : [],
+        Zone.find({ company: businessId }).select("name").lean(),
+      ]);
+      const zoneByNameLower = new Map(zones.map((z) => [z.name.toLowerCase(), z]));
+      const zoneByPropertyId = new Map(
+        propertiesInRows.map((p) => [String(p._id), zoneByNameLower.get(String(p.zoneRegion || "").toLowerCase()) || null])
+      );
+      resolveTag = (rawTagId) => {
+        const zone = zoneByPropertyId.get(rawTagId);
+        return zone ? { key: String(zone._id), label: zone.name } : { key: "unassigned", label: "Unassigned" };
+      };
+    } else {
+      const tagDocs = tagIds.length ? await grouping.model.find({ _id: { $in: tagIds }, business: businessId }).lean() : [];
+      const labelById = new Map(tagDocs.map((d) => [String(d._id), grouping.label(d) || String(d._id)]));
+      resolveTag = (rawTagId) => ({ key: rawTagId, label: labelById.get(rawTagId) || "Removed record" });
+    }
+
+    const accounts = await ChartOfAccount.find({ _id: { $in: accountIds }, business: businessId, type: { $in: ["income", "expense"] } }).select("_id type").lean();
     const typeById = new Map(accounts.map((a) => [String(a._id), a.type]));
-    const labelById = new Map(tagDocs.map((d) => [String(d._id), grouping.label(d) || String(d._id)]));
 
     const byTag = new Map();
     for (const row of rows) {
       const type = typeById.get(String(row._id.account));
       if (!type) continue; // balance-sheet accounts are not part of a profit and loss
-      const key = String(row._id.tag);
-      const item = byTag.get(key) || { key, label: by === "costCentre" ? key : labelById.get(key) || "Removed record", income: 0, expenses: 0 };
+      const { key, label } = resolveTag(String(row._id.tag));
+      const item = byTag.get(key) || { key, label, income: 0, expenses: 0 };
       if (type === "income") item.income += row.credit - row.debit;
       else item.expenses += row.debit - row.credit;
       byTag.set(key, item);

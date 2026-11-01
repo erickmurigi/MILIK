@@ -105,7 +105,7 @@ const legacyPermissionMatch = (permissions = {}, resource, action) => {
   return undefined;
 };
 
-const getPermissionValue = (permissions = {}, resource, action) => {
+const getPermissionValue = (permissions = {}, resource, action, rawAction = action) => {
   if (!permissions || typeof permissions !== "object") return undefined;
   const variants = [
     `${resource}.${action}`,
@@ -119,12 +119,14 @@ const getPermissionValue = (permissions = {}, resource, action) => {
   for (const key of variants) {
     if (Object.prototype.hasOwnProperty.call(permissions, key)) return permissions[key];
   }
-  if (
-    permissions?.[resource] &&
-    typeof permissions[resource] === "object" &&
-    Object.prototype.hasOwnProperty.call(permissions[resource], action)
-  ) {
-    return permissions[resource][action];
+  if (permissions?.[resource] && typeof permissions[resource] === "object") {
+    const nested = permissions[resource];
+    // sanitizePermissionMap stores nested keys with the exact casing from accessMatrix's action
+    // name (e.g. "approveHighValue"), but `action` here has already been through normalizeAction,
+    // which lowercases/strips it — so the normalized form never matches a camelCase nested key.
+    // Check the original, unnormalized action first before falling back to the normalized one.
+    if (rawAction && Object.prototype.hasOwnProperty.call(nested, rawAction)) return nested[rawAction];
+    if (Object.prototype.hasOwnProperty.call(nested, action)) return nested[action];
   }
   return legacyPermissionMatch(permissions, resource, action);
 };
@@ -170,7 +172,7 @@ export const hasCompanyActionPermission = ({ user = {}, company = {}, moduleKey 
   }
 
   const permissions = getScopedPermissions(user, companyId);
-  const explicit = getPermissionValue(permissions, resourceKey, normalizedAction);
+  const explicit = getPermissionValue(permissions, resourceKey, normalizedAction, String(action || ""));
   if (explicit === true) return true;
 
   if (user?.adminAccess) return true;

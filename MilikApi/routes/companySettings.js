@@ -32,6 +32,7 @@ import {
   updateTaxConfiguration,
   updateAutoInvoicing,
   updateIncomeRules,
+  updateExpenseApprovalSettings,
   updateTerminology,
 } from "../controllers/propertyController/companySettings.js";
 import { processAutoRentInvoices } from "../services/autoRentInvoicingService.js";
@@ -105,6 +106,9 @@ router.delete("/:businessId/deposits/:depositTypeId", verifySetupAccess, deleteD
 
 // Income Rules — setup/admin only
 router.put("/:businessId/income-rules", verifySetupAccess, updateIncomeRules);
+
+// Expense Approval Settings (high-value approval tier threshold) — setup/admin only
+router.put("/:businessId/expense-approval-settings", verifySetupAccess, updateExpenseApprovalSettings);
 
 // Terminology — setup/admin only
 router.patch("/:businessId/terminology", verifySetupAccess, updateTerminology);

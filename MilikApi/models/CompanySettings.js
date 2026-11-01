@@ -390,6 +390,10 @@ const CompanySettingsSchema = new mongoose.Schema(
       type: incomeRulesSchema,
       default: () => ({}),
     },
+    // Requisitions above this amount require the `expenses.approveHighValue` permission instead of
+    // the base `expenses.approve` one. null/0 = tiering disabled — anyone who can approve, approves
+    // any amount (today's behavior), which keeps this fully backward-compatible by default.
+    expenseApprovalThreshold: { type: Number, default: null, min: 0 },
     mriRate: { type: Number, default: 0.075, min: 0, max: 1 },
     currencyCode: { type: String, default: "KES" },
     decimalPlaces: { type: Number, default: 2 },

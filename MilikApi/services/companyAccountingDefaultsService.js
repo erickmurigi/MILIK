@@ -88,6 +88,13 @@ const ACCOUNTING_DEFAULT_KEYS = {
     fallbackCandidates: [
       { nameRegex: "^accounts payable", type: "liability" },
       { nameRegex: "trade creditors", type: "liability" },
+      // 2120 "Accrued Expenses" is the one postable AP-type liability account every company
+      // actually gets out of the box — there is no account literally named "Accounts Payable" or
+      // "Trade Creditors" in the base chart, so without this a company that hasn't manually
+      // configured this default in Accounting Defaults gets no fallback at all: paymentVoucher.js
+      // throws asking the admin to set it, and expenseRequisition.js's accrual posting silently
+      // no-ops (see its own comment at the call site).
+      { code: "2120", type: "liability" },
     ],
   },
 };

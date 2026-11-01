@@ -1,13 +1,14 @@
 // routes/landlord.js
 import express from "express"
-import { 
-  createLandlord, 
-  getLandlord, 
-  getLandlords, 
-  updateLandlord, 
-  deleteLandlord, 
+import {
+  createLandlord,
+  getLandlord,
+  getLandlords,
+  updateLandlord,
+  deleteLandlord,
   getLandlordStats,
-  bulkImportLandlords
+  bulkImportLandlords,
+  sendPortalInvite
 } from "../../controllers/propertyController/landlord.js"
 import { verifyUser, requireCompanyPermission } from "../../controllers/verifyToken.js"
 
@@ -38,5 +39,8 @@ router.delete("/:id", verifyUser, canDelete, deleteLandlord)
 
 // Get landlord stats
 router.get("/stats/:id", verifyUser, canView, getLandlordStats)
+
+// Invite / reset portal access (regenerates + emails a temporary password)
+router.post("/:id/portal-invite", verifyUser, canUpdate, sendPortalInvite)
 
 export default router

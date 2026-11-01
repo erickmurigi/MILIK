@@ -96,3 +96,8 @@ export const updateIncomeRules = async (dispatch, businessId, payload) =>
   runMutation(dispatch, businessId, () =>
     adminRequests.put(`/company-settings/${businessId}/income-rules`, payload)
   );
+
+export const updateExpenseApprovalSettings = async (dispatch, businessId, payload) =>
+  runMutation(dispatch, businessId, () =>
+    adminRequests.put(`/company-settings/${businessId}/expense-approval-settings`, payload)
+  );

@@ -52,6 +52,11 @@ const BUCKETS = [
   { key: "d90plus", label: "90+ Days",   headerCls: "text-red-800",     valueCls: "text-red-800",     footerCls: "text-red-900"     },
 ];
 
+// A voucher is paid to either a landlord (property maintenance, deposit refunds) or a
+// registered service provider/vendor (utilities, contractors) — never both — so one combined
+// "Payee" column covers either case instead of leaving vendor-tied rows blank.
+const payeeOf = (row) => row.vendorName || row.landlordName || "—";
+
 const STATUS_LABELS = { draft: "Draft", approved: "Approved" };
 const STATUS_COLORS  = {
   draft:    "text-slate-600 bg-slate-100",
@@ -126,7 +131,8 @@ const PaymentAgedAnalysis = () => {
     if (q) rows = rows.filter((r) =>
       r.reference?.toLowerCase().includes(q) ||
       r.narration?.toLowerCase().includes(q) ||
-      r.landlordName?.toLowerCase().includes(q)
+      r.landlordName?.toLowerCase().includes(q) ||
+      r.vendorName?.toLowerCase().includes(q)
     );
     if (selectedProperty) rows = rows.filter((r) => r.propertyName === selectedProperty);
     if (selectedStatus)   rows = rows.filter((r) => r.status === selectedStatus);
@@ -158,7 +164,7 @@ const PaymentAgedAnalysis = () => {
   const handleExportCSV = useCallback(() => {
     if (!filteredRows.length) return toast.info("No data to export");
     const headers = [
-      "Reference", "Narration", "Category", "Status", termProperty, termLandlord, "Due Date", "Days Overdue",
+      "Reference", "Narration", "Category", "Status", termProperty, "Payee", "Due Date", "Days Overdue",
       ...BUCKETS.map((b) => b.label),
       "Total Amount (KES)",
     ];
@@ -166,7 +172,7 @@ const PaymentAgedAnalysis = () => {
       r.reference, r.narration,
       CATEGORY_LABELS[r.category] || r.category,
       STATUS_LABELS[r.status] || r.status,
-      r.propertyName, r.landlordName,
+      r.propertyName, payeeOf(r),
       new Date(r.dueDate).toLocaleDateString("en-KE"),
       r.daysOverdue <= 0 ? 0 : r.daysOverdue,
       ...BUCKETS.map((b) => (r.bucket === b.key ? r.amount : "")),
@@ -186,7 +192,7 @@ const PaymentAgedAnalysis = () => {
     a.download = `Payment_Aged_Analysis_${asOf}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [filteredRows, bucketTotals, asOf, termProperty, termLandlord]);
+  }, [filteredRows, bucketTotals, asOf, termProperty]);
 
   // ── Print PDF ─────────────────────────────────────────────────────────────
   const handlePrintPDF = useCallback(() => {
@@ -198,7 +204,8 @@ const PaymentAgedAnalysis = () => {
       columns: [
         { label: "Reference", value: (r) => r.reference },
         { label: "Narration", value: (r) => r.narration },
-        { label: `${termProperty} / ${termLandlord}`, value: (r) => `${r.propertyName || ""}${r.landlordName && r.landlordName !== "—" ? ` / ${r.landlordName}` : ""}` },
+        { label: termProperty, value: (r) => r.propertyName || "" },
+        { label: "Payee", value: (r) => payeeOf(r) },
         { label: "Status", value: (r) => STATUS_LABELS[r.status] || r.status },
         { label: "Due Date", align: "right", value: (r) => new Date(r.dueDate).toLocaleDateString("en-KE") },
         { label: "Days Over", align: "right", value: (r) => (r.daysOverdue <= 0 ? "Current" : `${r.daysOverdue}d`) },
@@ -209,10 +216,10 @@ const PaymentAgedAnalysis = () => {
         ["Total Pending", fmt(bucketTotals.all)],
         ...BUCKETS.map((b) => [b.label, fmt(bucketTotals[b.key])]),
       ],
-      totalsRow: ["Total Pending", "", "", "", "", "", ...BUCKETS.map((b) => (bucketTotals[b.key] > 0 ? fmt(bucketTotals[b.key]) : "—"))],
+      totalsRow: ["Total Pending", "", "", "", "", "", "", ...BUCKETS.map((b) => (bucketTotals[b.key] > 0 ? fmt(bucketTotals[b.key]) : "—"))],
     });
     if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
-  }, [filteredRows, bucketTotals, asOf, currentCompany, termProperty, termLandlord]);
+  }, [filteredRows, bucketTotals, asOf, currentCompany, termProperty]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -247,7 +254,7 @@ const PaymentAgedAnalysis = () => {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={`Ref, narration or ${termLandlord.toLowerCase()}…`}
+              placeholder={`Ref, narration, ${termLandlord.toLowerCase()} or vendor…`}
             />
           </div>
 
@@ -326,7 +333,8 @@ const PaymentAgedAnalysis = () => {
             columns={[
               { label: "Reference" },
               { label: "Narration" },
-              { label: `${termProperty} / ${termLandlord}` },
+              { label: termProperty },
+              { label: "Payee" },
               { label: "Status", align: "center" },
               { label: "Due Date", align: "right" },
               { label: "Days Overdue", align: "right" },
@@ -338,7 +346,7 @@ const PaymentAgedAnalysis = () => {
             empty={isFiltered ? "No records match your filters" : "No pending payment vouchers"}
             renderFooter={filteredRows.length > 0 ? () => (
               <>
-                <td colSpan={5} className="px-3 py-2 text-xs font-black uppercase text-slate-600">
+                <td colSpan={6} className="px-3 py-2 text-xs font-black uppercase text-slate-600">
                   Total Pending
                   {isFiltered && (
                     <span className="ml-1 font-normal normal-case text-slate-400">
@@ -360,8 +368,10 @@ const PaymentAgedAnalysis = () => {
               <>
                 <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-500">{row.reference}</td>
                 <td className="max-w-[180px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={row.narration}>{row.narration}</td>
-                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">
-                  {row.propertyName}{row.landlordName && row.landlordName !== "—" ? ` / ${row.landlordName}` : ""}
+                <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName}</td>
+                <td className="max-w-[160px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={payeeOf(row)}>
+                  {row.vendorName && <span className="mr-1 text-[9px] font-bold uppercase text-sky-600">Vendor</span>}
+                  {payeeOf(row)}
                 </td>
                 <td className="px-3 py-1 border-r border-gray-100 text-center">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${STATUS_COLORS[row.status] || "border-slate-200 bg-slate-100 text-slate-500"}`}>

@@ -26,7 +26,7 @@ const ProfitByTagReport = () => {
       { value: "project", label: "Project" }, { value: "listing", label: "Unit / listing" },
       { value: "deal", label: "Deal" }, { value: "agent", label: "Agent" },
     ] : []),
-    ...(hasPM ? [{ value: "property", label: "Property" }] : []),
+    ...(hasPM ? [{ value: "property", label: "Property" }, { value: "zone", label: "Zone" }] : []),
   ], [hasSales, hasPM]);
 
   const [by, setBy] = useTabState("/accounts/profit-by-tag:by", "costCentre");

@@ -144,10 +144,28 @@ const LedgerAccountActivity = () => {
     }
   }, [businessId, accountId]);
 
-  // Initial load
+  // Initial load — a Trial Balance or Income Statement drill-down arrives via navigation
+  // state with the date range it needs reconciled; that always wins over any cached tab
+  // filters. Trial Balance is cumulative since inception (as-of date only), while Income
+  // Statement is a calendar-period slice (both start and end dates matter), so each arrives
+  // with its own shaped payload rather than forcing one into the other's shape.
   useEffect(() => {
     setLoading(true);
-    loadActivity(filters);
+    const tbDrillDown = location.state?.trialBalanceDrillDown;
+    const isDrillDown = location.state?.incomeStatementDrillDown;
+    if (tbDrillDown?.endDate) {
+      const overridden = { ...filters, startDate: "", endDate: tbDrillDown.endDate, direction: "all", includeReversed: false, property: "" };
+      setFilters(overridden);
+      loadActivity(overridden);
+      navigate(location.pathname, { replace: true, state: {} });
+    } else if (isDrillDown?.startDate && isDrillDown?.endDate) {
+      const overridden = { ...filters, startDate: isDrillDown.startDate, endDate: isDrillDown.endDate, direction: "all", includeReversed: false, property: isDrillDown.propertyId || "" };
+      setFilters(overridden);
+      loadActivity(overridden);
+      navigate(location.pathname, { replace: true, state: {} });
+    } else {
+      loadActivity(filters);
+    }
   }, [accountId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-fetch when filters change (debounced so date typing doesn't spam requests)

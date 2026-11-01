@@ -1235,6 +1235,8 @@ const CompanySettings = () => {
   const [triggeringAutoInvoicing, setTriggeringAutoInvoicing] = useState(false);
   const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager", manualReceiptConfirmation: "on_review" });
   const [savingIncomeRules, setSavingIncomeRules] = useState(false);
+  const [expenseApprovalThreshold, setExpenseApprovalThreshold] = useState("");
+  const [savingExpenseApproval, setSavingExpenseApproval] = useState(false);
   const [chartAccounts, setChartAccounts] = useState([]);
   // Track which company's chart of accounts is loaded via a ref so the guard
   // does NOT recreate loadChartAccounts on every successful load.
@@ -1309,6 +1311,9 @@ const CompanySettings = () => {
         latePenaltyBeneficiary: ir.latePenaltyBeneficiary || "manager",
         manualReceiptConfirmation: ir.manualReceiptConfirmation || "on_review",
       });
+      setExpenseApprovalThreshold(
+        response.data?.expenseApprovalThreshold != null ? String(response.data.expenseApprovalThreshold) : ""
+      );
     } catch (error) {
       toast.error(extractErrorMessage(error));
     } finally {
@@ -2137,8 +2142,48 @@ const CompanySettings = () => {
     }
   };
 
+  const saveExpenseApproval = async () => {
+    if (!currentCompany?._id) return;
+    setSavingExpenseApproval(true);
+    try {
+      const result = await adminRequests.put(`/company-settings/${currentCompany._id}/expense-approval-settings`, {
+        expenseApprovalThreshold: expenseApprovalThreshold === "" ? null : Number(expenseApprovalThreshold),
+      });
+      const freshThreshold = result?.data?.expenseApprovalThreshold;
+      if (reduxCompanySettings) {
+        dispatch(getSettingsSuccess({ ...reduxCompanySettings, expenseApprovalThreshold: freshThreshold ?? null }));
+      }
+      toast.success("Expense approval settings saved.");
+    } catch (err) {
+      toast.error(extractErrorMessage(err));
+    } finally {
+      setSavingExpenseApproval(false);
+    }
+  };
+
   const renderIncomeRulesTab = () => (
     <div className="space-y-4">
+      <Card
+        title="Expense Requisition — Approval Tier"
+        subtitle="Requisitions above this amount require the separate 'Approve high-value expense requisitions' permission, in addition to the normal approve permission. Grant it per user under System Setup → Rights. Leave blank to disable tiering — every approver can approve any amount, as before."
+        action={
+          <ActionButton variant="primary" onClick={saveExpenseApproval} disabled={savingExpenseApproval}>
+            {savingExpenseApproval ? <Spinner size="sm" /> : <FaSave />} Save
+          </ActionButton>
+        }
+      >
+        <div className="max-w-xs">
+          <label className="mb-1 block text-xs font-bold text-slate-900">High-Value Approval Threshold (KES)</label>
+          <input
+            type="number"
+            min="0"
+            value={expenseApprovalThreshold}
+            onChange={(e) => setExpenseApprovalThreshold(e.target.value)}
+            placeholder="Leave blank to disable"
+            className="h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-[#0B3B2E] focus:ring-1 focus:ring-[#0B3B2E]/20"
+          />
+        </div>
+      </Card>
       <Card
         title="Landlord Statement — Income Rules"
         subtitle="Control which charge types flow to the landlord's statement and which are retained as property manager income. These rules apply when generating landlord statements."

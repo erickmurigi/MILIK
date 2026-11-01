@@ -61,6 +61,7 @@ import coopB2BRoutes          from "./routes/propertyRoutes/coopB2B.js";
 import coopCollectionsRoutes  from "./routes/propertyRoutes/coopCollections.js";
 import expenseRequisitionRoutes from "./routes/propertyRoutes/expenseRequisitions.js";
 import serviceProvidersRoutes from "./routes/propertyRoutes/serviceProviders.js";
+import costCentresRoutes from "./routes/propertyRoutes/costCentres.js";
 import landlordStandingOrdersRoutes from "./routes/propertyRoutes/landlordStandingOrders.js";
 import landlordAdvancementsRoutes from "./routes/propertyRoutes/landlordAdvancements.js";
 import landlordReceiptsRoutes from "./routes/propertyRoutes/landlordReceipts.js";
@@ -125,6 +126,8 @@ import hrEmailRoutes          from "./modules/hr/routes/hrEmails.js";
 import hrAttendanceRoutes      from "./modules/hr/routes/attendance.js";
 import hrEssAuthRoutes        from "./modules/hr/routes/essAuth.js";
 import hrEssPortalRoutes      from "./modules/hr/routes/essPortal.js";
+import landlordPortalAuthRoutes from "./routes/landlordPortalAuth.js";
+import landlordPortalRoutes     from "./routes/landlordPortal.js";
 import saleListingRoutes from "./modules/propertySale/routes/listings.js";
 import saleProjectRoutes from "./modules/propertySale/routes/projects.js";
 import saleBuyerRoutes from "./modules/propertySale/routes/buyers.js";
@@ -541,6 +544,16 @@ const authLimiter = rateLimit({
   skipSuccessfulRequests: true,
 });
 
+const landlordPortalAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  message: { success: false, message: "Too many login attempts, please try again in 15 minutes." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  store: buildStore("landlord_portal_auth"),
+  skipSuccessfulRequests: true,
+});
+
 app.use(generalLimiter);
 app.use(cookieParser());
 
@@ -630,6 +643,7 @@ app.use("/api/mpesa-collections", mpesaCollectionsRoutes);
 app.use("/api/coop-collections",  coopCollectionsRoutes);
 app.use("/api/expense-requisitions", expenseRequisitionRoutes);
 app.use("/api/service-providers", serviceProvidersRoutes);
+app.use("/api/cost-centres", costCentresRoutes);
 app.use("/api/landlord-receipts", landlordReceiptsRoutes);
 app.use("/api/landlord-standing-orders", landlordStandingOrdersRoutes);
 app.use("/api/landlord-advancements", landlordAdvancementsRoutes);
@@ -697,6 +711,8 @@ app.use("/api/hr/emails",            hrEmailRoutes);
 app.use("/api/hr/attendance",        hrAttendanceRoutes);
 app.use("/api/hr/ess/auth",          hrEssAuthRoutes);
 app.use("/api/hr/ess",               hrEssPortalRoutes);
+app.use("/api/landlord-portal/auth", landlordPortalAuthLimiter, landlordPortalAuthRoutes);
+app.use("/api/landlord-portal",      landlordPortalRoutes);
 app.use("/api/sale/listings", saleListingRoutes);
 app.use("/api/sale/projects", saleProjectRoutes);
 app.use("/api/sale/buyers", saleBuyerRoutes);
@@ -758,6 +774,10 @@ app.use((err, req, res, next) => {
     success: false,
     status: errorStatus,
     message: clientMessage,
+    // Lets a controller attach extra structured context to a thrown error (e.g. the budget
+    // headroom snapshot behind an "approval override note required" 400) without changing this
+    // response shape for every other error in the app.
+    ...(err.data && typeof err.data === "object" ? err.data : {}),
     stack: !isProduction ? err.stack : undefined,
   });
 });

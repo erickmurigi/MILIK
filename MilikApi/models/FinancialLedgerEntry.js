@@ -161,7 +161,7 @@ const FinancialLedgerEntrySchema = new mongoose.Schema(
       saleDeal:    { type: mongoose.Schema.Types.ObjectId, ref: "SaleDeal", default: null },
       saleListing: { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", default: null },
       saleAgent:   { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
-      costCentre:  { type: String, default: "" },
+      costCentre:  { type: mongoose.Schema.Types.ObjectId, ref: "CostCentre", default: null },
     },
     sourceTransactionType: {
       type: String,

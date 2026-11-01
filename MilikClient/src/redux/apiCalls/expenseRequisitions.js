@@ -18,6 +18,11 @@ export const createExpenseRequisition = async (payload) => {
   return res.data;
 };
 
+export const createVendorTakeOnBalance = async (payload) => {
+  const res = await adminRequests.post("/expense-requisitions/take-on-balance", payload);
+  return res.data;
+};
+
 export const updateExpenseRequisition = async (id, payload) => {
   const res = await adminRequests.put(`/expense-requisitions/${id}`, payload);
   return res.data;

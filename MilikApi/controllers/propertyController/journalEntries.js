@@ -300,6 +300,7 @@ const populateJournalQuery = (query) =>
     .populate("lines.dimensions.listing", "title listingNumber unitNumber")
     .populate("lines.dimensions.agent", "fullName agentNumber")
     .populate("lines.dimensions.property", "propertyName name")
+    .populate("lines.dimensions.costCentre", "name code")
     .populate("property", "propertyName name")
     .populate("landlord", "landlordName name")
     .populate("debitAccount", "code name type group")

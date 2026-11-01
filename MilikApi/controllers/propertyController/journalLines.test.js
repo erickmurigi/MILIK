@@ -6,6 +6,7 @@ import { createJournalEntry, getJournalEntry, postJournalEntry, reverseJournalEn
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import AccountingPeriod from "../../models/AccountingPeriod.js";
 import SaleProject from "../../modules/propertySale/models/SaleProject.js";
+import CostCentre from "../../models/CostCentre.js";
 import { callController } from "../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../test/factories.js";
 import { getAccountByCode } from "../../test/factories.financial.js";
@@ -17,7 +18,8 @@ const setup = async () => {
   const call = (fn, opts = {}) => callController(fn, { user, ...opts });
   const acct = async (code) => String((await getAccountByCode(company._id, code))._id);
   const project = await SaleProject.create({ business: company._id, projectNumber: "PRJ-1", name: "Kitengela Plots" });
-  return { company, user, call, acct, project };
+  const costCentre = await CostCentre.create({ business: company._id, name: "Sales" });
+  return { company, user, call, acct, project, costCentre };
 };
 
 const totals = (entries) => ({
@@ -27,7 +29,7 @@ const totals = (entries) => ({
 
 describe("multi-line journals", () => {
   it("posts an expense with VAT as one balanced group, carries the tags, and reverses cleanly", async () => {
-    const { call, acct, project, company } = await setup();
+    const { call, acct, project, costCentre, company } = await setup();
     const expense = await acct("5100"); // Maintenance Expense
     const cash = await acct("1100"); // Cash on Hand
     const receivable = await acct("1200");
@@ -40,7 +42,7 @@ describe("multi-line journals", () => {
         reference: "INV-77",
         narration: "Survey fees for Kitengela Plots",
         lines: [
-          { account: expense, debit: 250000, description: "Survey", dimensions: { module: "propertySale", project: String(project._id), costCentre: " Sales " } },
+          { account: expense, debit: 250000, description: "Survey", dimensions: { module: "propertySale", project: String(project._id), costCentre: String(costCentre._id) } },
           { account: receivable, debit: 40000, description: "Input VAT" },
           { account: cash, credit: 290000, description: "Paid from cash" },
         ],
@@ -52,7 +54,7 @@ describe("multi-line journals", () => {
     // names come back populated for the screen
     expect(created.payload.lines[0].account.code).toBe("5100");
     expect(created.payload.lines[0].dimensions.project.name).toBe("Kitengela Plots");
-    expect(created.payload.lines[0].dimensions.costCentre).toBe("Sales");
+    expect(created.payload.lines[0].dimensions.costCentre.name).toBe("Sales");
 
     const posted = await call(postJournalEntry, { params: { id: created.payload._id } });
     expect(posted.payload.status).toBe("posted");
@@ -63,7 +65,8 @@ describe("multi-line journals", () => {
     const tagged = entries.filter((e) => String(e.dimensions?.saleProject) === String(project._id));
     expect(tagged).toHaveLength(1);
     expect(tagged[0]).toMatchObject({ direction: "debit", debit: 250000 });
-    expect(tagged[0].dimensions).toMatchObject({ module: "propertySale", costCentre: "Sales" });
+    expect(String(tagged[0].dimensions.costCentre)).toBe(String(costCentre._id));
+    expect(tagged[0].dimensions).toMatchObject({ module: "propertySale" });
     expect(String(tagged[0].business)).toBe(String(company._id));
 
     const reversed = await call(reverseJournalEntry, { params: { id: created.payload._id }, body: { reason: "Posted twice" } });

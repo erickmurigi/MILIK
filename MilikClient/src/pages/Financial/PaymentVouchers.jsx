@@ -237,6 +237,15 @@ const PaymentVouchers = () => {
   );
   const selectedSettlementAcc = useMemo(() => settlementAccounts.find((a) => String(a._id) === form.settlementAccountId), [settlementAccounts, form.settlementAccountId]);
   const selectedServiceProvider = useMemo(() => serviceProvidersList.find((sp) => String(sp._id) === form.serviceProviderId), [serviceProvidersList, form.serviceProviderId]);
+  // The vendor list is active-only; a voucher already tied to a since-deactivated vendor still
+  // needs to show its name in the picker and payee field instead of going blank.
+  const providerOptions = useMemo(() => {
+    const options = serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }));
+    if (form.serviceProviderId && !serviceProvidersList.some((sp) => String(sp._id) === String(form.serviceProviderId))) {
+      options.push({ value: form.serviceProviderId, label: `${form.serviceProviderName || "Unknown vendor"} (Inactive)` });
+    }
+    return options;
+  }, [serviceProvidersList, form.serviceProviderId, form.serviceProviderName]);
   const companySettings = useSelector(selectCompanySettings);
   const expenseItems = useMemo(() => companySettings?.expenseItems || [], [companySettings]);
   const expenseCategoryNameById = useMemo(
@@ -469,7 +478,7 @@ const PaymentVouchers = () => {
       try {
         const [rows, spData] = await Promise.all([
           getCachedChartOfAccounts(currentCompany._id),
-          getServiceProviders({ business: currentCompany._id, active: "true", limit: 200 }).catch(() => null),
+          getServiceProviders({ business: currentCompany._id, active: true, limit: 200 }).catch(() => null),
         ]);
         const postingAccounts = Array.isArray(rows) ? rows.filter((row) => row?.isPosting !== false && row?.isActive !== false) : [];
         setLiabilityAccounts(postingAccounts.filter((row) => String(row?.type || "").toLowerCase() === "liability"));
@@ -1033,18 +1042,22 @@ const PaymentVouchers = () => {
                             fillPayeeBank({ serviceProvider: spId });
                           }
                           const sp = serviceProvidersList.find((s) => String(s._id) === spId);
+                          const defaultAccountId = sp?.defaultExpenseAccount?._id || sp?.defaultExpenseAccount || "";
+                          // Pre-fill only lines whose expense account is still blank — never overwrite one the user already picked.
+                          const withDefaultAccount = (line) =>
+                            !line.expenseAccountId && defaultAccountId ? { ...line, expenseAccountId: defaultAccountId } : line;
                           setForm((prev) => {
                             if (sp?.subjectToWht && Number(sp?.whtRate) > 0) {
                               const rate = String(sp.whtRate);
-                              return { ...prev, serviceProviderId: spId, lines: prev.lines.map((line) => ({ ...line, whtRate: rate })) };
+                              return { ...prev, serviceProviderId: spId, lines: prev.lines.map((line) => withDefaultAccount({ ...line, whtRate: rate })) };
                             }
                             // moving off a vendor that carried tax takes its tax with it
                             return selectedServiceProvider?.subjectToWht
-                              ? { ...prev, serviceProviderId: spId, lines: prev.lines.map((line) => ({ ...line, whtRate: "" })), whtAccountId: "" }
-                              : { ...prev, serviceProviderId: spId };
+                              ? { ...prev, serviceProviderId: spId, lines: prev.lines.map((line) => withDefaultAccount({ ...line, whtRate: "" })), whtAccountId: "" }
+                              : { ...prev, serviceProviderId: spId, lines: prev.lines.map(withDefaultAccount) };
                           });
                         }}
-                        options={serviceProvidersList.map((sp) => ({ value: sp._id, label: `${sp.name}${sp.subjectToWht ? ` (WHT ${sp.whtRate}%)` : ""}` }))}
+                        options={providerOptions}
                         placeholder={serviceProvidersList.length > 0 ? "— None —" : "No registered vendors yet"}
                         size="sm"
                         searchable
@@ -1055,7 +1068,7 @@ const PaymentVouchers = () => {
                     <label className="block">
                       <span className={VOUCHER_LABEL}>Payee name {form.serviceProviderId ? "" : "(one-off payee)"}</span>
                       <input
-                        value={form.serviceProviderId ? (selectedServiceProvider?.name || "") : form.payeeName}
+                        value={form.serviceProviderId ? (selectedServiceProvider?.name || form.serviceProviderName || "") : form.payeeName}
                         disabled={Boolean(form.serviceProviderId)}
                         maxLength={150}
                         onChange={(e) => setForm((prev) => ({ ...prev, payeeName: e.target.value }))}

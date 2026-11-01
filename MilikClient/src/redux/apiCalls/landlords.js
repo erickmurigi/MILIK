@@ -117,6 +117,17 @@ export const updateLandlord = (id, landlordData) => async (dispatch) => {
   }
 };
 
+// Invite / reset portal access — regenerates + emails a temporary password
+export const sendLandlordPortalInvite = (id) => async () => {
+  try {
+    const res = await adminRequests.post(`/landlords/${id}/portal-invite`);
+    return res.data;
+  } catch (err) {
+    const message = err?.response?.data?.message || err?.message || 'Failed to send portal invite';
+    throw new Error(message);
+  }
+};
+
 // Delete landlord
 export const deleteLandlord = (id) => async (dispatch) => {
   dispatch(deleteLandlordStart());

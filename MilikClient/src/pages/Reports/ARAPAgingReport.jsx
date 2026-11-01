@@ -14,6 +14,9 @@ import { getARAgingReport, getAPAgingReport } from "../../redux/apiCalls";
 const fmt = (v) =>
   Number(v || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// A voucher is paid to either a landlord or a registered service provider/vendor, never both.
+const payeeOf = (row) => row.vendorName || row.landlordName || "—";
+
 const localDateStr = (d) => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -41,7 +44,7 @@ const BUCKET_COLORS = {
 // ─── Aging Table ─────────────────────────────────────────────────────────────
 const AgingTable = React.memo(({ rows, totals, type, loading }) => {
   const isAR = type === "ar";
-  const { tenant: termTenant, unit: termUnit, property: termProperty, landlord: termLandlord } = useTerms("tenant", "unit", "property", "landlord");
+  const { tenant: termTenant, unit: termUnit, property: termProperty } = useTerms("tenant", "unit", "property");
 
   return (
     <MilikTable
@@ -56,7 +59,8 @@ const AgingTable = React.memo(({ rows, totals, type, loading }) => {
       ] : [
         { label: "Reference" },
         { label: "Narration" },
-        { label: `${termProperty} / ${termLandlord}` },
+        { label: termProperty },
+        { label: "Payee" },
         { label: "Due Date", align: "right" },
         { label: "Days Over", align: "right" },
         { label: "Bucket", align: "right" },
@@ -69,7 +73,7 @@ const AgingTable = React.memo(({ rows, totals, type, loading }) => {
       renderFooter={rows.length > 0 ? () => (
         <>
           <td colSpan={3} className="px-3 py-2 text-xs font-black uppercase text-slate-600">Totals</td>
-          <td colSpan={3} />
+          <td colSpan={isAR ? 3 : 4} />
           <td className="px-3 py-2 text-right font-mono text-sm">{fmt(totals?.total)}</td>
         </>
       ) : undefined}
@@ -85,7 +89,11 @@ const AgingTable = React.memo(({ rows, totals, type, loading }) => {
             <>
               <td className="px-3 py-1 border-r border-gray-100 font-mono text-slate-700">{row.reference}</td>
               <td className="max-w-[200px] truncate px-3 py-1 border-r border-gray-100 text-slate-700">{row.narration}</td>
-              <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName} / {row.landlordName}</td>
+              <td className="px-3 py-1 border-r border-gray-100 text-slate-500">{row.propertyName}</td>
+              <td className="max-w-[140px] truncate px-3 py-1 border-r border-gray-100 text-slate-700" title={payeeOf(row)}>
+                {row.vendorName && <span className="mr-1 text-[9px] font-bold uppercase text-sky-600">Vendor</span>}
+                {payeeOf(row)}
+              </td>
             </>
           )}
           <td className="px-3 py-1 border-r border-gray-100 text-right text-slate-500">
@@ -158,7 +166,7 @@ const ARAPAgingReport = () => {
     const isAR = tab === "ar";
     const headers = isAR
       ? ["Invoice #", termTenant, termProperty, termUnit, "Invoice Date", "Due Date", "Days Overdue", "Bucket", "Amount", "Applied", "Outstanding"]
-      : ["Reference", "Narration", "Category", "Status", termProperty, termLandlord, "Due Date", "Days Overdue", "Bucket", "Amount"];
+      : ["Reference", "Narration", "Category", "Status", termProperty, "Payee", "Due Date", "Days Overdue", "Bucket", "Amount"];
 
     const dataRows = rows.map((r) =>
       isAR
@@ -166,7 +174,7 @@ const ARAPAgingReport = () => {
             new Date(r.invoiceDate).toLocaleDateString("en-KE"),
             new Date(r.dueDate).toLocaleDateString("en-KE"),
             r.daysOverdue, r.bucket, r.amount, r.applied, r.outstanding]
-        : [r.reference, r.narration, r.category, r.status, r.propertyName, r.landlordName,
+        : [r.reference, r.narration, r.category, r.status, r.propertyName, payeeOf(r),
             new Date(r.dueDate).toLocaleDateString("en-KE"),
             r.daysOverdue, r.bucket, r.amount]
     );
@@ -203,7 +211,8 @@ const ARAPAgingReport = () => {
       : [
           { label: "Reference", bold: true, value: (r) => r.reference },
           { label: "Narration", value: (r) => r.narration },
-          { label: `${termProperty} / ${termLandlord}`, value: (r) => `${r.propertyName} / ${r.landlordName}` },
+          { label: termProperty, value: (r) => r.propertyName },
+          { label: "Payee", value: (r) => payeeOf(r) },
           { label: "Due date", value: dueDate },
           { label: "Days over", align: "right", value: days },
           { label: "Bucket", value: bucketLabel },

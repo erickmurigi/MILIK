@@ -14,6 +14,7 @@ import { toggleUserLock, resetUserPassword } from "../../redux/apiCalls";
 import { adminRequests } from "../../utils/requestMethods";
 import { saleApi } from "../../services/propertySaleApi";
 import AttachAdvocateModal from "../PropertySale/AttachAdvocateModal";
+import LandlordsPortalTable from "./LandlordsPortalTable";
 
 // The extensibility point: each entry describes one portal type. `available: false` entries render a
 // plain "not built yet" panel — Tenant/Landlord/Employee portals don't have a userIds link field or role
@@ -34,7 +35,10 @@ const PORTAL_REGISTRY = {
     linkUser: (recordId, userId) => saleApi.linkAdvocateUser(recordId, userId),
   },
   tenants:   { label: "Tenants Portal",   icon: FaUsers,   available: false },
-  landlords: { label: "Landlords Portal", icon: FaHome,    available: false },
+  // Landlords aren't company Users (own login, own password on their own record — see
+  // Landlord.portalPassword / middleware/landlordPortalAuth.js), so the attach-a-user flow
+  // above doesn't apply. `custom` renders LandlordsPortalTable instead of the generic table.
+  landlords: { label: "Landlords Portal", icon: FaHome,    available: true, custom: true },
   employees: { label: "Employees Portal", icon: FaUserTie, available: false },
 };
 
@@ -118,14 +122,14 @@ export default function PortalUsersPage() {
   const { data: usersData, isFetching: usersLoading, error: usersError } = useQuery({
     queryKey: ["portal-users-all", biz],
     queryFn: () => adminRequests.get("/users", { params: { companyId: biz, limit: 500 } }).then((r) => r.data?.users || []),
-    enabled: !!biz && portal.available,
+    enabled: !!biz && portal.available && !portal.custom,
     staleTime: 15_000,
   });
 
   const { data: records, isFetching: recordsLoading, error: recordsError } = useQuery({
     queryKey: ["portal-records", biz, portalKey],
     queryFn: () => portal.fetchRecords(biz),
-    enabled: !!biz && portal.available && typeof portal.fetchRecords === "function",
+    enabled: !!biz && portal.available && !portal.custom && typeof portal.fetchRecords === "function",
     staleTime: 15_000,
   });
 
@@ -272,7 +276,9 @@ export default function PortalUsersPage() {
               </div>
             )}
 
-            {portal.available && (
+            {portal.available && portal.custom && <LandlordsPortalTable biz={biz} />}
+
+            {portal.available && !portal.custom && (
               <>
                 {(usersError || recordsError) && (
                   <div className="mb-2 border border-rose-200 bg-rose-50 px-3 py-2 text-[11px] font-bold text-rose-700">Failed to load portal users.</div>

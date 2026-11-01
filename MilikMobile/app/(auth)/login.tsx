@@ -3,22 +3,30 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, ActivityIndicator, Image, Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, Href } from 'expo-router';
 import { useDispatch } from 'react-redux';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setCredentials } from '../../redux/slices/authSlice';
+import { setLandlordPortalCredentials } from '../../redux/slices/landlordPortalAuthSlice';
 import { Colors } from '../../constants/colors';
 import { STORAGE_KEYS } from '../../constants';
 import api from '../../services/api';
+import landlordPortalApi from '../../services/landlordPortalApi';
 import { registerForPushNotificationsAsync } from '../../services/pushNotifications';
 
 export default function LoginScreen() {
   const router   = useRouter();
   const dispatch = useDispatch();
 
+  const [mode, setMode] = useState<'staff' | 'landlord'>('staff');
+
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [loading,  setLoading]  = useState(false);
+
+  const [companyCode,  setCompanyCode]  = useState('');
+  const [landlordCode, setLandlordCode] = useState('');
+  const [landlordPassword, setLandlordPassword] = useState('');
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
@@ -67,6 +75,31 @@ export default function LoginScreen() {
     }
   };
 
+  const handleLandlordLogin = async () => {
+    if (!companyCode.trim() || !landlordCode.trim() || !landlordPassword.trim()) {
+      Alert.alert('Required', 'Please enter the company code, landlord code, and password.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data } = await landlordPortalApi.post('/landlord-portal/auth/login', {
+        companyCode:  companyCode.trim().toUpperCase(),
+        landlordCode: landlordCode.trim(),
+        password:     landlordPassword,
+      });
+      await AsyncStorage.setItem(STORAGE_KEYS.LANDLORD_PORTAL_TOKEN, data.token);
+      await AsyncStorage.setItem(STORAGE_KEYS.LANDLORD_PORTAL_LANDLORD, JSON.stringify(data.landlord));
+      await AsyncStorage.setItem(STORAGE_KEYS.LANDLORD_PORTAL_COMPANY, JSON.stringify(data.company));
+      dispatch(setLandlordPortalCredentials({ token: data.token, landlord: data.landlord, company: data.company }));
+      router.replace('/(landlord-portal)' as Href);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Login failed. Please check your credentials.';
+      Alert.alert('Login Failed', msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       style={styles.container}
@@ -81,43 +114,111 @@ export default function LoginScreen() {
 
       {/* Form */}
       <View style={styles.form}>
-        <Text style={styles.formTitle}>Sign in to your account</Text>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            placeholder="you@company.com"
-            placeholderTextColor={Colors.textMuted}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            autoComplete="email"
-            textContentType="emailAddress"
-            importantForAutofill="yes"
-          />
+        <View style={styles.modeToggle}>
+          <TouchableOpacity
+            style={[styles.modeBtn, mode === 'staff' && styles.modeBtnActive]}
+            onPress={() => setMode('staff')}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeBtnText, mode === 'staff' && styles.modeBtnTextActive]}>Staff</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, mode === 'landlord' && styles.modeBtnActive]}
+            onPress={() => setMode('landlord')}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeBtnText, mode === 'landlord' && styles.modeBtnTextActive]}>Landlord</Text>
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.field}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            placeholder="••••••••"
-            placeholderTextColor={Colors.textMuted}
-            secureTextEntry
-            autoComplete="current-password"
-            textContentType="password"
-            importantForAutofill="yes"
-          />
-        </View>
+        <Text style={styles.formTitle}>
+          {mode === 'staff' ? 'Sign in to your account' : 'Sign in to the landlord portal'}
+        </Text>
+
+        {mode === 'staff' ? (
+          <>
+            <View style={styles.field}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@company.com"
+                placeholderTextColor={Colors.textMuted}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete="email"
+                textContentType="emailAddress"
+                importantForAutofill="yes"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="••••••••"
+                placeholderTextColor={Colors.textMuted}
+                secureTextEntry
+                autoComplete="current-password"
+                textContentType="password"
+                importantForAutofill="yes"
+              />
+            </View>
+          </>
+        ) : (
+          <>
+            <View style={styles.field}>
+              <Text style={styles.label}>Company Code</Text>
+              <TextInput
+                style={styles.input}
+                value={companyCode}
+                onChangeText={setCompanyCode}
+                placeholder="e.g. MILIK"
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="organization"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Landlord Code</Text>
+              <TextInput
+                style={styles.input}
+                value={landlordCode}
+                onChangeText={setLandlordCode}
+                placeholder="e.g. LL001"
+                placeholderTextColor={Colors.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                autoComplete="username"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                style={styles.input}
+                value={landlordPassword}
+                onChangeText={setLandlordPassword}
+                placeholder="••••••••"
+                placeholderTextColor={Colors.textMuted}
+                secureTextEntry
+                autoComplete="current-password"
+                textContentType="password"
+                importantForAutofill="yes"
+              />
+            </View>
+          </>
+        )}
 
         <TouchableOpacity
           style={[styles.btn, loading && styles.btnDisabled]}
-          onPress={handleLogin}
+          onPress={mode === 'staff' ? handleLogin : handleLandlordLogin}
           disabled={loading}
           activeOpacity={0.85}
         >
@@ -179,6 +280,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.text,
     marginBottom: 4,
+  },
+  modeToggle: {
+    flexDirection: 'row',
+    backgroundColor: Colors.background,
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 4,
+  },
+  modeBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modeBtnActive: {
+    backgroundColor: Colors.primary,
+  },
+  modeBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  modeBtnTextActive: {
+    color: Colors.white,
   },
   field: {
     gap: 6,

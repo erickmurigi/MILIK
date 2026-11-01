@@ -105,7 +105,7 @@ const JournalEntrySchema = new mongoose.Schema(
           listing:    { type: mongoose.Schema.Types.ObjectId, ref: "SaleListing", default: null },
           agent:      { type: mongoose.Schema.Types.ObjectId, ref: "SaleAgent", default: null },
           property:   { type: mongoose.Schema.Types.ObjectId, ref: "Property", default: null },
-          costCentre: { type: String, trim: true, default: "" },
+          costCentre: { type: mongoose.Schema.Types.ObjectId, ref: "CostCentre", default: null },
         },
       },
     ],
