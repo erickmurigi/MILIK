@@ -20,6 +20,7 @@ import { COMPANY_PRINT_FIELDS } from "../../utils/printCompanyFields.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
+import { round2 } from "../../utils/math.js";
 
 const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(String(value || ""));
 const toObjectId = (value) => (isValidObjectId(value) ? new mongoose.Types.ObjectId(String(value)) : null);
@@ -441,11 +442,46 @@ export const postCommissionAccrualForProcessedStatement = async ({ processedStat
 
     if (!alreadyHasPayable) {
       const landlordPayableAccount = await resolveLandlordRemittancePayableAccount(processedStatement.business);
+
+      // netAmountDue is ALREADY net of (a) any future-recoverable advance recovered for this exact
+      // period, and (b) any against-payable advance disbursed in this period — see
+      // landlordStatementService.js's netRemittance formula (advanceRecoveriesTotal /
+      // earlyPayoutsTotal), which subtracts both so the figure stays correct for its OTHER job:
+      // capping how much payLandlord lets the company actually pay out. But BOTH kinds of advance
+      // ALSO post their own real, immediate, fully balanced debit to 2110 the moment they're
+      // processed (processLandlordAdvancementRecovery for future-recoverable — must run before this
+      // period's statement can even be closed, see isPeriodClosedByProcessedStatement — and
+      // postDisbursementIfMissing's against_payable branch for against-payable, immediately on
+      // disbursement). Crediting 2110 for the already-net figure here would subtract the same
+      // amount a second time, permanently understating the liability. The GL posting below is
+      // grossed back up by whatever was already directly debited for this exact
+      // property/landlord/period so the ledger ends up at the true remaining balance —
+      // netAmountDue itself (and the payment cap it drives) is left untouched.
+      const alreadyRecoveredAgg = await FinancialLedgerEntry.aggregate([
+        {
+          $match: {
+            business: processedStatement.business,
+            property: processedStatement.property,
+            landlord: processedStatement.landlord,
+            accountId: landlordPayableAccount._id,
+            direction: "debit",
+            status: "approved",
+            "metadata.postingKind": { $in: ["landlord_advancement_recovery", "landlord_advance_against_payable"] },
+            statementPeriodStart: { $gte: processedStatement.periodStart },
+            statementPeriodEnd: { $lte: processedStatement.periodEnd },
+          },
+        },
+        { $group: { _id: null, total: { $sum: "$debit" } } },
+      ]);
+      const alreadyRecoveredForPeriod = round2(alreadyRecoveredAgg[0]?.total || 0);
+      const glAmountDue = round2(netAmountDue + alreadyRecoveredForPeriod);
+
       const payableJournalGroupId = new mongoose.Types.ObjectId();
       const payableMeta = {
         processedStatementId: String(processedStatement._id),
         postingKind: "landlord_payable_creation",
         autoPostedOnProcessing: true,
+        ...(alreadyRecoveredForPeriod > 0 ? { grossedUpForAdvances: alreadyRecoveredForPeriod } : {}),
       };
 
       const payableDebit = await postEntry({
@@ -458,8 +494,8 @@ export const postCommissionAccrualForProcessedStatement = async ({ processedStat
         statementPeriodStart: processedStatement.periodStart,
         statementPeriodEnd: processedStatement.periodEnd,
         category: "LANDLORD_PAYABLE",
-        amount: netAmountDue,
-        debit: netAmountDue,
+        amount: glAmountDue,
+        debit: glAmountDue,
         credit: 0,
         direction: "debit",
         accountId: propertyControlAccount._id,
@@ -484,9 +520,9 @@ export const postCommissionAccrualForProcessedStatement = async ({ processedStat
         statementPeriodStart: processedStatement.periodStart,
         statementPeriodEnd: processedStatement.periodEnd,
         category: "LANDLORD_PAYABLE",
-        amount: netAmountDue,
+        amount: glAmountDue,
         debit: 0,
-        credit: netAmountDue,
+        credit: glAmountDue,
         direction: "credit",
         accountId: landlordPayableAccount._id,
         journalGroupId: payableJournalGroupId,

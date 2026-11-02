@@ -5,8 +5,9 @@ import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
 import MeterReading from "../../models/MeterReading.js";
 import AuditLog from "../../models/AuditLog.js";
 import Tenant from "../../models/Tenant.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { recomputeTenantFinancialState, computeTenantInvoiceSnapshots } from "../propertyController/tenantInvoices.js";
-import { postReceiptUnappliedAllocationReleaseJournal } from "../propertyController/rentPayment.js";
+import { postReceiptUnappliedAllocationReleaseJournal, resolveUnallocatedReceiptsLiabilityAccount } from "../propertyController/rentPayment.js";
 import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { round2 } from "../../utils/math.js";
 
@@ -683,8 +684,34 @@ export const reallocatePayment = async (req, res, next) => {
     // Only fires when the payment was previously posted to the GL with an unapplied balance.
     // Atomic with the PMS update: if account 2130 is not configured the whole transaction
     // rolls back and the admin is prompted to set up their chart of accounts first.
+    //
+    // `prevUnapplied` (the stored allocationSummary.unapplied field) can drift out of sync with
+    // the real ledger — e.g. a payment whose original allocation target invoice was later edited
+    // or removed by a separate process that recalculated allocationSummary without reversing or
+    // re-tagging the original GL posting. Releasing against that stored field blindly debited
+    // 2130 for money that was never actually credited there, permanently distorting the account
+    // (confirmed via a real production ledger trace: a receipt originally posted straight to
+    // Tenant Receivables, with zero prior 2130 activity, still triggered a full-amount 2130 debit
+    // here on reallocation). Cap the release at what the ledger itself shows is still outstanding
+    // on 2130 for this exact payment, never the stored field alone.
+    let glVerifiedUnapplied = 0;
     if (prevUnapplied > 0 && payment.journalGroupId) {
-      let releaseRemaining = prevUnapplied;
+      const unallocatedAccount = await resolveUnallocatedReceiptsLiabilityAccount(businessId).catch(() => null);
+      if (unallocatedAccount?._id) {
+        const glRows = await FinancialLedgerEntry.find({
+          business: businessId,
+          accountId: unallocatedAccount._id,
+          sourceTransactionId: String(payment._id),
+          status: { $in: ["approved", "reversed"] },
+        }).select("debit credit").session(session).lean();
+        const glNet = round2(glRows.reduce((sum, r) => sum + Number(r.credit || 0) - Number(r.debit || 0), 0));
+        glVerifiedUnapplied = Math.max(0, glNet);
+      }
+    }
+    const releasableUnapplied = round2(Math.min(prevUnapplied, glVerifiedUnapplied));
+
+    if (releasableUnapplied > 0 && payment.journalGroupId) {
+      let releaseRemaining = releasableUnapplied;
       const releaseRows = [];
       for (const a of builtAllocations.filter((x) => x.invoice)) {
         if (releaseRemaining <= 0) break;

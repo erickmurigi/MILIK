@@ -18,6 +18,7 @@ import {
   getFinancialRatios,
   performYearEndClose,
   getLiabilitySubledger,
+  getLiabilitySubledgerAccounts,
   getRentalAgedAnalysisReport,
 } from "../../controllers/propertyController/financialReports.js";
 import { getTagSummaryReport } from "../../controllers/propertyController/tagReports.js";
@@ -42,6 +43,7 @@ router.get("/trial-balance-exceptions", verifyUser, requireCompanyModule(GL_ACCE
 router.get("/financial-ratios", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getFinancialRatios);
 
 router.get("/liability-subledger", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getLiabilitySubledger);
+router.get("/liability-subledger/accounts", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getLiabilitySubledgerAccounts);
 router.get("/tenant-summary", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getTenantSummaryReport);
 router.get("/rental-aged-analysis", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), getRentalAgedAnalysisReport);
 

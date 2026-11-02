@@ -1455,26 +1455,6 @@ export const getPropertyIncomeSummaryReport = async (req, res, next) => {
   }
 };
 
-const CASH_ACCOUNT_OPERATING_TYPES = new Set([
-  // Property management
-  "rent_payment", "landlord_receipt", "invoice", "invoice_note",
-  "expense", "payment_voucher", "petty_cash_disbursement",
-  "petty_cash_replenishment", "meter_reading", "recurring_deduction",
-  // Car wash
-  "carwash_payment", "carwash_expense", "carwash_prepaid_topup",
-  "carwash_savings_disbursement", "carwash_commission_payout",
-  // Inventory / POS
-  "pos_sale", "pos_purchase_receipt",
-  // Property sales
-  "property_sale_payment", "property_sale_commission_payout",
-  // Payroll
-  "payroll_period",
-]);
-const CASH_ACCOUNT_FINANCING_TYPES = new Set([
-  "landlord_payment", "advance", "processed_statement",
-  "processed_statement_payment", "deposit",
-  "fixed_asset_disposal",
-]);
 const CASH_FLOW_LABELS = {
   rent_payment:                    "Collections from Tenants",
   landlord_receipt:                "Direct Landlord Receipts",
@@ -1548,9 +1528,9 @@ export const getCashFlowReport = async (req, res, next) => {
         endDate,
         cashAccounts: [],
         operating: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
+        investing: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
         financing: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
-        adjustments: { items: [], totalInflows: 0, totalOutflows: 0, net: 0 },
-        summary: { openingCash: 0, netCashFromOperations: 0, netCashFromFinancing: 0, netCashFromAdjustments: 0, netChange: 0, closingCash: 0 },
+        summary: { openingCash: 0, netCashFromOperations: 0, netCashFromInvesting: 0, netCashFromFinancing: 0, netChange: 0, closingCash: 0 },
         note: "No cash or bank accounts identified. Add accounts with 'cash' or 'bank' in the name or sub-group.",
       });
     }
@@ -1573,14 +1553,24 @@ export const getCashFlowReport = async (req, res, next) => {
     };
 
     const cashOnlyMatch = { status: "approved", category: { $ne: "REVERSAL" } };
-    const [openingAgg, periodAgg] = await Promise.all([
+    const [openingAgg, cashByGroup] = await Promise.all([
       FinancialLedgerEntry.aggregate([
         { $match: { business: businessOid, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $lte: openingEndDate } } },
         { $group: { _id: "$accountId", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
       ]).allowDiskUse(true),
+      // Grouped by journalGroupId (the whole posting), not sourceTransactionType — classification
+      // below reads what the OTHER, non-cash leg of each posting actually is, not which module
+      // happened to post it. See the classifyAccount comment for why this is the correct axis.
       FinancialLedgerEntry.aggregate([
         { $match: { business: businessOid, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $gte: startDate, $lte: endDate } } },
-        { $group: { _id: "$sourceTransactionType", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
+        {
+          $group: {
+            _id: "$journalGroupId",
+            debit: { $sum: debitExpr },
+            credit: { $sum: creditExpr },
+            sourceTransactionType: { $first: "$sourceTransactionType" },
+          },
+        },
       ]).allowDiskUse(true),
     ]);
 
@@ -1593,27 +1583,87 @@ export const getCashFlowReport = async (req, res, next) => {
       return { _id: account._id, code: account.code, name: account.name, subGroup: account.subGroup || "", openingBalance: opening };
     });
 
-    const operatingItems = [];
-    const financingItems = [];
-    const adjustmentItems = [];
+    // ── Classify each posting by the account type/sub-group of its offsetting (non-cash) leg —
+    // the same axis the Balance Sheet and Income Statement already classify accounts by, instead of
+    // a hand-maintained list of transaction-type strings that a new module's postings would silently
+    // fall through. A cash movement is Investing if it clears/acquires a Fixed Assets account,
+    // Financing if it clears a Long-term Liability or Equity/Capital account, Operating otherwise —
+    // which is also where virtually every day-to-day collection and payment belongs.
+    const groupIds = cashByGroup.map((r) => r._id).filter(Boolean);
+    const offsettingLegs = groupIds.length
+      ? await FinancialLedgerEntry.find({
+          business: businessId,
+          journalGroupId: { $in: groupIds },
+          accountId: { $nin: cashAccountIds },
+        }).select("journalGroupId accountId").lean()
+      : [];
 
-    for (const row of periodAgg) {
-      const sourceType = String(row._id || "other");
+    const offsetAccountIds = [...new Set(offsettingLegs.map((l) => String(l.accountId)))];
+    const offsetAccounts = offsetAccountIds.length
+      ? await ChartOfAccount.find({ _id: { $in: offsetAccountIds } }).select("type subGroup").lean()
+      : [];
+    const offsetAccountMap = new Map(offsetAccounts.map((a) => [String(a._id), a]));
+
+    const classifyAccount = (acc) => {
+      if (!acc) return "operating";
+      if (acc.type === "asset" && acc.subGroup === "Fixed Assets") return "investing";
+      if (acc.type === "liability" && acc.subGroup === "Long-term Liabilities") return "financing";
+      if (acc.type === "equity" && acc.subGroup !== "Retained Earnings") return "financing";
+      return "operating";
+    };
+
+    const legAccountsByGroup = new Map();
+    offsettingLegs.forEach((l) => {
+      const gid = String(l.journalGroupId);
+      if (!legAccountsByGroup.has(gid)) legAccountsByGroup.set(gid, []);
+      legAccountsByGroup.get(gid).push(String(l.accountId));
+    });
+
+    // A posting with several non-cash legs (e.g. an asset disposal: clear the asset, clear
+    // accumulated depreciation, recognise a gain/loss) is classified by its most capital-in-nature
+    // leg — Investing beats Financing beats Operating — since that's what the cash receipt/payment
+    // as a WHOLE represents; splitting one posting's cash across sections would misstate both.
+    const classificationByGroup = new Map();
+    for (const [gid, accIds] of legAccountsByGroup) {
+      const classes = accIds.map((id) => classifyAccount(offsetAccountMap.get(id)));
+      classificationByGroup.set(gid, classes.includes("investing") ? "investing" : classes.includes("financing") ? "financing" : "operating");
+    }
+
+    // ── Re-aggregate into one row per (classification, transaction type) — many individual rent
+    // collections through the period still collapse into one "Collections from Tenants" row.
+    const buckets = new Map();
+    for (const row of cashByGroup) {
       const inflow = round2(row.debit || 0);
       const outflow = round2(row.credit || 0);
       const net = round2(inflow - outflow);
-      // Skip items where reversals fully cancel the original in the same period — net-zero has no cash flow impact.
+      // Skip items with no net cash impact — an inter-cashbook transfer, or reversals that fully
+      // cancel the original within the same period.
       if (Math.abs(net) < 0.01) continue;
-      const label = CASH_FLOW_LABELS[sourceType] || sourceType;
-      const item = { sourceType, label, inflow, outflow, net };
 
-      if (CASH_ACCOUNT_OPERATING_TYPES.has(sourceType)) {
-        operatingItems.push(item);
-      } else if (CASH_ACCOUNT_FINANCING_TYPES.has(sourceType)) {
-        financingItems.push(item);
-      } else {
-        adjustmentItems.push(item);
-      }
+      const gid = row._id ? String(row._id) : null;
+      // No journalGroupId (legacy data) can't be classified by an offsetting leg — defaults to
+      // Operating, the correct default since that's where the overwhelming majority of cash
+      // movements genuinely belong.
+      const classification = gid ? (classificationByGroup.get(gid) || "operating") : "operating";
+      const sourceType = String(row.sourceTransactionType || "other");
+      const key = `${classification}:${sourceType}`;
+      const bucket = buckets.get(key) || {
+        classification, sourceType, label: CASH_FLOW_LABELS[sourceType] || sourceType.replace(/_/g, " "),
+        inflow: 0, outflow: 0,
+      };
+      bucket.inflow = round2(bucket.inflow + inflow);
+      bucket.outflow = round2(bucket.outflow + outflow);
+      buckets.set(key, bucket);
+    }
+
+    const operatingItems = [];
+    const investingItems = [];
+    const financingItems = [];
+    for (const b of buckets.values()) {
+      const item = { sourceType: b.sourceType, label: b.label, inflow: b.inflow, outflow: b.outflow, net: round2(b.inflow - b.outflow) };
+      if (b.classification === "investing") investingItems.push(item);
+      else if (b.classification === "financing") financingItems.push(item);
+      else operatingItems.push(item);
     }
 
     const sumSection = (items) => {
@@ -1623,10 +1673,10 @@ export const getCashFlowReport = async (req, res, next) => {
     };
 
     const operating = sumSection(operatingItems);
+    const investing = sumSection(investingItems);
     const financing = sumSection(financingItems);
-    const adjustments = sumSection(adjustmentItems);
 
-    const netChange = round2(operating.net + financing.net + adjustments.net);
+    const netChange = round2(operating.net + investing.net + financing.net);
     const closingCash = round2(totalOpeningCash + netChange);
 
     return res.status(200).json({
@@ -1635,13 +1685,13 @@ export const getCashFlowReport = async (req, res, next) => {
       endDate,
       cashAccounts: cashAccountRows,
       operating,
+      investing,
       financing,
-      adjustments,
       summary: {
         openingCash: round2(totalOpeningCash),
         netCashFromOperations: operating.net,
+        netCashFromInvesting: investing.net,
         netCashFromFinancing: financing.net,
-        netCashFromAdjustments: adjustments.net,
         netChange,
         closingCash,
       },
@@ -2131,11 +2181,11 @@ export const getTrialBalanceExceptions = async (req, res, next) => {
           },
         },
         { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
-      ]),
+      ]).allowDiskUse(true),
       ChartOfAccount.find({ business: bizId }, {
         _id: 1, code: 1, name: 1, type: 1, group: 1, isActive: 1,
       }).lean(),
-    ]).allowDiskUse(true);
+    ]);
     const accountMap = new Map(accounts.map((a) => [String(a._id), a]));
 
     const exceptions = [];
@@ -2220,12 +2270,17 @@ export const getFinancialRatios = async (req, res, next) => {
     if (!businessId) return next(createError(400, "Business required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
+    // Defaults to today, end of day — same default the Balance Sheet's own asOfDate uses. Without
+    // this, a future-dated posting (an accrual, a scheduled journal) would count here but not on the
+    // Balance Sheet, so Total Equity/Assets/Liabilities computed on this page could silently drift
+    // out of reconciliation with the authoritative statement for the exact same company.
+    const asOfDate = normalizeDate(req.query.asOfDate, true);
 
     // Get per-account net balances — use REPORT_LEDGER_STATUSES so reversed
     // originals and their corrections net to zero before ratio calculation.
     const [rows, accounts] = await Promise.all([
       FinancialLedgerEntry.aggregate([
-        { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES } } },
+        { $match: { business: bizId, status: { $in: REPORT_LEDGER_STATUSES }, transactionDate: { $lte: asOfDate } } },
         {
           $group: {
             _id: "$accountId",
@@ -2234,12 +2289,19 @@ export const getFinancialRatios = async (req, res, next) => {
           },
         },
         { $addFields: { netBalance: { $subtract: ["$totalDebit", "$totalCredit"] } } },
-      ]),
+      ]).allowDiskUse(true),
       ChartOfAccount.find({ business: bizId }, {
         _id: 1, type: 1, group: 1, subGroup: 1,
       }).lean(),
-    ]).allowDiskUse(true);
+    ]);
     const accMap = new Map(accounts.map((a) => [String(a._id), a]));
+
+    // Matched by exact sub-group name (see accountingClassificationService.js's SUBGROUP_OPTIONS_BY_TYPE
+    // for the canonical list) — not a loose "contains the word current" substring check, which silently
+    // misclassified cash itself (sub-group "Cashbooks" / "Bank Accounts") as non-current, understating
+    // the Current Ratio for every company, since cash is usually the single largest current-asset line.
+    const CURRENT_ASSET_SUBGROUPS = new Set(["cashbooks", "bank accounts", "current assets", "receivables"]);
+    const CURRENT_LIABILITY_SUBGROUPS = new Set(["current liabilities", "payables", "control accounts", "other liabilities"]);
 
     let currentAssets = 0, nonCurrentAssets = 0;
     let currentLiabilities = 0, nonCurrentLiabilities = 0;
@@ -2250,21 +2312,24 @@ export const getFinancialRatios = async (req, res, next) => {
       const acc = accMap.get(String(row._id));
       if (!acc) continue;
       const net = row.netBalance;
-      const g = String(acc.group || "").toLowerCase();
       const sg = String(acc.subGroup || "").toLowerCase();
 
       if (acc.type === "asset") {
-        if (g.includes("current") || sg.includes("current")) currentAssets += net;
+        if (CURRENT_ASSET_SUBGROUPS.has(sg)) currentAssets += net;
         else nonCurrentAssets += net;
       } else if (acc.type === "liability") {
-        if (g.includes("current") || sg.includes("current")) currentLiabilities += Math.abs(net);
+        if (CURRENT_LIABILITY_SUBGROUPS.has(sg)) currentLiabilities += Math.abs(net);
         else nonCurrentLiabilities += Math.abs(net);
       } else if (acc.type === "equity") {
         totalEquity += Math.abs(net);
       } else if (acc.type === "income") {
+        // Every income subgroup in this system's chart taxonomy ("Rental Income", "Commission
+        // Income", "Car Wash Income", "Operating Income", "Other Income") is operating revenue —
+        // none of them are literally named "Revenue" or "Sales", so a substring check against those
+        // words matched nothing and left totalRevenue at 0 for every real company, which made Gross
+        // Margin and Net Margin show "N/A" even when the company clearly had income.
         totalIncome += Math.abs(net);
-        if (sg.includes("revenue") || sg.includes("sales") || sg === "") totalRevenue += Math.abs(net);
-        else if (sg.includes("cost") || sg.includes("cogs")) costOfRevenue += Math.abs(net);
+        totalRevenue += Math.abs(net);
       } else if (acc.type === "expense") {
         totalExpenses += Math.abs(net);
         if (sg.includes("cost") || sg.includes("cogs")) costOfRevenue += Math.abs(net);
@@ -2274,6 +2339,12 @@ export const getFinancialRatios = async (req, res, next) => {
     const totalAssets = currentAssets + nonCurrentAssets;
     const netIncome = totalIncome - totalExpenses;
     const grossProfit = totalRevenue - costOfRevenue;
+    // Mirrors the Balance Sheet's own "Current Period Earnings" line (getBalanceSheetReport): a
+    // company that has never run a formal Year-End Close has no Retained Earnings GL postings yet,
+    // so real equity-type accounts alone understate (often to ~0) what Equity actually is. Without
+    // this, Debt-to-Equity shows "N/A" for most real companies even though the Balance Sheet — the
+    // authoritative statement — reports a real, non-zero Total Equity for the exact same company.
+    totalEquity += netIncome;
 
     const ratios = {
       currentRatio: currentLiabilities > 0 ? +(currentAssets / currentLiabilities).toFixed(2) : null,
@@ -2285,6 +2356,7 @@ export const getFinancialRatios = async (req, res, next) => {
 
     return res.status(200).json({
       success: true,
+      asOfDate,
       ratios,
       components: {
         currentAssets: +currentAssets.toFixed(2),
@@ -2459,11 +2531,16 @@ export const getLiabilitySubledger = async (req, res, next) => {
 
     await ensureSystemChartOfAccounts(businessId);
 
+    // The five named tabs keep their own rich, purpose-built grouping below. Any other tab value is
+    // taken as a literal ChartOfAccount code — see getLiabilitySubledgerAccounts, which hands the
+    // frontend every OTHER posting liability account this company actually has, so no liability from
+    // any module (Property Sale, Car Wash, HR, Inventory, …) is ever left off this page — they fall
+    // through to the generic per-source-transaction breakdown at the end of this function.
     const codeMap   = { deposits: "2100", landlord: "2110", unallocated: "2130", tax: "2140", wht: "2141" };
-    const accountCode = codeMap[tab] ?? "2100";
+    const accountCode = codeMap[tab] || tab.toUpperCase();
     const account   = await findSystemAccountByCode(businessId, accountCode);
 
-    if (!account) {
+    if (!account || account.type !== "liability") {
       return res.json({ success: true, tab, accountCode, accountName: "", total: 0, groups: [] });
     }
 
@@ -2733,87 +2810,181 @@ export const getLiabilitySubledger = async (req, res, next) => {
     }
 
     // ── 2100 Deposits / 2130 Unallocated — group by tenant then by property ───
-    const agg = await FinancialLedgerEntry.aggregate([
-      { $match: glMatch },
-      {
-        $group: {
-          _id:      "$tenant",
-          credit:   { $sum: creditExpr },
-          debit:    { $sum: debitExpr },
-          property: { $last: "$property" },
+    if (tab === "deposits" || tab === "unallocated") {
+      const agg = await FinancialLedgerEntry.aggregate([
+        { $match: glMatch },
+        {
+          $group: {
+            _id:      "$tenant",
+            credit:   { $sum: creditExpr },
+            debit:    { $sum: debitExpr },
+            property: { $last: "$property" },
+          },
         },
-      },
-    ]).allowDiskUse(true);
+      ]).allowDiskUse(true);
 
-    const rows = agg
-      .map((r) => ({ tenantId: r._id, balance: round2(r.credit - r.debit), propertyId: r.property }))
-      .filter((r) => r.balance > 0.005 && r.tenantId);
+      const rows = agg
+        .map((r) => ({ tenantId: r._id, balance: round2(r.credit - r.debit), propertyId: r.property }))
+        .filter((r) => r.balance > 0.005 && r.tenantId);
 
-    const total = round2(rows.reduce((s, r) => s + r.balance, 0));
-    if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+      const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+      if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
 
-    const tenantIdList = rows.map((r) => r.tenantId);
+      const tenantIdList = rows.map((r) => r.tenantId);
 
-    // Fetch tenants and (for deposits) the latest DEPOSIT_CHARGE invoices in parallel.
-    const [tenants, invs] = await Promise.all([
-      Tenant.find({ _id: { $in: tenantIdList }, business: businessId })
-        .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName propertyCode" } })
-        .select("name unit")
-        .lean(),
-      tab === "deposits"
-        ? TenantInvoice.find({
-            business: businessId,
-            tenant:   { $in: tenantIdList },
-            category: "DEPOSIT_CHARGE",
-            ...(asOfDate ? { invoiceDate: { $lte: asOfDate } } : {}),
-          })
-            .select("tenant invoiceNumber amount invoiceDate")
-            .sort({ invoiceDate: -1 })
-            .lean()
-        : Promise.resolve([]),
-    ]);
+      // Fetch tenants and (for deposits) the latest DEPOSIT_CHARGE invoices in parallel.
+      const [tenants, invs] = await Promise.all([
+        Tenant.find({ _id: { $in: tenantIdList }, business: businessId })
+          .populate({ path: "unit", select: "unitNumber property", populate: { path: "property", select: "propertyName propertyCode" } })
+          .select("name unit")
+          .lean(),
+        tab === "deposits"
+          ? TenantInvoice.find({
+              business: businessId,
+              tenant:   { $in: tenantIdList },
+              category: "DEPOSIT_CHARGE",
+              ...(asOfDate ? { invoiceDate: { $lte: asOfDate } } : {}),
+            })
+              .select("tenant invoiceNumber amount invoiceDate")
+              .sort({ invoiceDate: -1 })
+              .lean()
+          : Promise.resolve([]),
+      ]);
 
-    const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
+      const tenantMap = new Map(tenants.map((t) => [String(t._id), t]));
 
-    // Build invoice map (first entry per tenant wins — sorted by date desc so newest first)
-    const invoiceMap = new Map();
-    invs.forEach((inv) => {
-      const key = String(inv.tenant);
-      if (!invoiceMap.has(key)) invoiceMap.set(key, inv);
-    });
+      // Build invoice map (first entry per tenant wins — sorted by date desc so newest first)
+      const invoiceMap = new Map();
+      invs.forEach((inv) => {
+        const key = String(inv.tenant);
+        if (!invoiceMap.has(key)) invoiceMap.set(key, inv);
+      });
 
-    const byProp = new Map();
-    rows.forEach((r) => {
-      const tenant = tenantMap.get(String(r.tenantId));
-      const prop   = tenant?.unit?.property;
-      const propId   = String(prop?._id || r.propertyId || "unknown");
-      const propName = prop?.propertyName || "Unknown Property";
-      const propCode = prop?.propertyCode || "";
+      const byProp = new Map();
+      rows.forEach((r) => {
+        const tenant = tenantMap.get(String(r.tenantId));
+        const prop   = tenant?.unit?.property;
+        const propId   = String(prop?._id || r.propertyId || "unknown");
+        const propName = prop?.propertyName || "Unknown Property";
+        const propCode = prop?.propertyCode || "";
 
-      if (!byProp.has(propId)) {
-        byProp.set(propId, { propertyId: propId, propertyName: propName, propertyCode: propCode, subtotal: 0, rows: [] });
-      }
-      const g   = byProp.get(propId);
-      g.subtotal = round2(g.subtotal + r.balance);
+        if (!byProp.has(propId)) {
+          byProp.set(propId, { propertyId: propId, propertyName: propName, propertyCode: propCode, subtotal: 0, rows: [] });
+        }
+        const g   = byProp.get(propId);
+        g.subtotal = round2(g.subtotal + r.balance);
 
-      const row = {
-        tenantId:   String(r.tenantId),
-        tenantName: tenant?.name || "Unknown Tenant",
-        unitNumber: tenant?.unit?.unitNumber || "",
-        balance:    r.balance,
-      };
-      if (tab === "deposits") {
-        const inv = invoiceMap.get(String(r.tenantId));
-        row.invoiceNumber = inv?.invoiceNumber || "";
-        row.invoiceDate   = inv?.invoiceDate   || null;
-        row.depositAmount = round2(Math.abs(Number(inv?.amount || 0)));
-      }
-      g.rows.push(row);
-    });
+        const row = {
+          tenantId:   String(r.tenantId),
+          tenantName: tenant?.name || "Unknown Tenant",
+          unitNumber: tenant?.unit?.unitNumber || "",
+          balance:    r.balance,
+        };
+        if (tab === "deposits") {
+          const inv = invoiceMap.get(String(r.tenantId));
+          row.invoiceNumber = inv?.invoiceNumber || "";
+          row.invoiceDate   = inv?.invoiceDate   || null;
+          row.depositAmount = round2(Math.abs(Number(inv?.amount || 0)));
+        }
+        g.rows.push(row);
+      });
 
-    const groups = [...byProp.values()].sort((a, b) => b.subtotal - a.subtotal);
+      const groups = [...byProp.values()].sort((a, b) => b.subtotal - a.subtotal);
 
-    return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+      return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+    }
+
+    // ── Any other posting liability account (Property Sale, Car Wash, HR, Inventory, …) — generic
+    // breakdown by source transaction, grouped by month. Deliberately less rich than the five tabs
+    // above (no per-type reference lookup, since the source document shape varies by module) but
+    // correct and complete: every liability account this company actually posts to shows up somewhere.
+    {
+      const agg = await FinancialLedgerEntry.aggregate([
+        { $match: glMatch },
+        {
+          $group: {
+            _id:                   "$sourceTransactionId",
+            credit:                { $sum: creditExpr },
+            debit:                 { $sum: debitExpr },
+            transactionDate:       { $last: "$transactionDate" },
+            notes:                 { $last: "$notes" },
+            sourceTransactionType: { $last: "$sourceTransactionType" },
+            property:              { $last: "$property" },
+          },
+        },
+      ]).allowDiskUse(true);
+
+      const rows = agg
+        .map((r) => ({
+          sourceId: r._id, balance: round2(r.credit - r.debit), date: r.transactionDate,
+          notes: r.notes || "", sourceType: r.sourceTransactionType || "", propertyId: r.property,
+        }))
+        .filter((r) => r.balance > 0.005);
+
+      const total = round2(rows.reduce((s, r) => s + r.balance, 0));
+      if (!rows.length) return res.json({ success: true, tab, accountCode, accountName: account.name, total: 0, groups: [] });
+
+      const propIds = [...new Set(rows.map((r) => r.propertyId).filter(Boolean))];
+      const props   = propIds.length ? await Property.find({ _id: { $in: propIds } }).select("propertyName").lean() : [];
+      const propNameMap = new Map(props.map((p) => [String(p._id), p.propertyName]));
+
+      const byMonth = new Map();
+      rows.forEach((r) => {
+        const d     = new Date(r.date || new Date());
+        const key   = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        const label = d.toLocaleString("en-KE", { month: "long", year: "numeric" });
+        if (!byMonth.has(key)) byMonth.set(key, { month: key, monthLabel: label, subtotal: 0, rows: [] });
+        const g = byMonth.get(key);
+        g.subtotal = round2(g.subtotal + r.balance);
+        g.rows.push({
+          sourceId:  String(r.sourceId || ""),
+          reference: (r.sourceType || "—").replace(/_/g, " "),
+          narration: r.notes,
+          property:  r.propertyId ? (propNameMap.get(String(r.propertyId)) || "") : "",
+          amount:    r.balance,
+          date:      r.date,
+        });
+      });
+
+      const groups = [...byMonth.entries()]
+        .sort((a, b) => b[0].localeCompare(a[0]))
+        .map(([, g]) => g);
+
+      return res.json({ success: true, tab, accountCode, accountName: account.name, total, groups });
+    }
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Every OTHER posting liability account this company actually has, beyond the five named tabs
+// (Tenant Deposits, Landlord Payables, Unallocated Receipts, Tax Payable, WHT Payable) — lets the
+// Liability Sub-Ledger page build one tab per module's own liability accounts (Property Sale's Agent
+// Commissions Payable, Car Wash's Staff Commissions/Savings Payable, HR's PAYE/NHIF/NSSF/AHL/Net
+// Salaries Payable, Inventory's VAT Payable, …) without hardcoding any of their codes here, so a new
+// module's liability account shows up automatically the moment it exists for this company. Per-vendor
+// trade-payable sub-accounts (code "2000-SUP…") are excluded — those already live on the Creditor Ledger.
+const LIABILITY_SUBLEDGER_NAMED_CODES = ["2100", "2110", "2130", "2140", "2141"];
+
+export const getLiabilitySubledgerAccounts = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) return next(createError(400, "Business context is required."));
+
+    await ensureSystemChartOfAccounts(businessId);
+
+    const accounts = await ChartOfAccount.find({
+      business: businessId,
+      type: "liability",
+      isPosting: { $ne: false },
+      isHeader: { $ne: true },
+      code: { $nin: LIABILITY_SUBLEDGER_NAMED_CODES, $not: /^2000-/ },
+    })
+      .select("code name")
+      .sort({ code: 1 })
+      .lean();
+
+    return res.json({ success: true, accounts });
   } catch (err) {
     next(err);
   }
@@ -3006,8 +3177,8 @@ export const getTenantSummaryReport = async (req, res, next) => {
             invoiceCount: { $sum: 1 },
           },
         },
-      ]),
-    ]).allowDiskUse(true);
+      ]).allowDiskUse(true),
+    ]);
 
     const unitMap = new Map(units.map((u) => [String(u._id), u]));
     const propMap = new Map(properties.map((p) => [String(p._id), p]));
@@ -3381,6 +3552,7 @@ export default {
   getFinancialRatios,
   performYearEndClose,
   getLiabilitySubledger,
+  getLiabilitySubledgerAccounts,
   getTenantSummaryReport,
   getRentalAgedAnalysisReport,
 };

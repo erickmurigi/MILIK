@@ -4784,6 +4784,27 @@ export const deleteTenantInvoice = async (req, res, next) => {
       return next(createError(400, "This invoice has active debit or credit notes. Reverse or cancel those notes first."));
     }
 
+    // A receipt's allocations array keeps its own appliedAmount/unapplied split independent of this
+    // invoice's own ledger entries — deleting the invoice out from under it (especially via the hard-delete
+    // branch below, which fully removes the document) leaves the receipt pointing at a phantom invoice,
+    // claiming the money is applied while nothing in the GL ever moves. Block instead of silently orphaning it.
+    const blockingAllocation = await RentPayment.findOne({
+      business: invoice.business,
+      "allocations.invoice": invoice._id,
+      "allocations.appliedAmount": { $gt: 0 },
+      isCancelled: { $ne: true },
+      isReversed: { $ne: true },
+    }).select("_id referenceNumber").lean();
+
+    if (blockingAllocation) {
+      return next(
+        createError(
+          400,
+          `Receipt ${blockingAllocation.referenceNumber || blockingAllocation._id} has allocated money to this invoice. Reallocate or reverse that receipt before deleting it.`
+        )
+      );
+    }
+
     const canHardDeleteWithoutAuditReversal =
       invoice.ledgerMode === "off_ledger" ||
       (["unposted", "failed", "not_applicable"].includes(String(invoice.postingStatus || "").toLowerCase()) &&

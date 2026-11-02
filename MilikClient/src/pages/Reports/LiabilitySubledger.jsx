@@ -4,7 +4,7 @@ import { useTabState } from "../../hooks/useTabState";
 import { toast } from "react-toastify";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { selectCurrentCompany, selectCurrentUser, selectAllProperties } from "../../redux/selectors";
-import { getLiabilitySubledger } from "../../redux/apiCalls";
+import { getLiabilitySubledger, getLiabilitySubledgerAccounts } from "../../redux/apiCalls";
 import AppSelect from "../../components/common/AppSelect";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import { fmtDate } from "../../utils/dates";
@@ -69,11 +69,17 @@ const exportCSV = ({ tab, groups, total, accountCode, accountName, asOf }) => {
       g.rows.forEach((r) => lines.push([q(g.monthLabel), q(r.reference), q(r.narration), q(r.property), q(fmtDate(r.date)), fmt(r.vatBalance)].join(",")));
       lines.push([`"${g.monthLabel} Subtotal"`, "", "", "", "", fmt(g.subtotal)].join(","));
     });
-  } else {
+  } else if (tab === "wht") {
     lines.push(["Month", "Voucher #", "Vendor", "Property", "Narration", "Gross (KES)", "WHT Held (KES)"].join(","));
     groups.forEach((g) => {
       g.rows.forEach((r) => lines.push([q(g.monthLabel), q(r.voucherNo), q(r.vendor), q(r.property), q(r.narration), fmt(r.grossAmount), fmt(r.whtBalance)].join(",")));
       lines.push([`"${g.monthLabel} Subtotal"`, "", "", "", "", "", fmt(g.subtotal)].join(","));
+    });
+  } else {
+    lines.push(["Month", "Source", "Narration", "Property", "Date", "Amount (KES)"].join(","));
+    groups.forEach((g) => {
+      g.rows.forEach((r) => lines.push([q(g.monthLabel), q(r.reference), q(r.narration), q(r.property), q(fmtDate(r.date)), fmt(r.amount)].join(",")));
+      lines.push([`"${g.monthLabel} Subtotal"`, "", "", "", "", fmt(g.subtotal)].join(","));
     });
   }
   lines.push("", `"GRAND TOTAL","${fmt(total)}"`);
@@ -328,6 +334,68 @@ const TaxGroup = React.memo(({ group }) => {
   );
 });
 
+// ─── GenericGroup — any liability account beyond the five named tabs (Property Sale, Car Wash, HR,
+// Inventory, …). Same shape as TaxGroup but with a neutral amount column, since the source document
+// varies by module and isn't resolved to a specific reference/vendor here. ──────────────────────────
+const GenericGroup = React.memo(({ group }) => {
+  const [open, setOpen] = useTabState(`lsl:gen:${group.month}`, true);
+  const cols = "140px 1fr 130px 90px 110px";
+  const hdrs = ["Source", "Narration", "Property", "Date", "Amount (KES)"];
+
+  return (
+    <div className="mb-1.5 overflow-hidden rounded border border-slate-200 bg-white shadow-sm">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 border-l-[3px] bg-slate-50 px-3 py-2.5 text-left transition-colors hover:bg-slate-100"
+        style={{ borderLeftColor: RED }}
+      >
+        <span className="text-slate-300">{open ? <FaChevronDown size={9} /> : <FaChevronRight size={9} />}</span>
+        <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
+        <span className="flex-1 text-[11px] font-bold text-slate-700">{group.monthLabel}</span>
+        <span className="mr-3 rounded-full bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-500">
+          {group.rows.length}
+        </span>
+        <span className="w-32 text-right font-mono text-[12px] font-black tabular-nums" style={{ color: RED }}>
+          {fmt(group.subtotal)}
+        </span>
+      </button>
+
+      {open && (
+        <>
+          <div className="grid border-b border-slate-100 bg-[#0B3B2E]/[0.03] px-4 py-1.5" style={{ gridTemplateColumns: cols }}>
+            {hdrs.map((h, i) => (
+              <span key={h} className={`text-[8px] font-bold uppercase tracking-[0.14em] text-slate-400 ${i === 4 ? "text-right" : ""}`}>
+                {h}
+              </span>
+            ))}
+          </div>
+          {group.rows.map((r, ri) => (
+            <div
+              key={r.sourceId || ri}
+              className={`grid items-center border-b border-slate-50 px-4 py-2 last:border-0 hover:bg-slate-50/80 ${ri % 2 !== 0 ? "bg-slate-50/30" : ""}`}
+              style={{ gridTemplateColumns: cols }}
+            >
+              <span className="truncate text-[10px] font-semibold capitalize text-[#0B3B2E]">{r.reference || "—"}</span>
+              <span className="truncate pr-2 text-[11px] text-slate-600">{r.narration || "—"}</span>
+              <span className="truncate text-[10px] text-slate-500">{r.property || "—"}</span>
+              <span className="text-[10px] text-slate-500">{fmtDate(r.date)}</span>
+              <span className="text-right font-mono text-[11px] font-bold tabular-nums" style={{ color: RED }}>
+                {fmt(r.amount)}
+              </span>
+            </div>
+          ))}
+          <div className="flex items-center justify-between border-t border-slate-200 bg-slate-50 px-4 py-1.5">
+            <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">Subtotal</span>
+            <span className="font-mono text-[11px] font-black tabular-nums" style={{ color: RED }}>
+              KES {fmt(group.subtotal)}
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const LiabilitySubledger = () => {
   const currentUser    = useSelector(selectCurrentUser);
@@ -346,11 +414,31 @@ const LiabilitySubledger = () => {
   }, [currentCompany?._id, currentUser?.company, currentUser?.businessId]);
 
   const businessName = currentCompany?.companyName || currentUser?.company?.companyName || "";
+  // Property scoping only makes sense for a company that actually runs Property Management — a
+  // Car Wash- or Property Sale-only company has no properties, so the filter would just be empty clutter.
+  const hasPM = hasCompanyModule(currentCompany, "propertyManagement");
 
-  const visibleTabs = useMemo(
-    () => TABS.filter((t) => !t.requiresModule || hasCompanyModule(currentCompany, t.requiresModule)),
-    [currentCompany]
-  );
+  // Every other posting liability account this company has (Property Sale's Agent Commissions
+  // Payable, Car Wash's Staff Commissions/Savings Payable, HR's PAYE/NHIF/NSSF/AHL/Net Salaries
+  // Payable, Inventory's VAT Payable, …) — fetched once per company so no module's liabilities are
+  // ever left off this page, without hardcoding any of their account codes here.
+  const [extraAccounts, setExtraAccounts] = useState([]);
+  const [extraAccountsLoaded, setExtraAccountsLoaded] = useState(false);
+  useEffect(() => {
+    if (!businessId) return;
+    let live = true;
+    setExtraAccountsLoaded(false);
+    getLiabilitySubledgerAccounts({ business: businessId })
+      .then((accounts) => { if (live) { setExtraAccounts(accounts); setExtraAccountsLoaded(true); } })
+      .catch(() => { if (live) setExtraAccountsLoaded(true); });
+    return () => { live = false; };
+  }, [businessId]);
+
+  const visibleTabs = useMemo(() => {
+    const named = TABS.filter((t) => !t.requiresModule || hasCompanyModule(currentCompany, t.requiresModule));
+    const generic = extraAccounts.map((a) => ({ key: a.code, label: a.name, code: a.code, desc: `Account ${a.code} · ${a.name}`, generic: true }));
+    return [...named, ...generic];
+  }, [currentCompany, extraAccounts]);
 
   const [tab,     setTab]     = useTabState("lsl:tab",     "deposits");
   const [filters, setFilters] = useTabState("lsl:filters", { asOf: today(), property: "" });
@@ -358,15 +446,18 @@ const LiabilitySubledger = () => {
   const [loading, setLoading] = useState(false);
   const abortRef = useRef(null);
 
-  // The persisted tab (from a previous visit, possibly on a different company) may no
-  // longer be visible — e.g. "deposits" was open, then the user switched to a company
-  // without Property Management. Fall back to the first tab this company can actually see.
+  // The persisted tab (from a previous visit, possibly on a different company) may no longer be
+  // visible — e.g. "deposits" was open, then the user switched to a company without Property
+  // Management, or the persisted tab was a generic account code from another company entirely. Falls
+  // back to the first tab this company can actually see — but only once extraAccounts has actually
+  // loaded, otherwise a persisted generic-account tab would get bumped before it ever had a chance
+  // to be recognised as valid.
   useEffect(() => {
-    if (visibleTabs.length === 0) return;
+    if (!extraAccountsLoaded || visibleTabs.length === 0) return;
     if (!visibleTabs.some((t) => t.key === tab)) {
       setTab(visibleTabs[0].key);
     }
-  }, [visibleTabs, tab, setTab]);
+  }, [visibleTabs, extraAccountsLoaded, tab, setTab]);
 
   const activeProperties = useMemo(
     () => allProperties.filter((p) => String(p.status || "").toLowerCase() !== "archived"),
@@ -412,43 +503,70 @@ const LiabilitySubledger = () => {
     <div className="flex h-full flex-col overflow-hidden">
     <div className="shrink-0">
 
-      {/* ── Header banner ── */}
-      <div
-        className="mb-4 rounded px-5 py-4"
-        style={{ background: GRN }}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-[13px] font-black uppercase tracking-[0.08em] text-white/80">
-              Liability Sub-Ledger
-            </h1>
-            <p className="mt-0.5 text-[11px] text-white/50">
-              {businessName} · Reconcile Balance Sheet liabilities to individual records
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end">
-            <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-white/40">
-              {tabDef.code} · {loading ? "loading…" : "total balance"}
-            </span>
-            <span className={`font-mono text-[22px] font-black tabular-nums ${loading ? "text-white/20" : "text-red-400"}`}>
-              KES {fmt(total)}
-            </span>
-            <span className="text-[9px] text-white/40">
-              {tabDef.desc} · {count} record{count !== 1 ? "s" : ""}
-            </span>
+      {/* ── Sticky toolbar ── */}
+      <div className="border-b border-slate-200 bg-white px-4 py-2 shadow-sm">
+        <div className="filter-bar flex items-center gap-1.5 overflow-x-auto">
+          <span className="shrink-0 text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: GRN }}>
+            Liability Sub-Ledger
+          </span>
+          <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
+          <span className="shrink-0 text-[11px] text-slate-500">As at</span>
+          <input
+            type="date"
+            value={filters.asOf}
+            max={today()}
+            onChange={(e) => setFilters((p) => ({ ...p, asOf: e.target.value }))}
+            className="h-7 shrink-0 border border-slate-200 bg-white px-2 text-[11px] font-semibold text-slate-700 focus:border-[#0B3B2E] focus:outline-none"
+          />
+          {hasPM && (
+            <AppSelect
+              value={filters.property}
+              onChange={(v) => setFilters((p) => ({ ...p, property: v ?? '' }))}
+              options={activePropertyOptions}
+              placeholder="All properties"
+              searchable
+              clearable
+              size="sm"
+              className="shrink-0 w-36"
+            />
+          )}
+          <span className="shrink-0 border border-slate-200 bg-slate-50 px-2 py-0.5 text-[9px] font-semibold text-slate-500">
+            {businessName}
+          </span>
+          <span className="shrink-0 border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] text-amber-700">
+            <FaExclamationTriangle size={7} className="mr-1 inline text-amber-500" />
+            Total should match <span className="font-bold">{tabDef.code}</span> on your Balance Sheet
+          </span>
+          <div className="ml-auto flex shrink-0 items-center gap-1.5">
+            <button
+              onClick={() => load(tab, filters)} disabled={loading}
+              className="flex h-7 items-center gap-1.5 bg-blue-600 px-3 text-[11px] font-bold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
+              {loading ? "Loading…" : "Refresh"}
+            </button>
+            {canExport && !loading && groups.length > 0 && (
+              <button
+                onClick={() => exportCSV({ tab, groups, total, accountCode: data.accountCode, accountName: data.accountName, asOf: filters.asOf })}
+                className="flex h-7 items-center gap-1.5 border border-[#FF8C00] bg-white px-3 text-[11px] font-bold text-[#FF8C00] hover:bg-orange-50"
+              >
+                <FaFileDownload size={9} /> CSV
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* ── Tabs ── */}
-      <div className="mb-3 flex gap-0 border-b border-slate-200">
+      <div className="flex gap-0 overflow-x-auto border-b border-slate-200 bg-white">
         {visibleTabs.map((t) => {
           const active = tab === t.key;
           return (
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`relative flex items-center gap-2 border-b-2 px-4 py-2 text-[11px] font-bold transition-all ${
+              title={t.desc}
+              className={`relative flex shrink-0 items-center gap-2 border-b-2 px-4 py-2 text-[11px] font-bold transition-all ${
                 active
                   ? "border-[#0B3B2E] text-[#0B3B2E]"
                   : "border-transparent text-slate-400 hover:text-slate-600"
@@ -467,63 +585,17 @@ const LiabilitySubledger = () => {
         })}
       </div>
 
-      {/* ── Filter bar ── */}
-      <div className="filter-bar mb-4 flex items-center gap-2 overflow-x-auto rounded border border-slate-200 bg-slate-50 px-3 py-2">
-        <FaCalendarAlt size={10} className="shrink-0 text-slate-400" />
-        <span className="shrink-0 text-[11px] text-slate-500">As at</span>
-        <input
-          type="date"
-          value={filters.asOf}
-          max={today()}
-          onChange={(e) => setFilters((p) => ({ ...p, asOf: e.target.value }))}
-          className="h-7 shrink-0 rounded border border-slate-200 bg-white px-2 py-1 text-[11px] focus:border-[#0B3B2E] focus:outline-none"
-        />
-
-        <div className="mx-1 h-4 w-px shrink-0 bg-slate-200" />
-
-        <span className="shrink-0 text-[11px] text-slate-500">Property</span>
-        <AppSelect
-          value={filters.property}
-          onChange={(v) => setFilters((p) => ({ ...p, property: v ?? '' }))}
-          options={activePropertyOptions}
-          placeholder="All properties"
-          searchable
-          clearable
-          size="sm"
-          className="shrink-0 w-36"
-        />
-
-        <button
-          onClick={() => load(tab, filters)}
-          disabled={loading}
-          className="flex h-7 shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-white px-2.5 text-[11px] text-slate-600 transition hover:bg-slate-100 disabled:opacity-40"
-        >
-          <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
-          Refresh
-        </button>
-
-        {/* Reconciliation note */}
-        <div className="ml-auto flex shrink-0 items-center gap-1.5 rounded border border-amber-200 bg-amber-50 px-2.5 py-1">
-          <FaExclamationTriangle size={8} className="shrink-0 text-amber-500" />
-          <span className="whitespace-nowrap text-[10px] text-amber-700">
-            Total should match <span className="font-bold">{tabDef.code}</span> on your Balance Sheet
-          </span>
-        </div>
-
-        {/* Export */}
-        {canExport && !loading && groups.length > 0 && (
-          <button
-            onClick={() => exportCSV({ tab, groups, total, accountCode: data.accountCode, accountName: data.accountName, asOf: filters.asOf })}
-            className="flex h-7 shrink-0 items-center gap-1.5 rounded px-2.5 text-[11px] text-white transition hover:opacity-90"
-            style={{ background: GRN }}
-          >
-            <FaFileDownload size={9} /> Export CSV
-          </button>
-        )}
+      {/* ── Total strip ── */}
+      <div className={`flex items-center gap-2 border-b border-slate-200 px-4 py-1.5 ${loading ? "bg-slate-50" : "bg-red-50"}`}>
+        <span className="text-[9px] font-black uppercase tracking-[0.12em] text-red-600/70">{tabDef.code} · {tabDef.label}</span>
+        <span className={`ml-auto font-mono text-sm font-black tabular-nums ${loading ? "text-slate-300" : "text-red-700"}`}>
+          KES {fmt(total)}
+        </span>
+        <span className="text-[9px] font-medium text-red-600/50">{count} record{count !== 1 ? "s" : ""}</span>
       </div>
 
     </div>
-    <div className="flex-1 overflow-y-auto">
+    <div className="flex-1 overflow-y-auto p-3">
 
       {/* ── Loading ── */}
       {loading && (
@@ -564,6 +636,9 @@ const LiabilitySubledger = () => {
 
           {tab === "wht" &&
             groups.map((g) => <WHTGroup key={g.month} group={g} />)}
+
+          {!["deposits", "unallocated", "landlord", "tax", "wht"].includes(tab) &&
+            groups.map((g) => <GenericGroup key={g.month} group={g} />)}
 
           {/* Grand total */}
           <div

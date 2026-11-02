@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useEntityCache } from "../../hooks/useEntityCache";
 import PaginationBar from '../../components/PaginationBar';
@@ -243,7 +243,7 @@ const MeterReadings = () => {
   );
 
   const [properties, setProperties] = useState([]);
-  const [units, setUnits] = useState([]);
+  const [unitsByProperty, setUnitsByProperty] = useState({});
   const [tenants, setTenants] = useState([]);
   const [utilityList, setUtilityList] = useState([]);
   const [readings, setReadings] = useState([]);
@@ -270,8 +270,44 @@ const MeterReadings = () => {
 
   // Sync local state from Redux so existing JSX references work unchanged
   useEffect(() => { if (reduxProperties.length) setProperties(reduxProperties); }, [reduxProperties]);
-  useEffect(() => { if (reduxUnits.length) setUnits(reduxUnits); }, [reduxUnits]);
   useEffect(() => { if (reduxTenants.length) setTenants(reduxTenants); }, [reduxTenants]);
+
+  // The shared units list is only the first page of /units (500, sorted by property
+  // name), so large portfolios get properties cut off mid-way or missing entirely.
+  // Each property picked on this page is fetched in full and overrides the shared list.
+  const units = useMemo(() => {
+    const fetchedIds = Object.keys(unitsByProperty);
+    if (!fetchedIds.length) return reduxUnits;
+    const fetched = new Set(fetchedIds);
+    const base = reduxUnits.filter(
+      (unit) => !fetched.has(String(unit?.property?._id || unit?.property || ""))
+    );
+    return base.concat(...Object.values(unitsByProperty));
+  }, [reduxUnits, unitsByProperty]);
+
+  const requestedPropertyUnitsRef = useRef(new Set());
+  useEffect(() => {
+    requestedPropertyUnitsRef.current = new Set();
+    setUnitsByProperty({});
+  }, [businessId]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    const wanted = [form.property, batchForm.property, draftFilters.property]
+      .map((id) => String(id || ""))
+      .filter((id) => id && id !== "any" && !requestedPropertyUnitsRef.current.has(id));
+    wanted.forEach((propertyId) => {
+      requestedPropertyUnitsRef.current.add(propertyId);
+      adminRequests
+        .get(`/units?business=${businessId}&property=${propertyId}&limit=5000`)
+        .then((res) => {
+          setUnitsByProperty((prev) => ({ ...prev, [propertyId]: normalizeList(res.data) }));
+        })
+        .catch(() => {
+          requestedPropertyUnitsRef.current.delete(propertyId);
+        });
+    });
+  }, [businessId, form.property, batchForm.property, draftFilters.property]);
 
   // Derive utility options from Redux data and the raw /utilities response
   const propertyOptions = useMemo(

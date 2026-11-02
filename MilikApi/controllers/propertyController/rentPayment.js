@@ -741,7 +741,7 @@ const getReceiptPostingBucketFromAllocationRow = (row = {}) => {
   return priorityGroup || "other";
 };
 
-const resolveUnallocatedReceiptsLiabilityAccount = async (businessId) => {
+export const resolveUnallocatedReceiptsLiabilityAccount = async (businessId) => {
   const account = await findFirstAccount(businessId, [
     { nameRegex: "unallocated receipt", type: "liability" },
     { nameRegex: "tenant advance", type: "liability" },
@@ -1582,71 +1582,93 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
     })
   );
 
-  let balancingLeg;
-  try {
-    balancingLeg = await postEntry({
-      business: payment.business,
-      property: propertyId,
-      landlord: landlordId,
-      tenant: payment.tenant || null,
-      unit: payment.unit || null,
-      sourceTransactionType: "rent_payment",
-      sourceTransactionId: String(payment._id),
-      transactionDate: txDate,
-      statementPeriodStart: start,
-      statementPeriodEnd: end,
-      category: "ADJUSTMENT",
-      amount,
-      direction: "debit",
-      debit: amount,
-      credit: 0,
-      accountId: remittanceAccount._id,
-      journalGroupId,
-      payer: "tenant",
-      receiver,
-      notes: (() => {
-        const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
-        const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
-        const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
-        return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
-      })(),
-      metadata: {
-        includeInLandlordStatement: false,
-        includeInCategoryTotals: false,
-        postingRole: "landlord_settlement",
-        paymentType: getPrimaryPaymentTypeFromAllocations(payment),
-        paymentMethod: payment.paymentMethod,
-        cashbook: null,
-        paidDirectToLandlord: true,
-        ledgerType: "receipts",
-        receiptNumber: payment.receiptNumber || null,
-        referenceNumber: payment.referenceNumber || null,
-        allocationSummary: payment.allocationSummary || {},
-        offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
-      },
-      createdBy: actorId,
-      approvedBy: actorId,
-      approvedAt: new Date(),
-      status: "approved",
-    });
-  } catch (debitError) {
-    await rollbackPostedAllocationReleaseEntries({
-      entryIds: creditLegEntries.map((entry) => entry?._id).filter(Boolean),
-      actorId,
-      reason: `Auto-reversal: remittance debit failed for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
-    });
-    throw debitError;
+  // The settlement debit below must only clear 2110 by an amount that was ACTUALLY credited to it,
+  // either now or earlier — otherwise it erases a liability that was never created, driving the
+  // account into a large, permanent abnormal (over-cleared) balance. Two cases genuinely did create
+  // that credit and so settle for the FULL receipt amount:
+  //  (a) "deposit_applied" — the tenant's deposit was already recorded landlord-held back when it was
+  //      first collected (a real credit to 2110 at that time); applying it against rent now simply
+  //      discharges that pre-existing liability. Covered by rentPayment.depositApplied.test.js.
+  //  (b) any receipt whose allocation includes its own "deposit_landlord" group — that group's credit
+  //      lands on 2110 within THIS SAME posting (see the creditLegEntries above), so settling it here
+  //      is pairing a credit and debit from the same transaction.
+  // Everything else (a genuine non-cash direct rent/utility receipt with no landlord-held-deposit
+  // component) never credited 2110 at all — the landlord statement correctly excludes it from
+  // managerCollections/netAmountDue (see landlordStatementService.test.js), so settling it here would
+  // debit 2110 for money that was never, and will never be, credited back. Covered by this file's own
+  // settlement-amount test below.
+  const depositLandlordGroupTotal = postingGroups.find((g) => g.key === "deposit_landlord")?.total || 0;
+  const isDepositApplied = String(payment.paymentMethod || "").trim() === "deposit_applied";
+  const settlementAmount = isDepositApplied ? amount : depositLandlordGroupTotal;
+
+  let balancingLeg = null;
+  if (settlementAmount > 0) {
+    try {
+      balancingLeg = await postEntry({
+        business: payment.business,
+        property: propertyId,
+        landlord: landlordId,
+        tenant: payment.tenant || null,
+        unit: payment.unit || null,
+        sourceTransactionType: "rent_payment",
+        sourceTransactionId: String(payment._id),
+        transactionDate: txDate,
+        statementPeriodStart: start,
+        statementPeriodEnd: end,
+        category: "ADJUSTMENT",
+        amount: settlementAmount,
+        direction: "debit",
+        debit: settlementAmount,
+        credit: 0,
+        accountId: remittanceAccount._id,
+        journalGroupId,
+        payer: "tenant",
+        receiver,
+        notes: (() => {
+          const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+          const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
+          const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+          return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
+        })(),
+        metadata: {
+          includeInLandlordStatement: false,
+          includeInCategoryTotals: false,
+          postingRole: "landlord_settlement",
+          paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+          paymentMethod: payment.paymentMethod,
+          cashbook: null,
+          paidDirectToLandlord: true,
+          ledgerType: "receipts",
+          receiptNumber: payment.receiptNumber || null,
+          referenceNumber: payment.referenceNumber || null,
+          allocationSummary: payment.allocationSummary || {},
+          offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
+        },
+        createdBy: actorId,
+        approvedBy: actorId,
+        approvedAt: new Date(),
+        status: "approved",
+      });
+    } catch (debitError) {
+      await rollbackPostedAllocationReleaseEntries({
+        entryIds: creditLegEntries.map((entry) => entry?._id).filter(Boolean),
+        actorId,
+        reason: `Auto-reversal: remittance debit failed for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+      });
+      throw debitError;
+    }
   }
 
+  const allEntries = balancingLeg ? [...creditLegEntries, balancingLeg] : creditLegEntries;
   payment.journalGroupId = journalGroupId;
-  payment.ledgerEntries = [...creditLegEntries.map((entry) => entry._id), balancingLeg._id];
+  payment.ledgerEntries = allEntries.map((entry) => entry._id);
   payment.postingStatus = "posted";
   payment.postingError = null;
   await payment.save();
 
   return {
     journalGroupId,
-    entries: [...creditLegEntries, balancingLeg],
+    entries: allEntries,
   };
 };
 
@@ -2095,6 +2117,11 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
   for (const receipt of receipts) {
     if (remaining <= 0) break;
 
+    // Snapshot so a GL-release failure below can roll this receipt's contribution back out of
+    // `remaining` — otherwise the invoice would end up marked paid/partially_paid using money this
+    // receipt never actually released, even though the receipt itself was left unsaved.
+    const remainingBeforeReceipt = remaining;
+
     const matchingLines = receipt.allocations.filter(
       (a) => !a.invoice && a.isPrepayment && a.billItemKey === billItemKey && Number(a.appliedAmount || 0) > 0.005
     );
@@ -2168,13 +2195,17 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
         if (debitLabel && !summary.debitNoteLabels.includes(debitLabel)) summary.debitNoteLabels.push(debitLabel);
       }
     }
-    receipt.allocationSummary = summary;
-    receipt.markModified("allocations");
-    receipt.markModified("allocationSummary");
-    await receipt.save();
-
-    // Post GL release journal — non-fatal
-    if (receipt.journalGroupId && actorId) {
+    // Post the GL release BEFORE persisting the reduced unapplied balance — the document must
+    // never claim this money was applied unless the matching GL movement actually succeeded.
+    // A receipt with no journalGroupId was never posted to GL in the first place (off-ledger),
+    // so there is nothing to release and it's safe to just save; otherwise a release is required,
+    // and a missing actor or a posting failure must roll this receipt back out instead of saving it.
+    if (receipt.journalGroupId) {
+      if (!actorId) {
+        console.error(`[autoApplyPrepayments] skipping receipt ${receipt._id}: no actor available to post the GL release.`);
+        remaining = remainingBeforeReceipt;
+        continue;
+      }
       try {
         await postReceiptUnappliedAllocationReleaseJournal({
           payment: receipt,
@@ -2183,9 +2214,16 @@ export const autoApplyPrepayments = async ({ businessId, tenantId, invoice, acto
           reason: `Auto-applied prepayment to invoice ${targetInvoice.invoiceNumber || targetInvoice._id}`,
         });
       } catch (glErr) {
-        console.error("[autoApplyPrepayments] GL release failed:", glErr.message);
+        console.error(`[autoApplyPrepayments] GL release failed for receipt ${receipt._id}, leaving its allocations unchanged:`, glErr.message);
+        remaining = remainingBeforeReceipt;
+        continue;
       }
     }
+
+    receipt.allocationSummary = summary;
+    receipt.markModified("allocations");
+    receipt.markModified("allocationSummary");
+    await receipt.save();
 
     // Audit trail: the held prepayment's own allocation row was just spliced out and
     // replaced above (see the splice/push a few lines up) — that's the correct live

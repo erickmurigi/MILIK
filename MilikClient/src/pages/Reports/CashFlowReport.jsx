@@ -34,7 +34,7 @@ const firstDayOfMonth = () => {
 const todayString = () => localDateStr(new Date());
 
 // ─── Collapsible cash-flow section ───────────────────────────────────────────
-const CashSection = ({ title, items = [], totalInflows, totalOutflows, net, accentColor }) => {
+const CashSection = ({ title, items = [], totalInflows, totalOutflows, net }) => {
   const [open, setOpen] = useState(true);
   const netColor = net >= 0 ? "#166534" : RED;
 
@@ -157,8 +157,8 @@ const CashFlowReport = () => {
 
   const summary = report?.summary || {};
   const operating = report?.operating || { items: [], totalInflows: 0, totalOutflows: 0, net: 0 };
+  const investing = report?.investing || { items: [], totalInflows: 0, totalOutflows: 0, net: 0 };
   const financing = report?.financing || { items: [], totalInflows: 0, totalOutflows: 0, net: 0 };
-  const adjustments = report?.adjustments || { items: [], totalInflows: 0, totalOutflows: 0, net: 0 };
   const cashAccounts = report?.cashAccounts || [];
   const note = report?.note || null;
 
@@ -189,14 +189,14 @@ const CashFlowReport = () => {
     };
 
     addSection("OPERATING ACTIVITIES", operating);
+    addSection("INVESTING ACTIVITIES", investing);
     addSection("FINANCING ACTIVITIES", financing);
-    addSection("OTHER ADJUSTMENTS", adjustments);
 
     lines.push("SUMMARY");
     lines.push(`Opening Cash Balance,,${Number(summary.openingCash || 0).toFixed(2)}`);
     lines.push(`Net Cash from Operations,,${Number(summary.netCashFromOperations || 0).toFixed(2)}`);
+    lines.push(`Net Cash from Investing,,${Number(summary.netCashFromInvesting || 0).toFixed(2)}`);
     lines.push(`Net Cash from Financing,,${Number(summary.netCashFromFinancing || 0).toFixed(2)}`);
-    lines.push(`Net Cash from Adjustments,,${Number(summary.netCashFromAdjustments || 0).toFixed(2)}`);
     lines.push(`Net Change in Cash,,${Number(summary.netChange || 0).toFixed(2)}`);
     lines.push(`Closing Cash Balance,,${Number(summary.closingCash || 0).toFixed(2)}`);
 
@@ -231,6 +231,7 @@ const CashFlowReport = () => {
       summaryItems: [
         ["Opening cash", `KES ${fmt(summary.openingCash)}`],
         ["From operations", `KES ${fmtSigned(summary.netCashFromOperations)}`],
+        ["From investing", `KES ${fmtSigned(summary.netCashFromInvesting)}`],
         ["From financing", `KES ${fmtSigned(summary.netCashFromFinancing)}`],
         ["Net change", `KES ${fmtSigned(summary.netChange)}`],
         ["Closing cash", `KES ${fmt(summary.closingCash)}`],
@@ -243,13 +244,13 @@ const CashFlowReport = () => {
       ],
       rows: [
         ...block("Operating activities", operating),
+        ...block("Investing activities", investing),
         ...block("Financing activities", financing),
-        ...block("Other adjustments", adjustments),
         { __group: "Cash position summary" },
         { __subtotal: ["Opening cash balance", "", "", fmt(summary.openingCash)] },
         { __subtotal: ["+ Net cash from operations", "", "", fmtSigned(summary.netCashFromOperations)] },
+        { __subtotal: ["+ Net cash from investing", "", "", fmtSigned(summary.netCashFromInvesting)] },
         { __subtotal: ["+ Net cash from financing", "", "", fmtSigned(summary.netCashFromFinancing)] },
-        { __subtotal: ["+ Net cash from adjustments", "", "", fmtSigned(summary.netCashFromAdjustments)] },
       ],
       totalsRow: ["Closing cash balance", "", "", fmt(summary.closingCash)],
       signatures: [{ label: "Prepared by" }, { label: "Reviewed by" }],
@@ -352,8 +353,8 @@ const CashFlowReport = () => {
               <>
                 {/* Three cash-flow sections */}
                 <CashSection title="Operating Activities" accentColor={GRN} {...operating} />
+                <CashSection title="Investing Activities" accentColor="#7c3aed" {...investing} />
                 <CashSection title="Financing Activities" accentColor="#1d4ed8" {...financing} />
-                <CashSection title="Other Adjustments" accentColor="#7c3aed" {...adjustments} />
 
                 {/* Cash position summary bar */}
                 <div
@@ -366,8 +367,8 @@ const CashFlowReport = () => {
                   {[
                     { label: "Opening Cash Balance",         value: summary.openingCash,            indent: false },
                     { label: "+ Net Cash from Operations",   value: summary.netCashFromOperations,  indent: true  },
+                    { label: "+ Net Cash from Investing",    value: summary.netCashFromInvesting,   indent: true  },
                     { label: "+ Net Cash from Financing",    value: summary.netCashFromFinancing,   indent: true  },
-                    { label: "+ Net Cash from Adjustments", value: summary.netCashFromAdjustments, indent: true  },
                     { label: "= Net Change in Cash",         value: summary.netChange,              indent: false },
                   ].map(({ label, value, indent }) => (
                     <div key={label} className="flex items-center justify-between border-b border-slate-100 py-1.5 text-xs">
