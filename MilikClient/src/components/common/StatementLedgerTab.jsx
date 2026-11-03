@@ -25,6 +25,8 @@
  *  onOpenReceiptWorkspace – fn(receiptId?) — the "Allocate Now" unapplied-credit
  *                           callout only renders when this is supplied
  *  allocationTracePanel  – JSX to render below the table (from parent)
+ *  belowTable            – JSX shown directly under the closing balance, inside the scroll area
+ *                           (tenant statements put the security deposit account here)
  *  from/to/typeFilter, onFromChange/onToChange/onTypeFilterChange – controlled
  *                         filter state; falls back to local state if omitted
  */
@@ -89,6 +91,7 @@ export default function StatementLedgerTab({
   onOpenAllocationTrace,
   onOpenReceiptWorkspace,
   allocationTracePanel,
+  belowTable,
   // Controlled filter state (lifted to the parent page)
   from: fromProp,
   to: toProp,
@@ -527,6 +530,7 @@ export default function StatementLedgerTab({
             )}
           </tbody>
         </table>
+        {belowTable}
       </div>
 
       {/* ── Footer ──────────────────────────────────────────────────────────── */}

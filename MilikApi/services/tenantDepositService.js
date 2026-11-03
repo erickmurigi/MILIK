@@ -3,6 +3,14 @@ import RentPayment from "../models/RentPayment.js";
 import PaymentVoucher from "../models/PaymentVoucher.js";
 import Tenant from "../models/Tenant.js";
 import TenantInvoiceNote from "../models/TenantInvoiceNote.js";
+import TenantInvoice from "../models/TenantInvoice.js";
+import Lease from "../models/Lease.js";
+import {
+  DEFAULT_BILLING_PERIODS,
+  addMonthsPreservingDayUTC,
+  buildSchedulePeriodKey,
+  canonicalizeBillingPeriodKey,
+} from "./billingPeriodService.js";
 import { round2 } from "../utils/math.js";
 
 // A tenant's deposit position, the one place it is worked out:
@@ -124,3 +132,63 @@ export const normalizeTenantDepositHolder = (value) =>
 
 export const resolveDepositForfeitTo = ({ tenant, property }) =>
   tenant?.depositForfeitTo || property?.depositForfeitTo || "landlord";
+
+// Rent periods the tenant occupied up to move-out that were never invoiced. A deposit must not be
+// released while these exist — the deposit is security for exactly this rent. Periods are walked
+// from the lease start the same way the billing schedule does (UTC dates, day-of-month preserved);
+// a period counts as billed when a live rent invoice carries its periodKey or is dated inside it.
+// Deleted and frozen schedule periods are deliberate "not owed" decisions and are skipped.
+const PERIOD_MATCH_TOLERANCE_MS = 12 * 60 * 60 * 1000; // invoice dates are stored at UTC or EAT midnight
+
+const utcDay = (value) => {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  // EAT-midnight values (21:00 UTC the day before) belong to the next calendar day
+  const shifted = new Date(d.getTime() + PERIOD_MATCH_TOLERANCE_MS);
+  return new Date(Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()));
+};
+
+export const findUnbilledRentPeriods = async ({ tenant, businessId }) => {
+  const lease = await Lease.findOne({ business: businessId, tenant: tenant._id, status: { $ne: "cancelled" } })
+    .sort({ startDate: -1, createdAt: -1 })
+    .select("startDate endDate status rentAmount billingPeriodKey billingScheduleAdjustments")
+    .lean();
+
+  const start = utcDay(lease?.startDate || tenant.moveInDate);
+  const endedOn = tenant.terminationDate || tenant.moveOutDate || (lease?.status === "terminated" ? lease.endDate : null);
+  const end = utcDay(endedOn || new Date());
+  if (!start || !end || end <= start) return [];
+
+  const billingPeriodKey = canonicalizeBillingPeriodKey(lease?.billingPeriodKey || "monthly");
+  const months = DEFAULT_BILLING_PERIODS.find((p) => p.key === billingPeriodKey)?.durationInMonths || 1;
+  const adjustments = new Map((lease?.billingScheduleAdjustments || []).map((row) => [row.periodKey, row]));
+
+  const invoices = await TenantInvoice.find({
+    business: businessId,
+    tenant: tenant._id,
+    category: "RENT_CHARGE",
+    status: { $nin: ["cancelled", "reversed"] },
+  }).select("invoiceDate metadata.periodKey").lean();
+  const billedKeys = new Set(invoices.map((inv) => inv.metadata?.periodKey).filter(Boolean));
+  const invoiceDays = invoices.map((inv) => utcDay(inv.invoiceDate)).filter(Boolean);
+
+  const rentPerPeriod = round2(Number(lease?.rentAmount ?? tenant.rent ?? 0) * months);
+  const unbilled = [];
+  for (let from = start, guard = 0; from < end && guard < 600; guard += 1) {
+    const next = addMonthsPreservingDayUTC(from, months);
+    const periodKey = buildSchedulePeriodKey({ startDate: from, billingPeriodKey });
+    const adjustment = adjustments.get(periodKey);
+    const billed = billedKeys.has(periodKey) || invoiceDays.some((day) => day >= from && day < next);
+    if (!billed && !["deleted", "frozen"].includes(adjustment?.status)) {
+      unbilled.push({
+        periodKey,
+        from,
+        to: new Date(Math.min(next.getTime(), end.getTime()) - 1),
+        label: from.toLocaleDateString("en-GB", { month: "short", year: "numeric", timeZone: "UTC" }),
+        rent: round2(adjustment?.rentAmount ?? rentPerPeriod),
+      });
+    }
+    from = next;
+  }
+  return unbilled;
+};

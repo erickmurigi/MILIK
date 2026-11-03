@@ -13,6 +13,7 @@ import { logAuditEvent } from "../../utils/auditLogger.js";
 import {
   activeLandlordRefunds,
   computeTenantDepositPosition,
+  findUnbilledRentPeriods,
   normalizeTenantDepositHolder,
   resolveDepositForfeitTo,
   syncTenantDepositRefundState,
@@ -53,7 +54,7 @@ const loadScopedTenant = async (req) => {
 
 const buildSettlementPayload = async ({ tenant, unit, property }) => {
   const businessId = tenant.business;
-  const [position, applications, refunds] = await Promise.all([
+  const [position, applications, refunds, unbilledPeriods] = await Promise.all([
     computeTenantDepositPosition(tenant._id, businessId),
     RentPayment.find({
       business: businessId,
@@ -70,6 +71,7 @@ const buildSettlementPayload = async ({ tenant, unit, property }) => {
       .select("_id voucherNo amount paidDate paymentMethod reference status depositHeldBy narration")
       .sort({ paidDate: 1, createdAt: 1 })
       .lean(),
+    findUnbilledRentPeriods({ tenant, businessId }),
   ]);
 
   return {
@@ -88,6 +90,8 @@ const buildSettlementPayload = async ({ tenant, unit, property }) => {
     forfeitTo: resolveDepositForfeitTo({ tenant, property }),
     forfeitToSource: tenant.depositForfeitTo ? "tenant" : "property",
     position,
+    // occupied rent periods with no invoice — the settlement screen makes these billed (or explicitly waived) first
+    unbilledPeriods,
     applications: applications.map((row) => ({
       _id: row._id,
       receiptNumber: row.receiptNumber,
@@ -141,6 +145,12 @@ export const recordLandlordDirectRefund = async (req, res, next) => {
     const position = await computeTenantDepositPosition(tenant._id, tenant.business);
     if (amount > position.available + 0.009) {
       return next(createError(400, `Only KES ${position.available.toLocaleString()} of deposit is still held for this tenant.`));
+    }
+    if (req.body?.waiveUnbilledRent !== true) {
+      const unbilled = await findUnbilledRentPeriods({ tenant, businessId: tenant.business });
+      if (unbilled.length) {
+        return next(createError(400, `Rent was never billed for ${unbilled.map((row) => row.label).join(", ")}. Bill it before recording the refund, or confirm it is not owed.`));
+      }
     }
 
     const actorUserId = await resolveAuditActorUserId({ req, businessId: tenant.business });

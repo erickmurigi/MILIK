@@ -51,7 +51,7 @@ export const buildSchedulePeriodKey = ({ startDate, billingPeriodKey = "monthly"
   return `${canonicalizeBillingPeriodKey(billingPeriodKey)}:${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 };
 
-const addMonthsPreservingDayUTC = (date, months = 1) => {
+export const addMonthsPreservingDayUTC = (date, months = 1) => {
   const day = date.getUTCDate();
   const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + Number(months || 0), 1));
   const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();

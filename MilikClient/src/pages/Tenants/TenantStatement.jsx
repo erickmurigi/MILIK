@@ -1034,8 +1034,25 @@ const TenantStatement = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allocationTraceData, allocationTraceTarget, selectedAllocationTrace, openReceiptAllocationWorkspace, setAllocationTraceTarget]);
 
-  const billingScheduleData = useMemo(() => {
-    const baseRent = tenantLease?.rentAmount || tenant?.rent || 0;
+  // Calendar day the tenancy ended (termination, or a terminated lease's end), as local midnight.
+  // Read through local date parts so UTC-midnight and EAT-midnight stored values land on the same day.
+  const tenancyEndedOn = useMemo(() => {
+    const terminated = String(tenant?.status || "").toLowerCase() === "terminated";
+    const leaseTerminated = String(tenantLease?.status || "").toLowerCase() === "terminated";
+    const raw = tenant?.terminationDate
+      || (terminated ? tenant?.moveOutDate : null)
+      || (leaseTerminated ? tenantLease?.endDate || tenantLease?.terminatedAt : null);
+    if (!raw) return null;
+    const d = new Date(raw);
+    return Number.isNaN(d.getTime()) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  }, [tenant?.status, tenant?.terminationDate, tenant?.moveOutDate, tenantLease?.status, tenantLease?.terminatedAt, tenantLease?.endDate]);
+
+  // Generates the full schedule-row list for one lease. Pulled out of the useMemo below so
+  // the "All Units" combined view can run it once per lease (tenantLeases) and merge the
+  // results, while the default single-lease view calls it with exactly the same arguments
+  // it always used — no change in behavior for the existing single-unit/single-lease path.
+  const buildScheduleRows = useCallback((lease, adjustmentsByPeriod) => {
+    const baseRent = lease?.rentAmount || tenant?.rent || 0;
     const companyBillingPeriods = normalizeBillingPeriods(companyTaxConfig);
 
     let tenantUtilities = [];
@@ -1053,12 +1070,12 @@ const TenantStatement = () => {
     if (tenantUtilities.length > 0) {
       tenantUtilities.forEach((util) => {
         const charge = parseFloat(util.unitCharge) || 0;
-        const utilityName = util.utilityLabel || util.utility || "Unknown";
-        if (!tenantUtilityNames.includes(utilityName)) {
+        // a nameless or uncharged utility line used to print "Unknown" under every period
+        const utilityName = String(util.utilityLabel || util.utility || util.name || "").trim();
+        if (util.isIncluded || charge <= 0) return;
+        serviceCharge += charge;
+        if (utilityName && !tenantUtilityNames.includes(utilityName)) {
           tenantUtilityNames.push(utilityName);
-        }
-        if (!util.isIncluded) {
-          serviceCharge += charge;
         }
       });
     }
@@ -1075,10 +1092,28 @@ const TenantStatement = () => {
     const openLeaseEnd = new Date(now);
     openLeaseEnd.setMonth(openLeaseEnd.getMonth() + DEFAULT_SCHEDULE_MONTHS + scheduleExtensionMonths);
 
-    if (tenantLease) {
-      scheduleStartDate = new Date(tenantLease.startDate);
-      const leaseEnd = tenantLease.endDate ? new Date(tenantLease.endDate) : null;
-      scheduleEndDate = (leaseEnd && leaseEnd > now) ? leaseEnd : openLeaseEnd;
+    if (tenancyEndedOn) {
+      // A terminated tenancy bills nothing from the termination date on. A past end date used to fall
+      // through to "open lease", extending the schedule 12 months past today.
+      scheduleStartDate = new Date(lease?.startDate || tenant?.moveInDate || now);
+      scheduleEndDate = tenancyEndedOn;
+    } else if (lease) {
+      scheduleStartDate = new Date(lease.startDate);
+      const leaseEnd = lease.endDate ? new Date(lease.endDate) : null;
+      const leaseHasEnded = ["terminated", "cancelled"].includes(String(lease.status || "").toLowerCase());
+      // A future-dated endDate on a still-active lease caps the schedule same as before. But a
+      // lease that has ALREADY ended (released/terminated, e.g. via the tenant edit form's unit
+      // release) must also stop there even though that date is now in the past — otherwise this
+      // falls through to the open-ended 12-months-from-today branch and keeps generating phantom
+      // future rows for a unit the tenant no longer holds, which never get invoiced and show up
+      // as permanently "unbooked". And it caps to the 1st of the end month rather than the exact
+      // day — a unit held for only a few days into its final month isn't billed for that stub
+      // (same no-charge-for-the-move-out-month policy used elsewhere for terminated tenants), so
+      // that month never shows up as an unbooked period at all instead of a few-day sliver.
+      const leaseEndCap = leaseHasEnded && leaseEnd
+        ? new Date(leaseEnd.getFullYear(), leaseEnd.getMonth(), 1)
+        : leaseEnd;
+      scheduleEndDate = leaseEndCap && (leaseHasEnded || leaseEndCap > now) ? leaseEndCap : openLeaseEnd;
     } else if (tenant) {
       scheduleStartDate = tenant.moveInDate ? new Date(tenant.moveInDate) : now;
       const moveOut = tenant.moveOutDate ? new Date(tenant.moveOutDate) : null;
@@ -1090,7 +1125,7 @@ const TenantStatement = () => {
 
     const matchedUnit = tenantUnitRecord;
     const selectedBillingPeriodKey = canonicalBillingPeriodKey(
-      tenantLease?.billingPeriodKey ||
+      lease?.billingPeriodKey ||
         tenant?.billingPeriodKey ||
         tenant?.billingFrequency ||
         tenant?.unit?.billingPeriodKey ||
@@ -1103,16 +1138,22 @@ const TenantStatement = () => {
       companyBillingPeriods.find((item) => item.key === selectedBillingPeriodKey) ||
       companyBillingPeriods.find((item) => item.key === "monthly") ||
       { key: "monthly", name: "Monthly", durationInMonths: 1 };
-    const paymentDueDay = Math.max(1, Math.min(28, Number(tenantLease?.paymentDueDay || 5)));
+    const paymentDueDay = Math.max(1, Math.min(28, Number(lease?.paymentDueDay || 5)));
 
-    // Pre-group invoices by periodKey/description to avoid O(n_periods × n_invoices) inside the loop
+    // Pre-group invoices by periodKey/description to avoid O(n_periods × n_invoices) inside the loop.
+    // A multi-unit tenant's invoices all share the same tenant + often the same periodKey, so
+    // this must also be scoped to the specific unit this lease is for — otherwise every unit's
+    // row ends up showing every OTHER unit's invoices too (confirmed live: a tenant with 4 units
+    // showed all 4 units' invoice numbers under each individual unit's period row).
     const SCHEDULE_CATEGORIES = new Set(["RENT_CHARGE", "UTILITY_CHARGE"]);
+    const leaseUnitId = safeId(lease?.unit?._id || lease?.unit) || safeId(tenant?.unit?._id || tenant?.unit);
     const invoicesByPeriodKey = new Map();
     const invoicesByPeriodDesc = new Map();
     tenantInvoices.forEach(inv => {
       const status = String(inv?.status || "").toLowerCase();
       if (["cancelled", "reversed"].includes(status)) return;
       if (!SCHEDULE_CATEGORIES.has(String(inv?.category || "").toUpperCase())) return;
+      if (leaseUnitId && safeId(inv?.unit?._id || inv?.unit) !== leaseUnitId) return;
       const metaKey = String(inv?.metadata?.periodKey || "").trim();
       if (metaKey) {
         if (!invoicesByPeriodKey.has(metaKey)) invoicesByPeriodKey.set(metaKey, []);
@@ -1131,7 +1172,7 @@ const TenantStatement = () => {
       const nextDate = addMonthsPreservingDay(currentDate, selectedBillingPeriod.durationInMonths) || new Date(scheduleEndDate);
       const periodEnd = new Date(Math.min(nextDate.getTime() - 1, scheduleEndDate.getTime()));
       const periodKey = buildSchedulePeriodKey({ startDate: currentDate, billingPeriodKey: selectedBillingPeriod.key });
-      const adjustment = billingScheduleAdjustmentsByPeriod[periodKey] || billingScheduleAdjustmentsByPeriod[buildPeriodKey(currentDate.getFullYear(), currentDate.getMonth())] || null;
+      const adjustment = adjustmentsByPeriod[periodKey] || adjustmentsByPeriod[buildPeriodKey(currentDate.getFullYear(), currentDate.getMonth())] || null;
 
       if (adjustment?.status === "deleted") {
         currentDate = nextDate;
@@ -1188,11 +1229,76 @@ const TenantStatement = () => {
     }
 
     return scheduleData;
-  }, [tenantLease, tenant, tenantUnitRecord, tenantInvoices, billingScheduleAdjustmentsByPeriod, companyTaxConfig, scheduleExtensionMonths]);
+  }, [tenant, tenantUnitRecord, tenantInvoices, companyTaxConfig, scheduleExtensionMonths, tenancyEndedOn]);
+
+  const billingScheduleData = useMemo(
+    () => buildScheduleRows(tenantLease, billingScheduleAdjustmentsByPeriod),
+    [buildScheduleRows, tenantLease, billingScheduleAdjustmentsByPeriod]
+  );
+
+  // "All Units" combined view: runs the same per-lease generator for every lease this
+  // tenant holds, then merges same-calendar-month rows together (summing rent/utility,
+  // combining invoice numbers per unit). Read-only — row selection/booking/freeze/delete
+  // stay scoped to a single real lease, picked via the dropdown, since a merged row can
+  // span leases that don't share one invoice/freeze state.
+  const isCombinedScheduleView = selectedLeaseId === "ALL_UNITS";
+  const combinedBillingScheduleData = useMemo(() => {
+    if (!isCombinedScheduleView || tenantLeases.length === 0) return [];
+
+    const merged = new Map();
+    tenantLeases.forEach((lease) => {
+      const adjustmentsByPeriod = (Array.isArray(lease?.billingScheduleAdjustments) ? lease.billingScheduleAdjustments : [])
+        .reduce((acc, item) => {
+          if (item?.periodKey) acc[item.periodKey] = item;
+          return acc;
+        }, {});
+      const rows = buildScheduleRows(lease, adjustmentsByPeriod);
+
+      rows.forEach((row) => {
+        const mergeKey = `${row.periodYear}-${row.periodMonth}`;
+        if (!merged.has(mergeKey)) {
+          merged.set(mergeKey, {
+            ...row,
+            rent: 0,
+            utility: 0,
+            utilityNames: [],
+            invoiceParts: [],
+            bookedCount: 0,
+            frozenCount: 0,
+            unitCount: 0,
+          });
+        }
+        const acc = merged.get(mergeKey);
+        acc.rent += row.rent;
+        acc.utility += row.utility;
+        row.utilityNames.forEach((name) => {
+          if (!acc.utilityNames.includes(name)) acc.utilityNames.push(name);
+        });
+        if (row.invoice && row.invoice !== "-") {
+          row.invoice.split(",").map((n) => n.trim()).filter(Boolean).forEach((num) => {
+            if (!acc.invoiceParts.includes(num)) acc.invoiceParts.push(num);
+          });
+        }
+        if (row.booked === "Yes") acc.bookedCount += 1;
+        if (row.frozen === "Yes") acc.frozenCount += 1;
+        acc.unitCount += 1;
+      });
+    });
+
+    return Array.from(merged.values())
+      .map((row) => ({
+        ...row,
+        booked: row.bookedCount === 0 ? "No" : row.bookedCount === row.unitCount ? "Yes" : "Partial",
+        frozen: row.frozenCount === 0 ? "No" : row.frozenCount === row.unitCount ? "Yes" : "Partial",
+        invoice: row.invoiceParts.length ? row.invoiceParts.join(", ") : "-",
+      }))
+      .sort((a, b) => (a.periodYear - b.periodYear) || (a.periodMonth - b.periodMonth));
+  }, [isCombinedScheduleView, tenantLeases, buildScheduleRows]);
 
   const billingScheduleByKey = useMemo(() => {
-    return new Map((billingScheduleData || []).map((row) => [row.periodKey, row]));
-  }, [billingScheduleData]);
+    const source = isCombinedScheduleView ? combinedBillingScheduleData : billingScheduleData;
+    return new Map((source || []).map((row) => [row.periodKey, row]));
+  }, [isCombinedScheduleView, combinedBillingScheduleData, billingScheduleData]);
 
   const depositBillingOption = useMemo(() => {
     const selectedRows = selectedSchedules
@@ -1260,7 +1366,8 @@ const TenantStatement = () => {
     const normalizedSearch = String(scheduleSearchText || "").trim().toLowerCase();
     const filterFrom = scheduleFilterFrom ? new Date(`${scheduleFilterFrom}T00:00:00`) : null;
     const filterTo   = scheduleFilterTo   ? new Date(`${scheduleFilterTo}T23:59:59`)   : null;
-    return (billingScheduleData || []).filter((row) => {
+    const source = isCombinedScheduleView ? combinedBillingScheduleData : billingScheduleData;
+    return (source || []).filter((row) => {
       const rowFrom = row?.fromRaw ? new Date(`${row.fromRaw}T00:00:00`) : null;
       const rowTo = row?.toRaw ? new Date(`${row.toRaw}T23:59:59`) : null;
       const fromOk = filterFrom ? (rowTo ? rowTo >= filterFrom : false) : true;
@@ -1272,7 +1379,7 @@ const TenantStatement = () => {
             .some((value) => String(value).toLowerCase().includes(normalizedSearch));
       return fromOk && toOk && searchOk;
     });
-  }, [billingScheduleData, scheduleFilterFrom, scheduleFilterTo, scheduleSearchText]);
+  }, [isCombinedScheduleView, combinedBillingScheduleData, billingScheduleData, scheduleFilterFrom, scheduleFilterTo, scheduleSearchText]);
 
   const allFrozen = useMemo(
     () => selectedSchedules.length > 0 && selectedSchedules.every((key) => billingScheduleByKey.get(key)?.frozen === "Yes"),
@@ -1280,11 +1387,12 @@ const TenantStatement = () => {
   );
 
   const hasOpenLease = useMemo(() => {
+    if (tenancyEndedOn) return false;
     const now = new Date();
     const leaseEnd = tenantLease?.endDate ? new Date(tenantLease.endDate) : null;
     const moveOut  = tenant?.moveOutDate  ? new Date(tenant.moveOutDate)  : null;
     return !((leaseEnd && leaseEnd > now) || (moveOut && moveOut > now));
-  }, [tenantLease?.endDate, tenant?.moveOutDate]);
+  }, [tenantLease?.endDate, tenant?.moveOutDate, tenancyEndedOn]);
 
   const scheduleFooter = useMemo(() => {
     let totRent = 0, totUtil = 0, bookedCount = 0;
@@ -1305,6 +1413,55 @@ const TenantStatement = () => {
       { id: "reviews", label: `${termRent} Reviews / Escalations`, icon: <FaChartBar /> },
     ],
     [termTenant, termRent]
+  );
+
+  // The tenant's security deposit, accounted for separately from the running balance (it never was part
+  // of what the tenant owes): collected, then each application, refund and landlord refund, down to what
+  // is still held. Shared by the on-screen statement and the printout.
+  const depositAccount = useMemo(() => {
+    const d = depositPosition;
+    if (!d || d.collected <= 0.009) return null;
+    const lines = [{ key: "collected", label: "Deposit collected", amount: d.collected }];
+    const applications = (tenantPayments || []).filter((p) => p?.paymentMethod === "deposit_applied" && !p?.isReversed && !p?.isCancelled);
+    applications.forEach((p) => lines.push({ key: `a${p._id}`, date: p.paymentDate, label: `Applied to charges · ${p.receiptNumber || ""}`, amount: -Number(p.amount || 0) }));
+    const appliedByReceipts = applications.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+    if (d.applied - appliedByReceipts > 0.009) lines.push({ key: "applied-other", label: "Applied to charges (credit notes)", amount: -(d.applied - appliedByReceipts) });
+    (d.refunds || []).forEach((r) => lines.push({ key: `r${r._id || r.voucherNo}`, date: r.paidDate, label: `Refunded to ${termTenant.toLowerCase()} · ${r.voucherNo}`, amount: -Number(r.amount || 0) }));
+    if (d.landlordRefunded > 0.009) lines.push({ key: "landlord", label: "Refunded by landlord directly", amount: -d.landlordRefunded });
+    return {
+      holder: String(tenantDepositHolder || "").toLowerCase() === "landlord" ? "Landlord" : "Manager",
+      lines,
+      held: d.available,
+    };
+  }, [depositPosition, tenantPayments, tenantDepositHolder, termTenant]);
+
+  const depositAccountJsx = depositAccount && (
+    <div className="border-t border-slate-200 bg-white px-3 py-2.5">
+      <p className="mb-1 text-[10px] font-black uppercase tracking-widest text-[#0B3B2E]">
+        Security Deposit <span className="font-semibold normal-case tracking-normal text-slate-500">· held by {depositAccount.holder}</span>
+      </p>
+      <table className="w-full max-w-2xl text-[11px]">
+        <tbody>
+          {depositAccount.lines.map((line) => (
+            <tr key={line.key} className="border-b border-slate-100">
+              <td className="w-28 py-1 text-slate-500">{line.date ? fmtDate(line.date) : ""}</td>
+              <td className="py-1 text-slate-800">{line.label}</td>
+              <td className={`py-1 text-right tabular-nums font-semibold ${line.amount < 0 ? "text-slate-700" : "text-[#0B3B2E]"}`}>
+                {line.amount < 0 ? "−" : ""}KES {Math.abs(line.amount).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </td>
+            </tr>
+          ))}
+          <tr>
+            <td />
+            <td className="py-1 font-black uppercase tracking-wide text-[#0B3B2E]">Still held</td>
+            <td className={`py-1 text-right tabular-nums font-black ${depositAccount.held > 0.009 ? "text-amber-700" : "text-emerald-700"}`}>
+              KES {depositAccount.held.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-1 text-[10px] text-slate-500">The deposit is held separately — it is not part of the balance above.</p>
+    </div>
   );
 
   const handlePrint = useCallback(() => {
@@ -1376,10 +1533,23 @@ const TenantStatement = () => {
       ],
       rows,
       totalsRow: ["", `${txns.length} transaction${txns.length !== 1 ? "s" : ""}`, "", "", "", ""],
-      notes: ["Computer-generated statement. DR = amount owed by the tenant, CR = credit in the tenant's favour."],
+      sections: depositAccount ? [{
+        heading: `Security Deposit — held by ${depositAccount.holder}`,
+        columns: [
+          { label: "Date", value: (l) => (l.date ? formatPrintDate(l.date) : "") },
+          { label: "Description", value: (l) => l.label },
+          { label: "Amount", align: "right", value: (l) => `${l.amount < 0 ? "-" : ""}${money(Math.abs(l.amount))}` },
+        ],
+        rows: depositAccount.lines,
+        totalsRow: ["", "Still held", money(depositAccount.held)],
+      }] : [],
+      notes: [
+        "Computer-generated statement. DR = amount owed by the tenant, CR = credit in the tenant's favour.",
+        ...(depositAccount ? ["The security deposit is held separately and is not part of the statement balance."] : []),
+      ],
     });
     if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
-  }, [currentCompany, tenant, statementData, stmtFrom, stmtTo, stmtTypeFilter]);
+  }, [currentCompany, tenant, statementData, stmtFrom, stmtTo, stmtTypeFilter, depositAccount]);
 
   const handleDownload = () => {
     handlePrint();
@@ -1499,6 +1669,7 @@ const TenantStatement = () => {
       onOpenAllocationTrace={(target) => setAllocationTraceTarget(target)}
       onOpenReceiptWorkspace={(receiptId) => openReceiptAllocationWorkspace(receiptId ?? "")}
       allocationTracePanel={allocationTracePanelJsx}
+      belowTable={depositAccountJsx}
       from={stmtFrom}
       to={stmtTo}
       typeFilter={stmtTypeFilter}
@@ -1784,7 +1955,10 @@ const TenantStatement = () => {
             const act = (color) => `inline-flex items-center gap-1 h-6 px-2 text-[10px] font-bold border ${color} text-white transition-colors shrink-0`;
             const hasSel = selectedSchedules.length > 0;
             const hasOneSel = selectedSchedules.length === 1;
-            const off = !hasSel || savingScheduleAction;
+            // Combined-view rows can span several real leases with different invoice/freeze
+            // states — booking/editing/freezing only makes sense against one real lease, so
+            // these actions stay disabled until a specific unit is picked from the dropdown.
+            const off = !hasSel || savingScheduleAction || isCombinedScheduleView;
             return (
               <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1">
                 {/* Filters */}
@@ -1850,7 +2024,7 @@ const TenantStatement = () => {
                 {/* Actions */}
                 <button type="button" onClick={handleCreateInvoices} disabled={off} className={off ? dis : act("border-[#0B3B2E] bg-[#0B3B2E] hover:bg-[#0A3127]")}><FaFileInvoiceDollar size={9} /> Create Invoice</button>
                 <button type="button" onClick={handleCancelInvoices} disabled={off} className={off ? dis : act("border-red-600 bg-red-600 hover:bg-red-700")}><FaBan size={9} /> Cancel</button>
-                <button type="button" onClick={handleEditSchedules} disabled={!hasOneSel || savingScheduleAction} className={!hasOneSel || savingScheduleAction ? dis : act("border-amber-600 bg-amber-600 hover:bg-amber-700")}><FaCog size={9} /> Edit</button>
+                <button type="button" onClick={handleEditSchedules} disabled={!hasOneSel || savingScheduleAction || isCombinedScheduleView} className={!hasOneSel || savingScheduleAction || isCombinedScheduleView ? dis : act("border-amber-600 bg-amber-600 hover:bg-amber-700")}><FaCog size={9} /> Edit</button>
                 <button type="button" onClick={handleDeleteSchedules} disabled={off} className={off ? dis : act("border-slate-600 bg-slate-600 hover:bg-slate-700")}><FaTrash size={9} /> Delete</button>
                 <button type="button" onClick={handleFreezeSchedules} disabled={off} className={off ? dis : allFrozen ? act("border-sky-600 bg-sky-600 hover:bg-sky-700") : act("border-indigo-600 bg-indigo-600 hover:bg-indigo-700")}>
                   {allFrozen ? <FaSun size={9} /> : <FaSnowflake size={9} />} {allFrozen ? "Unfreeze" : "Freeze"}
@@ -2121,7 +2295,8 @@ const TenantStatement = () => {
                       selectedSchedules.length === filteredBillingScheduleData.length && filteredBillingScheduleData.length > 0
                     }
                     onChange={handleSelectAll}
-                    className="cursor-pointer"
+                    disabled={isCombinedScheduleView}
+                    className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                   />
                 </th>
                 <th className="px-2.5 py-1.5 text-left font-semibold">From</th>
@@ -2154,15 +2329,16 @@ const TenantStatement = () => {
                     key={`${row.from}-${row.description}`}
                     className={`${
                       isSelected ? "bg-blue-50" : index % 2 === 0 ? "bg-white" : "bg-slate-50"
-                    } border-b border-slate-200 hover:bg-emerald-50/40 cursor-pointer`}
-                    onClick={() => handleSelectSchedule(row.periodKey)}
+                    } border-b border-slate-200 hover:bg-emerald-50/40 ${isCombinedScheduleView ? "" : "cursor-pointer"}`}
+                    onClick={() => !isCombinedScheduleView && handleSelectSchedule(row.periodKey)}
                   >
                     <td className="px-2.5 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleSelectSchedule(row.periodKey)}
-                        className="cursor-pointer"
+                        disabled={isCombinedScheduleView}
+                        className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                       />
                     </td>
                     <td className="px-2.5 py-1 text-slate-800">{row.from}</td>
@@ -2187,6 +2363,10 @@ const TenantStatement = () => {
                         <span className="inline-flex items-center gap-1 border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 text-[10px] font-black text-indigo-700">
                           <FaSnowflake size={8} /> Frozen
                         </span>
+                      ) : row.frozen === "Partial" ? (
+                        <span className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" title="Some units for this period are frozen, others aren't — pick a unit above to see which.">
+                          <FaSnowflake size={8} /> Partial
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
                           —
@@ -2197,6 +2377,10 @@ const TenantStatement = () => {
                       {row.booked === "Yes" ? (
                         <span className="inline-flex items-center gap-1 border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-black text-emerald-700">
                           <FaCheck size={8} /> Booked
+                        </span>
+                      ) : row.booked === "Partial" ? (
+                        <span className="inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-black text-amber-700" title="Some units for this period are invoiced, others aren't — pick a unit above to see which.">
+                          <FaCheck size={8} /> Partial
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 border border-slate-100 bg-slate-50 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">
@@ -3085,12 +3269,15 @@ const TenantStatement = () => {
                 <div className="flex shrink-0 items-center gap-1">
                   <span className="text-[9px] font-bold uppercase tracking-wide text-slate-400">Lease:</span>
                   <AppSelect
-                    value={safeId(tenantLease?._id) || null}
+                    value={isCombinedScheduleView ? "ALL_UNITS" : (safeId(tenantLease?._id) || null)}
                     onChange={(v) => setSelectedLeaseId(v || "")}
-                    options={tenantLeases.map((lease) => ({
-                      value: safeId(lease?._id),
-                      label: `${termUnit} ${lease?.unit?.unitNumber || lease?.unit?.unitName || lease?.unit?.name || "—"}`,
-                    }))}
+                    options={[
+                      { value: "ALL_UNITS", label: `All ${termUnit}s (Combined)` },
+                      ...tenantLeases.map((lease) => ({
+                        value: safeId(lease?._id),
+                        label: `${termUnit} ${lease?.unit?.unitNumber || lease?.unit?.unitName || lease?.unit?.name || "—"}`,
+                      })),
+                    ]}
                     compact
                   />
                 </div>

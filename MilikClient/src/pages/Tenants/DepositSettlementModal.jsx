@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useDispatch } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { FaHandshake, FaTimes, FaPlus, FaTrash, FaCheckCircle, FaExclamationTriangle, FaUndoAlt } from "react-icons/fa";
 import {
@@ -93,6 +94,7 @@ const newCharge = (owner, extra = {}) => ({ key: ++chargeKey, description: "", a
 
 export default function DepositSettlementModal({ tenantId, businessId, canRefund, onClose, onSettled }) {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [settlement, setSettlement] = useState(null);
   const [openItems, setOpenItems] = useState([]);
@@ -105,6 +107,7 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
   const [refund, setRefund] = useState({ mode: "voucher", amount: "", settlementAccount: "", paymentMethod: "mobile_money", reference: "", date: today(), notes: "" });
   const [steps, setSteps] = useState([]);
   const [posting, setPosting] = useState(false);
+  const [waiveUnbilled, setWaiveUnbilled] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -140,6 +143,7 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
       setAccounts(Array.isArray(chart) ? chart : []);
       setApplications(suggestApplications(items, position?.position?.available || 0));
       setCharges([]);
+      setWaiveUnbilled(false);
       setForfeit({ enabled: false, owner: position?.forfeitTo || "landlord" });
       setRefund((prev) => ({ ...prev, mode: position?.depositHeldBy === "Landlord" ? "landlord_direct" : "voucher", amount: "", reference: "", notes: "" }));
     } catch (error) {
@@ -179,11 +183,20 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
   }, [openItems, applications, charges, available, forfeit.enabled, refund.amount]);
 
   const overDrawn = totals.applied + totals.charged > available + 0.009;
+  const unbilledPeriods = settlement?.unbilledPeriods || [];
+  const unbilledRent = round2(unbilledPeriods.reduce((sum, row) => sum + num(row.rent), 0));
+  const blockedByUnbilled = unbilledPeriods.length > 0 && !waiveUnbilled;
   const nothingToDo = totals.applied <= 0 && totals.charged <= 0 && totals.forfeited <= 0 && totals.refunded <= 0;
 
   const setCharge = (key, field, value) => setCharges((prev) => prev.map((row) => (row.key === key ? { ...row, [field]: value } : row)));
 
+  const openBillingSchedule = () => {
+    onClose();
+    navigate(`/tenant/${tenantId}/statement`, { state: { initialTab: "billing" } });
+  };
+
   const post = async () => {
+    if (blockedByUnbilled) return toast.error("Bill the unbilled rent periods first, or confirm they are not owed.");
     if (overDrawn) return toast.error(`Charges and arrears exceed the ${ksh(available)} deposit held. Reduce the amounts applied.`);
     if (charges.some((row) => num(row.amount) > 0 && !String(row.description).trim())) return toast.error("Describe each move-out charge.");
     if (totals.refunded > 0 && refund.mode === "voucher" && !refund.settlementAccount) return toast.error("Choose the cash or bank account the refund is paid from.");
@@ -266,7 +279,7 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
         current = "refund";
         mark(current, "running");
         if (refund.mode === "landlord_direct") {
-          await recordLandlordDepositRefund(tenant._id, { amount: totals.refunded, date: refund.date, reference: refund.reference, notes: refund.notes });
+          await recordLandlordDepositRefund(tenant._id, { amount: totals.refunded, date: refund.date, reference: refund.reference, notes: refund.notes, waiveUnbilledRent: waiveUnbilled });
           mark(current, "done");
         } else {
           const voucher = await createPaymentVoucher({
@@ -282,6 +295,7 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
             reference: refund.reference.trim(),
             payeeName: tenant.name,
             payeeBank: refund.paymentMethod === "mobile_money" && tenant.phone ? { mobileNumber: tenant.phone } : undefined,
+            waiveUnbilledRent: waiveUnbilled,
             narration: refund.notes.trim() || `Deposit refund — ${tenant.name}${tenant.unit?.unitNumber ? ` (${tenant.unit.unitNumber})` : ""}`,
           });
           mark(current, "done", voucher?.voucherNo || "");
@@ -362,6 +376,29 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
                     {unpaidDepositInvoices.length} deposit invoice{unpaidDepositInvoices.length > 1 ? "s are" : " is"} still unpaid ({unpaidDepositInvoices.map((inv) => inv.invoiceNumber).join(", ")}).
                     A deposit that was never collected cannot be refunded — cancel {unpaidDepositInvoices.length > 1 ? "them" : "it"} with a credit note so the tenant does not owe it.
                   </span>
+                </div>
+              )}
+
+              {unbilledPeriods.length > 0 && (
+                <div className="border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-900">
+                  <div className="flex items-start gap-2">
+                    <FaExclamationTriangle className="mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold">
+                        Rent was never billed for {unbilledPeriods.length} period{unbilledPeriods.length > 1 ? "s" : ""} before move-out — about {ksh(unbilledRent)} (before tax).
+                      </p>
+                      <p className="mt-0.5">
+                        {unbilledPeriods.map((row) => `${row.label} (${ksh(row.rent)})`).join(" · ")}. Bill them first so the deposit covers them — refunding now would release security for rent the tenant still owes.
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-3">
+                        <button type="button" onClick={openBillingSchedule} className="h-7 border border-red-700 bg-red-700 px-3 text-xs font-bold text-white hover:bg-red-800">Open billing schedule</button>
+                        <label className="inline-flex cursor-pointer items-center gap-1.5 font-semibold">
+                          <input type="checkbox" checked={waiveUnbilled} onChange={(e) => setWaiveUnbilled(e.target.checked)} />
+                          These periods are not owed (rent-free, or vacated before them)
+                        </label>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -584,7 +621,7 @@ export default function DepositSettlementModal({ tenantId, businessId, canRefund
         <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-white px-3 py-2">
           <button type="button" onClick={onClose} disabled={posting} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Close</button>
           {available > 0.009 && (
-            <button type="button" onClick={post} disabled={posting || loading || overDrawn || nothingToDo} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
+            <button type="button" onClick={post} disabled={posting || loading || overDrawn || nothingToDo || blockedByUnbilled} className="inline-flex h-8 items-center gap-1.5 bg-[#0B3B2E] px-4 text-xs font-black text-white transition hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-60">
               {posting ? "Posting…" : "Post Settlement"}
             </button>
           )}

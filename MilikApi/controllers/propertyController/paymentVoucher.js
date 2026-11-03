@@ -28,6 +28,7 @@ import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import {
   computeTenantDepositPosition,
+  findUnbilledRentPeriods,
   normalizeTenantDepositHolder,
   syncTenantDepositRefundState,
 } from "../../services/tenantDepositService.js";
@@ -747,7 +748,7 @@ const getExpenseCategory = (voucherCategory) => {
 
 // A deposit refund is always made for one tenant, paid on the spot, and never for more than is still held.
 // The holder is snapshotted from the tenant so the posting stays right if the setting changes later.
-const resolveDepositRefundContext = async ({ businessId, tenantId, amount, status }) => {
+const resolveDepositRefundContext = async ({ businessId, tenantId, amount, status, waiveUnbilledRent = false }) => {
   if (!tenantId || !isValidObjectId(tenantId)) {
     throw createError(400, "A deposit refund must be made for a tenant. Use Settle Deposit on the tenant.");
   }
@@ -755,7 +756,7 @@ const resolveDepositRefundContext = async ({ businessId, tenantId, amount, statu
     throw createError(400, "A deposit refund is paid on the spot. Save it as paid with the cash or bank account it was paid from.");
   }
 
-  const tenant = await Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit depositHeldBy").lean();
+  const tenant = await Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit depositHeldBy moveInDate moveOutDate terminationDate rent").lean();
   if (!tenant) throw createError(404, "Tenant not found for this company.");
   const unit = tenant.unit ? await Unit.findOne({ _id: tenant.unit, business: businessId }).select("property").lean() : null;
   if (!unit?.property) throw createError(400, "The tenant's unit has no property, so the refund cannot be posted.");
@@ -764,6 +765,12 @@ const resolveDepositRefundContext = async ({ businessId, tenantId, amount, statu
   const position = await computeTenantDepositPosition(tenant._id, businessId);
   if (requested > position.available + 0.009) {
     throw createError(400, `Only KES ${position.available.toLocaleString()} of deposit is still held for this tenant.`);
+  }
+  if (!waiveUnbilledRent) {
+    const unbilled = await findUnbilledRentPeriods({ tenant, businessId });
+    if (unbilled.length) {
+      throw createError(400, `Rent was never billed for ${unbilled.map((row) => row.label).join(", ")}. Bill it before refunding the deposit, or confirm it is not owed.`);
+    }
   }
 
   return {
@@ -1467,7 +1474,7 @@ export const createPaymentVoucher = async (req, res, next) => {
     }
 
     const depositRefund = voucherCategory === "deposit_refund"
-      ? await resolveDepositRefundContext({ businessId, tenantId: input.tenant, amount: input.amount, status })
+      ? await resolveDepositRefundContext({ businessId, tenantId: input.tenant, amount: input.amount, status, waiveUnbilledRent: input.waiveUnbilledRent === true })
       : null;
     if (depositRefund) {
       input.property = depositRefund.propertyId;

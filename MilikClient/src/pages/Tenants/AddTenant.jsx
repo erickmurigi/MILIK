@@ -509,6 +509,16 @@ useEffect(() => {
     return;
   }
 
+  // Right after an edit-mode load, availableUnits hasn't been rebuilt with the
+  // tenant's occupied additional units yet (that happens in a separate effect
+  // whose setState lands on the next render) — recomputing rent here would
+  // momentarily sum only whatever availableUnits already had (e.g. just the
+  // primary unit) and stomp the correctly-loaded combined rent. Same guard the
+  // deposit/utilities autofill effect below already uses.
+  if (skipNextUnitAutofillRef.current) {
+    return;
+  }
+
   setFormData((prev) => ({
     ...prev,
     additionalUnits: additionalChanged ? cleanedAdditionalUnits : prev.additionalUnits,

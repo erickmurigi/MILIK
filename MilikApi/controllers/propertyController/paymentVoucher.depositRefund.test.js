@@ -10,7 +10,8 @@ import { createTestLease, createTestUser, createTestChartOfAccounts } from "../.
 import { createTestTenantInvoice } from "../../test/factories.payments.js";
 import { createPayment } from "./rentPayment.js";
 import { createPaymentVoucher, updatePaymentVoucherStatus } from "./paymentVoucher.js";
-import { computeTenantDepositPosition } from "../../services/tenantDepositService.js";
+import { computeTenantDepositPosition, findUnbilledRentPeriods } from "../../services/tenantDepositService.js";
+import TenantInvoice from "../../models/TenantInvoice.js";
 import Tenant from "../../models/Tenant.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
 import ExpenseProperty from "../../models/ExpenseProperty.js";
@@ -53,6 +54,8 @@ const refundBody = ({ tenant, cash, amount, ...rest }) => ({
   paidDate: new Date(2026, 5, 1),
   settlementAccount: String(cash._id),
   paymentMethod: "mobile_money",
+  // these tests are about the posting; the unbilled-rent guard has its own test below
+  waiveUnbilledRent: true,
   ...rest,
 });
 
@@ -129,5 +132,31 @@ describe("deposit refund vouchers", () => {
     const position = await computeTenantDepositPosition(tenant._id, company._id);
     expect(position.available).toBe(5000);
     expect((await Tenant.findById(tenant._id).lean()).depositRefundStatus).toBe("pending");
+  });
+
+  it("refuses a refund while occupied rent periods were never billed, unless confirmed not owed", async () => {
+    const { tenant, user, cash } = await setup({ deposit: 5000 });
+
+    await expect(callController(createPaymentVoucher, { user, body: refundBody({ tenant, cash, amount: 5000, waiveUnbilledRent: false }) }))
+      .rejects.toMatchObject({ status: 400, message: expect.stringMatching(/never billed/) });
+
+    const waived = await callController(createPaymentVoucher, { user, body: refundBody({ tenant, cash, amount: 5000, waiveUnbilledRent: true }) });
+    expect(waived.statusCode).toBe(201);
+  });
+});
+
+describe("findUnbilledRentPeriods", () => {
+  it("lists occupied months with no rent invoice, counting an EAT-midnight invoice date as its own month", async () => {
+    const { tenant, company } = await createTestLease({ startDate: new Date(Date.UTC(2026, 7, 1)) });
+    await Tenant.findByIdAndUpdate(tenant._id, { moveInDate: new Date(Date.UTC(2026, 7, 1)), terminationDate: new Date(Date.UTC(2026, 10, 1)) });
+    // August billed with the date stored at EAT midnight (21:00 UTC on 31 July) — the real shape seen in production
+    await TenantInvoice.collection.insertOne({
+      business: company._id, tenant: tenant._id, category: "RENT_CHARGE", status: "paid", amount: 15000,
+      invoiceNumber: "INV-AUG", invoiceDate: new Date(Date.UTC(2026, 6, 31, 21)), metadata: {},
+    });
+
+    const refreshed = await Tenant.findById(tenant._id).lean();
+    const unbilled = await findUnbilledRentPeriods({ tenant: refreshed, businessId: company._id });
+    expect(unbilled.map((row) => row.periodKey)).toEqual(["monthly:2026-09-01", "monthly:2026-10-01"]);
   });
 });
