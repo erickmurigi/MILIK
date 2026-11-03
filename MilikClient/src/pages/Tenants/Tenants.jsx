@@ -4,10 +4,8 @@ import {
   selectCurrentUser,
   selectCurrentCompany,
   selectAllProperties,
-  selectAllTenants,
   selectAllUnits,
   selectAllLeases,
-  selectTenantPagination,
 } from "../../redux/selectors";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useEntityCache } from "../../hooks/useEntityCache";
@@ -38,7 +36,7 @@ import {
   FaHandshake,
 } from "react-icons/fa";
 import { toast } from "react-toastify";
-import { getTenants, batchDeleteTenants, updateTenant } from "../../redux/tenantsRedux";
+import { batchDeleteTenants, updateTenant } from "../../redux/tenantsRedux";
 import { fetchCompanySettings, selectCompanySettings } from "../../redux/companySettingsRedux";
 import { getUnits } from "../../redux/unitRedux";
 import { getProperties } from "../../redux/propertyRedux";
@@ -51,16 +49,7 @@ import {
 } from "../../utils/excelTemplates";
 import { adminRequests } from "../../utils/requestMethods";
 import { printTabularList } from "../../utils/printList";
-import {
-  createPaymentVoucher,
-  createRentPayment,
-  createTenantInvoice,
-  createTenantInvoiceNote,
-  getChartOfAccounts,
-  getCreditableTenantInvoices,
-  getLeases,
-  getTenantInvoices,
-} from "../../redux/apiCalls";
+import { createTenantInvoice, getLeases } from "../../redux/apiCalls";
 import { hasCompanyPermission } from "../../utils/permissions";
 import { normalizeUppercaseInput, toListingCaps } from "../../utils/listingPageUtils";
 import { fmtDate } from "../../utils/dates";
@@ -69,10 +58,20 @@ import AppSelect from "../../components/common/AppSelect";
 import Spinner from "../../components/common/Spinner";
 import MilikTable from "../../components/common/MilikTable";
 import PaginationBar from "../../components/PaginationBar";
+import DepositSettlementModal from "./DepositSettlementModal";
 
 const MILIK_GREEN = "bg-[#0B3B2E]";
 const MILIK_ORANGE = "bg-[#FF8C00]";
 const DEFAULT_PAGE_SIZE = 50;
+
+// The listing keeps its own rows, keyed by the exact query that produced them. It used to render
+// the shared Redux tenant list, which other pages and the other listing tab (active vs terminated)
+// overwrite with different queries — so a visit briefly showed someone else's rows (terminated mixed
+// into active) until its own fetch landed, or kept them when that other fetch landed last.
+// Module-level so revisiting a tab repaints its last result for the same query instantly.
+const tenantListCache = new Map();
+const TENANT_LIST_CACHE_LIMIT = 20;
+const tenantListRows = (body) => (Array.isArray(body) ? body : Array.isArray(body?.data) ? body.data : Array.isArray(body?.tenants) ? body.tenants : []);
 const fmtKES = (n) => Number(n || 0).toLocaleString("en-KE");
 
 const normalizeId = (value) => {
@@ -86,34 +85,6 @@ const isActiveInvoice = (invoice) => {
   const status = String(invoice?.status || "").toLowerCase();
   return status !== "cancelled" && status !== "reversed";
 };
-
-const roundMoney = (value) => {
-  const num = Number(value || 0);
-  if (!Number.isFinite(num)) return 0;
-  return Math.round(num * 100) / 100;
-};
-
-const normalizeDepositHolder = (value) => {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (["landlord", "owner", "self_managed_landlord"].includes(normalized)) return "Landlord";
-  return "Management Company";
-};
-
-const isCashbookLikeAccount = (account = {}) => {
-  const haystack = `${account?.name || ""} ${account?.accountName || ""} ${account?.group || ""} ${account?.subGroup || ""}`.toLowerCase();
-  const type = String(account?.type || account?.accountType || "").toLowerCase();
-  return type === "asset" && /cash|bank|m-?pesa|mobile|wallet|petty|till|collection/.test(haystack);
-};
-
-const pickDepositLiabilityAccount = (accounts = []) => {
-  return (Array.isArray(accounts) ? accounts : []).find((account) => {
-    const haystack = `${account?.name || ""} ${account?.accountName || ""} ${account?.group || ""} ${account?.subGroup || ""}`.toLowerCase();
-    const type = String(account?.type || account?.accountType || "").toLowerCase();
-    return type === "liability" && /deposit/.test(haystack);
-  }) || null;
-};
-
-
 
 const getTenantUnitLabel = (tenant = {}) => {
   const primary = tenant?.unit?.unitNumber || tenant?.unit?.unitName || tenant?.unit?.name || tenant?.unitNumber || "";
@@ -682,25 +653,26 @@ const Tenants = ({ listingMode = "active" }) => {
   const termUnit = useTerm("unit");
   const termProperty = useTerm("property");
   const termRent = useTerm("rent");
-  const termLandlord = useTerm("landlord");
 
   // Redux state
   const currentCompany = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const tenantsData = useSelector(selectAllTenants);
+  const [tenantList, setTenantList] = useState({ key: null, data: [], total: 0 });
+  const [isFetchingTenants, setIsFetchingTenants] = useState(false);
+  const tenantsData = tenantList.data;
   const units = useSelector(selectAllUnits);
   const properties = useSelector(selectAllProperties);
   const leases = useSelector(selectAllLeases);
   const { propertiesLoaded, unitsLoaded } = useEntityCache(currentCompany?._id);
 
-  const tenantPagination = useSelector(selectTenantPagination);
-  const isFetchingTenants = useSelector((state) => state.tenant?.isFetching ?? false);
+  const tenantPagination = { total: tenantList.total };
 
-  const { canViewTenants, canCreateTenant, canUpdateTenant, canDeleteTenant } = useMemo(() => ({
+  const { canViewTenants, canCreateTenant, canUpdateTenant, canDeleteTenant, canRefundDeposit } = useMemo(() => ({
     canViewTenants:  hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "view",   "propertyManagement"),
     canCreateTenant: hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "create", "propertyManagement"),
     canUpdateTenant: hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "update", "propertyManagement"),
     canDeleteTenant: hasCompanyPermission(currentUser || {}, currentCompany, "tenants", "delete", "propertyManagement"),
+    canRefundDeposit: hasCompanyPermission(currentUser || {}, currentCompany, "deposits", "refund", "propertyManagement"),
   }), [currentUser, currentCompany]);
 
   const isTerminatedView = listingMode === "terminated";
@@ -734,24 +706,7 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   const [isRollingBackTransfer, setIsRollingBackTransfer] = useState(false);
   const [rollbackTransferTenantId, setRollbackTransferTenantId] = useState("");
   const [invoiceRefreshTick, setInvoiceRefreshTick] = useState(0);
-  // Loaded per-tenant when deposit settlement modal opens
-  const [tenantInvoices, setTenantInvoices] = useState([]);
-
-  const [showDepositSettlementModal, setShowDepositSettlementModal] = useState(false);
   const [depositSettlementTenantId, setDepositSettlementTenantId] = useState("");
-  const [depositSettlementAction, setDepositSettlementAction] = useState("apply");
-  const [depositSettlementForm, setDepositSettlementForm] = useState({
-    retainAmount: "",
-    refundAmount: "",
-    reason: "",
-    cashbookAccountId: "",
-  });
-  const [depositSettlementContext, setDepositSettlementContext] = useState({
-    creditableInvoices: [],
-    chartAccounts: [],
-    loading: false,
-  });
-  const [isProcessingDepositSettlement, setIsProcessingDepositSettlement] = useState(false);
 
   // ===== FILTERS =====
   const [appliedFilters, setAppliedFilters] = useTabState("/tenants:appliedFilters", {
@@ -832,6 +787,39 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     };
   }, [currentCompany?._id, currentPage, pageSize, tenantStatusQuery, appliedFilters]);
 
+  const listRequestRef = useRef(0);
+  const loadTenantList = useCallback(async (params = buildTenantParams()) => {
+    if (!params?.business) return;
+    const key = JSON.stringify(params);
+    const cached = tenantListCache.get(key);
+    // only ever show rows fetched for exactly this query
+    setTenantList((prev) => (cached || (prev.key === key ? prev : { key, data: [], total: 0 })));
+
+    const requestId = ++listRequestRef.current;
+    setIsFetchingTenants(true);
+    try {
+      const res = await adminRequests.get(`/tenants?${new URLSearchParams(params)}`);
+      if (requestId !== listRequestRef.current) return; // a newer query superseded this one
+      const data = tenantListRows(res.data);
+      const next = { key, data, total: Number(res.data?.total ?? data.length) };
+      tenantListCache.delete(key);
+      tenantListCache.set(key, next);
+      if (tenantListCache.size > TENANT_LIST_CACHE_LIMIT) tenantListCache.delete(tenantListCache.keys().next().value);
+      setTenantList(next);
+    } catch (error) {
+      if (requestId === listRequestRef.current) toast.error(error?.response?.data?.message || `Failed to load ${termTenants.toLowerCase()}`);
+    } finally {
+      if (requestId === listRequestRef.current) setIsFetchingTenants(false);
+    }
+  }, [buildTenantParams, termTenants]);
+
+  // after a terminate/restore/transfer/delete/import every cached view (active, terminated, other
+  // filters) may hold the moved tenant, so drop them all rather than repaint a stale one
+  const reloadTenantListAfterChange = useCallback((page) => {
+    tenantListCache.clear();
+    return loadTenantList(buildTenantParams(page));
+  }, [loadTenantList, buildTenantParams]);
+
   useEffect(() => {
     if (!currentCompany?._id) return;
     if (!unitsLoaded) dispatch(getUnits({ business: currentCompany._id }));
@@ -847,8 +835,8 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
 
   useEffect(() => {
     if (!currentCompany?._id) return;
-    dispatch(getTenants(buildTenantParams()));
-  }, [dispatch, buildTenantParams, currentCompany?._id]);
+    loadTenantList();
+  }, [loadTenantList, currentCompany?._id]);
 
   useEffect(() => {
     setSelectAll(false);
@@ -892,8 +880,8 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
 
   const refreshTenants = useCallback(() => {
     if (!currentCompany?._id) return;
-    dispatch(getTenants(buildTenantParams()));
-  }, [currentCompany?._id, dispatch, buildTenantParams]);
+    loadTenantList();
+  }, [currentCompany?._id, loadTenantList]);
 
   useEffect(() => {
     if (invoiceRefreshTick > 0) refreshTenants();
@@ -1062,15 +1050,16 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
         terminationDate: tenant.terminationDate ? fmtDate(tenant.terminationDate) : "-",
         moveOutDate: tenant.moveOutDate ? fmtDate(tenant.moveOutDate) : "-",
         terminationReason: tenant.terminationReason || "",
-        depositHeld: Number(tenant.depositReceipted ?? 0),
-        depositHeldBy: tenant.depositHeldBy || tenant.unit?.property?.depositHeldBy || "Management Company",
+        // still held = collected - applied - refunded, worked out server-side
+        depositHeld: Number(tenant.depositAvailable ?? 0),
+        depositHeldBy: String(tenant.depositHeldBy || tenant.unit?.property?.depositHeldBy || "").toLowerCase() === "landlord" ? "Landlord" : "Manager",
         settlementStatus:
-          Number(balance || 0) > 0.009
+          Number(tenant.depositAvailable ?? 0) > 0.009
+            ? "DEPOSIT_TO_SETTLE"
+            : Number(balance || 0) > 0.009
             ? "OWES_BALANCE"
             : Number(balance || 0) < -0.009
-            ? "REFUND_DUE"
-            : Number(tenant.depositReceipted ?? 0) > 0 && String(tenant.depositRefundStatus || "").toLowerCase() === "pending"
-            ? "PENDING_SETTLEMENT"
+            ? "CREDIT_DUE"
             : "SETTLED",
         phone: tenant.phone || "-",
         email: tenant.email || "-",
@@ -1135,16 +1124,6 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
     [tenantsData, selectedTenants]
   );
 
-  const depositSettlementTenant = useMemo(
-    () => transformedTenants.find((tenant) => normalizeId(tenant.id) === normalizeId(depositSettlementTenantId)) || null,
-    [transformedTenants, depositSettlementTenantId]
-  );
-
-  const depositSettlementTenantSource = useMemo(
-    () => (Array.isArray(tenantsData) ? tenantsData : []).find((tenant) => normalizeId(tenant?._id) === normalizeId(depositSettlementTenantId)) || null,
-    [tenantsData, depositSettlementTenantId]
-  );
-
   const selectedTenantRows = useMemo(
     () => transformedTenants.filter((tenant) => selectedTenantsSet.has(tenant.id)),
     [transformedTenants, selectedTenantsSet]
@@ -1164,354 +1143,10 @@ const [transferForm, setTransferForm] = useState({ tenantId: "", newUnit: "", ef
   const menuCanRestore = menuHasOneSel && !!selectedPrimaryTenant?.canRestore;
   const menuHasDeletable = selectedDeletableTenants.length > 0;
 
-  const depositSettlementDerived = useMemo(() => {
-    const tenant = depositSettlementTenant;
-    const depositHeld = roundMoney(tenant?.depositHeld || 0);
-    const outstandingBalance = roundMoney(Math.max(0, Number(tenant?.balance || 0)));
-    const depositHolder = normalizeDepositHolder(tenant?.depositHeldBy || depositSettlementTenantSource?.depositHeldBy || depositSettlementTenantSource?.unit?.property?.depositHeldBy || "");
-    const baseApplyAmount = roundMoney(Math.min(depositHeld, outstandingBalance));
-    const remainingAfterApply = roundMoney(Math.max(0, depositHeld - baseApplyAmount));
-    const requestedRetainAmount = roundMoney(depositSettlementForm.retainAmount || 0);
-    const safeRetainAmount = roundMoney(Math.min(Math.max(requestedRetainAmount, 0), remainingAfterApply));
-    const requestedRefundAmount = roundMoney(depositSettlementForm.refundAmount || remainingAfterApply || 0);
-    const safeRefundAmount = roundMoney(Math.min(Math.max(requestedRefundAmount, 0), remainingAfterApply));
-    const finalBalance = roundMoney(
-      depositSettlementAction === "retain"
-        ? Math.max(0, outstandingBalance - baseApplyAmount)
-        : Math.max(0, outstandingBalance - baseApplyAmount)
-    );
-
-    return {
-      depositHeld,
-      outstandingBalance,
-      depositHolder,
-      baseApplyAmount,
-      remainingAfterApply,
-      safeRetainAmount,
-      safeRefundAmount,
-      finalBalance,
-      canRefund: depositHolder === "Management Company",
-    };
-  }, [depositSettlementAction, depositSettlementForm.retainAmount, depositSettlementForm.refundAmount, depositSettlementTenant, depositSettlementTenantSource]);
-
-  const depositLiabilityAccount = useMemo(
-    () => pickDepositLiabilityAccount(depositSettlementContext.chartAccounts),
-    [depositSettlementContext.chartAccounts]
-  );
-
-  const cashbookAccounts = useMemo(
-    () => (Array.isArray(depositSettlementContext.chartAccounts) ? depositSettlementContext.chartAccounts : []).filter((account) => isCashbookLikeAccount(account)),
-    [depositSettlementContext.chartAccounts]
-  );
-
-  const buildAllocationRows = useCallback((invoices = [], requestedAmount = 0) => {
-    let remaining = roundMoney(requestedAmount);
-    const rows = [];
-
-    for (const invoice of Array.isArray(invoices) ? invoices : []) {
-      if (remaining <= 0.009) break;
-      const available = roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? invoice?.balance ?? 0);
-      if (available <= 0.009) continue;
-      const appliedAmount = roundMoney(Math.min(available, remaining));
-      if (appliedAmount <= 0.009) continue;
-      rows.push({
-        invoice: invoice?._id,
-        appliedAmount,
-        amount: appliedAmount,
-        invoiceNumber: invoice?.invoiceNumber || "",
-        category: invoice?.category || "",
-      });
-      remaining = roundMoney(remaining - appliedAmount);
-    }
-
-    return rows;
-  }, []);
-
-  const refreshTenantSettlementData = useCallback(async () => {
+  const refreshTenantList = useCallback(() => {
     if (!currentCompany?._id) return;
-    dispatch(getTenants(buildTenantParams()));
-  }, [currentCompany?._id, dispatch, buildTenantParams]);
-
-  const openDepositSettlementModal = useCallback(async (tenantId) => {
-    if (!tenantId) return;
-    const tenantRow = transformedTenants.find((tenant) => normalizeId(tenant.id) === normalizeId(tenantId));
-    setDepositSettlementTenantId(tenantId);
-    setDepositSettlementAction(Number(tenantRow?.balance || 0) > 0.009 ? "apply" : "refund");
-    setDepositSettlementForm({
-      retainAmount: "",
-      refundAmount: roundMoney(Math.max(0, Number(tenantRow?.depositHeld || 0) - Math.max(0, Number(tenantRow?.balance || 0)))).toString(),
-      reason: "",
-      cashbookAccountId: "",
-    });
-    setShowDepositSettlementModal(true);
-    setDepositSettlementContext({ creditableInvoices: [], chartAccounts: [], loading: true });
-
-    try {
-      const [creditableInvoices, chartAccounts, allTenantInvoices] = await Promise.all([
-        getCreditableTenantInvoices({ business: currentCompany?._id, tenantId }),
-        getChartOfAccounts({ business: currentCompany?._id }),
-        getTenantInvoices({ business: currentCompany?._id, tenantId }),
-      ]);
-      setTenantInvoices(Array.isArray(allTenantInvoices) ? allTenantInvoices : []);
-      const cashbookAccount = (Array.isArray(chartAccounts) ? chartAccounts : []).find((account) => isCashbookLikeAccount(account));
-      setDepositSettlementContext({
-        creditableInvoices: Array.isArray(creditableInvoices) ? creditableInvoices : [],
-        chartAccounts: Array.isArray(chartAccounts) ? chartAccounts : [],
-        loading: false,
-      });
-      setDepositSettlementForm((prev) => ({
-        ...prev,
-        cashbookAccountId: prev.cashbookAccountId || normalizeId(cashbookAccount?._id),
-      }));
-    } catch (error) {
-      console.error("Failed to load deposit settlement context:", error);
-      setDepositSettlementContext({ creditableInvoices: [], chartAccounts: [], loading: false });
-      toast.error(error?.response?.data?.message || error?.response?.data?.error || "Failed to load deposit settlement details.");
-    }
-  }, [currentCompany?._id, transformedTenants]);
-
-  const closeDepositSettlementModal = useCallback(() => {
-    if (isProcessingDepositSettlement) return;
-    setShowDepositSettlementModal(false);
-    setDepositSettlementTenantId("");
-    setDepositSettlementAction("apply");
-    setDepositSettlementForm({ retainAmount: "", refundAmount: "", reason: "", cashbookAccountId: "" });
-    setDepositSettlementContext({ creditableInvoices: [], chartAccounts: [], loading: false });
-  }, [isProcessingDepositSettlement]);
-
-  const updateTenantDepositSnapshot = useCallback(async ({ tenantId, remainingDeposit = 0, refundStatus = null, refundAmount = null, refundReference = "" }) => {
-    if (!tenantId) return;
-    const payload = {
-      depositAmount: roundMoney(Math.max(0, remainingDeposit)),
-    };
-    if (refundStatus) payload.depositRefundStatus = refundStatus;
-    if (refundAmount !== null) payload.depositRefundAmount = roundMoney(refundAmount);
-    payload.depositRefundReference = refundReference || "";
-    await dispatch(updateTenant({ id: tenantId, tenantData: payload })).unwrap();
-  }, [dispatch]);
-
-  const postManagerDepositCreditNotes = useCallback(async ({ tenantId, reason = "", allocations = [] }) => {
-    if (!depositLiabilityAccount?._id) {
-      throw new Error("Deposit liability account could not be resolved from Chart of Accounts.");
-    }
-    const notes = await Promise.all(allocations.map((row) => {
-      const sourceInvoice = tenantInvoices.find((invoice) => normalizeId(invoice?._id) === normalizeId(row?.invoice)) || row;
-      return createTenantInvoiceNote({
-        tenant: tenantId,
-        sourceInvoice: row.invoice,
-        noteType: "CREDIT_NOTE",
-        amount: row.appliedAmount,
-        category: sourceInvoice?.category,
-        chartAccountId: depositLiabilityAccount._id,
-        description: reason || `Deposit applied to ${sourceInvoice?.invoiceNumber || "tenant balance"}`,
-        metadata: {
-          depositSettlement: true,
-          depositSettlementType: "apply",
-          sourceInvoiceNumber: sourceInvoice?.invoiceNumber || "",
-        },
-      });
-    }));
-    return notes;
-  }, [depositLiabilityAccount?._id, tenantInvoices]);
-
-  const postLandlordHeldDepositReceipt = useCallback(async ({ tenantId, tenantSource, amount, allocations = [], reason = "" }) => {
-    if (!tenantSource?._id || !tenantSource?.unit?._id) {
-      throw new Error("Tenant unit context is required before posting a landlord-held deposit settlement receipt.");
-    }
-    return createRentPayment(dispatch, {
-      business: currentCompany?._id,
-      tenant: tenantSource._id,
-      unit: tenantSource.unit._id,
-      amount: roundMoney(amount),
-      paymentDate: new Date().toISOString().slice(0, 10),
-      paidDirectToLandlord: true,
-      paymentMethod: "direct_to_landlord",
-      paymentType: "deposit",
-      allocationMode: "manual",
-      allocations: allocations.map((row) => ({ invoice: row.invoice, appliedAmount: roundMoney(row.appliedAmount) })),
-      isConfirmed: true,
-      reference: `DEPOSIT-SETTLEMENT-${String(tenantId).slice(-6)}`,
-      description: reason || "Landlord-held deposit settlement",
-      notes: reason || "Landlord-held deposit settlement",
-      metadata: {
-        depositSettlement: true,
-        depositHeldBy: "Landlord",
-      },
-    });
-  }, [currentCompany?._id, dispatch]);
-
-  const processDepositSettlement = useCallback(async () => {
-    if (!depositSettlementTenant || !depositSettlementTenantSource) {
-      toast.error("Choose a terminated tenant first.");
-      return;
-    }
-
-    const { depositHeld, outstandingBalance, baseApplyAmount, remainingAfterApply, safeRetainAmount, safeRefundAmount, canRefund, depositHolder } = depositSettlementDerived;
-
-    if (depositSettlementContext.loading) {
-      toast.info("Deposit settlement context is still loading.");
-      return;
-    }
-
-    if (depositSettlementAction === "refund" && !canRefund) {
-      toast.warning("Landlord-held deposits cannot be refunded from the manager workspace.");
-      return;
-    }
-
-    if (["apply", "retain"].includes(depositSettlementAction) && outstandingBalance > 0.009 && !depositLiabilityAccount && depositHolder === "Management Company") {
-      toast.error("Deposit liability account not found. Confirm Chart of Accounts first.");
-      return;
-    }
-
-    setIsProcessingDepositSettlement(true);
-    try {
-      const allocations = buildAllocationRows(depositSettlementContext.creditableInvoices, baseApplyAmount);
-      const appliedAmount = roundMoney(allocations.reduce((sum, row) => sum + Number(row?.appliedAmount || 0), 0));
-      let remainingDeposit = roundMoney(depositHeld);
-      const settlementRefs = [];
-
-      if (appliedAmount > 0.009) {
-        if (depositHolder === "Management Company") {
-          const notes = await postManagerDepositCreditNotes({
-            tenantId: depositSettlementTenant.id,
-            reason: depositSettlementForm.reason || "Deposit applied to tenant arrears",
-            allocations,
-          });
-          settlementRefs.push(...notes.map((row) => row?.noteNumber || row?._id).filter(Boolean));
-        } else {
-          const receipt = await postLandlordHeldDepositReceipt({
-            tenantId: depositSettlementTenant.id,
-            tenantSource: depositSettlementTenantSource,
-            amount: appliedAmount,
-            allocations,
-            reason: depositSettlementForm.reason || "Landlord-held deposit applied to arrears",
-          });
-          settlementRefs.push(receipt?.receiptNumber || receipt?._id || "");
-        }
-        remainingDeposit = roundMoney(remainingDeposit - appliedAmount);
-      }
-
-      if (depositSettlementAction === "retain") {
-        if (safeRetainAmount <= 0.009) {
-          throw new Error("Enter a valid retain amount.");
-        }
-        const retainInvoice = await createTenantInvoice({
-          business: currentCompany?._id,
-          tenant: depositSettlementTenant.id,
-          unit: depositSettlementTenantSource?.unit?._id || depositSettlementTenantSource?.unit,
-          property: depositSettlementTenantSource?.unit?.property?._id || depositSettlementTenantSource?.unit?.property || depositSettlementTenantSource?.property?._id || depositSettlementTenantSource?.property,
-          category: "DEPOSIT_CHARGE",
-          amount: safeRetainAmount,
-          invoiceDate: new Date().toISOString().slice(0, 10),
-          dueDate: new Date().toISOString().slice(0, 10),
-          description: depositSettlementForm.reason || "Deposit retention / move-out charge",
-          metadata: {
-            depositSettlement: true,
-            depositSettlementType: "retain",
-            depositHeldBy: depositHolder,
-          },
-        });
-        const retainInvoiceId = retainInvoice?._id || retainInvoice?.data?._id;
-        const retainInvoiceNumber = retainInvoice?.invoiceNumber || retainInvoice?.data?.invoiceNumber || "";
-        if (!retainInvoiceId) {
-          throw new Error("Retention invoice was created without a resolvable invoice id.");
-        }
-
-        if (depositHolder === "Management Company") {
-          const retainNote = await createTenantInvoiceNote({
-            tenant: depositSettlementTenant.id,
-            sourceInvoice: retainInvoiceId,
-            noteType: "CREDIT_NOTE",
-            amount: safeRetainAmount,
-            category: "DEPOSIT_CHARGE",
-            chartAccountId: depositLiabilityAccount?._id,
-            description: depositSettlementForm.reason || "Deposit retained against move-out charges",
-            metadata: {
-              depositSettlement: true,
-              depositSettlementType: "retain",
-            },
-          });
-          settlementRefs.push(retainInvoiceNumber || retainInvoiceId, retainNote?.noteNumber || retainNote?._id || "");
-        } else {
-          const retainReceipt = await postLandlordHeldDepositReceipt({
-            tenantId: depositSettlementTenant.id,
-            tenantSource: depositSettlementTenantSource,
-            amount: safeRetainAmount,
-            allocations: [{ invoice: retainInvoiceId, appliedAmount: safeRetainAmount }],
-            reason: depositSettlementForm.reason || "Landlord-held deposit retained against move-out charges",
-          });
-          settlementRefs.push(retainInvoiceNumber || retainInvoiceId, retainReceipt?.receiptNumber || retainReceipt?._id || "");
-        }
-        remainingDeposit = roundMoney(remainingDeposit - safeRetainAmount);
-      }
-
-      if (depositSettlementAction === "refund") {
-        if (safeRefundAmount <= 0.009) {
-          throw new Error("There is no refundable deposit amount remaining.");
-        }
-        if (!depositSettlementForm.cashbookAccountId) {
-          throw new Error("Choose the cash or bank account used for the refund.");
-        }
-        const voucher = await createPaymentVoucher({
-          business: currentCompany?._id,
-          category: "deposit_refund",
-          property: depositSettlementTenantSource?.unit?.property?._id || depositSettlementTenantSource?.unit?.property || depositSettlementTenantSource?.property?._id || depositSettlementTenantSource?.property,
-          liabilityAccount: depositLiabilityAccount?._id,
-          settlementAccount: depositSettlementForm.cashbookAccountId,
-          amount: safeRefundAmount,
-          dueDate: new Date().toISOString().slice(0, 10),
-          paidDate: new Date().toISOString().slice(0, 10),
-          status: "paid",
-          reference: `TENANT-DEPOSIT-REFUND-${String(depositSettlementTenant.id).slice(-6)}`,
-          narration: depositSettlementForm.reason || `Deposit refund for ${depositSettlementTenant.tenantName}`,
-        });
-        settlementRefs.push(voucher?.voucherNo || voucher?._id || "");
-        remainingDeposit = roundMoney(remainingDeposit - safeRefundAmount);
-      }
-
-      const nextRefundStatus = remainingDeposit > 0.009 ? "pending" : depositSettlementAction === "refund" ? "paid" : "not_applicable";
-      const recordedRefundAmount = depositSettlementAction === "refund" ? safeRefundAmount : remainingDeposit;
-      await updateTenantDepositSnapshot({
-        tenantId: depositSettlementTenant.id,
-        remainingDeposit,
-        refundStatus: nextRefundStatus,
-        refundAmount: recordedRefundAmount,
-        refundReference: settlementRefs.filter(Boolean).join(", "),
-      });
-
-      await refreshTenantSettlementData();
-      toast.success(
-        depositSettlementAction === "retain"
-          ? "Deposit retention posted successfully."
-          : depositSettlementAction === "refund"
-          ? "Deposit refund posted successfully."
-          : "Deposit applied successfully."
-      );
-      closeDepositSettlementModal();
-    } catch (error) {
-      console.error("Deposit settlement failed:", error);
-      toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Deposit settlement failed.");
-    } finally {
-      setIsProcessingDepositSettlement(false);
-    }
-  }, [
-    buildAllocationRows,
-    closeDepositSettlementModal,
-    currentCompany?._id,
-    depositLiabilityAccount,
-    depositSettlementAction,
-    depositSettlementContext.creditableInvoices,
-    depositSettlementContext.loading,
-    depositSettlementDerived,
-    depositSettlementForm.cashbookAccountId,
-    depositSettlementForm.reason,
-    depositSettlementTenant,
-    depositSettlementTenantSource,
-    postLandlordHeldDepositReceipt,
-    postManagerDepositCreditNotes,
-    refreshTenantSettlementData,
-    updateTenantDepositSnapshot,
-  ]);
+    reloadTenantListAfterChange();
+  }, [currentCompany?._id, reloadTenantListAfterChange]);
 
   // ===== SELECTION HANDLERS =====
   const handleSelectTenant = (tenantId) => {
@@ -1689,14 +1324,14 @@ const confirmTransferUnit = useCallback(async () => {
     }
 
     setShowTransferModal(false);
-    await dispatch(getTenants(buildTenantParams()));
+    await reloadTenantListAfterChange();
     await dispatch(getUnits({ business: currentCompany._id }));
   } catch (error) {
     toast.error(error?.response?.data?.message || error?.response?.data?.error || error?.message || "Failed to transfer tenant unit");
   } finally {
     setIsTransferring(false);
   }
-}, [canUpdateTenant, transferForm, transferFiltered, currentCompany, dispatch, buildTenantParams]);
+}, [canUpdateTenant, transferForm, transferFiltered, currentCompany, dispatch, reloadTenantListAfterChange]);
 
   const handleReviewRent = () => {
     if (!canUpdateTenant) {
@@ -1774,13 +1409,16 @@ const confirmTransferUnit = useCallback(async () => {
       });
 
       toast.success(response?.data?.message || `${termTenant} terminated successfully`);
+      const terminatedTenantId = terminationForm.tenantId;
       setShowTerminateModal(false);
       setTerminationForm({ tenantId: "", effectiveDate: "", reason: "" });
       setSelectedTenants([]);
       setSelectAll(false);
+      // a held deposit is the next thing to deal with at move-out
+      if (Number(selectedPrimaryTenant?.depositHeld || 0) > 0.009) setDepositSettlementTenantId(terminatedTenantId);
 
       await Promise.all([
-        dispatch(getTenants(buildTenantParams())),
+        reloadTenantListAfterChange(),
         dispatch(getUnits({ business: currentCompany._id })),
       ]);
     } catch (error) {
@@ -1819,7 +1457,7 @@ const confirmTransferUnit = useCallback(async () => {
       setSelectedTenants([]);
       setSelectAll(false);
       await Promise.allSettled([
-        dispatch(getTenants(buildTenantParams())),
+        reloadTenantListAfterChange(),
         dispatch(getUnits({ business: currentCompany._id })),
         getLeases(dispatch, currentCompany._id, "active"),
       ]);
@@ -1856,7 +1494,7 @@ const confirmTransferUnit = useCallback(async () => {
       setShowRollbackTransferModal(false);
       setRollbackTransferTenantId("");
       await Promise.allSettled([
-        dispatch(getTenants(buildTenantParams())),
+        reloadTenantListAfterChange(),
         dispatch(getUnits({ business: currentCompany._id })),
       ]);
     } catch (error) {
@@ -1966,7 +1604,7 @@ const confirmTransferUnit = useCallback(async () => {
       toast.error(`Failed to delete ${failCount} tenant(s).${reasons ? ` ${reasons}` : ""}`);
     }
 
-    if (currentCompany?._id) dispatch(getTenants(buildTenantParams()));
+    if (currentCompany?._id) reloadTenantListAfterChange();
   };
 
   // ---------------------------
@@ -1985,7 +1623,7 @@ const confirmTransferUnit = useCallback(async () => {
       }, { timeout: 0 });
 
       await Promise.all([
-        dispatch(getTenants(buildTenantParams(1))),
+        reloadTenantListAfterChange(1),
         dispatch(getUnits({ business: currentCompany._id })),
       ]);
       setCurrentPage(1);
@@ -2098,7 +1736,6 @@ const confirmTransferUnit = useCallback(async () => {
   // Stable option arrays — avoids busting AppSelect's internal useMemo on every render
   const uniquePropertyOptions = useMemo(() => uniqueProperties.filter((p) => p !== "any").map((p) => ({ value: p, label: p })), [uniqueProperties]);
   const statusSelectOptions   = useMemo(() => statusOptions.filter((s) => s !== "any").map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) })), [statusOptions]);
-  const cashbookAccountOptions = useMemo(() => cashbookAccounts.map((account) => ({ value: normalizeId(account?._id), label: account?.name || account?.accountName || "Unnamed account" })), [cashbookAccounts]);
 
   // ===== RENDER =====
   return (
@@ -2217,6 +1854,12 @@ const confirmTransferUnit = useCallback(async () => {
                   </ListToolbar.MenuItem>
                 )}
                 {isTerminatedView && (
+                  <ListToolbar.MenuItem icon={FaHandshake} disabled={!menuHasOneSel} onClick={() => { setActionMenuOpen(false); setDepositSettlementTenantId(selectedPrimaryTenant?.id || ""); }} className="font-semibold text-[#0B3B2E]">
+                    Settle Deposit
+                    {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
+                  </ListToolbar.MenuItem>
+                )}
+                {isTerminatedView && (
                   <ListToolbar.MenuItem icon={FaRedoAlt} disabled={!menuCanRestore} onClick={handleOpenRestoreTenant} className="font-semibold">
                     Restore {termTenant}
                     {!menuHasOneSel && <span className="ml-auto text-[10px] text-slate-400">select 1</span>}
@@ -2326,14 +1969,26 @@ const confirmTransferUnit = useCallback(async () => {
                       <span className="font-bold text-red-600">Ksh {tenant.balance.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     ) : <span className="text-slate-300">—</span>}
                   </td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-700 whitespace-nowrap">Ksh {tenant.depositHeld.toLocaleString()}</td>
-                  <td className="px-3 py-1.5 border-r border-gray-100 text-center">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      tenant.settlementStatus === "SETTLED" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : tenant.settlementStatus === "REFUND_DUE" ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : tenant.settlementStatus === "OWES_BALANCE" ? "bg-red-50 text-red-700 border-red-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                    }`}>{tenant.settlementStatus.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold tabular-nums text-slate-700 whitespace-nowrap">
+                    {tenant.depositHeld > 0.009
+                      ? `Ksh ${tenant.depositHeld.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : <span className="text-slate-300">—</span>}
+                  </td>
+                  <td className="px-3 py-1.5 border-r border-gray-100 text-center" onClick={(e) => e.stopPropagation()}>
+                    {tenant.settlementStatus === "DEPOSIT_TO_SETTLE" ? (
+                      <button
+                        type="button"
+                        title="Settle this deposit"
+                        onClick={() => setDepositSettlementTenantId(tenant.id)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                      ><FaHandshake size={9} /> Settle Deposit</button>
+                    ) : (
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                        tenant.settlementStatus === "SETTLED" ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : tenant.settlementStatus === "CREDIT_DUE" ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : "bg-red-50 text-red-700 border-red-200"
+                      }`}>{tenant.settlementStatus.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                    )}
                   </td>
                   <td className="px-3 py-1.5 border-r border-gray-100 text-slate-700">{tenant.depositHeldBy}</td>
                 </>
@@ -2897,281 +2552,14 @@ const confirmTransferUnit = useCallback(async () => {
         </div>
       )}
 
-      {showDepositSettlementModal && (
-        <div className="fixed inset-0 z-[140] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
-          <div className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl">
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-[#0B3B2E] px-4 py-3 text-white">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/60">Deposit Settlement</p>
-                <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-wide">Terminate Tenant Settlement Workspace</h3>
-                <p className="mt-0.5 text-xs text-white/70">Apply deposit, refund the balance, or retain charges without leaving the terminated tenants page.</p>
-              </div>
-              <button
-                onClick={closeDepositSettlementModal}
-                disabled={isProcessingDepositSettlement}
-                className="text-white/70 transition-colors hover:text-white disabled:opacity-60"
-              >
-                <FaTimes size={13} />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="grid gap-4 xl:grid-cols-[1.3fr,0.95fr]">
-                <div className="space-y-4">
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{termTenant}</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.tenantName || "-"}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{depositSettlementTenant?.tenantCode || "-"}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">{termProperty} / {termUnit}</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.propertyName || "-"}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">{depositSettlementTenant?.unitNumber || "-"}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Termination Date</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementTenant?.terminationDate || "-"}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Move-out {depositSettlementTenant?.moveOutDate || "-"}</p>
-                    </div>
-                    <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Deposit Holder</p>
-                      <p className="mt-1.5 text-sm font-bold text-slate-900">{depositSettlementDerived.depositHolder}</p>
-                      <p className="mt-0.5 text-xs text-slate-500">Refund {depositSettlementDerived.canRefund ? "allowed" : "blocked"}</p>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-700">Deposit Held</p>
-                      <p className="mt-1.5 text-xl font-black text-amber-950">Ksh {depositSettlementDerived.depositHeld.toLocaleString()}</p>
-                    </div>
-                    <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-red-700">Outstanding Balance</p>
-                      <p className="mt-1.5 text-xl font-black text-red-900">Ksh {depositSettlementDerived.outstandingBalance.toLocaleString()}</p>
-                    </div>
-                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-700">Remaining After Apply</p>
-                      <p className="mt-1.5 text-xl font-black text-emerald-900">Ksh {depositSettlementDerived.remainingAfterApply.toLocaleString()}</p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Choose settlement action</p>
-                    <div className="mt-3 grid gap-2 md:grid-cols-3">
-                      {[
-                        { key: "apply", title: "Apply Deposit to Balance", caption: "Use the deposit to clear open arrears first." },
-                        { key: "refund", title: "Refund Remaining Deposit", caption: depositSettlementDerived.canRefund ? "Post a manager-held refund to cash or bank." : "Blocked for landlord-held deposits." },
-                        { key: "retain", title: "Retain Deposit (Charges)", caption: "Create a charge invoice, then clear it from deposit." },
-                      ].map((option) => {
-                        const disabled = option.key === "refund" && !depositSettlementDerived.canRefund;
-                        const active = depositSettlementAction === option.key;
-                        return (
-                          <button
-                            key={option.key}
-                            type="button"
-                            disabled={disabled || isProcessingDepositSettlement}
-                            onClick={() => setDepositSettlementAction(option.key)}
-                            className={`rounded-lg border px-3 py-3 text-left transition ${
-                              active
-                                ? "border-[#0B3B2E] bg-[#0B3B2E] text-white shadow-md"
-                                : disabled
-                                ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                                : "border-slate-200 bg-slate-50 text-slate-900 hover:border-[#0B3B2E]/30 hover:bg-[#0B3B2E]/5"
-                            }`}
-                          >
-                            <p className="text-xs font-bold">{option.title}</p>
-                            <p className={`mt-1 text-[11px] ${active ? "text-white/75" : "text-slate-500"}`}>{option.caption}</p>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Smart calculation</p>
-                        <h4 className="mt-0.5 text-sm font-bold text-slate-900">Settlement preview</h4>
-                      </div>
-                      {depositSettlementContext.loading && <span className="text-xs text-slate-500">Loading...</span>}
-                    </div>
-
-                    <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Apply To Arrears</p>
-                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.baseApplyAmount.toLocaleString()}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Refund Amount</p>
-                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.safeRefundAmount.toLocaleString()}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Retain Amount</p>
-                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.safeRetainAmount.toLocaleString()}</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-white px-3 py-2.5">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Final Balance</p>
-                        <p className="mt-1 text-base font-black text-slate-900">Ksh {depositSettlementDerived.finalBalance.toLocaleString()}</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Refund amount</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
-                          value={depositSettlementForm.refundAmount}
-                          onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, refundAmount: e.target.value }))}
-                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
-                          placeholder="0.00"
-                        />
-                        <p className="mt-1 text-[10px] text-slate-500">Capped at the deposit left after arrears are applied.</p>
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Retain amount</label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          disabled={depositSettlementAction !== "retain"}
-                          value={depositSettlementForm.retainAmount}
-                          onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, retainAmount: e.target.value }))}
-                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10 disabled:bg-slate-100"
-                          placeholder="0.00"
-                        />
-                        <p className="mt-1 text-[10px] text-slate-500">Retained via a charge invoice and deposit settlement trail.</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                      <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Cash / bank account for refund</label>
-                        <AppSelect
-                          value={depositSettlementForm.cashbookAccountId}
-                          onChange={(v) => setDepositSettlementForm((prev) => ({ ...prev, cashbookAccountId: v ?? "" }))}
-                          options={cashbookAccountOptions}
-                          placeholder="Select cash or bank account"
-                          searchable
-                          clearable
-                          size="md"
-                          disabled={depositSettlementAction !== "refund" || !depositSettlementDerived.canRefund}
-                          className="w-full"
-                        />
-                      </div>
-                      <div>
-                        <label className="mb-1.5 block text-[10px] font-black uppercase tracking-wide text-slate-500">Reason / narration</label>
-                        <textarea
-                          rows={3}
-                          value={depositSettlementForm.reason}
-                          onChange={(e) => setDepositSettlementForm((prev) => ({ ...prev, reason: e.target.value }))}
-                          placeholder="Move-out arrears cleared, damage retention, tenant refund reference..."
-                          className="mt-1 w-full border border-slate-200 bg-white px-3 py-2 text-xs focus:border-[#0B3B2E] focus:outline-none focus:ring-2 focus:ring-[#0B3B2E]/10"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Accounting preview</p>
-                    <div className="mt-3 space-y-2 text-xs text-slate-700">
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <p className="font-bold text-slate-900">Apply deposit</p>
-                        <p className="mt-1">DR Deposit Liability</p>
-                        <p>CR Tenant Receivable</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <p className="font-bold text-slate-900">Refund (manager-held only)</p>
-                        <p className="mt-1">DR Deposit Liability</p>
-                        <p>CR Cash / Bank</p>
-                      </div>
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-                        <p className="font-bold text-slate-900">Retention</p>
-                        <p className="mt-1">Create charge invoice first, then clear it from the deposit trail.</p>
-                      </div>
-                      {!depositSettlementDerived.canRefund && (
-                        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-amber-900">
-                          <p className="font-bold">{termLandlord}-held deposit rule</p>
-                          <p className="mt-1">This workspace will not post cash or bank refunds when the deposit is held by the {termLandlord.toLowerCase()}.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Open invoices for settlement</p>
-                        <h4 className="mt-0.5 text-sm font-bold text-slate-900">Automatic deposit allocation</h4>
-                      </div>
-                      <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold text-slate-700">
-                        {depositSettlementContext.creditableInvoices.length} open
-                      </span>
-                    </div>
-                    <div className="mt-3 max-h-[220px] overflow-y-auto rounded-lg border border-slate-200">
-                      {depositSettlementContext.creditableInvoices.length > 0 ? (
-                        <table className="min-w-full text-[11px] border-collapse">
-                          <thead className="bg-[#0B3B2E] text-white">
-                            <tr>
-                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Invoice</th>
-                              <th className="px-3 py-1 text-left font-bold border-r border-white/10">Category</th>
-                              <th className="px-3 py-1 text-right font-bold">Open</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {depositSettlementContext.creditableInvoices.map((invoice, i) => (
-                              <tr key={normalizeId(invoice?._id)} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}>
-                                <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{invoice?.invoiceNumber || "-"}</td>
-                                <td className="px-3 py-1 border-r border-gray-100 text-slate-600">{String(invoice?.category || "-").replace(/_/g, " ")}</td>
-                                <td className="px-3 py-1 text-right font-bold text-slate-900">Ksh {roundMoney(invoice?.remainingCreditableAmount ?? invoice?.remainingBalance ?? 0).toLocaleString()}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      ) : (
-                        <div className="px-4 py-6 text-center text-xs text-slate-500">No open posted invoices available for automatic crediting.</div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-[#0B3B2E]/15 bg-[#0B3B2E]/5 px-4 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#0B3B2E]">Final confirmation</p>
-                    <div className="mt-3 space-y-1.5 text-xs text-slate-700">
-                      <p><span className="font-bold text-slate-900">Action:</span> {depositSettlementAction.replace(/_/g, " ")}</p>
-                      <p><span className="font-bold text-slate-900">Apply amount:</span> Ksh {depositSettlementDerived.baseApplyAmount.toLocaleString()}</p>
-                      <p><span className="font-bold text-slate-900">Refund amount:</span> Ksh {depositSettlementDerived.safeRefundAmount.toLocaleString()}</p>
-                      <p><span className="font-bold text-slate-900">Retain amount:</span> Ksh {depositSettlementDerived.safeRetainAmount.toLocaleString()}</p>
-                      <p><span className="font-bold text-slate-900">Deposit left after settlement:</span> Ksh {roundMoney(
-                        depositSettlementDerived.depositHeld - depositSettlementDerived.baseApplyAmount - (depositSettlementAction === "refund" ? depositSettlementDerived.safeRefundAmount : 0) - (depositSettlementAction === "retain" ? depositSettlementDerived.safeRetainAmount : 0)
-                      ).toLocaleString()}</p>
-                    </div>
-                    <div className="mt-4 flex flex-wrap justify-end gap-2">
-                      <button
-                        onClick={closeDepositSettlementModal}
-                        disabled={isProcessingDepositSettlement}
-                        className="border border-slate-300 bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={processDepositSettlement}
-                        disabled={isProcessingDepositSettlement || depositSettlementContext.loading}
-                        className="flex items-center gap-2 bg-[#0B3B2E] px-4 py-2 text-xs font-black uppercase tracking-wide text-white hover:bg-[#0A3127] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {isProcessingDepositSettlement ? "Processing..." : "Confirm Settlement"}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {depositSettlementTenantId && (
+        <DepositSettlementModal
+          tenantId={depositSettlementTenantId}
+          businessId={currentCompany?._id}
+          canRefund={canRefundDeposit}
+          onClose={() => setDepositSettlementTenantId("")}
+          onSettled={refreshTenantList}
+        />
       )}
       {showDeleteModal && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
@@ -3332,7 +2720,7 @@ const confirmTransferUnit = useCallback(async () => {
             company={currentCompany}
             dispatch={dispatch}
             onClose={() => setShowAddUtilityModal(false)}
-            onSaved={() => dispatch(getTenants({ business: currentCompany?._id }))}
+            onSaved={() => loadTenantList()}
           />
         );
       })()}
@@ -3348,7 +2736,7 @@ const confirmTransferUnit = useCallback(async () => {
             allUnits={units}
             dispatch={dispatch}
             onClose={() => setShowRemoveUtilityModal(false)}
-            onSaved={() => dispatch(getTenants({ business: currentCompany?._id }))}
+            onSaved={() => loadTenantList()}
           />
         );
       })()}

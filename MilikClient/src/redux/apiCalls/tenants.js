@@ -117,3 +117,19 @@ export const getTenantStatementBundle = async (tenantId) => {
   const res = await adminRequests.get(`/tenants/${tenantId}/statement-bundle`);
   return res.data;
 };
+
+// Move-out deposit settlement: the tenant's deposit position, its history, and landlord-direct refunds
+export const getDepositSettlement = async (tenantId) => {
+  const res = await adminRequests.get(`/tenants/${tenantId}/deposit-settlement`);
+  return res.data?.data;
+};
+
+export const recordLandlordDepositRefund = async (tenantId, payload) => {
+  const res = await adminRequests.post(`/tenants/${tenantId}/deposit-settlement/landlord-refunds`, payload);
+  return res.data?.data;
+};
+
+export const reverseLandlordDepositRefund = async (tenantId, entryId) => {
+  const res = await adminRequests.post(`/tenants/${tenantId}/deposit-settlement/landlord-refunds/${entryId}/reverse`);
+  return res.data?.data;
+};

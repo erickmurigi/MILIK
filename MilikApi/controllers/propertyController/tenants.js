@@ -9,6 +9,7 @@ import { matchUnitIds, phoneSearchRegex } from "../../utils/listSearch.js";
 import RentPayment from "../../models/RentPayment.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
+import PaymentVoucher from "../../models/PaymentVoucher.js";
 import Lease from "../../models/Lease.js";
 import Receipt from "../../models/Receipts.js";
 import LatePenaltyBatch from "../../models/LatePenaltyBatch.js";
@@ -25,6 +26,7 @@ import { isAgreementNumberDuplicateError, saveLeaseWithUniqueAgreementNumber } f
 import { logAuditEvent } from "../../utils/auditLogger.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
+import { computeTenantDepositPositions, resolveTenantDepositAvailable, syncTenantDepositRefundState } from "../../services/tenantDepositService.js";
 
 
 const ACTIVE_TENANT_STATUSES = ["active", "overdue"];
@@ -913,9 +915,11 @@ export const createTenant = async (req, res, next) => {
       rent: assignedRent,
       depositAmount: defaultDepositAmount,
       depositHeldBy: normalizeDepositHolder(req.body.depositHeldBy, effectivePropertyDepositHolder),
+      depositForfeitTo: ["landlord", "propertyManager"].includes(req.body.depositForfeitTo) ? req.body.depositForfeitTo : null,
       status: normalizeTenantStatus(req.body.status || "active"),
-      depositRefundStatus: defaultDepositAmount > 0 ? "pending" : "not_applicable",
-      depositRefundAmount: defaultDepositAmount,
+      // refund state follows the deposit actually collected and refunded (tenantDepositService)
+      depositRefundStatus: "not_applicable",
+      depositRefundAmount: 0,
       lettingFeeAmount: computedLettingFeeAmount,
       documents: sanitizeDocuments(req.body.documents),
       utilities: sanitizeUtilities(
@@ -1216,7 +1220,7 @@ export const getTenants = async (req, res, next) => {
     // Count invoices and payments for current-page tenants only
     const pageIds = tenants.map((t) => t._id);
     if (pageIds.length > 0) {
-      const [invCounts, paymentCounts, noteCounts, depositReceipts] = await Promise.all([
+      const [invCounts, paymentCounts, noteCounts, depositPositions] = await Promise.all([
         TenantInvoice.aggregate([
           { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenant: { $in: pageIds }, status: { $nin: ["cancelled", "reversed"] } } },
           { $group: { _id: "$tenant", count: { $sum: 1 } } },
@@ -1229,20 +1233,18 @@ export const getTenants = async (req, res, next) => {
           { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenant: { $in: pageIds }, status: { $nin: ["cancelled", "reversed"] } } },
           { $group: { _id: "$tenant", count: { $sum: 1 } } },
         ]),
-        RentPayment.aggregate([
-          { $match: { business: new mongoose.Types.ObjectId(String(businessId)), tenant: { $in: pageIds }, paymentType: "deposit", isReversed: { $ne: true }, isCancelled: { $ne: true } } },
-          { $group: { _id: "$tenant", total: { $sum: "$amount" } } },
-        ]),
+        computeTenantDepositPositions(businessId, pageIds),
       ]);
       const invCountMap = new Map(invCounts.map((r) => [String(r._id), r.count]));
       const payCountMap = new Map(paymentCounts.map((r) => [String(r._id), r.count]));
       const noteCountMap = new Map(noteCounts.map((r) => [String(r._id), r.count]));
-      const depositReceiptedMap = new Map(depositReceipts.map((r) => [String(r._id), r.total]));
       enrichedTenants.forEach((t) => {
         t.invoiceCount = invCountMap.get(String(t._id)) || 0;
         t.paymentCount = payCountMap.get(String(t._id)) || 0;
         t.invoiceNoteCount = noteCountMap.get(String(t._id)) || 0;
-        t.depositReceipted = depositReceiptedMap.get(String(t._id)) || 0;
+        const deposit = depositPositions.get(String(t._id));
+        t.depositReceipted = deposit?.collected || 0;
+        t.depositAvailable = deposit?.available || 0;
       });
     }
 
@@ -1378,8 +1380,19 @@ export const updateTenant = async (req, res, next) => {
       normalizedPayload.depositAmount = depositAmount;
     }
 
-    if (normalizedPayload.depositRefundAmount !== undefined) {
-      normalizedPayload.depositRefundAmount = Math.max(0, Number(normalizedPayload.depositRefundAmount || 0));
+    // Refund state is derived from the actual refund vouchers / landlord refund records (see
+    // tenantDepositService), and those records are only written by the deposit settlement flow.
+    delete normalizedPayload.depositRefundAmount;
+    delete normalizedPayload.depositRefundStatus;
+    delete normalizedPayload.depositRefundReference;
+    delete normalizedPayload.depositLandlordRefunds;
+
+    if (normalizedPayload.depositForfeitTo !== undefined) {
+      const forfeitTo = String(normalizedPayload.depositForfeitTo || "").trim();
+      if (forfeitTo && !["landlord", "propertyManager"].includes(forfeitTo)) {
+        return next(createError(400, "Forfeited deposit must go to the landlord or the property manager"));
+      }
+      normalizedPayload.depositForfeitTo = forfeitTo || null;
     }
 
     if (normalizedPayload.documents !== undefined) {
@@ -1770,12 +1783,6 @@ export const updateTenantStatus = async (req, res, next) => {
     const status = requestedStatus === "moved_out" ? "terminated" : requestedStatus;
     const terminationDate = req.body?.terminationDate || req.body?.moveOutDate || null;
     const terminationReason = String(req.body?.terminationReason || "").trim();
-    const depositRefundAmount = Number(
-      req.body?.depositRefundAmount ?? tenant.depositRefundAmount ?? tenant.depositAmount ?? 0
-    );
-    const depositRefundReference = String(
-      req.body?.depositRefundReference || tenant.depositRefundReference || ""
-    ).trim();
 
     if (!status) {
       return next(createError(400, "Tenant status is required"));
@@ -1801,10 +1808,6 @@ export const updateTenantStatus = async (req, res, next) => {
       updateData.moveOutDate = effectiveTerminationDate;
       updateData.terminationDate = effectiveTerminationDate;
       updateData.terminationReason = terminationReason;
-      updateData.depositRefundAmount = depositRefundAmount;
-      updateData.depositRefundReference = depositRefundReference;
-      updateData.depositRefundStatus =
-        depositRefundAmount > 0 ? req.body?.depositRefundStatus || "pending" : "not_applicable";
     } else if (
       shouldTenantOccupyUnits(status) &&
       !shouldTenantOccupyUnits(tenant)
@@ -1864,6 +1867,7 @@ export const updateTenantStatus = async (req, res, next) => {
     });
 
     const updatedTenant = updatedTenantDoc;
+    const depositPosition = isTerminate ? await syncTenantDepositRefundState(tenant._id, tenant.business) : null;
 
     await logAuditEvent({
       req,
@@ -1882,8 +1886,7 @@ export const updateTenantStatus = async (req, res, next) => {
         nextStatus: status,
         terminationDate: updateData.terminationDate || null,
         terminationReason,
-        depositRefundAmount: updateData.depositRefundAmount,
-        depositRefundStatus: updateData.depositRefundStatus,
+        depositAvailable: depositPosition?.available ?? null,
         previousUnits: previousOccupiedUnitIds,
         nextUnits: nextOccupiedUnitIds,
       },
@@ -1954,31 +1957,8 @@ export const getTenantPayments = async (req, res, next) => {
 // How much deposit is actually collected-and-not-yet-applied for a tenant — never the
 // lease's configured/required depositAmount, which doesn't move. Shared by getTenantBalance
 // and the "Deposit Applied" receipt flow (rentPayment.js), which validates against it.
-export const resolveTenantDepositAvailable = async (tenantId, businessId) => {
-  // $match in an aggregation pipeline does not auto-cast strings to ObjectIds the way
-  // Model.find() does — an un-cast id here silently matches nothing.
-  const confirmedActiveMatch = {
-    tenant: new mongoose.Types.ObjectId(String(tenantId)),
-    business: new mongoose.Types.ObjectId(String(businessId)),
-    isConfirmed: true,
-    isCancelled: { $ne: true },
-    isReversed: { $ne: true },
-  };
-
-  const [[depositCollectedAgg], [depositAppliedAgg]] = await Promise.all([
-    RentPayment.aggregate([
-      { $match: confirmedActiveMatch },
-      { $group: { _id: null, total: { $sum: "$allocationSummary.deposit" } } },
-    ]),
-    RentPayment.aggregate([
-      { $match: { ...confirmedActiveMatch, paymentMethod: "deposit_applied" } },
-      { $group: { _id: null, total: { $sum: "$amount" } } },
-    ]),
-  ]);
-  const depositCollected = round2(depositCollectedAgg?.total || 0);
-  const depositApplied = round2(depositAppliedAgg?.total || 0);
-  return { depositCollected, depositApplied, depositAvailable: round2(Math.max(0, depositCollected - depositApplied)) };
-};
+// Collected - applied - refunded now lives in tenantDepositService; re-exported for existing importers.
+export { resolveTenantDepositAvailable };
 
 // Get tenant balance
 export const getTenantBalance = async (req, res, next) => {
@@ -2060,7 +2040,7 @@ export const getTenantStatementBundle = async (req, res, next) => {
 
     const bId = tenantBase.business;
 
-    const [tenant, leases, receipts, invoices, invoiceNotes] = await Promise.all([
+    const [tenant, leases, receipts, invoices, invoiceNotes, depositPosition, depositRefunds] = await Promise.all([
       // Full tenant with unit/property populate
       Tenant.findOne(filter)
         .populate({ path: "unit",            select: "unitNumber property rent amenities status utilities", populate: { path: "property", select: PROPERTY_SELECT } })
@@ -2091,6 +2071,13 @@ export const getTenantStatementBundle = async (req, res, next) => {
       TenantInvoiceNote.find({ business: bId, tenant: tenantId, status: { $nin: ["cancelled", "reversed"] } })
         .sort({ noteDate: -1, createdAt: -1 })
         .lean(),
+
+      // Deposit position + paid refunds for the statement's deposit strip
+      computeTenantDepositPositions(bId, [tenantId]).then((positions) => positions.get(String(tenantId)) || null),
+      PaymentVoucher.find({ business: bId, tenant: tenantId, category: "deposit_refund", status: "paid" })
+        .select("voucherNo amount paidDate")
+        .sort({ paidDate: 1 })
+        .lean(),
     ]);
 
     return res.status(200).json({
@@ -2100,6 +2087,7 @@ export const getTenantStatementBundle = async (req, res, next) => {
       receipts: { items: receipts, total: receipts.length },
       invoices,
       invoiceNotes,
+      deposit: depositPosition ? { ...depositPosition, refunds: depositRefunds } : null,
     });
   } catch (err) {
     next(err);
@@ -2701,8 +2689,8 @@ export const bulkImportTenants = async (req, res, next) => {
           status: importedTenantStatus,
           depositAmount,
           depositHeldBy: normalizeDepositHolder(record.depositHeldBy, propertyDepositHeldBy),
-          depositRefundStatus: depositAmount > 0 ? "pending" : "not_applicable",
-          depositRefundAmount: depositAmount,
+          depositRefundStatus: "not_applicable",
+          depositRefundAmount: 0,
           lettingFeeAmount: computedLettingFeeAmount,
           paymentMethod: normalizePaymentMethod(record.paymentMethod),
           leaseType,

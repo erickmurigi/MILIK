@@ -438,6 +438,13 @@ const PropertySchema = new mongoose.Schema(
       default: "propertyManager",
     },
 
+    // Who keeps a deposit the tenant forfeits at move-out. Tenants inherit this unless they carry their own.
+    depositForfeitTo: {
+      type: String,
+      enum: ["landlord", "propertyManager"],
+      default: "landlord",
+    },
+
     lettingFeeMode: {
       type: String,
       enum: ["percentage", "fixed"],

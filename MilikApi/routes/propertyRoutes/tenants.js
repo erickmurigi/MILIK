@@ -19,36 +19,16 @@ import {
   rollbackTenantTransfer,
   backfillMissingLeases,
 } from "../../controllers/propertyController/tenants.js"
+import {
+  getDepositSettlement,
+  recordLandlordDirectRefund,
+  reverseLandlordDirectRefund,
+} from "../../controllers/propertyController/depositSettlement.js"
 import { requireCompanyPermission, verifyUser } from "../../controllers/verifyToken.js"
 
 const router = express.Router()
 
 const canRefundDeposit = requireCompanyPermission("deposits", "refund", "propertyManagement");
-
-// Terminating a tenant always settles/computes their deposit refund as part of
-// the same request (see updateTenantStatus), even when the client sends no
-// deposit fields explicitly — so the only reliable signal here is the status
-// transition itself, not body-field presence.
-const guardStatusDepositRefund = (req, res, next) => {
-  const requestedStatus = String(req.body?.status || "").toLowerCase();
-  const status = requestedStatus === "moved_out" ? "terminated" : requestedStatus;
-  if (status === "terminated") return canRefundDeposit(req, res, next);
-  next();
-};
-
-// The general tenant-update route can also directly edit a previously recorded
-// deposit refund — gate only requests that actually touch those fields.
-const guardUpdateDepositRefund = (req, res, next) => {
-  const body = req.body || {};
-  if (
-    body.depositRefundAmount !== undefined ||
-    body.depositRefundStatus !== undefined ||
-    body.depositRefundReference !== undefined
-  ) {
-    return canRefundDeposit(req, res, next);
-  }
-  next();
-};
 
 // Create tenant
 router.post("/", verifyUser, createTenant)
@@ -65,11 +45,16 @@ router.get("/", verifyUser, getTenants)
 // Get tenant statement bundle (tenant + leases + receipts + invoices + notes in one round trip)
 router.get("/:id/statement-bundle", verifyUser, getTenantStatementBundle)
 
+// Move-out deposit settlement: position + history, and landlord-direct refund memos
+router.get("/:id/deposit-settlement", verifyUser, getDepositSettlement)
+router.post("/:id/deposit-settlement/landlord-refunds", verifyUser, canRefundDeposit, recordLandlordDirectRefund)
+router.post("/:id/deposit-settlement/landlord-refunds/:entryId/reverse", verifyUser, canRefundDeposit, reverseLandlordDirectRefund)
+
 // Get single tenant
 router.get("/:id", verifyUser, getTenant)
 
 // Update tenant
-router.put("/:id", verifyUser, guardUpdateDepositRefund, updateTenant)
+router.put("/:id", verifyUser, updateTenant)
 
 // Transfer tenant primary unit
 router.post("/:id/transfer-unit", verifyUser, transferTenantUnit)
@@ -81,7 +66,7 @@ router.post("/:id/rollback-transfer", verifyUser, rollbackTenantTransfer)
 router.delete("/:id", verifyUser, deleteTenant)
 
 // Update tenant status
-router.put("/status/:id", verifyUser, guardStatusDepositRefund, updateTenantStatus)
+router.put("/status/:id", verifyUser, updateTenantStatus)
 
 // Get tenant payments
 router.get("/payments/:id", verifyUser, getTenantPayments)

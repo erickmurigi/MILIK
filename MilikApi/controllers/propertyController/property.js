@@ -748,6 +748,7 @@ export const createProperty = async (req, res) => {
       controlAccount: null,
       tenantsPaysTo: resolvedTenantsPaysTo,
       depositHeldBy: resolvedDepositHeldBy,
+      depositForfeitTo: req.body.depositForfeitTo === "propertyManager" ? "propertyManager" : "landlord",
       commissionPercentage: modeAwareAssignment.commissionPercentage ?? 0,
       commissionFixedAmount: modeAwareAssignment.commissionFixedAmount ?? 0,
       commissionPaymentMode: modeAwareAssignment.commissionPaymentMode || "percentage",
@@ -903,7 +904,7 @@ export const getProperties = async (req, res, next) => {
           "address townCityState estateArea roadStreet zoneRegion lrNumber " +
           "accountLedgerType propertyLedgerEnabled commissionPercentage " +
           "commissionPaymentMode commissionCategoryKeys commissionTaxSettings " +
-          "depositHeldBy vatRate taxMode taxCodeKey " +
+          "depositHeldBy depositForfeitTo vatRate taxMode taxCodeKey " +
           "grossLettableArea netLettableArea unitMeasurement rentPerMeasure rentCurrency " +
           "standingCharges securityDeposits utilityRates " +
           "business controlAccount createdAt updatedAt"

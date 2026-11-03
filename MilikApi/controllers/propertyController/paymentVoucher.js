@@ -21,8 +21,16 @@ import { resolveConfiguredAccountingDefaultAccount } from "../../services/compan
 import {
   resolvePropertyAccountingContext,
   resolveLandlordRemittancePayableAccount,
+  resolveTenantDepositPayableAccount,
   ensurePropertyControlAccount,
 } from "../../services/propertyAccountingService.js";
+import Tenant from "../../models/Tenant.js";
+import Unit from "../../models/Unit.js";
+import {
+  computeTenantDepositPosition,
+  normalizeTenantDepositHolder,
+  syncTenantDepositRefundState,
+} from "../../services/tenantDepositService.js";
 import { syncProcessedStatementSettlementState } from "../../services/processedStatementSettlementService.js";
 import { createError } from "../../utils/error.js";
 import { hasCompanyActionPermission } from "../../utils/permissionControl.js";
@@ -609,7 +617,13 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
     });
   }
 
-  if (voucher.category === "deposit_refund") {
+  if (isManagerHeldDepositRefund(voucher)) {
+    // the manager is handing back cash it holds in trust: releases the deposit liability, never touches the landlord
+    return resolveTenantDepositPayableAccount(businessId);
+  }
+
+  if (voucher.category === "deposit_refund" && !isLandlordHeldDepositRefund(voucher)) {
+    // pre-settlement vouchers with no tenant link keep the posting they were made with
     return resolveLandlordRemittancePayableAccount(businessId);
   }
 
@@ -621,7 +635,8 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
     return account;
   }
 
-  if (["landlord_maintenance", "landlord_other"].includes(voucher.category)) {
+  // A landlord-held refund the manager pays on the landlord's behalf is a landlord deduction, posted exactly like one
+  if (["landlord_maintenance", "landlord_other"].includes(voucher.category) || isLandlordHeldDepositRefund(voucher)) {
     const context =
       accountingContext ||
       (await resolvePropertyAccountingContext({
@@ -730,6 +745,40 @@ const getExpenseCategory = (voucherCategory) => {
   return null;
 };
 
+// A deposit refund is always made for one tenant, paid on the spot, and never for more than is still held.
+// The holder is snapshotted from the tenant so the posting stays right if the setting changes later.
+const resolveDepositRefundContext = async ({ businessId, tenantId, amount, status }) => {
+  if (!tenantId || !isValidObjectId(tenantId)) {
+    throw createError(400, "A deposit refund must be made for a tenant. Use Settle Deposit on the tenant.");
+  }
+  if (status !== "paid") {
+    throw createError(400, "A deposit refund is paid on the spot. Save it as paid with the cash or bank account it was paid from.");
+  }
+
+  const tenant = await Tenant.findOne({ _id: tenantId, business: businessId }).select("_id unit depositHeldBy").lean();
+  if (!tenant) throw createError(404, "Tenant not found for this company.");
+  const unit = tenant.unit ? await Unit.findOne({ _id: tenant.unit, business: businessId }).select("property").lean() : null;
+  if (!unit?.property) throw createError(400, "The tenant's unit has no property, so the refund cannot be posted.");
+
+  const requested = Math.round(Math.abs(Number(amount || 0)) * 100) / 100;
+  const position = await computeTenantDepositPosition(tenant._id, businessId);
+  if (requested > position.available + 0.009) {
+    throw createError(400, `Only KES ${position.available.toLocaleString()} of deposit is still held for this tenant.`);
+  }
+
+  return {
+    tenantId: tenant._id,
+    propertyId: unit.property,
+    depositHeldBy: normalizeTenantDepositHolder(tenant.depositHeldBy),
+  };
+};
+
+// deposit_refund vouchers made by the deposit settlement carry the tenant and the holder at refund time
+const isManagerHeldDepositRefund = (voucher) =>
+  voucher?.category === "deposit_refund" && Boolean(voucher?.tenant) && voucher?.depositHeldBy === "Management Company";
+const isLandlordHeldDepositRefund = (voucher) =>
+  voucher?.category === "deposit_refund" && Boolean(voucher?.tenant) && voucher?.depositHeldBy === "Landlord";
+
 const voucherRequiresProperty = (voucherCategory) =>
   PROPERTY_REQUIRED_CATEGORIES.has(String(voucherCategory || ""));
 
@@ -789,6 +838,7 @@ const populateVoucherQuery = (query) =>
   query
     .populate("property", "propertyName name")
     .populate("landlord", "name landlordName")
+    .populate("tenant", "name tenantCode")
     .populate("saleOwner", "fullName ownerNumber")
     .populate("saleProject", "name projectNumber")
     .populate("approvedBy", "surname otherNames email")
@@ -802,8 +852,9 @@ const populateVoucherQuery = (query) =>
     .populate("serviceProvider", "name subjectToWht whtRate");
 
 const createExpenseRecordForVoucher = async (voucher, { statementDate = null } = {}) => {
-  const expenseCategory = getExpenseCategory(voucher.category);
-  if (!expenseCategory || !LANDLORD_STATEMENT_CATEGORIES.has(String(voucher.category || ""))) return null;
+  // the expense record is what puts a deduction on the landlord statement
+  const expenseCategory = isLandlordHeldDepositRefund(voucher) ? "other" : getExpenseCategory(voucher.category);
+  if (!expenseCategory || !(LANDLORD_STATEMENT_CATEGORIES.has(String(voucher.category || "")) || isLandlordHeldDepositRefund(voucher))) return null;
 
   const effectiveDate = normalizeDate(resolveVoucherPostingDate({ voucher, statementDate }));
   const description = String(voucher.narration || voucher.reference || `Payment voucher ${voucher.voucherNo}`).trim();
@@ -1106,10 +1157,7 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
 
   const postingDate = normalizeDate(resolveVoucherPostingDate({ voucher, statementDate }));
 
-  let expenseRecord = null;
-  if (voucher.category !== "deposit_refund") {
-    expenseRecord = await createExpenseRecordForVoucher(voucher, { statementDate: postingDate });
-  }
+  const expenseRecord = await createExpenseRecordForVoucher(voucher, { statementDate: postingDate });
 
   const { start, end } = buildStatementPeriod(postingDate);
   const txDate = postingDate;
@@ -1144,7 +1192,8 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
       transactionDate: txDate,
       statementPeriodStart: start,
       statementPeriodEnd: end,
-      category: voucher.category === "deposit_refund" ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
+      category: voucher.category === "deposit_refund" && !isLandlordHeldDepositRefund(voucher) ? "ADJUSTMENT" : "EXPENSE_DEDUCTION",
+      tenant: voucher.tenant || null,
       amount,
       journalGroupId,
       payer: "manager",
@@ -1163,11 +1212,18 @@ const ensureVoucherAccrualPosting = async ({ voucher, actorUserId, statementDate
         debit: group.amount,
         credit: 0,
         accountId: group.accountId,
-        receiver: voucher.category === "deposit_refund" ? "landlord" : "vendor",
+        receiver: isManagerHeldDepositRefund(voucher) ? "tenant" : voucher.category === "deposit_refund" ? "landlord" : "vendor",
         metadata: {
           voucherNo: voucher.voucherNo,
           voucherCategory: voucher.category,
-          postingRole: voucher.category === "deposit_refund" ? "landlord_payable_reduction" : voucher.category === "sale_owner_expense" ? "owner_recoverable_accrual" : ["landlord_maintenance", "landlord_other"].includes(voucher.category) ? "property_control_deduction" : "expense_or_deduction",
+          depositHeldBy: voucher.depositHeldBy || null,
+          postingRole: isManagerHeldDepositRefund(voucher)
+            ? "tenant_deposit_release"
+            : isLandlordHeldDepositRefund(voucher) || ["landlord_maintenance", "landlord_other"].includes(voucher.category)
+              ? "property_control_deduction"
+              : voucher.category === "deposit_refund"
+                ? "landlord_payable_reduction"
+                : voucher.category === "sale_owner_expense" ? "owner_recoverable_accrual" : "expense_or_deduction",
           includeInLandlordStatement: false,
           expenseRecordId: expenseRecord?._id ? String(expenseRecord._id) : null,
         },
@@ -1410,6 +1466,15 @@ export const createPaymentVoucher = async (req, res, next) => {
       return next(createError(400, "Voucher category is required"));
     }
 
+    const depositRefund = voucherCategory === "deposit_refund"
+      ? await resolveDepositRefundContext({ businessId, tenantId: input.tenant, amount: input.amount, status })
+      : null;
+    if (depositRefund) {
+      input.property = depositRefund.propertyId;
+      input.lines = [];
+      input.whtAmount = 0;
+    }
+
     if (voucherRequiresProperty(voucherCategory) && (!input.property || !isValidObjectId(input.property))) {
       return next(createError(400, "Property is required for this voucher category"));
     }
@@ -1521,6 +1586,8 @@ export const createPaymentVoucher = async (req, res, next) => {
       reference: input.reference || "",
       business: businessId,
       sourceRequisition: sourceRequisition?._id || null,
+      tenant: depositRefund?.tenantId || null,
+      depositHeldBy: depositRefund?.depositHeldBy || null,
     };
 
     const whtLimit = Number(payload.whtAmount || 0);
@@ -1608,6 +1675,8 @@ export const createPaymentVoucher = async (req, res, next) => {
         throw postingError;
       }
     }
+
+    if (voucher.tenant) await syncTenantDepositRefundState(voucher.tenant, businessId);
 
     emitToCompany(businessId, "voucher:new", { voucherId: voucher._id });
     const populated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id)).lean();
@@ -1745,6 +1814,11 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
 
     const existing = await PaymentVoucher.findOne({ _id: req.params.id, business }).lean();
     if (!existing) return next(createError(404, "Payment voucher not found"));
+
+    // deposit refunds are created by the deposit settlement only, already paid: reverse and redo instead of editing
+    if (existing.category === "deposit_refund" || payload.category === "deposit_refund") {
+      return next(createError(400, "Deposit refunds cannot be edited. Reverse the refund and settle the deposit again from the tenant."));
+    }
 
     if (Object.prototype.hasOwnProperty.call(payload, "payeeBank")) {
       payload.payeeBank = await resolvePayeeBank({
@@ -1895,6 +1969,11 @@ const updatePaymentVoucherStatusHandler = async (req, res, next) => {
     const voucher = await PaymentVoucher.findOne({ _id: req.params.id, business });
     if (!voucher) return next(createError(404, "Payment voucher not found"));
 
+    // an old deposit_refund draft has no tenant, so posting it would charge the landlord for any deposit
+    if (voucher.category === "deposit_refund" && !voucher.tenant && ["approved", "paid"].includes(status)) {
+      return next(createError(400, "This deposit refund is not linked to a tenant. Delete the draft and refund the deposit with Settle Deposit on the tenant."));
+    }
+
     const actorUserId = await resolveActorUserId(req, business);
 
     if (status === "draft") {
@@ -1988,6 +2067,7 @@ const updatePaymentVoucherStatusHandler = async (req, res, next) => {
 
     await voucher.save();
     await syncLinkedProcessedStatementForVoucher({ voucher, businessId: business });
+    if (voucher.tenant) await syncTenantDepositRefundState(voucher.tenant, business);
 
     const updated = await populateVoucherQuery(PaymentVoucher.findById(voucher._id)).lean();
 
@@ -2046,6 +2126,7 @@ const deletePaymentVoucherHandler = async (req, res, next) => {
       await releaseSourceRequisitionFromVoucher({ voucher: row, businessId: business });
       await row.save();
       await syncLinkedProcessedStatementForVoucher({ voucher: row, businessId: business });
+      if (row.tenant) await syncTenantDepositRefundState(row.tenant, business);
 
       emitToCompany(row.business, "voucher:reversed", { voucherId: row._id });
 

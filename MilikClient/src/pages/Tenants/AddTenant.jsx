@@ -299,6 +299,7 @@ const AddTenant = () => {
     rent: "",
     depositAmount: "",
     depositHeldBy: isSelfManagingLandlordMode ? "Landlord" : "Management Company",
+    depositForfeitTo: "",
     status: "active",
     emergencyContactName: "",
     emergencyContactPhone: "",
@@ -801,6 +802,7 @@ useEffect(() => {
               ? String(tenant.depositAmount)
               : "",
           depositHeldBy: tenant.depositHeldBy || "Management Company",
+          depositForfeitTo: tenant.depositForfeitTo || "",
           status: tenant.status || "active",
           emergencyContactName: tenant.emergencyContact?.name || "",
           emergencyContactPhone: tenant.emergencyContact?.phone || "",
@@ -1730,6 +1732,22 @@ useEffect(() => {
                         <p className="mt-1 text-xs text-red-600">{fieldErrors.depositHeldBy}</p>
                       )}
                     </div>
+
+                    {!isSelfManagingLandlordMode && (
+                      <div>
+                        <AppSelect
+                          label="Forfeited Deposit Goes To"
+                          value={formData.depositForfeitTo || ""}
+                          onChange={(v) => handleInputChange({ target: { name: "depositForfeitTo", value: v || "" } })}
+                          options={[
+                            { value: "", label: `Same as ${termProperty.toLowerCase()}` },
+                            { value: "landlord", label: termLandlord },
+                            { value: "propertyManager", label: "Manager" },
+                          ]}
+                          size="md"
+                        />
+                      </div>
+                    )}
 
                     <div className="md:col-span-2">
                       <label className={labelClass}>{termUtilities} & Charges (Ksh)</label>

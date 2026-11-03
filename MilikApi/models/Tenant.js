@@ -180,6 +180,28 @@ const TenantSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // null inherits the property's depositForfeitTo
+    depositForfeitTo: {
+      type: String,
+      enum: ["landlord", "propertyManager", null],
+      default: null,
+    },
+
+    // Landlord-held deposits the landlord refunded to the tenant directly. No cash passes through
+    // the manager's books, so these are memo records that only close the tenant's deposit.
+    depositLandlordRefunds: [
+      {
+        amount: { type: Number, required: true, min: 0.01 },
+        date: { type: Date, required: true },
+        reference: { type: String, trim: true, default: "" },
+        notes: { type: String, trim: true, default: "" },
+        recordedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+        recordedAt: { type: Date, default: Date.now },
+        reversedAt: { type: Date, default: null },
+        reversedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+      },
+    ],
+
     paymentMethod: {
       type: String,
       enum: ["bank_transfer", "mobile_money", "cash", "check", "credit_card"],

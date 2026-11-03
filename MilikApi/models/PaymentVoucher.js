@@ -46,6 +46,10 @@ const PaymentVoucherSchema = new mongoose.Schema(
     },
     property: { type: mongoose.Schema.Types.ObjectId, ref: "Property", default: null },
     landlord: { type: mongoose.Schema.Types.ObjectId, ref: "Landlord", default: null },
+    // deposit_refund only: the tenant refunded, and who held the deposit when it was refunded —
+    // that decides whether the refund releases the manager's deposit liability or is a landlord deduction
+    tenant: { type: mongoose.Schema.Types.ObjectId, ref: "Tenant", default: null },
+    depositHeldBy: { type: String, enum: ["Management Company", "Landlord", null], default: null },
     // Property-sale owner recharge vouchers (category "sale_owner_expense") — an unrelated pair of
     // models to the PMS Property/Landlord above, so kept as their own fields rather than overloaded.
     saleProject: { type: mongoose.Schema.Types.ObjectId, ref: "SaleProject", default: null, index: true },
@@ -152,6 +156,7 @@ PaymentVoucherSchema.index({ business: 1, status: 1 });
 PaymentVoucherSchema.index({ business: 1, category: 1 });
 PaymentVoucherSchema.index({ business: 1, property: 1, status: 1 });
 PaymentVoucherSchema.index({ landlord: 1 });
+PaymentVoucherSchema.index({ business: 1, tenant: 1, category: 1, status: 1 }, { partialFilterExpression: { tenant: { $type: "objectId" } } });
 PaymentVoucherSchema.index({ business: 1, saleOwner: 1, status: 1 });
 PaymentVoucherSchema.index({ liabilityAccount: 1 });
 PaymentVoucherSchema.index({ business: 1, sourceRequisition: 1 });

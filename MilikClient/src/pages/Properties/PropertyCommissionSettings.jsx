@@ -45,6 +45,7 @@ const defaultForm = {
   prepaymentRecognition: 'on_invoice_allocation',
   tenantsPaysTo: 'propertyManager',
   depositHeldBy: 'propertyManager',
+  depositForfeitTo: 'landlord',
   commissionCategoryKeys: ['rent'],
   commissionTaxSettings: {
     enabled: false,
@@ -62,6 +63,7 @@ const normalizePropertyForm = (property) => ({
   prepaymentRecognition: property?.prepaymentRecognition || 'on_invoice_allocation',
   tenantsPaysTo: property?.tenantsPaysTo || 'propertyManager',
   depositHeldBy: property?.depositHeldBy || 'propertyManager',
+  depositForfeitTo: property?.depositForfeitTo || 'landlord',
   commissionCategoryKeys: Array.isArray(property?.commissionCategoryKeys) && property.commissionCategoryKeys.length > 0
     ? Array.from(new Set(property.commissionCategoryKeys.map((item) => normalizeCategoryKey(item)).filter(Boolean)))
     : ['rent'],
@@ -442,6 +444,20 @@ const PropertyCommissionSettings = () => {
                         ]}
                         size="sm"
                       />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-bold text-slate-900">Forfeited Deposit Goes To</label>
+                      <AppSelect
+                        value={formData.depositForfeitTo || 'landlord'}
+                        onChange={(v) => setFormData((f) => ({ ...f, depositForfeitTo: v || 'landlord' }))}
+                        options={[
+                          { value: 'landlord', label: termLandlord },
+                          { value: 'propertyManager', label: `${termProperty} Manager` },
+                        ]}
+                        size="sm"
+                      />
+                      <p className="mt-1 text-[11px] text-slate-500">Default when a {termTenant.toLowerCase()} forfeits a deposit at move-out. Each tenant can override it.</p>
                     </div>
 
                     <div>

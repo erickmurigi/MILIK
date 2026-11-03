@@ -344,6 +344,7 @@ const TenantStatement = () => {
   const [invoiceRefresh, setInvoiceRefresh] = useState(0);
   const [tenantInvoices, setTenantInvoices] = useState([]);
   const [tenantInvoiceNotes, setTenantInvoiceNotes] = useState([]);
+  const [depositPosition, setDepositPosition] = useState(null);
   const [scheduleDefinedPeriod, setScheduleDefinedPeriod] = useState("custom");
   const [scheduleFilterFrom, setScheduleFilterFrom] = useState("");
   const [scheduleFilterTo, setScheduleFilterTo] = useState("");
@@ -548,6 +549,7 @@ const TenantStatement = () => {
         setTenantPayments(data.receipts?.items ?? []);
         setTenantInvoices(Array.isArray(data.invoices) ? data.invoices : []);
         setTenantInvoiceNotes(Array.isArray(data.invoiceNotes) ? data.invoiceNotes : []);
+        setDepositPosition(data.deposit || null);
       })
       .catch(() => { setTenantLoading(false); });
   }, [dispatch, currentCompany?._id, tenantId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1735,8 +1737,35 @@ const TenantStatement = () => {
             </div>
             <div className="flex items-center gap-2 pl-4 shrink-0">
               <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Holder</span>
-              <span className="text-[11px] font-black text-slate-700">{tenantDepositHolder}</span>
+              <span className="text-[11px] font-black text-slate-700">{String(tenantDepositHolder || "").toLowerCase() === "landlord" ? "Landlord" : "Manager"}</span>
             </div>
+            {depositPosition && depositPosition.collected > 0 && (
+              <>
+                <div className="flex items-center gap-2 pl-4 shrink-0">
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Collected</span>
+                  <span className="text-[11px] font-black text-slate-700">KES {depositPosition.collected.toLocaleString()}</span>
+                </div>
+                {depositPosition.applied > 0 && (
+                  <div className="flex items-center gap-2 pl-4 shrink-0">
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Applied</span>
+                    <span className="text-[11px] font-black text-slate-700">KES {depositPosition.applied.toLocaleString()}</span>
+                  </div>
+                )}
+                {depositPosition.refunded + depositPosition.landlordRefunded > 0 && (
+                  <div className="flex items-center gap-2 pl-4 shrink-0" title={(depositPosition.refunds || []).map((r) => `${r.voucherNo} · ${fmtDate(r.paidDate)} · KES ${Number(r.amount).toLocaleString()}`).join(", ")}>
+                    <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Refunded</span>
+                    <span className="text-[11px] font-black text-slate-700">
+                      KES {(depositPosition.refunded + depositPosition.landlordRefunded).toLocaleString()}
+                      {depositPosition.refunds?.length ? <span className="ml-1 font-semibold text-slate-500">· {depositPosition.refunds.map((r) => r.voucherNo).join(", ")}</span> : null}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-center gap-2 pl-4 shrink-0">
+                  <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Still Held</span>
+                  <span className={`text-[11px] font-black ${depositPosition.available > 0.009 ? "text-amber-700" : "text-emerald-700"}`}>KES {depositPosition.available.toLocaleString()}</span>
+                </div>
+              </>
+            )}
             <div className="flex items-center gap-2 pl-4 shrink-0">
               <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Invoice</span>
               {hasActiveDepositInvoice ? (

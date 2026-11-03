@@ -97,7 +97,8 @@ const amountInWords = (value) => {
 
 const PMS_CATEGORIES = [
   { value: "landlord_maintenance", label: "Accounts Payable – Maintenance", landlordLabel: "Accounts Payable – Maintenance", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
-  { value: "deposit_refund",       label: "Deposit Refund (Liability Release)", landlordLabel: "Deposit Refund (Liability Release)", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
+  // Made only by Settle Deposit on a terminated tenant (it needs the tenant to post correctly) — listed for the list/filter
+  { value: "deposit_refund",       label: "Deposit Refund",                 landlordLabel: "Deposit Refund",                 propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true, systemOnly: true },
   { value: "landlord_other",       label: "Accounts Payable – Other",       landlordLabel: "Accounts Payable – Other",       propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
   // System-generated only, by "Pay Landlord" on a processed statement — not offered in the New
   // Voucher form (see creatableCategoryOptions below), just here so the list/filter can show and
