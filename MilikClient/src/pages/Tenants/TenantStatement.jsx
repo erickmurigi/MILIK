@@ -570,10 +570,16 @@ const TenantStatement = () => {
   }, [currentCompany?._id, tenantId, invoiceRefresh]);
 
   // Stable reference so child handlers that call this don't cause re-renders of memoized subtrees
-  const getInvoicesForPeriod = useCallback((periodRow, categories = ["RENT_CHARGE", "UTILITY_CHARGE"]) => {
+  // unitId: scope matches to one unit's own invoices — required for the single-lease view,
+  // since a multi-unit tenant's invoices often share the same periodKey across units (this
+  // was previously unscoped and could match another unit's invoice to a different unit's
+  // row). Pass undefined/null to intentionally match across every unit, which is what the
+  // "All Units" combined view wants when cancelling every unit's invoice for a period.
+  const getInvoicesForPeriod = useCallback((periodRow, categories = ["RENT_CHARGE", "UTILITY_CHARGE"], unitId = undefined) => {
     const allowedCategories = Array.isArray(categories)
       ? categories.map((category) => String(category || "").toUpperCase())
       : [];
+    const scopedUnitId = unitId ? safeId(unitId) : null;
 
     return tenantInvoices.filter((invoice) => {
       const invoicePeriod = formatPeriodLabel(invoice?.invoiceDate || invoice?.createdAt);
@@ -585,6 +591,7 @@ const TenantStatement = () => {
       return (
         !["cancelled", "reversed"].includes(status) &&
         (allowedCategories.length === 0 || allowedCategories.includes(invoiceCategory)) &&
+        (!scopedUnitId || safeId(invoice?.unit?._id || invoice?.unit) === scopedUnitId) &&
         ((metadataPeriodKey && rowPeriodKey && metadataPeriodKey === rowPeriodKey) ||
           (!metadataPeriodKey && invoicePeriod === periodRow?.description))
       );
@@ -1779,6 +1786,63 @@ const TenantStatement = () => {
       }
     };
 
+    // Combined-view counterpart of persistScheduleAdjustments above. A selected row in the
+    // "All Units" view is a merged display aggregate (its periodKey is a synthetic
+    // year-month, not a real lease period), so it can't be written back onto any one lease.
+    // Instead this recomputes each lease's OWN schedule rows, finds whichever of THEM fall
+    // in the selected calendar months, and applies applyRow to each independently — so a
+    // freeze/delete issued from the combined view correctly becomes N real per-lease
+    // adjustments, one per unit, each still skipping rows that are already booked.
+    const persistScheduleAdjustmentsForAllLeases = async (selectedPeriods, applyRow, successMessage) => {
+      try {
+        setSavingScheduleAction(true);
+        let touchedAny = false;
+        let skippedBooked = false;
+
+        await Promise.all(tenantLeases.map(async (lease) => {
+          const leaseId = safeId(lease?._id);
+          if (!leaseId) return;
+          const existingAdjustments = Array.isArray(lease?.billingScheduleAdjustments) ? lease.billingScheduleAdjustments : [];
+          const adjustmentsByPeriod = existingAdjustments.reduce((acc, item) => {
+            if (item?.periodKey) acc[item.periodKey] = item;
+            return acc;
+          }, {});
+          const rows = buildScheduleRows(lease, adjustmentsByPeriod);
+          const matchingRows = rows.filter((row) => selectedPeriods.has(`${row.periodYear}-${row.periodMonth}`));
+          if (matchingRows.length === 0) return;
+
+          const byKey = new Map(existingAdjustments.map((item) => [item.periodKey, { ...item }]));
+          let leaseChanged = false;
+          matchingRows.forEach((row) => {
+            if (row.booked === "Yes") { skippedBooked = true; return; }
+            const existing = byKey.get(row.periodKey) || { periodKey: row.periodKey };
+            const next = applyRow(existing, row);
+            if (next) { byKey.set(row.periodKey, next); leaseChanged = true; }
+          });
+          if (!leaseChanged) return;
+
+          await updateLease(dispatch, leaseId, { billingScheduleAdjustments: Array.from(byKey.values()) });
+          touchedAny = true;
+        }));
+
+        if (currentCompany?._id) {
+          await getLeases(dispatch, currentCompany._id, null, tenantId);
+        }
+
+        if (!touchedAny) {
+          toast.warning(skippedBooked ? "Booked schedule rows cannot be changed." : "Nothing to update.");
+          return false;
+        }
+        toast.success(skippedBooked ? `${successMessage} Booked rows were skipped.` : successMessage);
+        return true;
+      } catch (error) {
+        toast.error(error?.response?.data?.message || error?.message || "Schedule action failed");
+        return false;
+      } finally {
+        setSavingScheduleAction(false);
+      }
+    };
+
     const handleCreateInvoices = () => {
       if (selectedSchedules.length === 0) {
         toast.warning("Please select at least one billing period");
@@ -1809,8 +1873,11 @@ const TenantStatement = () => {
         return;
       }
 
+      // Combined view: intentionally unscoped — cancel every unit's invoice for the
+      // selected period(s). Single-unit view: scoped to the selected lease's own unit.
+      const cancelUnitId = isCombinedScheduleView ? undefined : (tenantLease?.unit?._id || tenantLease?.unit);
       const matchingInvoices = invoicedPeriods.flatMap((row) =>
-        getInvoicesForPeriod(row, ["RENT_CHARGE", "UTILITY_CHARGE"])
+        getInvoicesForPeriod(row, ["RENT_CHARGE", "UTILITY_CHARGE"], cancelUnitId)
       );
       const uniqueInvoices = Array.from(new Map(matchingInvoices.map((invoice) => [safeId(invoice), invoice])).values());
 
@@ -1958,7 +2025,12 @@ const TenantStatement = () => {
             // Combined-view rows can span several real leases with different invoice/freeze
             // states — booking/editing/freezing only makes sense against one real lease, so
             // these actions stay disabled until a specific unit is picked from the dropdown.
-            const off = !hasSel || savingScheduleAction || isCombinedScheduleView;
+            // Create Invoice already books every one of the tenant's units independently
+            // (SingleBookingModal loops its own unit contexts), and Cancel/Freeze/Delete now
+            // branch per-lease above — so these stay enabled in combined view. Only Edit
+            // (a single row's own From/To/Rent) has no coherent meaning across several
+            // merged leases, so it alone stays combined-view-disabled, just below.
+            const off = !hasSel || savingScheduleAction;
             return (
               <div className="flex items-center gap-1.5 overflow-x-auto border-b border-slate-100 px-2 py-1">
                 {/* Filters */}
@@ -2074,6 +2146,23 @@ const TenantStatement = () => {
                         type="button"
                         onClick={async () => {
                           const selectedRows = selectedSchedules.map((key) => billingScheduleByKey.get(key)).filter(Boolean);
+
+                          if (isCombinedScheduleView) {
+                            const selectedPeriods = new Set(selectedRows.map((row) => `${row.periodYear}-${row.periodMonth}`));
+                            const ok = await persistScheduleAdjustmentsForAllLeases(selectedPeriods, (existing, row) => ({
+                              ...existing,
+                              fromDate: row.fromRaw,
+                              toDate: row.toRaw,
+                              rentAmount: Number(row.rent || 0),
+                              utilityAmount: Number(row.utility || 0),
+                              utilityNames: row.utilityNames || [],
+                              status: allFrozen ? "active" : "frozen",
+                              updatedAt: new Date().toISOString(),
+                            }), allFrozen ? "Schedule(s) activated successfully." : "Schedule(s) frozen successfully.");
+                            if (ok) { setShowFreezeScheduleModal(false); setSelectedSchedules([]); }
+                            return;
+                          }
+
                           const bookedRows = selectedRows.filter((row) => row.booked === "Yes");
                           const rowsToChange = selectedRows.filter((row) => row.booked !== "Yes");
                           const activating = rowsToChange.length > 0 && rowsToChange.every((row) => row.frozen === "Yes");
@@ -2149,6 +2238,18 @@ const TenantStatement = () => {
                       <button
                         onClick={async () => {
                           const selectedRows = selectedSchedules.map((key) => billingScheduleByKey.get(key)).filter(Boolean);
+
+                          if (isCombinedScheduleView) {
+                            const selectedPeriods = new Set(selectedRows.map((row) => `${row.periodYear}-${row.periodMonth}`));
+                            const ok = await persistScheduleAdjustmentsForAllLeases(selectedPeriods, (existing) => ({
+                              ...existing,
+                              status: "deleted",
+                              updatedAt: new Date().toISOString(),
+                            }), "Schedule(s) deleted successfully.");
+                            if (ok) { setShowDeleteScheduleModal(false); setSelectedSchedules([]); }
+                            return;
+                          }
+
                           const bookedRows = selectedRows.filter((row) => row.booked === "Yes");
                           const rowsToDelete = selectedRows.filter((row) => row.booked !== "Yes");
 
@@ -2295,8 +2396,7 @@ const TenantStatement = () => {
                       selectedSchedules.length === filteredBillingScheduleData.length && filteredBillingScheduleData.length > 0
                     }
                     onChange={handleSelectAll}
-                    disabled={isCombinedScheduleView}
-                    className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                    className="cursor-pointer"
                   />
                 </th>
                 <th className="px-2.5 py-1.5 text-left font-semibold">From</th>
@@ -2329,16 +2429,15 @@ const TenantStatement = () => {
                     key={`${row.from}-${row.description}`}
                     className={`${
                       isSelected ? "bg-blue-50" : index % 2 === 0 ? "bg-white" : "bg-slate-50"
-                    } border-b border-slate-200 hover:bg-emerald-50/40 ${isCombinedScheduleView ? "" : "cursor-pointer"}`}
-                    onClick={() => !isCombinedScheduleView && handleSelectSchedule(row.periodKey)}
+                    } border-b border-slate-200 hover:bg-emerald-50/40 cursor-pointer`}
+                    onClick={() => handleSelectSchedule(row.periodKey)}
                   >
                     <td className="px-2.5 py-1.5 text-center" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => handleSelectSchedule(row.periodKey)}
-                        disabled={isCombinedScheduleView}
-                        className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                        className="cursor-pointer"
                       />
                     </td>
                     <td className="px-2.5 py-1 text-slate-800">{row.from}</td>
