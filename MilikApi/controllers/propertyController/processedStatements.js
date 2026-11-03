@@ -1271,7 +1271,18 @@ export const getStatementsByBusiness = async (req, res, next) => {
       // payment). Previously had no tab at all: not unpaid/part_paid, not negative, not
       // literally "paid" — making it permanently unreachable in this list, including its
       // Reverse action, which only renders for rows this query returns.
+      //
+      // isNegativeStatement exclusion added: a NEGATIVE statement is ALSO born with
+      // status "processed" (closeStatement sets status from netAmountDue, and
+      // normalizeProcessedStatementSnapshot forces netAmountDue to 0 for every negative
+      // statement — so this is the one status value every negative statement starts with,
+      // and recordRecoveryFromLandlord never changes .status afterwards either, so it
+      // STAYS "processed" even once fully recovered). Without this exclusion, every
+      // negative statement — both still-owed and already-recovered — showed up here too,
+      // duplicating the Recoveries tab's own rows under a tab whose whole point was meant
+      // to be "nothing was ever owed, in either direction".
       query.status = "processed";
+      query.isNegativeStatement = { $ne: true };
     } else if (tab === "management_fees") {
       query.commissionGrossAmount = { $gt: 0 };
       query.status = { $ne: "reversed" };

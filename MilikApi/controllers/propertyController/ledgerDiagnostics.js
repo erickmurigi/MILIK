@@ -444,11 +444,21 @@ export const runIntegrityReport = async (req, res, next) => {
     if (!businessId) return next(createError(400, "Business context required"));
 
     const bizId = new mongoose.Types.ObjectId(String(businessId));
-    // ACTIVE_STATUSES: used for totals and account-orphan checks (approved entries only)
+    // ACTIVE_STATUSES: used for the account-orphan check only (which accounts live entries
+    // currently reference). Never use this for a debit/credit BALANCE total — a "reversed"
+    // original entry's debit and its REVERSAL counterpart's credit are two halves of the same
+    // no-op; counting the "approved" reversal while excluding the "reversed" original (what this
+    // used to do for the overall GL total below) only happens to net to zero when a transaction has
+    // exactly one layer of reversal. A transaction corrected more than once (reversed, then its
+    // replacement itself corrected again — postCorrection's own output, for instance) breaks that
+    // coincidence and reports a GL imbalance that was never actually there: a real production
+    // instance of this flagged a whole company "critical" with a false KES 5,727 imbalance, while
+    // the per-group check below (which already used REPORT_STATUSES) correctly found nothing wrong.
     const ACTIVE_STATUSES = ["approved"];
     // REPORT_STATUSES: matches the trial balance — both "approved" and "reversed" entries
     // are included so that a properly reversed journal group (original "reversed" + REVERSAL
-    // "approved" pairs) shows as balanced, consistent with what the trial balance shows.
+    // "approved" pairs) shows as balanced, consistent with what the trial balance shows. Used for
+    // the overall GL total too now, for the same reason.
     const REPORT_STATUSES = ["approved", "reversed"];
 
     // Legacy entries stored amount+direction instead of explicit debit/credit fields.
@@ -477,9 +487,10 @@ export const runIntegrityReport = async (req, res, next) => {
       accountBalances,
       accountTypeMap,
       journalsWithNoLedger,
+      ungroupedEntries,
     ] = await Promise.all([
       FinancialLedgerEntry.aggregate([
-        { $match: { business: bizId, status: { $in: ACTIVE_STATUSES } } },
+        { $match: { business: bizId, status: { $in: REPORT_STATUSES } } },
         {
           $group: {
             _id: null,
@@ -526,13 +537,30 @@ export const runIntegrityReport = async (req, res, next) => {
         { $addFields: { netBalance: { $subtract: ["$netDebit", "$netCredit"] } } },
       ]).allowDiskUse(true),
       ChartOfAccount.find(
-        { business: bizId, isActive: true },
+        // Memo-only accounts (e.g. 2199 — see confirmNonCashDirectToLandlordReceipt in
+        // rentPayment.js) are expected to carry a permanent, one-directional balance by design;
+        // excluded here so typeIndex below never contains them, which makes the abnormalBalances
+        // filter (which only flags accounts it can find in typeIndex) skip them automatically.
+        { business: bizId, isActive: true, subGroup: { $ne: "Memo Accounts" } },
         { _id: 1, code: 1, name: 1, type: 1 }
       ).lean(),
       JournalEntry.find(
         { business: bizId, status: "posted", ledgerEntries: { $size: 0 } },
         { journalNo: 1, date: 1 }
       ).lean(),
+      // Specifically "corrected entry" postings (postCorrection's output — tagged with
+      // metadata.correctionOf) that have no journalGroupId: invisible to the per-group balance
+      // check above (which requires journalGroupId: { $ne: null }) — exactly the bug postCorrection
+      // itself was fixed for this session (it used to leave this unset whenever its caller didn't
+      // supply one, e.g. the chart-of-accounts "reclassify" endpoint never has). Deliberately NOT a
+      // check for every ungrouped entry system-wide — whole modules (carwash, petty cash, the demo
+      // workspace's opening-balance migration) post cleanly paired entries without ever using
+      // journalGroupId at all, by design; flagging all of those here would be permanent, massive,
+      // unactionable noise (one company alone has 27,000+) rather than a signal of anything wrong.
+      FinancialLedgerEntry.find(
+        { business: bizId, status: { $in: REPORT_STATUSES }, journalGroupId: null, "metadata.correctionOf": { $exists: true } },
+        { sourceTransactionType: 1, sourceTransactionId: 1, debit: 1, credit: 1, amount: 1, direction: 1, transactionDate: 1 }
+      ).limit(50).lean(),
     ]);
 
     const totalDebit = Number(totals?.totalDebit || 0);
@@ -606,6 +634,11 @@ export const runIntegrityReport = async (req, res, next) => {
     if (inactiveAccountEntries > 0) issues.push({ severity: "warning",  issue: `${inactiveAccountEntries} entry/entries posted to inactive accounts` });
     if (abnormalBalances.length)   issues.push({ severity: "warning",  issue: `${abnormalBalances.length} account(s) have abnormal balance signs` });
     if (journalsWithNoLedger.length) issues.push({ severity: "warning", issue: `${journalsWithNoLedger.length} posted journal(s) have no ledger entries` });
+    // Dollar-neutral on its own (never double-counted — these entries are already in the totals
+    // above), but invisible to the per-group balance check, so it's worth surfacing rather than
+    // silently relying on no caller ever forgetting a journalGroupId again. Scoped to correction
+    // entries specifically (metadata.correctionOf) — see the query above for why.
+    if (ungroupedEntries.length)   issues.push({ severity: "warning", issue: `${ungroupedEntries.length} correction entry/entries posted without a journal group — can't be checked for a balanced pair` });
 
     const overallStatus = issues.some((i) => i.severity === "critical") ? "critical" : issues.length ? "warnings" : "clean";
     const runAt = new Date();
@@ -635,6 +668,14 @@ export const runIntegrityReport = async (req, res, next) => {
         inactiveAccountEntries,
         abnormalBalances,
         journalsWithNoLedger: journalsWithNoLedger.map((j) => ({ id: j._id, journalNo: j.journalNo, date: j.date })),
+        ungroupedEntries: ungroupedEntries.map((e) => ({
+          id: e._id,
+          sourceType: e.sourceTransactionType,
+          sourceId: e.sourceTransactionId,
+          debit: e.debit,
+          credit: e.credit,
+          date: e.transactionDate,
+        })),
       },
     });
   } catch (err) {

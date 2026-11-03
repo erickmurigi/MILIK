@@ -24,6 +24,7 @@ import {
   resolveLandlordRemittancePayableAccount,
   resolvePropertyAccountingContext,
   resolveTenantDepositPayableAccount,
+  resolveDirectToLandlordReceiptsMemoAccount,
 } from "../../services/propertyAccountingService.js";
 import {
   postPropertyLedgerEntry,
@@ -1601,65 +1602,127 @@ const confirmNonCashDirectToLandlordReceipt = async (payment, actorId) => {
   const isDepositApplied = String(payment.paymentMethod || "").trim() === "deposit_applied";
   const settlementAmount = isDepositApplied ? amount : depositLandlordGroupTotal;
 
-  let balancingLeg = null;
-  if (settlementAmount > 0) {
+  // Everything credited above that ISN'T covered by the 2110 settlement is a genuine non-cash
+  // direct receipt (see the comment above for why it can't debit 2110 either). It still needs a
+  // debit leg to keep THIS journal group's own debit=credit balance intact — a real production
+  // bug left 37 such groups one-sided for KES 314,000 in a single morning before this was caught —
+  // so it lands on a dedicated memo/clearing account (2199) that exists only to carry this running
+  // total. Never rolled into the Balance Sheet or the Landlord Remittance Payable balance, and
+  // excluded from the abnormal-balance integrity check: a permanent debit balance there is
+  // expected by design, not an error.
+  const totalCreditedAmount = postingGroups.reduce((sum, g) => sum + Number(g.total || 0), 0);
+  const memoAmount = round2(Math.max(0, totalCreditedAmount - settlementAmount));
+
+  const postedBalancingLegs = [];
+  if (settlementAmount > 0 || memoAmount > 0) {
     try {
-      balancingLeg = await postEntry({
-        business: payment.business,
-        property: propertyId,
-        landlord: landlordId,
-        tenant: payment.tenant || null,
-        unit: payment.unit || null,
-        sourceTransactionType: "rent_payment",
-        sourceTransactionId: String(payment._id),
-        transactionDate: txDate,
-        statementPeriodStart: start,
-        statementPeriodEnd: end,
-        category: "ADJUSTMENT",
-        amount: settlementAmount,
-        direction: "debit",
-        debit: settlementAmount,
-        credit: 0,
-        accountId: remittanceAccount._id,
-        journalGroupId,
-        payer: "tenant",
-        receiver,
-        notes: (() => {
-          const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
-          const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
-          const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
-          return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
-        })(),
-        metadata: {
-          includeInLandlordStatement: false,
-          includeInCategoryTotals: false,
-          postingRole: "landlord_settlement",
-          paymentType: getPrimaryPaymentTypeFromAllocations(payment),
-          paymentMethod: payment.paymentMethod,
-          cashbook: null,
-          paidDirectToLandlord: true,
-          ledgerType: "receipts",
-          receiptNumber: payment.receiptNumber || null,
-          referenceNumber: payment.referenceNumber || null,
-          allocationSummary: payment.allocationSummary || {},
-          offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
-        },
-        createdBy: actorId,
-        approvedBy: actorId,
-        approvedAt: new Date(),
-        status: "approved",
-      });
+      if (settlementAmount > 0) {
+        postedBalancingLegs.push(await postEntry({
+          business: payment.business,
+          property: propertyId,
+          landlord: landlordId,
+          tenant: payment.tenant || null,
+          unit: payment.unit || null,
+          sourceTransactionType: "rent_payment",
+          sourceTransactionId: String(payment._id),
+          transactionDate: txDate,
+          statementPeriodStart: start,
+          statementPeriodEnd: end,
+          category: "ADJUSTMENT",
+          amount: settlementAmount,
+          direction: "debit",
+          debit: settlementAmount,
+          credit: 0,
+          accountId: remittanceAccount._id,
+          journalGroupId,
+          payer: "tenant",
+          receiver,
+          notes: (() => {
+            const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+            const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
+            const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+            return `${modeLabel} – Landlord Settlement – ${num}${_ref}`;
+          })(),
+          metadata: {
+            includeInLandlordStatement: false,
+            includeInCategoryTotals: false,
+            postingRole: "landlord_settlement",
+            paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+            paymentMethod: payment.paymentMethod,
+            cashbook: null,
+            paidDirectToLandlord: true,
+            ledgerType: "receipts",
+            receiptNumber: payment.receiptNumber || null,
+            referenceNumber: payment.referenceNumber || null,
+            allocationSummary: payment.allocationSummary || {},
+            offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
+          },
+          createdBy: actorId,
+          approvedBy: actorId,
+          approvedAt: new Date(),
+          status: "approved",
+        }));
+      }
+
+      if (memoAmount > 0) {
+        const memoAccount = await resolveDirectToLandlordReceiptsMemoAccount(payment.business);
+        postedBalancingLegs.push(await postEntry({
+          business: payment.business,
+          property: propertyId,
+          landlord: landlordId,
+          tenant: payment.tenant || null,
+          unit: payment.unit || null,
+          sourceTransactionType: "rent_payment",
+          sourceTransactionId: String(payment._id),
+          transactionDate: txDate,
+          statementPeriodStart: start,
+          statementPeriodEnd: end,
+          category: "ADJUSTMENT",
+          amount: memoAmount,
+          direction: "debit",
+          debit: memoAmount,
+          credit: 0,
+          accountId: memoAccount._id,
+          journalGroupId,
+          payer: "tenant",
+          receiver,
+          notes: (() => {
+            const modeLabel = payment?.metadata?.autoReceiptSource === "mpesa_c2b" ? "M-Pesa Auto" : "Manual";
+            const num = payment.receiptNumber || payment.referenceNumber || String(payment._id).slice(-6);
+            const _ref = payment.referenceNumber ? ` [${payment.referenceNumber}]` : "";
+            return `${modeLabel} – Direct-to-Landlord Memo – ${num}${_ref}`;
+          })(),
+          metadata: {
+            includeInLandlordStatement: false,
+            includeInCategoryTotals: false,
+            postingRole: "direct_to_landlord_memo",
+            paymentType: getPrimaryPaymentTypeFromAllocations(payment),
+            paymentMethod: payment.paymentMethod,
+            cashbook: null,
+            paidDirectToLandlord: true,
+            ledgerType: "receipts",
+            receiptNumber: payment.receiptNumber || null,
+            referenceNumber: payment.referenceNumber || null,
+            allocationSummary: payment.allocationSummary || {},
+            offsetOfEntryIds: creditLegEntries.map((entry) => String(entry._id)),
+          },
+          createdBy: actorId,
+          approvedBy: actorId,
+          approvedAt: new Date(),
+          status: "approved",
+        }));
+      }
     } catch (debitError) {
       await rollbackPostedAllocationReleaseEntries({
-        entryIds: creditLegEntries.map((entry) => entry?._id).filter(Boolean),
+        entryIds: [...creditLegEntries, ...postedBalancingLegs].map((entry) => entry?._id).filter(Boolean),
         actorId,
-        reason: `Auto-reversal: remittance debit failed for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
+        reason: `Auto-reversal: remittance/memo debit failed for receipt ${payment.receiptNumber || payment.referenceNumber || payment._id}`,
       });
       throw debitError;
     }
   }
 
-  const allEntries = balancingLeg ? [...creditLegEntries, balancingLeg] : creditLegEntries;
+  const allEntries = [...creditLegEntries, ...postedBalancingLegs];
   payment.journalGroupId = journalGroupId;
   payment.ledgerEntries = allEntries.map((entry) => entry._id);
   payment.postingStatus = "posted";

@@ -18,6 +18,27 @@ const normalizeDate = (value, fallback = new Date()) => {
   return Number.isNaN(date.getTime()) ? new Date(fallback) : date;
 };
 
+// dimensions.{saleProject,saleDeal,saleListing,costCentre} are ObjectId-typed, default null — but a
+// caller passing "" instead of omitting the field (e.g. a cleared-but-not-nulled form field) gets
+// stored as the literal string "" with no error, since document CONSTRUCTION doesn't cast-validate
+// eagerly. That silently poisons the entry: any LATER save of the same shape — a reversal copying
+// `dimensions` straight off the original, exactly what postReversal does — fails validation with a
+// Cast-to-ObjectId error. Sanitizing here, at the single chokepoint every entry (original or
+// reversal) is posted through, stops this invalid shape from ever being persisted again.
+const OBJECT_ID_DIMENSION_FIELDS = ["saleProject", "saleDeal", "saleListing", "costCentre"];
+const sanitizeDimensions = (dimensions) => {
+  if (!dimensions || typeof dimensions !== "object") return dimensions;
+  const sanitized = { ...dimensions };
+  for (const field of OBJECT_ID_DIMENSION_FIELDS) {
+    const value = sanitized[field];
+    if (value == null) continue; // already null/undefined — leave as-is
+    if (value === "" || !mongoose.Types.ObjectId.isValid(String(value))) {
+      sanitized[field] = null;
+    }
+  }
+  return sanitized;
+};
+
 const validatePayload = (payload) => {
   const requiredFields = [
     "business",
@@ -149,6 +170,7 @@ export const postEntry = async (payload = {}) => {
 
   const entry = new FinancialLedgerEntry({
     ...resolvedPayload,
+    dimensions: sanitizeDimensions(resolvedPayload.dimensions),
     transactionDate: normalizeDate(resolvedPayload.transactionDate),
     statementPeriodStart: normalizeDate(resolvedPayload.statementPeriodStart),
     statementPeriodEnd: normalizeDate(resolvedPayload.statementPeriodEnd),
@@ -186,14 +208,33 @@ export const postReversal = async ({ entryId, reason, userId, session = null }) 
     throw createError(400, "postReversal requires entryId");
   }
 
-  const originalEntry = await FinancialLedgerEntry.findById(entryId).session(session || null);
-  if (!originalEntry) {
-    throw createError(404, "Ledger entry not found");
-  }
+  // Atomically claim the entry for reversal BEFORE reading anything else — flips
+  // status approved -> reversed in one update, conditioned on it still being "approved". Two
+  // concurrent calls to postReversal for the SAME entry (e.g. two overlapping delete-invoice
+  // requests racing — a real production incident: a double-click or a re-run script landed two
+  // overlapping deleteTenantInvoice calls on the same invoice, and the old read-then-check-then-write
+  // version let both calls see "not yet reversed" before either had written, so both posted a
+  // reversal — one original leg ended up reversed twice, the other once, breaking the GL balance)
+  // can no longer both succeed: only the call whose updateOne actually matches a document gets to
+  // proceed, the other sees matchedCount 0 and is correctly told the entry is already reversed.
+  const claimResult = await FinancialLedgerEntry.collection.updateOne(
+    { _id: new mongoose.Types.ObjectId(String(entryId)), status: "approved", reversedByEntry: null },
+    { $set: { status: "reversed" } },
+    session ? { session } : undefined
+  );
 
-  if (originalEntry.reversedByEntry || originalEntry.status === "reversed") {
+  if (claimResult.matchedCount === 0) {
+    const exists = await FinancialLedgerEntry.findById(entryId).session(session || null).lean();
+    if (!exists) throw createError(404, "Ledger entry not found");
     throw createError(400, "Ledger entry already reversed");
   }
+
+  // .lean() deliberately — hydrating a full Mongoose document re-casts every path, including
+  // dimensions.*, and throws on any pre-existing entry that already has an invalid value there
+  // (e.g. dimensions.costCentre stored as "" instead of null). A reversal must still be postable
+  // for an entry whose dimensions are already corrupted; sanitizing happens below before reposting.
+  // Status here already reads "reversed" — that's this call's own claim above, not a race.
+  const originalEntry = await FinancialLedgerEntry.findById(entryId).session(session || null).lean();
 
   // Guarantee the original has a journalGroupId before reversing.
   // If it was posted without one (pre-fix entries), create a shared group now so
@@ -207,47 +248,80 @@ export const postReversal = async ({ entryId, reason, userId, session = null }) 
   const reversalPeriodStart = new Date(reversalDate.getFullYear(), reversalDate.getMonth(), 1, 0, 0, 0, 0);
   const reversalPeriodEnd   = new Date(reversalDate.getFullYear(), reversalDate.getMonth() + 1, 0, 23, 59, 59, 999);
 
-  const reversalEntry = await postEntry({
-    session,
-    allowInactiveAccount:  true,
-    business:              originalEntry.business,
-    dimensions:            originalEntry.toObject().dimensions,
-    property:              originalEntry.property,
-    landlord:              originalEntry.landlord,
-    tenant:                originalEntry.tenant,
-    unit:                  originalEntry.unit,
-    sourceTransactionType: originalEntry.sourceTransactionType,
-    sourceTransactionId:   originalEntry.sourceTransactionId,
-    transactionDate:       reversalDate,
-    statementPeriodStart:  reversalPeriodStart,
-    statementPeriodEnd:    reversalPeriodEnd,
-    category:              "REVERSAL",
-    accountId:             originalEntry.accountId || null,
-    journalGroupId:        groupId,
-    amount:                originalEntry.amount,
-    direction:             flipDirection(originalEntry.direction),
-    payer:                 originalEntry.receiver || "n/a",
-    receiver:              originalEntry.payer   || "n/a",
-    notes:                 reason || `Reversal of ledger entry ${originalEntry._id}`,
-    reversalOf:            originalEntry._id,
-    metadata: {
-      reversalReason:          reason || "Correction",
-      reversedEntryCategory:   originalEntry.category,
-      reversedEntryId:         String(originalEntry._id),
-      originalAccountId:       String(originalEntry.accountId   || ""),
-      originalJournalGroupId:  String(originalEntry.journalGroupId || ""),
-      originalMetadata:        originalEntry.metadata || {},
-    },
-    createdBy:  userId,
-    approvedBy: userId,
-    approvedAt: new Date(),
-    status:     "approved",
-  });
+  let reversalEntry;
+  try {
+    reversalEntry = await postEntry({
+      session,
+      allowInactiveAccount:  true,
+      business:              originalEntry.business,
+      dimensions:            originalEntry.dimensions,
+      property:              originalEntry.property,
+      landlord:              originalEntry.landlord,
+      tenant:                originalEntry.tenant,
+      unit:                  originalEntry.unit,
+      sourceTransactionType: originalEntry.sourceTransactionType,
+      sourceTransactionId:   originalEntry.sourceTransactionId,
+      transactionDate:       reversalDate,
+      statementPeriodStart:  reversalPeriodStart,
+      statementPeriodEnd:    reversalPeriodEnd,
+      category:              "REVERSAL",
+      accountId:             originalEntry.accountId || null,
+      journalGroupId:        groupId,
+      amount:                originalEntry.amount,
+      direction:             flipDirection(originalEntry.direction),
+      payer:                 originalEntry.receiver || "n/a",
+      receiver:              originalEntry.payer   || "n/a",
+      notes:                 reason || `Reversal of ledger entry ${originalEntry._id}`,
+      reversalOf:            originalEntry._id,
+      metadata: {
+        reversalReason:          reason || "Correction",
+        reversedEntryCategory:   originalEntry.category,
+        reversedEntryId:         String(originalEntry._id),
+        originalAccountId:       String(originalEntry.accountId   || ""),
+        originalJournalGroupId:  String(originalEntry.journalGroupId || ""),
+        originalMetadata:        originalEntry.metadata || {},
+      },
+      createdBy:  userId,
+      approvedBy: userId,
+      approvedAt: new Date(),
+      status:     "approved",
+    });
+  } catch (postError) {
+    // The claim above already flipped status to "reversed" — if the reversal entry itself never
+    // gets created, that leaves the original stuck "reversed" with nothing actually reversing it.
+    // Un-claim it so it's postable again instead of silently disappearing from the GL.
+    await FinancialLedgerEntry.collection.updateOne(
+      { _id: originalEntry._id, status: "reversed", reversedByEntry: null },
+      { $set: { status: "approved" } },
+      session ? { session } : undefined
+    );
+    throw postError;
+  }
 
   originalEntry.status           = "reversed";
   originalEntry.reversedByEntry  = reversalEntry._id;
   if (!originalEntry.journalGroupId) originalEntry.journalGroupId = groupId;
-  await originalEntry.save(session ? { session } : undefined);
+
+  // FinancialLedgerEntry blocks every Mongoose query-style update (pre("updateOne")/
+  // pre("findOneAndUpdate") below in the model — "use reversal entries instead"), and the original
+  // code's own `.save()` only got away with mutating these three link fields because a full
+  // document re-hydrate+save isn't a Query at all. That re-hydration is exactly what throws on an
+  // already-corrupted dimensions.* value (see the .lean() read above), so update through the raw
+  // driver collection instead — it bypasses Mongoose entirely, immutability guard included, which
+  // is fine here: this is the one sanctioned internal mutation (linking a reversal), not a rewrite
+  // of the entry's financial meaning. status is already "reversed" from the atomic claim above —
+  // this just links reversedByEntry/journalGroupId, it isn't what makes the reversal exclusive.
+  await FinancialLedgerEntry.collection.updateOne(
+    { _id: originalEntry._id },
+    {
+      $set: {
+        status: originalEntry.status,
+        reversedByEntry: originalEntry.reversedByEntry,
+        journalGroupId: originalEntry.journalGroupId,
+      },
+    },
+    session ? { session } : undefined
+  );
 
   return { originalEntry, reversalEntry };
 };
@@ -278,6 +352,16 @@ export const postCorrection = async ({ entryId, correctedPayload, reason, userId
     statementPeriodEnd: correctedPayload.statementPeriodEnd || originalEntry.statementPeriodEnd,
     payer: correctedPayload.payer || originalEntry.payer,
     receiver: correctedPayload.receiver || originalEntry.receiver,
+    // Defaults to the SAME group the reversal above was just posted into — a caller that doesn't
+    // supply its own journalGroupId (the chart-of-accounts "reclassify" endpoint never has — it only
+    // ever passes entryId/reason/correctedPayload) used to leave the corrected entry with no group
+    // at all. That's not just cosmetic: the GL integrity report's per-group balance check only
+    // looks at entries that HAVE a journalGroupId, so a correction's other leg silently fell outside
+    // every balance check — invisible to both the per-group check (wrong journalGroupId) and,
+    // combined with a separate bug in the report's overall-total query, miscounted there too. A real
+    // production instance of exactly this (a landlord-advancement bank-account reclassification)
+    // was found this way and is what prompted this fix.
+    journalGroupId: correctedPayload.journalGroupId || reversalEntry.journalGroupId,
     notes: correctedPayload.notes || `Correction repost after reversal of ${originalEntry._id}`,
     metadata: {
       ...(originalEntry.metadata || {}),

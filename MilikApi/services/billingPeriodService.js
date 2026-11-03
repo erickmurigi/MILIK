@@ -51,6 +51,68 @@ export const buildSchedulePeriodKey = ({ startDate, billingPeriodKey = "monthly"
   return `${canonicalizeBillingPeriodKey(billingPeriodKey)}:${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
 };
 
+const addMonthsPreservingDayUTC = (date, months = 1) => {
+  const day = date.getUTCDate();
+  const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + Number(months || 0), 1));
+  const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
+  next.setUTCDate(Math.min(day, lastDay));
+  return next;
+};
+
+// The one correct way to find "this calendar month's occurrence" of a lease's recurring billing
+// schedule. Using the lease's raw startDate directly as the period anchor (what this codebase used
+// to do everywhere) only happens to be right for a lease's very first billing month — every month
+// after that needs the schedule walked forward from the anchor, preserving day-of-month the same
+// way the booking UI already does client-side (invoiceBookingUtils.js's addMonthsPreservingDay /
+// resolveTenantBookingPeriod). Two code paths computing periodKey two different ways for the same
+// tenant/unit/calendar month is exactly how a cron-generated invoice and a manually-booked invoice
+// for the same month ended up with different periodKey strings, silently defeating the
+// duplicate-invoice guard that's supposed to compare them (a real production incident — see
+// controllers/propertyController/tenantInvoices.test.js for the regression test).
+const MAX_SCHEDULE_ITERATIONS = 2400; // ~200 years of monthly periods — a safety bound, not a real limit
+
+export const resolveOccurrencePeriodStart = ({
+  leaseStartDate,
+  billingPeriodKey = "monthly",
+  durationInMonths = 1,
+  targetYear,
+  targetMonth,
+} = {}) => {
+  const anchor = new Date(leaseStartDate);
+  if (Number.isNaN(anchor.getTime()) || !Number.isFinite(targetYear) || !Number.isFinite(targetMonth)) return null;
+  const months = Math.max(1, Math.trunc(Number(durationInMonths) || 1));
+
+  let current = new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate()));
+  for (let i = 0; i < MAX_SCHEDULE_ITERATIONS; i++) {
+    if (current.getUTCFullYear() === targetYear && current.getUTCMonth() === targetMonth) {
+      return current;
+    }
+    const next = addMonthsPreservingDayUTC(current, months);
+    if (next.getTime() <= current.getTime()) break; // guard against a stuck loop
+    // Walked past the target without landing on it — an irregular (e.g. quarterly) schedule only
+    // lands on some months, never the target's, so there is no occurrence to return.
+    if (next.getUTCFullYear() > targetYear || (next.getUTCFullYear() === targetYear && next.getUTCMonth() > targetMonth)) {
+      return null;
+    }
+    current = next;
+  }
+  return null;
+};
+
+// Canonical idempotency key for a recurring tenant charge — the SAME format every caller (cron,
+// manual booking, batch booking) must use for the same tenant/unit/category/period, so the unique
+// {business, idempotencyKey} index on TenantInvoice (models/TenantInvoice.js) actually catches a
+// cross-path duplicate, not just two calls from the same path racing each other.
+export const buildRecurringChargeIdempotencyKey = ({ tenantId, unitId, category, utilityType = "", periodKey = "" } = {}) =>
+  [
+    "recurring_charge",
+    String(tenantId || ""),
+    String(unitId || ""),
+    String(category || "").toUpperCase(),
+    String(utilityType || "").trim().toLowerCase(),
+    String(periodKey || "").trim(),
+  ].join(":");
+
 export const buildBillingPeriodRecord = (input = {}, fallback = null) => {
   const fallbackDurationMonths = Number(fallback?.durationInMonths || 1);
   const durationInMonthsRaw = Number(input?.durationInMonths ?? fallback?.durationInMonths ?? 1);

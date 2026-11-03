@@ -5,7 +5,7 @@
 // controller (journal entries, payment vouchers, receipts, invoices) posts through.
 import { describe, it, expect } from "vitest";
 import mongoose from "mongoose";
-import { postEntry, postReversal } from "./ledgerPostingService.js";
+import { postEntry, postReversal, postCorrection } from "./ledgerPostingService.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import { createTestCompany, createTestChartOfAccounts } from "../test/factories.js";
 import { getAccountByCode } from "../test/factories.financial.js";
@@ -121,5 +121,163 @@ describe("ledgerPostingService", () => {
     await expect(
       postReversal({ entryId: original._id, reason: "double reversal", userId: null })
     ).rejects.toThrow(/already reversed/i);
+  });
+
+  // Regression test for a real production bug found while removing duplicate invoices live: 10
+  // entries had dimensions.costCentre stored as the literal string "" instead of null (an
+  // ObjectId-typed field) — valid at document CONSTRUCTION time since Mongoose doesn't cast-validate
+  // eagerly, but fatal the moment anything tries to save that same shape again, which is exactly
+  // what postReversal does (it copies `dimensions` straight off the original). Every
+  // deleteTenantInvoice call on one of these invoices failed with a Cast-to-ObjectId error and left
+  // the duplicate stuck. The fix sanitizes dimensions inside postEntry itself — the one chokepoint
+  // every entry (original or reversal) is posted through — so "" can never be persisted again, and
+  // a reversal of an already-corrupted entry no longer fails.
+  it("sanitizes an empty-string ObjectId dimension so it is never persisted, and so a reversal of an already-corrupted entry still succeeds", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const cash = await getAccountByCode(company._id, "1100");
+
+    const now = new Date();
+    const { start, end } = buildStatementPeriod(now);
+
+    // A fresh entry explicitly passing "" for an ObjectId dimension must come back sanitized to null.
+    const fresh = await postEntry({
+      business: company._id,
+      allowUnscoped: true,
+      accountId: cash._id,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId: "ledger-posting-test-3",
+      transactionDate: now,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount: 500,
+      direction: "debit",
+      payer: "manager",
+      receiver: "system",
+      notes: "Entry with a stray empty-string dimension",
+      dimensions: { costCentre: "" },
+    });
+    expect(fresh.dimensions?.costCentre ?? null).toBeNull();
+
+    // Simulate the real-world corrupted state directly (bypassing Mongoose validators, the same
+    // way the live bad data got there) — an entry already saved with costCentre: "".
+    await FinancialLedgerEntry.collection.updateOne(
+      { _id: fresh._id },
+      { $set: { "dimensions.costCentre": "" } }
+    );
+
+    const { reversalEntry } = await postReversal({
+      entryId: fresh._id,
+      reason: "Test reversal of a corrupted entry",
+      userId: null,
+    });
+    expect(reversalEntry.dimensions?.costCentre ?? null).toBeNull();
+  });
+
+  // Regression test for a real production bug found via the GL integrity report: GLR was out of
+  // balance by KES 77,000 across 13 journal groups, every one showing the SAME original debit leg
+  // reversed TWICE (two reversal credit entries) while its sibling credit leg was only reversed
+  // once. Root cause: postReversal read the original entry, checked "already reversed" in app
+  // code, and only wrote status:"reversed" back at the very end — two overlapping calls for the
+  // same entryId (two overlapping deleteTenantInvoice requests for the same invoice, e.g. a
+  // double-submitted removal script) could both read "not yet reversed" before either had written,
+  // so both posted a reversal. Fixed by claiming the entry atomically (a single conditional
+  // updateOne) before anything else runs, so only one concurrent caller can ever win.
+  it("never reverses the same entry twice when two callers race, even though both see it as not-yet-reversed", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const cash = await getAccountByCode(company._id, "1100");
+
+    const now = new Date();
+    const { start, end } = buildStatementPeriod(now);
+
+    const original = await postEntry({
+      business: company._id,
+      allowUnscoped: true,
+      accountId: cash._id,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId: "ledger-posting-test-race",
+      transactionDate: now,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount: 13000,
+      direction: "debit",
+      payer: "manager",
+      receiver: "system",
+      notes: "Entry two concurrent reversals will race against",
+    });
+
+    const results = await Promise.allSettled([
+      postReversal({ entryId: original._id, reason: "racer A", userId: null }),
+      postReversal({ entryId: original._id, reason: "racer B", userId: null }),
+    ]);
+
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
+    expect(results.find((r) => r.status === "rejected").reason.message).toMatch(/already reversed/i);
+
+    const allEntries = await FinancialLedgerEntry.find({
+      business: company._id, sourceTransactionType: "manual_adjustment", sourceTransactionId: "ledger-posting-test-race",
+    }).lean();
+    // Exactly 2: the original (now reversed) plus ONE reversal entry — not two.
+    expect(allEntries).toHaveLength(2);
+    const reversalRows = allEntries.filter((e) => e.category === "REVERSAL");
+    expect(reversalRows).toHaveLength(1);
+
+    const netDebit = allEntries.reduce((sum, e) => sum + Number(e.debit || 0), 0);
+    const netCredit = allEntries.reduce((sum, e) => sum + Number(e.credit || 0), 0);
+    expect(netDebit).toBe(netCredit);
+  });
+
+  // Regression test for a real production bug found via the GL integrity report: a landlord
+  // advancement's bank account was reclassified (chart-of-accounts "reclassify" endpoint, which
+  // calls postCorrection without ever passing its own journalGroupId), and the corrected entry
+  // came out with journalGroupId: null — invisible to the integrity report's per-group balance
+  // check, which only examines entries that have one. The money was never wrong, but the
+  // correction's own two legs (the reversal and its replacement) ended up split across two
+  // different "groups" (one real, one none) instead of staying together as a single journal.
+  it("posts the corrected entry into the SAME journal group as the reversal it follows", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const cash = await getAccountByCode(company._id, "1100");
+    const bank2 = await getAccountByCode(company._id, "4100");
+
+    const now = new Date();
+    const { start, end } = buildStatementPeriod(now);
+
+    const original = await postEntry({
+      business: company._id,
+      allowUnscoped: true,
+      accountId: cash._id,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId: "ledger-posting-test-correction",
+      transactionDate: now,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount: 20000,
+      direction: "credit",
+      payer: "manager",
+      receiver: "system",
+      notes: "Entry to be reclassified to a different account",
+    });
+
+    const { reversalEntry, correctedEntry } = await postCorrection({
+      entryId: original._id,
+      reason: "Reclassified to a different bank account",
+      userId: new mongoose.Types.ObjectId(),
+      correctedPayload: {
+        accountId: bank2._id,
+        category: original.category,
+        amount: original.amount,
+        direction: original.direction,
+        notes: "Reclassified",
+      },
+    });
+
+    expect(correctedEntry.journalGroupId).toBeTruthy();
+    expect(String(correctedEntry.journalGroupId)).toBe(String(reversalEntry.journalGroupId));
   });
 });

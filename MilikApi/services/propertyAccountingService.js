@@ -278,6 +278,27 @@ export const resolveLandlordRemittancePayableAccount = async (businessId) => {
   return fallback;
 };
 
+// Memo-only clearing account for a genuine non-cash "paid direct to landlord" receipt — see
+// confirmNonCashDirectToLandlordReceipt in rentPayment.js for why this can't be 2110.
+export const resolveDirectToLandlordReceiptsMemoAccount = async (businessId) => {
+  await ensureSystemChartOfAccounts(businessId);
+
+  const exact = await findSystemAccountByCode(businessId, "2199");
+  if (exact) return exact;
+
+  const fallback = await ChartOfAccount.findOne({
+    business: businessId,
+    type: "liability",
+    name: { $regex: "direct.to.landlord receipts", $options: "i" },
+  });
+
+  if (!fallback) {
+    throw new Error("Direct-to-Landlord Receipts (Memo) account was not found for this business.");
+  }
+
+  return fallback;
+};
+
 export const findPropertyControlAccount = async ({ businessId, propertyCode } = {}) => {
   if (!businessId || !propertyCode) return null;
 
@@ -293,6 +314,7 @@ export default {
   ensurePropertyControlAccount,
   resolveTenantDepositPayableAccount,
   resolveLandlordRemittancePayableAccount,
+  resolveDirectToLandlordReceiptsMemoAccount,
   findPropertyControlAccount,
 };
 export const getLandlordBalance = async (landlordId, businessId = null) => {

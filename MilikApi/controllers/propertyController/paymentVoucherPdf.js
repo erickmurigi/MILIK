@@ -15,6 +15,7 @@ const CATEGORY_LABELS = {
   landlord_maintenance: "Accounts Payable – Maintenance",
   deposit_refund: "Deposit Refund (Liability Release)",
   landlord_other: "Accounts Payable – Other",
+  landlord_remittance: "Landlord Statement Payment",
   manager_property: "Operating Expense (Property)",
   company_operational: "Operating Expense (Company)",
   petty_cash_float: "Petty Cash Float Top-up",

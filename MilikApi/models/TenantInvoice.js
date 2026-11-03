@@ -182,12 +182,16 @@ TenantInvoiceSchema.index({ business: 1, property: 1, landlord: 1, invoiceDate: 
 TenantInvoiceSchema.index({ business: 1, property: 1, landlord: 1, bookingDate: -1 });
 TenantInvoiceSchema.index({ business: 1, invoiceNumber: 1 }, { unique: true });
 
+// $ne/$not are NOT supported in a partial index filter expression — MongoDB rejects the index
+// build outright if used (confirmed via a real production bug: this index silently never existed,
+// so nothing ever actually enforced idempotencyKey uniqueness). $gt: "" is the supported way to
+// express "non-empty string" (the empty string sorts first among strings in BSON comparison).
 TenantInvoiceSchema.index(
   { business: 1, idempotencyKey: 1 },
   {
     unique: true,
     partialFilterExpression: {
-      idempotencyKey: { $exists: true, $type: "string", $ne: "" },
+      idempotencyKey: { $exists: true, $type: "string", $gt: "" },
     },
   }
 );

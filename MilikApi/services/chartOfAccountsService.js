@@ -13,6 +13,12 @@ const SYSTEM_CHART_TEMPLATE = [
 
   { code: "2100", name: "Tenant Deposit Payable", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2110", name: "Landlord Remittance Payable", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  // Memo-only: a genuine non-cash "paid direct to landlord" receipt clears the tenant's receivable
+  // with no real cash or payable movement on the company's own books (the landlord already has the
+  // money — see confirmNonCashDirectToLandlordReceipt). This account exists only so that journal
+  // group still balances in double-entry terms; its running debit balance is expected and permanent
+  // by design, not an error — excluded from the Balance Sheet and the abnormal-balance check.
+  { code: "2199", name: "Direct-to-Landlord Receipts (Memo)", type: "liability", group: "liabilities", subGroup: "Memo Accounts", isSystem: true, isHeader: false, isPosting: true },
   { code: "2120", name: "Accrued Expenses", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2130", name: "Unallocated Receipts", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
   { code: "2140", name: "Tax Payables", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },

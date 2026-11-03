@@ -444,6 +444,10 @@ export const getBalanceSheetReport = async (req, res, next) => {
         isPosting: { $ne: false },
         isHeader: { $ne: true },
         type: { $in: ["asset", "liability", "equity", "income", "expense"] },
+        // Memo-only accounts (e.g. 2199 — see confirmNonCashDirectToLandlordReceipt) exist purely
+        // to keep a journal group's own debit=credit balance intact; they carry no real economic
+        // position of the company's own and never belong on its Balance Sheet.
+        subGroup: { $ne: "Memo Accounts" },
       })
         .sort({ code: 1 })
         .lean(),

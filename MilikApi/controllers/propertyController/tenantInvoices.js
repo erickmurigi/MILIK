@@ -8,7 +8,13 @@ import TenantInvoiceNote, { TENANT_NOTE_TYPES } from "../../models/TenantInvoice
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
 import Lease from "../../models/Lease.js";
-import { buildSchedulePeriodKey } from "../../services/billingPeriodService.js";
+import {
+  buildSchedulePeriodKey,
+  resolveOccurrencePeriodStart,
+  buildRecurringChargeIdempotencyKey,
+  resolveBillingPeriodFromSettings,
+} from "../../services/billingPeriodService.js";
+import CompanySettings from "../../models/CompanySettings.js";
 import Property from "../../models/Property.js";
 import { matchTenantIds, matchUnitIds } from "../../utils/listSearch.js";
 import Company from "../../models/Company.js";
@@ -3560,7 +3566,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
 
   const normalizedCategory = String(category).toUpperCase();
   const normalizedMetadata = metadata && typeof metadata === "object" ? metadata : {};
-  const normalizedIdempotencyKey = String(idempotencyKey || "").trim();
+  let normalizedIdempotencyKey = String(idempotencyKey || "").trim();
 
   if (normalizedIdempotencyKey) {
     const existingInvoice = await findExistingInvoiceByIdempotencyKey(businessId, normalizedIdempotencyKey);
@@ -3715,16 +3721,30 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     req?.body?.account;
 
   const statementPeriod = buildStatementPeriod(normalizedInvoiceDate);
-  // The period key comes from the tenant's lease (its start date is the billing anchor), so every
-  // recurring charge for the same period carries the same key, whichever screen created it.
-  // Callers that already send a key (batch booking) keep theirs.
+  // The period key identifies WHICH occurrence of the lease's recurring schedule this charge is
+  // for (e.g. "monthly:2026-11-01" for November's rent) — not the lease's own identity. Using the
+  // lease's raw startDate as the anchor only gives the right answer for a lease's very first
+  // billing month; every month after that the schedule must be walked forward to the invoiced
+  // month via resolveOccurrencePeriodStart (same algorithm the booking UI already uses
+  // client-side), or this silently drifts — which is exactly how a cron-generated November
+  // invoice and a manually-booked November invoice for the same tenant ended up with two
+  // different periodKey strings, defeating the duplicate guard that compares them (the GLR
+  // double-booking incident). Callers that already send a key (e.g. the booking UI) keep theirs.
   if (
     !normalizeSchedulePeriodKey(normalizedMetadata?.periodKey) &&
     ["RENT_CHARGE", "UTILITY_CHARGE", "DEPOSIT_CHARGE"].includes(normalizedCategory)
   ) {
+    // invoiceMonth is read with LOCAL getters, not UTC — for RENT_CHARGE/UTILITY_CHARGE,
+    // normalizedInvoiceDate was just built by getMonthStart() above the call chain (see
+    // resolveRecurringBillingDates), which constructs a LOCAL-midnight Date. On a positive-UTC-
+    // offset server (this company runs on Africa/Nairobi, UTC+3) that local midnight's UTC
+    // representation falls on the PREVIOUS calendar day, so reading it back with UTC getters
+    // silently resolves to the wrong month — the frontend's own period math (invoiceBookingUtils.js
+    // addMonthsPreservingDay) is entirely local-calendar-based too, so staying in local time here is
+    // what keeps this in agreement with it.
     const invoiceMonth = new Date(normalizedInvoiceDate);
-    const periodStart = new Date(Date.UTC(invoiceMonth.getUTCFullYear(), invoiceMonth.getUTCMonth(), 1));
-    const periodEnd = new Date(Date.UTC(invoiceMonth.getUTCFullYear(), invoiceMonth.getUTCMonth() + 1, 0, 23, 59, 59, 999));
+    const periodStart = new Date(invoiceMonth.getFullYear(), invoiceMonth.getMonth(), 1);
+    const periodEnd = new Date(invoiceMonth.getFullYear(), invoiceMonth.getMonth() + 1, 0, 23, 59, 59, 999);
     const lease = await Lease.findOne({
       business: businessId,
       tenant,
@@ -3739,14 +3759,45 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
 
     if (lease?.startDate) {
       normalizedMetadata.billingPeriodKey = canonicalizeBillingPeriodKey(lease.billingPeriodKey || "monthly");
-      normalizedMetadata.periodKey = buildSchedulePeriodKey({
-        startDate: lease.startDate,
+      const companySettings = await CompanySettings.findOne({ company: businessId }).select("billingPeriods").lean();
+      const billingPeriodRecord = resolveBillingPeriodFromSettings(companySettings, normalizedMetadata.billingPeriodKey);
+      const occurrenceStart = resolveOccurrencePeriodStart({
+        leaseStartDate: lease.startDate,
         billingPeriodKey: normalizedMetadata.billingPeriodKey,
+        durationInMonths: billingPeriodRecord?.durationInMonths || 1,
+        targetYear: invoiceMonth.getFullYear(),
+        targetMonth: invoiceMonth.getMonth(),
       });
+      if (occurrenceStart) {
+        normalizedMetadata.periodKey = buildSchedulePeriodKey({
+          startDate: occurrenceStart,
+          billingPeriodKey: normalizedMetadata.billingPeriodKey,
+        });
+      }
     }
   }
 
   const schedulePeriodKey = normalizeSchedulePeriodKey(normalizedMetadata?.periodKey);
+
+  // The findConflictingMonthlyInvoice check below is a read-then-write guard with no database
+  // backing — under concurrency (two batch-booking runs overlapping, or duplicate items within the
+  // same batch racing against a per-batch query cache) both calls can see "no conflict" before
+  // either has saved, and both succeed. Deriving a real idempotencyKey here — in the SAME canonical
+  // format the cron-triggered auto-invoicing job now also uses (see autoRentInvoicingService.js) —
+  // makes the unique {business, idempotencyKey} index (see models/TenantInvoice.js) the
+  // authoritative backstop across every caller, cron included: a genuine race, or a manual booking
+  // for a period cron already invoiced, now fails at the database with a duplicate-key error
+  // instead of creating a second invoice for the same tenant/unit/period.
+  if (!normalizedIdempotencyKey && schedulePeriodKey && ["RENT_CHARGE", "UTILITY_CHARGE", "DEPOSIT_CHARGE"].includes(normalizedCategory)) {
+    normalizedIdempotencyKey = buildRecurringChargeIdempotencyKey({
+      tenantId: tenant,
+      unitId: unit,
+      category: normalizedCategory,
+      utilityType: normalizedCategory === "UTILITY_CHARGE" ? normalizedMetadata?.utilityType : "",
+      periodKey: schedulePeriodKey,
+    });
+  }
+
   const recurringInvoiceCacheKey = buildRecurringInvoiceCacheKey({
     businessId,
     propertyId: accountingContext.propertyId,
@@ -4867,15 +4918,33 @@ export const deleteTenantInvoice = async (req, res, next) => {
       const pendingEntries = originalEntries.filter(
         (entry) => !entry.reversedByEntry && entry.status !== "reversed"
       );
-      const deleteReversals = [];
-      for (const entry of pendingEntries) {
-        const reversal = await postReversal({
-          entryId: entry._id,
-          reason: `Invoice ${invoice.invoiceNumber} deleted`,
-          userId: actorUserId,
-        });
-        deleteReversals.push(reversal);
-        if (reversal?.reversalEntry?.accountId) touchedAccountIds.add(String(reversal.reversalEntry.accountId));
+
+      if (pendingEntries.length > 0) {
+        // Reverse every leg inside one Mongo transaction. Without it, postEntry's save() can
+        // commit a reversal document on the server and still reject the promise (a lost write
+        // acknowledgment, a replica election mid-request, etc) — postReversal correctly un-claims
+        // the original when that happens, but has no way to undo the insert that already landed,
+        // leaving a real, orphaned REVERSAL entry behind. Retrying then repeats the exact same
+        // thing: the original never actually reverses, and a fresh orphaned entry piles up on
+        // every attempt. Wrapping the loop in a transaction means any failure on any leg rolls
+        // back every write from this attempt, insert included — either all legs reverse cleanly
+        // or nothing is left behind at all.
+        const reversalSession = await mongoose.startSession();
+        try {
+          await reversalSession.withTransaction(async () => {
+            for (const entry of pendingEntries) {
+              const reversal = await postReversal({
+                entryId: entry._id,
+                reason: `Invoice ${invoice.invoiceNumber} deleted`,
+                userId: actorUserId,
+                session: reversalSession,
+              });
+              if (reversal?.reversalEntry?.accountId) touchedAccountIds.add(String(reversal.reversalEntry.accountId));
+            }
+          });
+        } finally {
+          await reversalSession.endSession();
+        }
       }
     }
 

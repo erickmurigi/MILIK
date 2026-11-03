@@ -46,8 +46,11 @@ const buildPositiveStatementStatus = ({ statement, amountPaid }) => {
 const mapVoucherToHistoryRow = (voucher) => ({
   amount: round2(voucher?.amount || 0),
   paymentDate: normalizeDate(voucher?.paidDate || voucher?.paidAt || voucher?.approvedAt || voucher?.createdAt, new Date()),
-  paymentMethod: null,
-  paymentReference: voucher?.voucherNo || null,
+  // The voucher's own paymentMethod/reference — not voucherNo, which is just this system's
+  // internal sequential id and carries none of the real-world payment evidence (bank transfer
+  // ref, M-Pesa code, cheque number) the user actually typed in when recording the payment.
+  paymentMethod: voucher?.paymentMethod || null,
+  paymentReference: voucher?.reference || voucher?.voucherNo || null,
   notes: voucher?.narration || null,
   createdBy: voucher?.paidBy || voucher?.approvedBy || null,
   entryId: voucher?._id ? String(voucher._id) : null,
@@ -89,7 +92,7 @@ export const computeProcessedStatementSettlementState = async ({ statementId, bu
       ],
       status: { $ne: "reversed" },
     })
-      .select("_id amount status voucherNo narration paidDate paidAt approvedAt approvedBy paidBy createdAt")
+      .select("_id amount status voucherNo narration paidDate paidAt approvedAt approvedBy paidBy createdAt paymentMethod reference")
       .sort({ paidDate: 1, approvedAt: 1, createdAt: 1 })
       .lean(),
     FinancialLedgerEntry.find({

@@ -30,6 +30,17 @@ const normalizePaymentMethod = (value) => {
   return null;
 };
 
+// PaymentVoucher.paymentMethod has its own, different enum (bank_transfer/mobile_money/cash/
+// cheque/other — see models/PaymentVoucher.js) from normalizePaymentMethod's vocabulary above
+// (mpesa/paypal/pesapal/...), which exists for resolveCashbookAccount's benefit. Storing
+// normalizePaymentMethod's output directly on a voucher would throw a Mongoose validation error
+// for "mpesa" — a very common real value here — since it isn't a valid enum member.
+const toVoucherPaymentMethod = (normalized) => {
+  if (normalized === "mpesa") return "mobile_money";
+  if (["bank_transfer", "cash", "cheque"].includes(normalized)) return normalized;
+  return "other";
+};
+
 // req.user.company is always trusted first — a client-supplied business/company
 // value is only used as a fallback for requests with no authenticated company
 // context (mirrors resolveBusinessId in controllers/propertyController/
@@ -276,7 +287,10 @@ export const listLandlordPayments = async (req, res, next) => {
     const { page, limit, skip } = parsePagination(req, { defaultLimit: 50, maxLimit: 200 });
 
     const PaymentVoucher = (await import("../../models/PaymentVoucher.js")).default;
-    const query = { category: "landlord_other" };
+    // "landlord_remittance" is what payLandlord actually tags its vouchers with now (previously
+    // "landlord_other" — a leftover from before that category existed, which would have silently
+    // emptied this list the moment payLandlord's category was corrected).
+    const query = { category: "landlord_remittance" };
     if (businessId) query.business = new mongoose.Types.ObjectId(businessId);
     const lid = landlordId || landlordQ;
     if (isValidObjectId(lid)) query.landlord = new mongoose.Types.ObjectId(lid);
@@ -578,29 +592,18 @@ export const payLandlord = async (req, res, next) => {
       );
     }
 
-    const newAmountPaid = alreadyPaid + paymentAmount;
-    const newBalanceDue = Math.max(netAmountDue - newAmountPaid, 0);
-
-    let newStatus = "unpaid";
-    if (newAmountPaid <= 0) {
-      newStatus = "unpaid";
-    } else if (newBalanceDue <= 0 && netAmountDue > 0) {
-      newStatus = "paid";
-    } else if (newAmountPaid > 0 && newBalanceDue > 0) {
-      newStatus = "part_paid";
-    } else if (netAmountDue <= 0) {
-      newStatus = "processed";
-    }
-
-    statement.amountPaid = newAmountPaid;
-    statement.balanceDue = newBalanceDue;
-    statement.status = newStatus;
-    statement.paidDate = postingDate;
-    statement.paymentMethod = normalizedPaymentMethod;
-    statement.paymentReference = referenceNumber || null;
+    // amountPaid/balanceDue/status are deliberately NOT written here — see the sync call near the
+    // end of this function, after the voucher + GL posting have actually succeeded. Setting them
+    // here used to mark the statement paid/part_paid before any voucher or GL entry existed to back
+    // that claim: if postEntry below then failed, the catch block correctly rolled back the voucher
+    // and the GL leg, but a premature save here had already committed — leaving the statement
+    // permanently reporting an amountPaid/balanceDue that no real payment ever backed, with nothing
+    // to self-correct it (syncProcessedStatementSettlementState, which recomputes these fields from
+    // live, non-reversed vouchers, is only ever called from this function's own success path).
+    // notes is harmless either way — set in memory now, persisted together with the correct
+    // financial fields by that same end-of-function sync call, and simply never saved at all if
+    // the payment fails, which is the right outcome for it too.
     statement.notes = notes || statement.notes || null;
-
-    await statement.save();
 
     const PaymentVoucher = (await import("../../models/PaymentVoucher.js")).default;
 
@@ -632,18 +635,34 @@ export const payLandlord = async (req, res, next) => {
 
     const voucher = await PaymentVoucher.create({
       voucherNo,
-      category: "landlord_other",
-      status: "approved",
+      // "landlord_remittance", not "landlord_other" — this voucher is the system's own record of an
+      // already-completed statement payout (a staff member picking "landlord_other" from the New
+      // Voucher form means something different: an ad-hoc landlord expense). Sharing one category
+      // made every automatic statement payment indistinguishable from a manual miscellaneous payable
+      // in the voucher list.
+      category: "landlord_remittance",
+      // This voucher has no separate accrual step of its own — the landlord payable it settles was
+      // already posted earlier (postPayableCreationIfMissing/postCommissionAccrualIfMissing, above)
+      // — and the GL legs just below post the real, complete, already-approved settlement
+      // immediately. It is factually paid the moment this runs, matching paidBy/paidAt/paidDate
+      // already being set below; leaving status "approved" meant it displayed as awaiting payment
+      // (and the paid-vouchers workflow required settlementAccount to be set to mark it paid, which
+      // this creation never set either) until someone went and manually marked it paid a second time.
+      status: "paid",
       property: statement.property,
       landlord: statement.landlord,
       amount: paymentAmount,
       dueDate: postingDate,
       paidDate: postingDate,
       reference: referenceNumber || null,
+      paymentMethod: toVoucherPaymentMethod(normalizedPaymentMethod),
       sourceProcessedStatement: statement._id,
       narration: `Landlord Payment — ${stmtRef}${cashbookAccount?.name ? ` via ${cashbookAccount.name}` : ""}`,
       liabilityAccount: landlordPayableAccount?._id || null,
-      debitAccount: cashbookAccount?._id || null,
+      // No separate accrual debit account exists for this voucher (see status comment above) — left
+      // null rather than the cashbook account, which belongs in settlementAccount, not here.
+      debitAccount: null,
+      settlementAccount: cashbookAccount?._id || null,
       approvedBy: actorUserId,
       approvedAt: postingDate,
       paidBy: actorUserId,

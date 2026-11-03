@@ -147,7 +147,7 @@ const MAX_VOUCHER_LINES = 50;
 // Landlord-side vouchers post to a property control account (and a sale_owner_expense voucher posts to
 // the single Owner Expense Recoverable account, 1313) and each covers one scope, so their lines never
 // pick an expense account of their own
-const CONTROL_ACCOUNT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund", "sale_owner_expense"]);
+const CONTROL_ACCOUNT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other", "landlord_remittance", "deposit_refund", "sale_owner_expense"]);
 
 const linesHaveExpenseAccounts = (lines = []) =>
   Array.isArray(lines) && lines.length > 0 && lines.every((line) => line?.expenseAccount);
@@ -706,11 +706,15 @@ const resolveVoucherDebitAccount = async ({ voucher, businessId, accountingConte
   return account;
 };
 
+// Deliberately NOT landlord_remittance — those vouchers settle a prior statement's already-computed
+// remittance and must never be pulled back in as a NEW statement deduction (see the matching
+// sourceProcessedStatement: null exclusion in landlordStatementService.js's own voucher query).
 const LANDLORD_STATEMENT_CATEGORIES = new Set(["landlord_maintenance", "landlord_other"]);
 const PROPERTY_REQUIRED_CATEGORIES = new Set([
   "landlord_maintenance",
   "deposit_refund",
   "landlord_other",
+  "landlord_remittance",
   "manager_property",
 ]);
 const EXPLICIT_DEBIT_ACCOUNT_CATEGORIES = new Set([

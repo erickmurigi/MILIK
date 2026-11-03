@@ -26,6 +26,11 @@ const PaymentVoucherSchema = new mongoose.Schema(
         "landlord_maintenance",
         "deposit_refund",
         "landlord_other",
+        // System-generated only (landlordPaymentController.js payLandlord) — never offered in the
+        // manual "New Voucher" form. Distinguishes an automatic statement remittance payout from an
+        // ad-hoc "landlord_other" expense; both used to share that one generic category, making every
+        // landlord payout indistinguishable from a miscellaneous payable in the voucher list.
+        "landlord_remittance",
         "manager_property",
         "company_operational",
         "petty_cash_float",

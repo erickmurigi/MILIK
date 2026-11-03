@@ -67,7 +67,7 @@ const Section = ({ title, action, children }) => (
 );
 const whtFor = (gross, rate) => Math.round(Number(gross || 0) * Number(rate || 0)) / 100;
 // Landlord-side vouchers (and sale_owner_expense) post to a control account, so their lines have no payable or expense account of their own
-const LANDLORD_CONTROL_CATEGORY_VALUES = new Set(["landlord_maintenance", "landlord_other", "deposit_refund", "sale_owner_expense"]);
+const LANDLORD_CONTROL_CATEGORY_VALUES = new Set(["landlord_maintenance", "landlord_other", "landlord_remittance", "deposit_refund", "sale_owner_expense"]);
 const formatKes = (value) => `KES ${Number(value || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -99,6 +99,10 @@ const PMS_CATEGORIES = [
   { value: "landlord_maintenance", label: "Accounts Payable – Maintenance", landlordLabel: "Accounts Payable – Maintenance", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
   { value: "deposit_refund",       label: "Deposit Refund (Liability Release)", landlordLabel: "Deposit Refund (Liability Release)", propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
   { value: "landlord_other",       label: "Accounts Payable – Other",       landlordLabel: "Accounts Payable – Other",       propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true },
+  // System-generated only, by "Pay Landlord" on a processed statement — not offered in the New
+  // Voucher form (see creatableCategoryOptions below), just here so the list/filter can show and
+  // search by a clear label instead of falling back to the raw "landlord_remittance" enum value.
+  { value: "landlord_remittance",  label: "Landlord Statement Payment",     landlordLabel: "Landlord Statement Payment",     propertyRequired: true,  explicitDebitAccount: false, pmsOnly: true, systemOnly: true },
   { value: "manager_property",     label: "Operating Expense (Property)",   landlordLabel: "Operating Expense (Property)",   propertyRequired: true,  explicitDebitAccount: true,  pmsOnly: true },
 ];
 const BASE_CATEGORIES = [
@@ -531,6 +535,18 @@ const PaymentVouchers = () => {
     () => categories.map((c) => ({ value: c.value, label: c.label })),
     [categories]
   );
+  // The New Voucher form's own category picker — excludes systemOnly categories (currently just
+  // landlord_remittance), which only "Pay Landlord" on a processed statement ever creates. Editing
+  // an existing voucher that already carries one of those categories still needs to show it
+  // correctly (as a non-reselectable, display-only entry) rather than render blank.
+  const creatableCategoryOptions = useMemo(() => {
+    const base = categories.filter((c) => !c.systemOnly).map((c) => ({ value: c.value, label: c.label }));
+    if (form.category && !base.some((o) => o.value === form.category)) {
+      const current = categories.find((c) => c.value === form.category);
+      if (current) return [...base, { value: current.value, label: current.label }];
+    }
+    return base;
+  }, [categories, form.category]);
 
   const loadVouchers = useCallback(async () => {
     if (!currentCompany?._id) return;
@@ -950,7 +966,7 @@ const PaymentVouchers = () => {
                       label="Category *"
                       value={form.category}
                       onChange={(val) => setForm((prev) => ({ ...prev, category: val ?? prev.category }))}
-                      options={categoryOptions}
+                      options={creatableCategoryOptions}
                       size="sm"
                     />
                   </div>

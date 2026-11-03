@@ -12,6 +12,7 @@ import { callController } from "../../test/callController.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
+import ChartOfAccount from "../../models/ChartOfAccount.js";
 import {
   createTestChartOfAccounts,
   createTestLease,
@@ -56,6 +57,57 @@ describe("createTenantInvoiceRecord — idempotency", () => {
     expect(invoices).toHaveLength(1);
     expect(invoices[0].amount).toBe(15000);
   });
+
+  // Regression test for a real production bug found live in GLR: a batch booking run produced
+  // two rent invoices for the same tenant/unit/period. The only caller that ever passed an
+  // explicit idempotencyKey was the cron-triggered auto-invoicing job — manual single-invoice
+  // creation and batch booking relied solely on findConflictingMonthlyInvoice, a read-then-write
+  // check with no database backing, so two overlapping calls could both see "no conflict" before
+  // either had saved. The fix derives the same kind of idempotencyKey for every caller (not just
+  // cron) once the billing period is resolved, so the real unique {business, idempotencyKey} index
+  // on TenantInvoice backs every code path. See createTenantInvoiceRecord for the fix.
+  it("never creates two rent invoices for the same tenant/unit/period when booked concurrently with no explicit idempotencyKey", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({ rentAmount: 15000 });
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+
+    const req = { user, body: {} };
+    const payload = {
+      business: String(company._id),
+      property: String(property._id),
+      landlord: String(landlord._id),
+      tenant: String(tenant._id),
+      unit: String(unit._id),
+      category: "RENT_CHARGE",
+      amount: 15000,
+      description: "Rent — Feb 2026",
+      invoiceDate: new Date(2026, 1, 1),
+      dueDate: new Date(2026, 1, 5),
+      // No idempotencyKey — this is the manual/batch-booking shape, not the cron shape.
+    };
+
+    // Indexes build asynchronously in the background after model registration — wait for them so
+    // this test deterministically exercises the real unique index rather than racing its build.
+    await TenantInvoice.init();
+
+    // Simulate the real-world failure: two concurrent booking attempts for the same
+    // tenant/unit/period (a batch booking run submitted twice, or a duplicate item within the
+    // same batch), both racing the in-memory findConflictingMonthlyInvoice pre-check.
+    const results = await Promise.allSettled([
+      createTenantInvoiceRecord({ req, payload }),
+      createTenantInvoiceRecord({ req, payload }),
+    ]);
+
+    const invoices = await TenantInvoice.find({
+      business: company._id, tenant: tenant._id, unit: unit._id, category: "RENT_CHARGE",
+    }).lean();
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].idempotencyKey).toBeTruthy();
+
+    // At least one call must have succeeded — the system must never silently drop a booking,
+    // only ever prevent it from being duplicated.
+    expect(results.some((r) => r.status === "fulfilled")).toBe(true);
+  }, 30000);
 });
 
 describe("deleteTenantInvoice — GL reversal", () => {
@@ -121,6 +173,81 @@ describe("deleteTenantInvoice — GL reversal", () => {
       category: "REVERSAL",
     }).lean();
     expect(reversalEntries.length).toBeGreaterThan(0);
+  });
+
+  // Regression test for a real production bug found live in GLR: deleting an invoice retried 7
+  // times, each attempt throwing a 500 and leaving behind a new orphaned REVERSAL entry for the
+  // same leg, while that leg itself was never actually marked reversed. Root cause: the reversal
+  // loop posted each leg one at a time with no transaction — when a later leg's reversal failed,
+  // the earlier leg's reversal entry (already inserted) had no way to be undone, so it survived
+  // as a phantom credit/debit with nothing it was ever meant to balance against. Fixed by wrapping
+  // the whole loop in one Mongo transaction (see deleteTenantInvoice), so any leg's failure rolls
+  // back every write from that attempt, inserts included.
+  it("rolls back every leg's reversal, leaving no orphaned entry, if a later leg's reversal fails mid-delete", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({});
+    await createTestChartOfAccounts(company._id);
+    const user = await createTestUser({ company });
+
+    const req = { user, body: {} };
+    const invoice = await createTenantInvoiceRecord({
+      req,
+      payload: {
+        business: String(company._id),
+        property: String(property._id),
+        landlord: String(landlord._id),
+        tenant: String(tenant._id),
+        unit: String(unit._id),
+        category: "RENT_CHARGE",
+        amount: 9000,
+        invoiceDate: new Date(),
+        dueDate: new Date(),
+      },
+    });
+
+    const originalEntries = await FinancialLedgerEntry.find({
+      business: company._id,
+      sourceTransactionType: "invoice",
+      sourceTransactionId: String(invoice._id),
+      status: "approved",
+    }).lean();
+    expect(originalEntries.length).toBeGreaterThanOrEqual(2);
+
+    // Force the SECOND leg's reversal to fail deterministically, after the first leg's reversal
+    // has already been created — by deleting its posting account outright, so postEntry's own
+    // account-existence check throws (this check has no allowInactiveAccount bypass, unlike the
+    // active/inactive check reversals otherwise skip).
+    const secondLegAccountId = originalEntries[1].accountId;
+    await ChartOfAccount.deleteOne({ _id: secondLegAccountId });
+
+    await expect(
+      callController(deleteTenantInvoice, { params: { id: String(invoice._id) }, user })
+    ).rejects.toThrow();
+
+    // The whole request failed, so the invoice itself must be untouched.
+    const reloadedInvoice = await TenantInvoice.findById(invoice._id).lean();
+    expect(reloadedInvoice.status).not.toBe("reversed");
+    expect(reloadedInvoice.postingStatus).toBe("posted");
+
+    // Neither original leg may be left half-reversed.
+    const reloadedOriginalEntries = await FinancialLedgerEntry.find({
+      business: company._id,
+      sourceTransactionType: "invoice",
+      sourceTransactionId: String(invoice._id),
+      category: { $ne: "REVERSAL" },
+    }).lean();
+    reloadedOriginalEntries.forEach((entry) => {
+      expect(entry.status).toBe("approved");
+      expect(entry.reversedByEntry).toBeFalsy();
+    });
+
+    // And no orphaned REVERSAL document may survive from the first leg's otherwise-successful
+    // insert — this is the exact shape of the bug seen live on INV01386.
+    const reversalEntries = await FinancialLedgerEntry.find({
+      business: company._id,
+      category: "REVERSAL",
+      reversalOf: originalEntries[0]._id,
+    }).lean();
+    expect(reversalEntries).toHaveLength(0);
   });
 });
 
