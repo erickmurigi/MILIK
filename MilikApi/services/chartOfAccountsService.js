@@ -87,6 +87,13 @@ const SYSTEM_CHART_TEMPLATE = [
   // Client Management accounts
   { code: "1260", name: "Client Receivables", type: "asset", group: "assets", subGroup: "Current Assets", isSystem: true, isHeader: false, isPosting: true },
   { code: "4520", name: "Client Service Income", type: "income", group: "income", subGroup: "Operating Income", isSystem: true, isHeader: false, isPosting: true },
+  // Contract billing: straight-line/milestone lines are billed into 2165 and released to income by the
+  // monthly recognition run. 2136/1265/1266 back client receipts (unapplied cash, WHT and VAT withheld
+  // by the client at source and recoverable from KRA).
+  { code: "2165", name: "Deferred Revenue — Client Contracts", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "2136", name: "Client Unapplied Receipts", type: "liability", group: "liabilities", subGroup: "Current Liabilities", isSystem: true, isHeader: false, isPosting: true },
+  { code: "1265", name: "WHT Recoverable — Client Income Tax", type: "asset", group: "assets", subGroup: "Current Assets", isSystem: true, isHeader: false, isPosting: true },
+  { code: "1266", name: "VAT Withheld Recoverable — Clients", type: "asset", group: "assets", subGroup: "Current Assets", isSystem: true, isHeader: false, isPosting: true },
 ];
 
 const SYSTEM_CHART_CODES = SYSTEM_CHART_TEMPLATE.map((account) => account.code);
@@ -98,7 +105,7 @@ const SHARED_CASHBOOK_CODES = new Set(["1100", "1110", "1130"]);
 const HR_ACCOUNT_CODES = new Set(["2170", "2171", "2172", "2173", "2174", "2175", "5400", "5401", "5402", "5403"]);
 const SALE_ACCOUNT_CODES = new Set(["1240", "1250", "2180", "2181", "4500", "4510", "5500", "5501", "5502"]);
 const INVENTORY_ACCOUNT_CODES = new Set(["1300", "1310", "2000", "2190", "4000", "5000", "5010"]);
-const CLIENTS_ACCOUNT_CODES = new Set(["1260", "4520"]);
+const CLIENTS_ACCOUNT_CODES = new Set(["1260", "4520", "2165", "2136", "1265", "1266"]);
 // 2190 (Output VAT Payable) started as POS-only but is a genuinely shared,
 // module-agnostic liability — Client Management invoices need it too, and any
 // future module charging VAT on a customer-facing invoice will as well.

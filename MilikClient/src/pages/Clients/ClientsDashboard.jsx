@@ -1,256 +1,166 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FaBuilding, FaFileContract, FaMoneyBillWave, FaChartLine } from 'react-icons/fa';
+import { toast } from 'react-toastify';
+import { FaPlus, FaReceipt, FaSyncAlt } from 'react-icons/fa';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ClientsShell from './ClientsShell';
-import { clientsApi } from '../../services/clientsApi';
-import DashboardCard, { DashboardStatCard } from '../../components/Dashboard/DashboardCard';
-import { fmtDate } from '../../utils/dates';
-import StatusBadge from '../../components/common/StatusBadge';
+import ListToolbar from '../../components/common/ListToolbar';
+import AppSelect from '../../components/common/AppSelect';
+import { Kpi, Section, ShareBar, EmptyNote } from '../../components/Clients/clientUi';
+import { clientsCollectionsApi, unwrap, apiError } from '../../services/clientsCollectionsApi';
+import { money, createListCache, useClientsAccess } from '../../components/Clients/clientHelpers';
+import { todayISO } from '../../utils/dates';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const fmtKES = (n) =>
-  new Intl.NumberFormat('en-KE', {
-    style: 'currency',
-    currency: 'KES',
-    minimumFractionDigits: 2,
-  }).format(Number(n) || 0);
-
-const daysUntil = (d) =>
-  Math.ceil((new Date(d) - new Date()) / (1000 * 60 * 60 * 24));
-
-const StatCard = DashboardStatCard;
-const Card     = DashboardCard;
-
-const daysColor = (days) => {
-  if (days <= 30) return 'text-red-600 font-bold';
-  if (days <= 60) return 'text-amber-600 font-semibold';
-  return 'text-emerald-700';
+const cache = createListCache();
+const compact = (v) => {
+  const n = Number(v || 0);
+  if (Math.abs(n) >= 1e6) return `${(n / 1e6).toFixed(2)}M`;
+  if (Math.abs(n) >= 1e3) return `${(n / 1e3).toFixed(1)}K`;
+  return money(n);
 };
 
-const CONTRACT_STATUS_MAP = {
-  active:     'border-emerald-200 bg-emerald-50 text-emerald-700',
-  draft:      'border-slate-200 bg-slate-50 text-slate-600',
-  expired:    'border-red-200 bg-red-50 text-red-700',
-  terminated: 'border-red-200 bg-red-50 text-red-600',
-  renewed:    'border-blue-200 bg-blue-50 text-blue-700',
+const PERIODS = [
+  { value: 'month', label: 'This month' },
+  { value: 'last', label: 'Last month' },
+  { value: 'quarter', label: 'Last 3 months' },
+  { value: 'ytd', label: 'Year to date' },
+];
+const periodRange = (p) => {
+  const now = new Date();
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  if (p === 'last') return { from: iso(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: iso(new Date(now.getFullYear(), now.getMonth(), 0)) };
+  if (p === 'quarter') return { from: iso(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to: todayISO() };
+  if (p === 'ytd') return { from: `${now.getFullYear()}-01-01`, to: todayISO() };
+  return { from: iso(new Date(now.getFullYear(), now.getMonth(), 1)), to: todayISO() };
 };
 
-const CLIENT_STATUS_MAP = {
-  active:   'border-emerald-200 bg-emerald-50 text-emerald-700',
-  inactive: 'border-amber-200 bg-amber-50 text-amber-700',
-  churned:  'border-red-200 bg-red-50 text-red-600',
+const TopList = ({ rows, valueKey, tone, onOpen, empty }) => {
+  const max = Math.max(0, ...rows.map((r) => r[valueKey] || 0));
+  if (!rows.length) return <EmptyNote>{empty}</EmptyNote>;
+  return (
+    <div className="divide-y divide-slate-100">
+      {rows.map((r) => (
+        <button key={r.clientId} type="button" onClick={() => onOpen(r)} className="block w-full px-3 py-1.5 text-left hover:bg-[#EBF5EF]">
+          <div className="flex items-baseline justify-between gap-2 text-xs">
+            <span className="truncate font-semibold text-slate-900">{r.clientName || '—'}<span className="ml-1.5 font-normal text-slate-500">{r.clientCode}</span></span>
+            <span className="shrink-0 font-bold tabular-nums text-slate-900">{money(r[valueKey])}</span>
+          </div>
+          <div className="mt-1"><ShareBar value={r[valueKey]} max={max} tone={tone} /></div>
+        </button>
+      ))}
+    </div>
+  );
 };
-
-// ─── Main component ───────────────────────────────────────────────────────────
 
 const ClientsDashboard = () => {
   const navigate = useNavigate();
-  const [loading, setLoading]   = useState(true);
-  const [clients, setClients]   = useState([]);
-  const [contracts, setContracts] = useState([]);
-  const [error, setError]       = useState(null);
+  const { businessId, canCreate } = useClientsAccess();
+  const [period, setPeriod] = useState('month');
+  const range = useMemo(() => periodRange(period), [period]);
+  const key = `${businessId}:${range.from}:${range.to}`;
+  const [state, setState] = useState(() => cache.peek(key) || { kpis: null, forecast: null });
+  const [isFetching, setIsFetching] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    Promise.all([
-      clientsApi.list({ status: 'active', limit: 8 }),
-      clientsApi.listContracts({ expiringDays: 60, limit: 10 }),
-    ])
-      .then(([clientsRes, contractsRes]) => {
-        if (cancelled) return;
-        setClients(clientsRes.data?.clients || clientsRes.data?.data || []);
-        setContracts(contractsRes.data?.contracts || contractsRes.data?.data || []);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err?.message || 'Failed to load dashboard');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, []);
+  const load = useCallback(async (force = false) => {
+    if (!businessId) return;
+    const hit = !force && cache.get(key);
+    if (hit) { setState(hit); return; }
+    setIsFetching(true);
+    try {
+      const [kpis, forecast] = await Promise.all([
+        clientsCollectionsApi.report('dashboard', range).then(unwrap),
+        clientsCollectionsApi.report('billing-forecast', { months: 6 }).then(unwrap).catch(() => null),
+      ]);
+      const next = { kpis, forecast };
+      cache.set(key, next);
+      setState(next);
+    } catch (err) {
+      toast.error(apiError(err, 'Failed to load dashboard'));
+    } finally {
+      setIsFetching(false);
+    }
+  }, [businessId, key, range]);
+  useEffect(() => { load(); }, [load]);
 
-  // ─── Stats computation ────────────────────────────────────────────────────
-  const activeClients    = clients.length;
-  const expiringCount    = contracts.filter((c) => daysUntil(c.endDate) <= 30).length;
-  const monthlyRecurring = contracts
-    .filter((c) => c.status === 'active' && (c.billingCycle === 'monthly' || c.billingCycle === 'Monthly'))
-    .reduce((sum, c) => sum + Number(c.currentValue || c.baseValue || 0), 0);
-
-  const expiringContracts = [...contracts].sort(
-    (a, b) => new Date(a.endDate) - new Date(b.endDate)
+  const k = state.kpis;
+  const openClient = useCallback((r) => navigate(`/clients/${r.clientId}`, { state: { tabTitle: r.clientName } }), [navigate]);
+  const chartRows = useMemo(
+    () => (state.forecast?.months || []).map((m) => ({ name: new Date(`${m.month}-01T00:00:00`).toLocaleDateString('en-GB', { month: 'short' }), amount: m.amount })),
+    [state.forecast],
   );
+  const collectionRate = k && k.billed?.total > 0 ? Math.round((k.collected?.total / k.billed.total) * 100) : null;
 
   return (
-    <ClientsShell
-      title="Dashboard"
-      action={
-        <button
-          type="button"
-          onClick={() => navigate('/clients')}
-          className="inline-flex h-7 items-center gap-1.5 bg-[#0B3B2E] px-3 text-xs font-bold text-white hover:bg-[#0A3127]"
-        >
-          All Clients
-        </button>
-      }
-    >
-      <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+    <ClientsShell>
+      <ListToolbar>
+        <AppSelect compact value={period} onChange={(v) => setPeriod(v || 'month')} options={PERIODS} />
+        <ListToolbar.Button variant="outline" icon={FaSyncAlt} onClick={() => load(true)} disabled={isFetching}>{isFetching ? 'Loading…' : 'Refresh'}</ListToolbar.Button>
+        <ListToolbar.Divider />
+        <ListToolbar.Button variant="outline" onClick={() => navigate('/clients/reports/ar-aging')}>AR aging</ListToolbar.Button>
+        <ListToolbar.Button variant="outline" onClick={() => navigate('/clients/collections')}>Collections</ListToolbar.Button>
+        <ListToolbar.Divider />
+        {canCreate && <ListToolbar.Button variant="outline" icon={FaReceipt} onClick={() => navigate('/clients/receipts/new')}>Record Receipt</ListToolbar.Button>}
+        {canCreate && <ListToolbar.Button icon={FaPlus} onClick={() => navigate('/clients/new')}>New Client</ListToolbar.Button>}
+      </ListToolbar>
 
-        {error && (
-          <div className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            {error}
-          </div>
-        )}
+      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto bg-slate-50 p-3">
+        {!k ? (
+          <div className="py-16 text-center text-sm text-slate-400">{isFetching ? 'Loading dashboard…' : 'No data yet'}</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+              <Kpi label="MRR" value={`KES ${compact(k.mrr)}`} sub={`${k.activeContracts} active contract(s)`} />
+              <Kpi label="ARR" value={`KES ${compact(k.arr)}`} sub="MRR × 12" />
+              <Kpi label="Billed" value={`KES ${compact(k.billed?.total)}`} sub={`${k.billed?.invoices || 0} invoice(s) · net ${compact(k.billed?.netAfterNotes)}`} />
+              <Kpi label="Collected" value={`KES ${compact(k.collected?.total)}`} sub={`${collectionRate != null ? `${collectionRate}% of billed · ` : ''}${k.collected?.receipts || 0} receipt(s)`} />
+              <Kpi label="Receivables" value={`KES ${compact(k.receivables)}`} sub="All open invoices" onClick={() => navigate('/clients/reports/ar-aging')} />
+              <Kpi label="Overdue" value={`KES ${compact(k.overdue?.total)}`} tone={k.overdue?.total > 0 ? 'text-red-600' : 'text-slate-900'} sub={`${k.overdue?.invoices || 0} invoice(s)`} onClick={() => navigate('/clients/collections')} />
+              <Kpi label="DSO" value={k.dso != null ? `${k.dso} days` : '—'} sub="Trailing 90 days" />
+              <Kpi label="Churn" value={`${k.churn?.rate || 0}%`} sub={`${k.churn?.contracts || 0} lost · KES ${compact(k.churn?.lostMrr)} MRR`} tone={k.churn?.contracts ? 'text-red-600' : 'text-slate-900'} />
+            </div>
 
-        {/* ── Stat cards ──────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 gap-1.5 xl:grid-cols-4">
-          <StatCard
-            label="Active Clients"
-            value={loading ? '…' : activeClients}
-            icon={FaBuilding}
-            tone="green"
-            sub="currently active"
-          />
-          <StatCard
-            label="Expiring (30 days)"
-            value={loading ? '…' : expiringCount}
-            icon={FaFileContract}
-            tone="orange"
-            sub="contracts expiring"
-          />
-          <StatCard
-            label="Monthly Recurring"
-            value={loading ? '…' : fmtKES(monthlyRecurring)}
-            icon={FaChartLine}
-            tone="slate"
-            sub="active monthly contracts"
-          />
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => navigate('/clients/invoices')}
-            onKeyDown={(e) => e.key === 'Enter' && navigate('/clients/invoices')}
-            className="relative overflow-hidden border bg-amber-700 border-amber-700 px-4 py-3 shadow-sm cursor-pointer hover:brightness-110 transition-all"
-          >
-            <FaMoneyBillWave className="absolute right-3 top-2.5 h-10 w-10 text-white/10" />
-            <p className="text-[9px] font-extrabold uppercase tracking-widest text-white/60">Invoices</p>
-            <p className="mt-1.5 text-2xl font-black leading-none text-white">All Invoices</p>
-            <p className="mt-1 text-[10px] text-white/60 underline">View all invoices →</p>
-          </div>
-        </div>
-
-        {/* ── Two column area ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 gap-1.5 xl:grid-cols-[1fr_360px]">
-
-          {/* Contracts Expiring Soon */}
-          <Card
-            title="Contracts Expiring Soon (Next 60 Days)"
-            right={
-              <button
-                type="button"
-                onClick={() => navigate('/clients/contracts')}
-              className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
-              >
-                View All →
-              </button>
-            }
-          >
-            {loading ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading…</div>
-            ) : !expiringContracts.length ? (
-              <div className="py-8 text-center text-xs text-slate-400">
-                No contracts expiring in the next 60 days.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[600px] text-xs">
-                  <thead>
-                    <tr className="bg-[#0B3B2E]">
-                      {['Client', 'Contract #', 'Value (KES)', 'Ends On', 'Days Left', 'Status'].map((h) => (
-                        <th
-                          key={h}
-                          className="px-3 py-1.5 text-left text-[10px] font-black uppercase tracking-widest text-white"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {expiringContracts.map((c, idx) => {
-                      const days = daysUntil(c.endDate);
-                      return (
-                        <tr
-                          key={c._id}
-                          className={`border-b border-slate-100 hover:bg-slate-50 cursor-pointer ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/60'}`}
-                          onClick={() => navigate(`/clients/${c.client?._id || c.client}`, { state: { tabTitle: c.client?.name || c.clientName } })}
-                        >
-                          <td className="px-3 py-2.5 font-semibold text-slate-800">
-                            {c.client?.name || c.clientName || '—'}
-                          </td>
-                          <td className="px-3 py-2.5 font-mono text-[11px] text-[#0B3B2E]">
-                            {c.contractNumber || c._id?.slice(-6).toUpperCase() || '—'}
-                          </td>
-                          <td className="px-3 py-2.5 tabular-nums text-slate-700">
-                            {fmtKES(c.currentValue || c.baseValue)}
-                          </td>
-                          <td className="px-3 py-2.5 text-slate-600">{fmtDate(c.endDate)}</td>
-                          <td className={`px-3 py-2.5 tabular-nums ${daysColor(days)}`}>
-                            {days < 0 ? `${Math.abs(days)} overdue` : `${days} days`}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <StatusBadge status={c.status} map={CONTRACT_STATUS_MAP} />
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </Card>
-
-          {/* Recent Clients */}
-          <Card
-            title="Recent Active Clients"
-            right={
-              <button
-                type="button"
-                onClick={() => navigate('/clients')}
-                className="text-[10px] font-extrabold uppercase tracking-wide text-[#0B3B2E] hover:text-[#FF8C00]"
-              >
-                View All →
-              </button>
-            }
-          >
-            {loading ? (
-              <div className="py-8 text-center text-xs text-slate-400">Loading…</div>
-            ) : !clients.length ? (
-              <div className="py-8 text-center text-xs text-slate-400">No active clients.</div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {clients.map((cl) => (
-                  <div
-                    key={cl._id}
-                    className="flex items-center justify-between gap-2 px-3 py-2.5 hover:bg-slate-50 cursor-pointer"
-                    onClick={() => navigate(`/clients/${cl._id}`, { state: { tabTitle: cl.name } })}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-slate-800 truncate">{cl.name}</p>
-                      <p className="text-[10px] text-slate-400">
-                        {cl.clientCode || '—'} &middot; {cl.category || '—'}
-                      </p>
-                    </div>
-                    <StatusBadge status={cl.status} map={CLIENT_STATUS_MAP} />
+            <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-3">
+              <Section title="Billing forecast — next 6 months" bodyClass="p-2" className="xl:col-span-2">
+                {chartRows.length ? (
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartRows} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                        <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: '#475569' }} axisLine={false} tickLine={false} tickFormatter={compact} width={48} />
+                        <Tooltip formatter={(v) => [`KES ${money(v)}`, 'Expected billing']} cursor={{ fill: '#EBF5EF' }} />
+                        <Bar dataKey="amount" fill="#0B3B2E" maxBarSize={40} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                ))}
-              </div>
-            )}
-          </Card>
+                ) : <EmptyNote>No active contract schedules</EmptyNote>}
+                {state.forecast && <p className="px-1 text-[10px] text-slate-500">Total KES {money(state.forecast.total)} · net of VAT · <button type="button" className="font-bold text-[#0B3B2E] hover:underline" onClick={() => navigate('/clients/reports/billing-forecast')}>12-month view</button></p>}
+              </Section>
+              <Section title="Renewals due" bodyClass="p-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {[['30 days', k.renewalsDue?.d30], ['60 days', k.renewalsDue?.d60], ['90 days', k.renewalsDue?.d90]].map(([label, v]) => (
+                    <Kpi key={label} label={label} value={v || 0} tone={label === '30 days' && v ? 'text-red-600' : 'text-slate-900'} onClick={() => navigate('/clients/reports/renewals')} />
+                  ))}
+                </div>
+                <div className="mt-2 space-y-1 text-xs">
+                  <div className="flex justify-between"><span className="text-slate-600">Cash collected</span><b className="tabular-nums">{money(k.collected?.cash)}</b></div>
+                  <div className="flex justify-between"><span className="text-slate-600">Income tax withheld</span><b className="tabular-nums">{money(k.collected?.whtIncomeTax)}</b></div>
+                  <div className="flex justify-between"><span className="text-slate-600">VAT withheld</span><b className="tabular-nums">{money(k.collected?.whtVat)}</b></div>
+                  <div className="flex justify-between"><span className="text-slate-600">VAT billed</span><b className="tabular-nums">{money(k.billed?.vat)}</b></div>
+                </div>
+              </Section>
+            </div>
 
-        </div>
+            <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+              <Section title="Top clients by revenue" bodyClass="p-0">
+                <TopList rows={k.topClientsByRevenue || []} valueKey="revenue" onOpen={openClient} empty="No billing in this period" />
+              </Section>
+              <Section title="Top clients by overdue" bodyClass="p-0">
+                <TopList rows={k.topClientsByOverdue || []} valueKey="overdue" tone="bg-red-500" onOpen={openClient} empty="Nothing overdue" />
+              </Section>
+            </div>
+          </>
+        )}
       </div>
     </ClientsShell>
   );

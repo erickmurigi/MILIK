@@ -65,3 +65,13 @@ export const imagesUpload = multer({
     else cb(new Error("Only jpeg, png, or webp images are allowed"));
   },
 });
+
+// Business documents (signed contracts, KRA certificates, WHT certificates): PDFs and scans, kept as-is
+export const documentsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (/^(application\/pdf|image\/(jpeg|jpg|png|webp))$/.test(file.mimetype)) cb(null, true);
+    else cb(new Error("Only PDF, jpeg, png or webp files are allowed"));
+  },
+});

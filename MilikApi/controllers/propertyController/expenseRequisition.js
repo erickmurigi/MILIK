@@ -287,7 +287,12 @@ const resolveRequisitionExpenseAccount = async (businessId, category) => {
 };
 
 const postRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
-  if (!requisition.serviceProvider || !Number(requisition.amount)) return;
+  if (!requisition.serviceProvider || !Number(requisition.amount)) {
+    // No GL work to do, but the status/audit fields the caller already set on `requisition`
+    // (e.g. setApprovedAudit) still need to persist — this function owns the save either way.
+    await requisition.save();
+    return;
+  }
 
   const [expenseAccount, apAccount] = await Promise.all([
     requisition.expenseAccount
@@ -307,7 +312,10 @@ const postRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
     // account to begin with. Found via the vendor take-on balance test asserting on real GL entries.
     resolveConfiguredAccountingDefaultAccount({ businessId: requisition.business, field: "accountsPayableAccount" }),
   ]);
-  if (!expenseAccount || !apAccount) return;
+  if (!expenseAccount || !apAccount) {
+    await requisition.save();
+    return;
+  }
 
   const txDate = requisition.approvedAt || new Date();
   const { start, end } = buildStatementPeriod(txDate);
@@ -337,28 +345,45 @@ const postRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
     status: "approved",
   };
 
-  let debitLeg;
+  // Both legs, plus the requisition document's own status/audit save, are posted inside ONE Mongo
+  // transaction. Without this, a sequential postEntry/postEntry pair is vulnerable to a ghost
+  // write: either leg's insert can commit on the server while the driver's write acknowledgment is
+  // lost, so the call still throws. The old catch block here only ever reversed the DEBIT leg
+  // (`if (debitLeg?._id)`), which can never help when it's the CREDIT (AP liability) leg itself
+  // that ghost-writes — that leg's id is never captured before the throw, so it would survive as a
+  // permanently orphaned, un-reversed liability with no offsetting expense debit. A real
+  // transaction makes this atomic: either both legs post and the requisition saves together, or
+  // the whole attempt rolls back and nothing is left behind.
+  let debitLeg, creditLeg;
+  const glSession = await mongoose.startSession();
   try {
-    debitLeg = await postEntry({
-      ...base, direction: "debit", debit: amount, credit: 0, accountId: expenseAccount._id,
-      metadata: { postingRole: "ap_invoice_expense", requisitionNo: requisition.requisitionNo || requisition.referenceNo || "", isTakeOnBalance: requisition.isTakeOnBalance === true },
+    await glSession.withTransaction(async () => {
+      debitLeg = await postEntry({
+        ...base, direction: "debit", debit: amount, credit: 0, accountId: expenseAccount._id,
+        metadata: { postingRole: "ap_invoice_expense", requisitionNo: requisition.requisitionNo || requisition.referenceNo || "", isTakeOnBalance: requisition.isTakeOnBalance === true },
+        session: glSession,
+      });
+      creditLeg = await postEntry({
+        ...base, direction: "credit", debit: 0, credit: amount, accountId: apAccount._id,
+        metadata: { postingRole: "ap_invoice_liability", offsetOfEntryId: String(debitLeg._id), requisitionNo: requisition.requisitionNo || requisition.referenceNo || "", isTakeOnBalance: requisition.isTakeOnBalance === true },
+        session: glSession,
+      });
+      await requisition.save({ session: glSession });
     });
-    await postEntry({
-      ...base, direction: "credit", debit: 0, credit: amount, accountId: apAccount._id,
-      metadata: { postingRole: "ap_invoice_liability", offsetOfEntryId: String(debitLeg._id), requisitionNo: requisition.requisitionNo || requisition.referenceNo || "", isTakeOnBalance: requisition.isTakeOnBalance === true },
-    });
-  } catch (error) {
-    if (debitLeg?._id) {
-      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for requisition accrual ${requisition.requisitionNo || requisition._id}`, userId: actorUserId }).catch(() => null);
-    }
-    throw error;
+  } finally {
+    await glSession.endSession();
   }
 
   await aggregateChartOfAccountBalances(String(requisition.business), [String(expenseAccount._id), String(apAccount._id)]);
 };
 
 const reverseRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
-  if (!requisition.serviceProvider) return;
+  if (!requisition.serviceProvider) {
+    // Nothing to reverse, but the cancellation fields the caller already set on `requisition`
+    // still need to persist — this function owns the save either way.
+    await requisition.save();
+    return;
+  }
   const entries = await FinancialLedgerEntry.find({
     business: requisition.business,
     sourceTransactionType: "expense_requisition",
@@ -366,12 +391,47 @@ const reverseRequisitionAccrualGL = async ({ requisition, actorUserId }) => {
     status: "approved",
     reversalOf: null,
   }).lean();
-  for (const entry of entries) {
-    await postReversal({
-      entryId: entry._id,
-      reason: `Requisition cancelled — ${requisition.cancellationReason || requisition.requisitionNo || ""}`,
-      userId: actorUserId,
+
+  if (!entries.length) {
+    await requisition.save();
+    return;
+  }
+
+  const touchedAccountIds = new Set();
+  entries.forEach((entry) => {
+    if (entry?.accountId) touchedAccountIds.add(String(entry.accountId));
+  });
+
+  // Every original leg's reversal, plus the requisition's own cancellation save, is wrapped in
+  // ONE Mongo transaction and run SEQUENTIALLY (not Promise.all — a session must not run
+  // concurrent ops). Without this, postReversal's insert can ghost-write (commit on the server
+  // while the driver's ack is lost) and still reject — and reversing with no transaction at all
+  // means a failure on a later leg leaves the earlier legs reversed and the rest untouched: a
+  // real, unbalanced, half-reversed GL state with no retry-safety. The transaction makes it
+  // all-or-nothing: either every leg reverses and the requisition saves as cancelled together, or
+  // the whole attempt rolls back — nothing left half-done, and a retry starts clean.
+  const reversalSession = await mongoose.startSession();
+  try {
+    await reversalSession.withTransaction(async () => {
+      for (const entry of entries) {
+        const result = await postReversal({
+          entryId: entry._id,
+          reason: `Requisition cancelled — ${requisition.cancellationReason || requisition.requisitionNo || ""}`,
+          userId: actorUserId,
+          session: reversalSession,
+        });
+        if (result?.reversalEntry?.accountId) {
+          touchedAccountIds.add(String(result.reversalEntry.accountId));
+        }
+      }
+      await requisition.save({ session: reversalSession });
     });
+  } finally {
+    await reversalSession.endSession();
+  }
+
+  if (touchedAccountIds.size > 0) {
+    await aggregateChartOfAccountBalances(String(requisition.business), Array.from(touchedAccountIds));
   }
 };
 
@@ -832,6 +892,7 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
       row.cancelledBy = null;
       row.cancellationReason = "";
       await applyBudgetCheck(row);
+      await row.save();
     } else if (status === "approved") {
       const threshold = await getExpenseApprovalThreshold(businessId);
       await ensureHighValueApprovalPermission(req, businessId, row.amount, threshold);
@@ -851,6 +912,8 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
       }
 
       setApprovedAudit(row, actorUserId, req.body?.approvalNote || req.body?.reason || "");
+      // Posts both GL legs (if applicable) and saves `row`'s status/audit fields together in one
+      // atomic transaction — see postRequisitionAccrualGL. No separate row.save() needed here.
       await postRequisitionAccrualGL({ requisition: row, actorUserId });
     } else if (status === "rejected") {
       const reason = sanitizeReason(req.body?.reason || req.body?.rejectionReason || "");
@@ -858,11 +921,16 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
         return next(createError(400, "Rejection reason is required."));
       }
       setRejectedAudit(row, actorUserId, reason);
+      await row.save();
     } else if (status === "cancelled") {
       const reason = sanitizeReason(req.body?.reason || req.body?.cancellationReason || "Cancelled");
       setCancelledAudit(row, actorUserId, reason);
       if (previousStatus === "approved") {
+        // Reverses every original GL leg (if any) and saves `row`'s cancellation fields together
+        // in one atomic transaction — see reverseRequisitionAccrualGL. No separate row.save().
         await reverseRequisitionAccrualGL({ requisition: row, actorUserId });
+      } else {
+        await row.save();
       }
     } else if (status === "draft") {
       clearSubmissionAuditForDraft(row);
@@ -875,9 +943,9 @@ export const updateExpenseRequisitionStatus = async (req, res, next) => {
       row.cancelledAt = null;
       row.cancelledBy = null;
       row.cancellationReason = "";
+      await row.save();
     }
 
-    await row.save();
     const populated = await populateQuery(ExpenseRequisition.findById(row._id)).lean();
     res.status(200).json(populated);
   } catch (error) {

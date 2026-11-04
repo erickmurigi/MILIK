@@ -9,6 +9,7 @@ import { matchTenantIds, phoneSearchRegex } from "../../utils/listSearch.js";
 import User from "../../models/User.js";
 import { getRawMpesaPaybillConfigs, getPrimaryMpesaPaybillConfig } from "../../utils/companyModules.js";
 import { createAutoReceipt } from "./rentPayment.js";
+import { autoMatchClientMpesaCollection } from "../../modules/clients/services/clientMpesaMatchService.js";
 import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
 import { round2 } from "../../utils/math.js";
@@ -909,6 +910,9 @@ export const mpesaConfirmationCallback = async (req, res, next) => {
 
     if (stored?.tenant?._id) {
       await attemptAutoReceipt({ stored, config });
+    } else if (stored?._id) {
+      // not a tenant payment: try the client billing module (account = client code or invoice number); never throws
+      await autoMatchClientMpesaCollection(stored);
     }
   } catch (error) {
     console.error("[PMS-Confirmation] Processing error shortCode=%s: %s", shortCode, error.message);

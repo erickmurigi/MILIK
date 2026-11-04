@@ -1,43 +1,37 @@
 import mongoose from "mongoose";
 import { createError } from "../../../utils/error.js";
 import { round2 } from "../../../utils/math.js";
-import ClientInvoice from "../models/ClientInvoice.js";
+import { logAuditEvent } from "../../../utils/auditLogger.js";
+import { emitToCompany } from "../../../utils/socketManager.js";
+import ClientInvoice, { CLIENT_INVOICE_STATUSES, CLIENT_INVOICE_OPEN_STATUSES } from "../models/ClientInvoice.js";
 import ClientInteraction from "../models/ClientInteraction.js";
 import ClientPayment from "../models/ClientPayment.js";
+import ClientContract from "../models/ClientContract.js";
+import ClientCreditNote from "../models/ClientCreditNote.js";
+import ClientRevenueSchedule from "../models/ClientRevenueSchedule.js";
+import ClientReceipt from "../models/ClientReceipt.js";
 import Client from "../models/Client.js";
 import Company from "../../../models/Company.js";
 import ChartOfAccount from "../../../models/ChartOfAccount.js";
 import FinancialLedgerEntry from "../../../models/FinancialLedgerEntry.js";
 import { resolveActiveBusinessId, currentUserId, escapeRegex } from "../services/businessScope.js";
-import { nextInvoiceNumber } from "../services/clientSequenceService.js";
+import { nextInvoiceNumberForSeries } from "../services/clientSequenceService.js";
 import { sendInvoiceEmail, sendReceiptEmail } from "../services/clientEmailService.js";
-import { postClientInvoiceLedger, postClientPaymentLedger } from "../services/clientAccountingService.js";
+import { postClientPaymentLedger, reverseClientLedgerEntries } from "../services/clientAccountingService.js";
 import { postReversal } from "../../../services/ledgerPostingService.js";
 import { claimPaymentReference, releasePaymentReference } from "../../../services/paymentReferenceGuard.js";
+import { getClientTaxContext } from "../services/clientTaxService.js";
+import { buildInvoiceLines, postClientInvoice } from "../services/clientInvoicePostingService.js";
+import { getClientBillingSettings } from "../services/clientContractService.js";
+import { computeClientInvoiceOutstanding } from "../services/clientInvoiceBalanceService.js";
+import { releaseScheduleRowsForInvoice } from "../services/clientScheduleService.js";
+import { cancelRevenueSchedulesForInvoice } from "../services/clientRevenueService.js";
+import { TAX_MODES } from "../services/clientLineMath.js";
 
 
 // ─── Sanitizers ──────────────────────────────────────────────────────────────
 
-const ALLOWED_STATUSES = ["draft", "sent", "partial", "paid", "overdue", "cancelled"];
-
-const sanitizeLineItem = (item) => {
-  const quantity  = Math.max(0, Number(item.quantity  ?? 1));
-  const unitPrice = Math.max(0, Number(item.unitPrice ?? 0));
-  return {
-    description: String(item.description || "").trim(),
-    quantity,
-    unitPrice,
-    amount:  Math.round(quantity * unitPrice * 100) / 100,
-    taxable: item.taxable !== false,
-  };
-};
-
-const sanitizeLineItems = (items) => {
-  if (!Array.isArray(items)) return [];
-  return items
-    .filter((item) => item && String(item?.description || "").trim())
-    .map(sanitizeLineItem);
-};
+const ALLOWED_STATUSES = CLIENT_INVOICE_STATUSES;
 
 const sanitizeInvoicePayload = (body = {}) => ({
   client:           String(body.client || "").trim(),
@@ -46,10 +40,60 @@ const sanitizeInvoicePayload = (body = {}) => ({
   dueDate:          body.dueDate   ? new Date(body.dueDate)   : null,
   periodStart:      body.periodStart ? new Date(body.periodStart) : null,
   periodEnd:        body.periodEnd   ? new Date(body.periodEnd)   : null,
-  lineItems:        sanitizeLineItems(body.lineItems),
   vatRate:          Math.min(100, Math.max(0, Number(body.vatRate ?? 16))),
+  taxMode:          TAX_MODES.includes(body.taxMode) ? body.taxMode : "exclusive",
+  poNumber:         String(body.poNumber || "").trim(),
+  currency:         String(body.currency || "KES").trim().toUpperCase() || "KES",
   notes:            String(body.notes || "").trim(),
 });
+
+// Validates the payload and builds the per-line-taxed line items shared by create and update.
+const prepareInvoice = async ({ business, body }) => {
+  const payload = sanitizeInvoicePayload(body);
+  if (!payload.client) throw createError(400, "Client is required");
+  if (!payload.dueDate || Number.isNaN(payload.dueDate.getTime())) throw createError(400, "Valid dueDate is required");
+  if (Number.isNaN(payload.issueDate.getTime())) throw createError(400, "Invalid issueDate");
+
+  const [clientExists, contract, taxCtx, settings] = await Promise.all([
+    Client.exists({ _id: payload.client, business }),
+    payload.contract && mongoose.Types.ObjectId.isValid(payload.contract)
+      ? ClientContract.findOne({ _id: payload.contract, business }).select("_id client version currency").lean()
+      : Promise.resolve(null),
+    getClientTaxContext(business),
+    getClientBillingSettings(business),
+  ]);
+  if (!clientExists) throw createError(404, "Client not found");
+  if (payload.contract && (!contract || String(contract.client) !== String(payload.client))) {
+    throw createError(400, "Contract not found for this client");
+  }
+
+  const lineItems = await buildInvoiceLines({ business, items: body.lineItems, taxCtx, legacyVatRate: body.vatRate });
+  if (!lineItems.length) throw createError(400, "At least one line item is required");
+
+  return {
+    ...payload,
+    contractVersion: contract?.version || null,
+    lineItems,
+    taxCalculation: "line",
+    terms: body.terms !== undefined ? String(body.terms || "").trim() : settings.invoiceTerms || "",
+    settings,
+  };
+};
+
+const withOutstanding = (invoice) => ({ ...invoice, outstanding: computeClientInvoiceOutstanding(invoice) });
+
+const auditInvoice = (req, invoice, action, message, metadata = {}) =>
+  logAuditEvent({
+    req,
+    company: invoice.business,
+    action: `client_invoice.${action}`,
+    category: "finance",
+    targetType: "ClientInvoice",
+    targetId: invoice._id,
+    targetName: invoice.invoiceNumber,
+    message,
+    metadata,
+  });
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 
@@ -63,8 +107,14 @@ export const listInvoices = async (req, res, next) => {
     if (req.query.status && ALLOWED_STATUSES.includes(req.query.status)) {
       filter.status = req.query.status;
     }
+    // Overdue is derived (due date passed, still owing), not only the cron-set status.
+    if (req.query.overdue === "true") {
+      filter.status = { $in: CLIENT_INVOICE_OPEN_STATUSES };
+      filter.dueDate = { $lt: new Date() };
+    }
     if (req.query.search) {
-      filter.invoiceNumber = new RegExp(escapeRegex(String(req.query.search).trim()), "i");
+      const s = escapeRegex(String(req.query.search).trim());
+      filter.$or = [{ invoiceNumber: new RegExp(s, "i") }, { poNumber: new RegExp(s, "i") }];
     }
     if (req.query.dateFrom || req.query.dateTo) {
       filter.issueDate = {};
@@ -76,7 +126,7 @@ export const listInvoices = async (req, res, next) => {
     const page  = Math.max(Number(req.query.page || 1), 1);
     const skip  = (page - 1) * limit;
 
-    const [invoices, total] = await Promise.all([
+    const [rows, total] = await Promise.all([
       ClientInvoice.find(filter)
         .populate("client", "name clientCode email phone")
         .sort({ issueDate: -1, createdAt: -1 })
@@ -85,6 +135,11 @@ export const listInvoices = async (req, res, next) => {
         .lean(),
       ClientInvoice.countDocuments(filter),
     ]);
+    const now = new Date();
+    const invoices = rows.map((inv) => {
+      const outstanding = computeClientInvoiceOutstanding(inv);
+      return { ...inv, outstanding, isOverdue: CLIENT_INVOICE_OPEN_STATUSES.includes(inv.status) && outstanding > 0.005 && inv.dueDate && new Date(inv.dueDate) < now };
+    });
 
     const pagination = { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) };
     res.status(200).json({ success: true, data: { invoices, pagination }, invoices, pagination });
@@ -97,11 +152,16 @@ export const getInvoice = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const invoice = await ClientInvoice.findOne({ _id: req.params.id, business })
-      .populate("client", "name clientCode email phone address")
+      .populate("client", "name clientCode email phone address taxPin")
       .populate("contract", "contractNumber description")
       .lean();
     if (!invoice) return next(createError(404, "Invoice not found"));
-    res.status(200).json({ success: true, data: invoice, invoice });
+    const [notes, revenueSchedules] = await Promise.all([
+      ClientCreditNote.find({ business, invoice: invoice._id }).sort({ noteDate: 1 }).lean(),
+      ClientRevenueSchedule.find({ business, invoice: invoice._id }).lean(),
+    ]);
+    const data = { ...invoice, outstanding: computeClientInvoiceOutstanding(invoice, notes), notes, revenueSchedules };
+    res.status(200).json({ success: true, data, invoice: data });
   } catch (error) {
     next(error);
   }
@@ -111,33 +171,25 @@ export const createInvoice = async (req, res, next) => {
   try {
     const business = resolveActiveBusinessId(req);
     const userId   = currentUserId(req);
-    const payload  = sanitizeInvoicePayload(req.body);
+    const { settings, ...payload } = await prepareInvoice({ business, body: req.body || {} });
 
-    if (!payload.client) return next(createError(400, "Client is required"));
-    if (!payload.dueDate || Number.isNaN(payload.dueDate.getTime())) {
-      return next(createError(400, "Valid dueDate is required"));
-    }
-    if (payload.lineItems.length === 0) {
-      return next(createError(400, "At least one line item is required"));
-    }
-
-    const clientExists = await Client.exists({ _id: payload.client, business });
-    if (!clientExists) return next(createError(404, "Client not found"));
-
-    const invoiceNumber = await nextInvoiceNumber(business);
+    const series = String(req.body?.series || settings.invoicePrefix || "CINV").trim().toUpperCase();
+    const invoiceNumber = await nextInvoiceNumberForSeries(business, series);
 
     // No GL posting here — this creates a draft, and updateInvoice explicitly
     // allows edits while status is "draft" (line amounts, VAT, everything can
-    // still change). Posting happens in sendInvoice(), the moment the invoice
-    // becomes a real, binding claim and can no longer be edited — so posted
-    // entries can never go stale from a subsequent draft edit.
+    // still change). Posting happens in postInvoice()/sendInvoice(), the moment
+    // the invoice becomes a real, binding claim and can no longer be edited — so
+    // posted entries can never go stale from a subsequent draft edit.
     const invoice = await ClientInvoice.create({
       ...payload,
       invoiceNumber,
+      series,
       business,
       createdBy: userId,
     });
 
+    await auditInvoice(req, invoice, "created", `Draft invoice ${invoiceNumber} created (${invoice.total})`);
     res.status(201).json({ success: true, data: invoice, invoice, message: "Invoice created" });
   } catch (error) {
     next(error);
@@ -152,22 +204,35 @@ export const updateInvoice = async (req, res, next) => {
     if (!existing) return next(createError(404, "Invoice not found"));
 
     if (existing.status !== "draft") {
-      return next(createError(400, `Invoice cannot be edited in '${existing.status}' status. Only draft invoices can be updated.`));
+      return next(createError(400, `Invoice cannot be edited in '${existing.status}' status. Only draft invoices can be updated — use a credit or debit note.`));
     }
 
-    const payload = sanitizeInvoicePayload(req.body);
-    if (!payload.dueDate || Number.isNaN(payload.dueDate.getTime())) {
-      return next(createError(400, "Valid dueDate is required"));
-    }
-    if (payload.lineItems.length === 0) {
-      return next(createError(400, "At least one line item is required"));
-    }
+    const { settings, ...payload } = await prepareInvoice({ business, body: req.body || {} });
 
     // Apply changes and trigger pre-save hook by using .save()
     Object.assign(existing, payload);
     await existing.save();
 
+    await auditInvoice(req, existing, "updated", `Draft invoice ${existing.invoiceNumber} updated (${existing.total})`);
     res.status(200).json({ success: true, data: existing, invoice: existing, message: "Invoice updated" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Posts a draft to the ledger without emailing it (billing-run drafts, invoices sent by hand).
+export const postInvoice = async (req, res, next) => {
+  try {
+    const business = resolveActiveBusinessId(req);
+    const userId   = currentUserId(req);
+    const invoice = await ClientInvoice.findOne({ _id: req.params.id, business });
+    if (!invoice) return next(createError(404, "Invoice not found"));
+    if (invoice.status !== "draft") return next(createError(400, `Invoice is already ${invoice.status}`));
+
+    await postClientInvoice({ invoice, userId, targetStatus: "posted" });
+    await auditInvoice(req, invoice, "posted", `Invoice ${invoice.invoiceNumber} posted to the ledger (${invoice.total})`, { journalGroupId: invoice.journalGroupId });
+    emitToCompany(String(business), "clients:invoice:updated", { invoiceId: String(invoice._id), status: invoice.status });
+    res.status(200).json({ success: true, data: invoice, invoice, message: "Invoice posted" });
   } catch (error) {
     next(error);
   }
@@ -386,22 +451,18 @@ export const sendInvoice = async (req, res, next) => {
     // moment the invoice becomes a real, binding claim against the client.
     // Required to succeed: unlike the email below (best-effort, logged either
     // way), a send that didn't reach the ledger must not be recorded as sent —
-    // it stays in "draft" so it can be retried. postClientInvoiceLedger is
-    // itself idempotent (guards on sourceTransactionId), so a resend of an
-    // already-posted invoice is a safe no-op here.
+    // it stays in "draft" so it can be retried. postClientInvoice commits the
+    // journal and the status change in one transaction, and a resend of an
+    // already-posted invoice never posts again.
     const wasDraft = invoice.status === "draft";
     if (wasDraft) {
-      const ledgerEntries = await postClientInvoiceLedger({ invoice, userId });
-      if (ledgerEntries.length) {
-        invoice.ledgerEntries = ledgerEntries.map((e) => e._id);
-      }
+      await postClientInvoice({ invoice, userId, targetStatus: "sent" });
     }
 
     const emailResult = await sendInvoiceEmail(invoice.toObject(), client, company);
 
-    const now = new Date();
-    invoice.sentAt = now;
-    if (wasDraft) invoice.status = "sent";
+    invoice.sentAt = new Date();
+    if (invoice.status === "posted") invoice.status = "sent";
     await invoice.save();
 
     // Log the interaction
@@ -418,6 +479,8 @@ export const sendInvoice = async (req, res, next) => {
       createdBy:      userId,
     });
 
+    await auditInvoice(req, invoice, wasDraft ? "posted_and_sent" : "sent", `Invoice ${invoice.invoiceNumber} ${wasDraft ? "posted and " : ""}sent`, { emailDelivered: Boolean(emailResult.success) });
+    emitToCompany(String(business), "clients:invoice:updated", { invoiceId: String(invoice._id), status: invoice.status });
     res.status(200).json({
       success:     true,
       data:        invoice,
@@ -439,30 +502,42 @@ export const cancelInvoice = async (req, res, next) => {
     const invoice = await ClientInvoice.findOne({ _id: req.params.id, business });
     if (!invoice) return next(createError(404, "Invoice not found"));
 
-    if (["paid", "partial", "cancelled"].includes(invoice.status)) {
+    if (["paid", "partial", "partially_paid", "cancelled", "credited"].includes(invoice.status) || Number(invoice.paidAmount || 0) > 0) {
       return next(createError(
         400,
         invoice.status === "cancelled"
           ? "Invoice is already cancelled"
-          : `Invoice has recorded payment activity (status '${invoice.status}') and cannot be cancelled directly. Reverse the payment(s) first.`
+          : `Invoice has recorded payment or credit activity (status '${invoice.status}') and cannot be cancelled directly. Reverse the payment(s) or use a credit note.`
       ));
     }
+    if (await ClientReceipt.exists({ business, "allocations.invoice": invoice._id, "allocations.status": "active", status: "posted" })) {
+      return next(createError(400, "Receipts are allocated to this invoice — reverse or reallocate them before cancelling"));
+    }
+    if (await ClientCreditNote.exists({ business, invoice: invoice._id, status: "posted" })) {
+      return next(createError(400, "This invoice has credit/debit notes — reverse them first, or credit the remaining balance instead of cancelling"));
+    }
+    // Refuses if any deferred revenue was already recognised (credit note territory).
+    await cancelRevenueSchedulesForInvoice({ business, invoiceId: invoice._id });
 
-    // Reverse any GL entries posted when this invoice was sent (a still-draft
+    // Reverse any GL entries posted when this invoice was posted/sent (a still-draft
     // invoice never posted anything, so this is a no-op for those). A failed
     // reversal throws and aborts the cancel — see reversePayment for why this
     // must not be swallowed.
     if (invoice.ledgerEntries?.length) {
-      const originals = await FinancialLedgerEntry.find({
-        _id: { $in: invoice.ledgerEntries },
-        status: { $ne: "reversed" },
-      }).select("_id").lean();
-      await Promise.all(originals.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+      await reverseClientLedgerEntries({ business, entryIds: invoice.ledgerEntries, reason, userId });
     }
 
     invoice.status = "cancelled";
+    invoice.cancelledAt = new Date();
+    invoice.cancelledBy = userId;
+    invoice.cancellationReason = reason;
     await invoice.save();
 
+    // Contract periods this invoice billed become billable again.
+    const released = await releaseScheduleRowsForInvoice(invoice._id);
+
+    await auditInvoice(req, invoice, "cancelled", `Invoice ${invoice.invoiceNumber} cancelled: ${reason}`, { releasedSchedulePeriods: released.modifiedCount });
+    emitToCompany(String(business), "clients:invoice:updated", { invoiceId: String(invoice._id), status: invoice.status });
     res.status(200).json({ success: true, data: invoice, invoice, message: "Invoice cancelled" });
   } catch (error) {
     next(error);

@@ -187,19 +187,43 @@ export const postEntry = async (payload = {}) => {
 };
 
 /**
- * Posts the legs of one journal in order. If a leg fails, the legs already posted are reversed and the error is rethrown,
- * so a journal is never left half-posted (a retry would otherwise find "something already posted" and stop).
+ * Posts the legs of one journal in order, inside a single Mongo transaction, so a journal is never left
+ * half-posted. The previous implementation posted legs sequentially and, on failure, tried to reverse
+ * whatever had already been pushed onto a `posted` array — but a leg that ghost-writes (the insert
+ * commits on the server while the driver's write-acknowledgment is lost, so the `await postEntry(...)`
+ * call itself still throws) never gets pushed onto `posted` at all, so that catch block could never see
+ * it, let alone reverse it: a permanent, orphaned, one-sided GL entry. Wrapping the whole loop in one
+ * transaction removes the need for any of that — MongoDB itself rolls back every write made inside an
+ * aborted transaction, ghost-written inserts included, so either every leg survives or none do.
+ *
+ * Pass an existing `session` when the caller already has one open (e.g. its own `withTransaction` block
+ * that also needs to `.save()` a parent record alongside these legs) so postEntries joins it instead of
+ * opening a nested, independent transaction. With no session passed, postEntries creates, manages, and
+ * ends its own — the external contract is unchanged either way: resolves to the array of posted entries
+ * on success, throws on failure with nothing left behind.
  */
-export const postEntries = async (payloads = []) => {
-  const posted = [];
-  try {
-    for (const payload of payloads) posted.push(await postEntry(payload));
-    return posted;
-  } catch (error) {
-    for (const entry of posted) {
-      await postReversal({ entryId: entry._id, reason: "Auto-reversal: the journal could not be completed", userId: entry.createdBy }).catch(() => null);
+export const postEntries = async (payloads = [], { session: externalSession = null } = {}) => {
+  const postAll = async (session) => {
+    const posted = [];
+    for (const payload of payloads) {
+      posted.push(await postEntry({ ...payload, session }));
     }
-    throw error;
+    return posted;
+  };
+
+  if (externalSession) {
+    return postAll(externalSession);
+  }
+
+  const session = await mongoose.startSession();
+  try {
+    let posted;
+    await session.withTransaction(async () => {
+      posted = await postAll(session);
+    });
+    return posted;
+  } finally {
+    await session.endSession();
   }
 };
 

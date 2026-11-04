@@ -111,6 +111,23 @@ const sanitizeAmenities = (amenities = []) => {
     .filter(Boolean);
 };
 
+// Returns undefined (not an object) when no value was submitted at all, so callers can tell
+// "leave whatever this unit already has" apart from "explicitly set/cleared" — see the comment
+// on unitRentTaxSettingsSchema in models/Unit.js for why that distinction has to survive here.
+const sanitizeRentTaxSettings = (value) => {
+  if (value === null) return null;
+  if (!value || typeof value !== "object") return undefined;
+  return {
+    enabled: !!value.enabled,
+    taxCodeKey: typeof value.taxCodeKey === "string" && value.taxCodeKey.trim() ? value.taxCodeKey.trim() : "vat_standard",
+    taxMode: ["company_default", "exclusive", "inclusive"].includes(value.taxMode) ? value.taxMode : "company_default",
+    rateOverride:
+      value.rateOverride === null || value.rateOverride === undefined || value.rateOverride === ""
+        ? null
+        : Number(value.rateOverride),
+  };
+};
+
 const roundCurrency = (value) => Number(Number(value || 0).toFixed(2));
 
 const calculateRentFromPropertyDefaults = (propertyDoc, areaValue, explicitRent) => {
@@ -533,6 +550,7 @@ export const createUnit = async (req, res, next) => {
       amenities: sanitizeAmenities(req.body.amenities),
       utilities: sanitizeUtilities(req.body.utilities),
       deposits: sanitizeDeposits(req.body.deposits),
+      rentTaxSettings: sanitizeRentTaxSettings(req.body.rentTaxSettings),
       status: requestedStatus,
       isVacant,
       vacantSince: isVacant ? new Date() : undefined,
@@ -858,6 +876,13 @@ export const updateUnit = async (req, res, next) => {
       unit.deposits = sanitizeDeposits(req.body.deposits);
     }
 
+    if (req.body.rentTaxSettings !== undefined) {
+      const sanitizedRentTaxSettings = sanitizeRentTaxSettings(req.body.rentTaxSettings);
+      if (sanitizedRentTaxSettings !== undefined) {
+        unit.rentTaxSettings = sanitizedRentTaxSettings;
+      }
+    }
+
     if (req.body.areaSqFt !== undefined) {
       unit.areaSqFt = Number(req.body.areaSqFt || 0);
     }
@@ -1020,6 +1045,41 @@ export const updateUnitStatus = async (req, res, next) => {
     await updatePropertyUnitCounts(updatedUnit.property);
 
     return res.status(200).json(updatedUnit);
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Convenience bulk action: writes the same explicit rent-tax decision onto every unit under a
+// property in one click. Not a parallel source of truth — invoicing always reads each unit's own
+// stored `rentTaxSettings` (see resolveInvoiceTaxability in services/taxCalculationService.js),
+// this just saves clicking into every unit individually.
+export const bulkSetUnitRentTaxSettings = async (req, res, next) => {
+  try {
+    const businessId = resolveBusinessId(req);
+    if (!businessId) {
+      return next(createError(400, "Business context is required."));
+    }
+
+    const property = await Property.findOne({
+      _id: req.params.propertyId,
+      business: businessId,
+    }).lean();
+    if (!property) {
+      return next(createError(404, "Selected property was not found."));
+    }
+
+    const sanitized = sanitizeRentTaxSettings(req.body.rentTaxSettings);
+    if (sanitized === undefined) {
+      return next(createError(400, "rentTaxSettings is required."));
+    }
+
+    const result = await Unit.updateMany(
+      { property: property._id, business: businessId },
+      { $set: { rentTaxSettings: sanitized } }
+    );
+
+    return res.status(200).json({ matched: result.matchedCount, modified: result.modifiedCount });
   } catch (err) {
     next(err);
   }

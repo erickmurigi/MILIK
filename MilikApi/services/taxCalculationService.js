@@ -179,26 +179,50 @@ export const calculateTaxBreakdown = ({ amount, taxRate = 0, taxMode = "exclusiv
   };
 };
 
-const resolveInvoiceTaxability = ({ category, taxSettings, overrides = {} }) => {
+const resolveInvoiceTaxability = ({ category, taxSettings, overrides = {}, unitTaxSettings = null }) => {
   const normalizedCategory = String(category || "").toUpperCase();
   if (typeof overrides?.isTaxable === "boolean") return overrides.isTaxable;
   if (normalizedCategory === "DEPOSIT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.deposit ?? false);
 
-  if (normalizedCategory === "RENT_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.rent ?? taxSettings.invoiceTaxableByDefault);
+  if (normalizedCategory === "RENT_CHARGE") {
+    // A unit that has never had its own rent-tax setting configured carries no
+    // `rentTaxSettings` document at all (see models/Unit.js) — only once a unit's
+    // own setting has been explicitly saved does it take over from the company-wide switch.
+    if (unitTaxSettings && typeof unitTaxSettings.enabled === "boolean") return unitTaxSettings.enabled;
+    return Boolean(taxSettings.invoiceTaxabilityByCategory?.rent ?? taxSettings.invoiceTaxableByDefault);
+  }
   if (normalizedCategory === "UTILITY_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.utility ?? taxSettings.invoiceTaxableByDefault);
   if (normalizedCategory === "LATE_PENALTY_CHARGE") return Boolean(taxSettings.invoiceTaxabilityByCategory?.penalty ?? taxSettings.invoiceTaxableByDefault);
   return Boolean(taxSettings.invoiceTaxableByDefault);
 };
 
-export const buildInvoiceTaxSnapshot = ({ amount, category, companyTaxConfig, requestedTaxCodeKey = null, requestedTaxMode = null, overrides = {} }) => {
+export const buildInvoiceTaxSnapshot = ({ amount, category, companyTaxConfig, requestedTaxCodeKey = null, requestedTaxMode = null, overrides = {}, unitTaxSettings = null }) => {
   const config = companyTaxConfig || normalizeCompanyTaxConfiguration();
   const taxSettings = config.taxSettings || DEFAULT_TAX_SETTINGS;
   const taxCodes = config.taxCodes || DEFAULT_TAX_CODES;
   const precision = Number(taxSettings.roundingPrecision ?? 2);
-  const categoryTaxable = resolveInvoiceTaxability({ category, taxSettings, overrides });
+  const categoryTaxable = resolveInvoiceTaxability({ category, taxSettings, overrides, unitTaxSettings });
   const taxEngineActive = Boolean(taxSettings.enabled && categoryTaxable);
+
+  // When a unit's own rent-tax setting is the thing making this invoice taxable, its own
+  // tax code/mode/rate are the right defaults to fall back to (ahead of the generic company
+  // default) — but an explicit per-invoice override/payload value still wins over both.
+  const unitOverrideIsSource =
+    String(category || "").toUpperCase() === "RENT_CHARGE" &&
+    unitTaxSettings &&
+    unitTaxSettings.enabled === true;
+  const unitTaxCodeKey = unitOverrideIsSource ? unitTaxSettings.taxCodeKey || null : null;
+  const unitTaxMode =
+    unitOverrideIsSource && unitTaxSettings.taxMode && unitTaxSettings.taxMode !== "company_default"
+      ? unitTaxSettings.taxMode
+      : null;
+  const unitRateOverride =
+    unitOverrideIsSource && unitTaxSettings.rateOverride !== undefined && unitTaxSettings.rateOverride !== null
+      ? Number(unitTaxSettings.rateOverride)
+      : null;
+
   const requestedCodeKey =
-    overrides?.taxCodeKey || requestedTaxCodeKey || (taxEngineActive ? taxSettings.defaultTaxCodeKey : "no_tax");
+    overrides?.taxCodeKey || requestedTaxCodeKey || unitTaxCodeKey || (taxEngineActive ? taxSettings.defaultTaxCodeKey : "no_tax");
   const requestedTaxCode = resolveTaxCode({
     taxCodes,
     requestedKey: requestedCodeKey,
@@ -215,13 +239,15 @@ export const buildInvoiceTaxSnapshot = ({ amount, category, companyTaxConfig, re
         fallbackRate: 0,
       });
   const taxMode =
-    String(overrides?.taxMode || requestedTaxMode || taxSettings.defaultTaxMode || "exclusive").toLowerCase() ===
+    String(overrides?.taxMode || requestedTaxMode || unitTaxMode || taxSettings.defaultTaxMode || "exclusive").toLowerCase() ===
     "inclusive"
       ? "inclusive"
       : "exclusive";
   const requestedRate =
     overrides?.rateOverride !== undefined && overrides?.rateOverride !== null
       ? Number(overrides.rateOverride)
+      : unitRateOverride !== null
+      ? unitRateOverride
       : Number(effectiveTaxCode.rate || 0);
   const effectiveTaxRate =
     retainsTaxClassification && effectiveTaxCode.type !== "exempt" ? Math.max(requestedRate, 0) : 0;

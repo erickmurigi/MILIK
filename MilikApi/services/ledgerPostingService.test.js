@@ -5,8 +5,9 @@
 // controller (journal entries, payment vouchers, receipts, invoices) posts through.
 import { describe, it, expect } from "vitest";
 import mongoose from "mongoose";
-import { postEntry, postReversal, postCorrection } from "./ledgerPostingService.js";
+import { postEntry, postEntries, postReversal, postCorrection } from "./ledgerPostingService.js";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
+import ChartOfAccount from "../models/ChartOfAccount.js";
 import { createTestCompany, createTestChartOfAccounts } from "../test/factories.js";
 import { getAccountByCode } from "../test/factories.financial.js";
 
@@ -279,5 +280,107 @@ describe("ledgerPostingService", () => {
 
     expect(correctedEntry.journalGroupId).toBeTruthy();
     expect(String(correctedEntry.journalGroupId)).toBe(String(reversalEntry.journalGroupId));
+  });
+
+  // Regression test for postEntries' own ghost-write vulnerability: the old implementation posted each
+  // leg sequentially and, on failure, tried to reverse whatever had already been pushed onto its local
+  // `posted` array — but a leg that ghost-writes (the insert commits on the server while the driver's
+  // write-acknowledgment is lost, so the `await postEntry(...)` call itself still throws) never gets
+  // pushed onto `posted`, so that catch block could never see it. postEntries now wraps the whole loop
+  // in one Mongo transaction instead, so MongoDB rolls back every write made inside it — this proves the
+  // first (successfully-written) leg does not survive when a later leg in the same batch fails.
+  it("postEntries leaves no leg behind when a later payload in the batch fails", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const cash = await getAccountByCode(company._id, "1100");
+    const income = await getAccountByCode(company._id, "4100");
+
+    const now = new Date();
+    const { start, end } = buildStatementPeriod(now);
+    const sourceTransactionId = "ledger-posting-test-postEntries-atomic";
+
+    const base = {
+      business: company._id,
+      allowUnscoped: true,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId,
+      transactionDate: now,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount: 4000,
+      payer: "manager",
+      receiver: "system",
+    };
+
+    // The first payload's account is real and would, under the old sequential-with-manual-reversal
+    // code, be inserted and left behind the moment the second payload's account is invalid. The second
+    // payload's accountId is a fresh, never-created ObjectId, so validatePostingAccount deterministically
+    // rejects it ("posting account was not found") on every run.
+    await expect(
+      postEntries([
+        { ...base, accountId: cash._id, direction: "debit", notes: "First leg — would ghost-write under the old code" },
+        { ...base, accountId: income._id, direction: "credit", notes: "irrelevant" },
+        { ...base, accountId: new mongoose.Types.ObjectId(), direction: "credit", notes: "Forces the batch to fail" },
+      ])
+    ).rejects.toThrow(/posting account/i);
+
+    const entries = await FinancialLedgerEntry.find({
+      business: company._id,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId,
+    }).lean();
+    expect(entries).toHaveLength(0);
+  });
+
+  // postEntries must also be usable as a participant in a caller's OWN transaction (passing `session`)
+  // rather than always opening its own — otherwise a caller that needs to .save() a parent record
+  // alongside these legs in the same atomic unit (as journalEntries.js's postJournalToLedger does
+  // around postEntry directly) would have no way to fold postEntries' legs into that same transaction.
+  it("postEntries joins an externally-supplied session instead of opening a nested transaction", async () => {
+    const company = await createTestCompany();
+    await createTestChartOfAccounts(company._id);
+    const cash = await getAccountByCode(company._id, "1100");
+    const income = await getAccountByCode(company._id, "4100");
+
+    const now = new Date();
+    const { start, end } = buildStatementPeriod(now);
+    const sourceTransactionId = "ledger-posting-test-postEntries-external-session";
+
+    const base = {
+      business: company._id,
+      allowUnscoped: true,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId,
+      transactionDate: now,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: "ADJUSTMENT",
+      amount: 2500,
+      payer: "manager",
+      receiver: "system",
+    };
+
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await postEntries(
+          [
+            { ...base, accountId: cash._id, direction: "debit", notes: "Debit leg" },
+            { ...base, accountId: income._id, direction: "credit", notes: "Credit leg" },
+          ],
+          { session }
+        );
+      });
+    } finally {
+      await session.endSession();
+    }
+
+    const entries = await FinancialLedgerEntry.find({
+      business: company._id,
+      sourceTransactionType: "manual_adjustment",
+      sourceTransactionId,
+    }).lean();
+    expect(entries).toHaveLength(2);
   });
 });

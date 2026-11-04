@@ -493,3 +493,92 @@ export const sendReceiptEmail = async (invoice, client, company) => {
     return { success: false, reason: err.message };
   }
 };
+
+// Receipt for a ClientReceipt (one payment settling one or more invoices, possibly with WHT and an
+// unapplied balance held as credit). Allocations must have their invoice populated (invoiceNumber).
+export const sendClientReceiptEmail = async (receipt, client, company) => {
+  if (!isEmailEnabled()) return { success: false, reason: "email_globally_disabled" };
+
+  const profile = resolveEmailProfile(company);
+  if (!profile) return { success: false, reason: "smtp_not_configured" };
+
+  const toEmail = String(client?.email || "").trim();
+  if (!toEmail) return { success: false, reason: "client_email_missing" };
+
+  const currency = receipt.currency || "KES";
+  const companyName = escapeHtml(company?.name || "");
+  const allocations = (receipt.allocations || []).filter((row) => row.status !== "reversed" && Number(row.amount) > 0);
+  const whtIncome = Number(receipt.whtIncomeTax?.amount || 0);
+  const whtVat = Number(receipt.whtVat?.amount || 0);
+  const unapplied = Number(receipt.unappliedAmount || 0);
+  const subject = `Payment Receipt – ${receipt.receiptNumber}`;
+
+  const row = (label, value, strong = false) =>
+    `<tr><td style="padding:8px 14px;color:#6b7280;min-width:150px;">${escapeHtml(label)}</td><td style="padding:8px 14px;${strong ? "font-weight:bold;" : ""}">${value}</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8" /><title>Payment Receipt</title></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif;font-size:14px;color:#111827;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 0;"><tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;">
+      <tr><td style="background:#0B3B2E;padding:20px 28px;"><div style="color:#ffffff;font-size:18px;font-weight:bold;">${companyName}</div></td></tr>
+      <tr><td style="padding:28px;">
+        <div style="font-size:18px;font-weight:bold;color:#0B3B2E;margin-bottom:4px;">Payment Receipt ${escapeHtml(receipt.receiptNumber)}</div>
+        <div style="color:#16a34a;font-size:13px;margin-bottom:20px;">Payment received — thank you!</div>
+        <p style="margin:0 0 20px;">Dear ${escapeHtml(client?.name || "Client")},<br />We acknowledge receipt of your payment.</p>
+        <table cellpadding="0" cellspacing="0" style="background:#f9fafb;border:1px solid #e5e7eb;width:100%;margin-bottom:16px;">
+          ${row("Receipt No.", escapeHtml(receipt.receiptNumber), true)}
+          ${row("Date", formatDate(receipt.receiptDate))}
+          ${row("Amount Received", formatCurrency(receipt.amount, currency), true)}
+          ${receipt.method ? row("Method", escapeHtml(String(receipt.method).replace(/_/g, " "))) : ""}
+          ${receipt.reference ? row("Reference", escapeHtml(receipt.reference)) : ""}
+          ${whtIncome > 0 ? row("Income Tax Withheld", formatCurrency(whtIncome, currency)) : ""}
+          ${whtVat > 0 ? row("VAT Withheld", formatCurrency(whtVat, currency)) : ""}
+        </table>
+        ${allocations.length ? `<div style="font-weight:bold;margin-bottom:6px;">Applied to</div>
+        <table cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;width:100%;margin-bottom:16px;">
+          ${allocations.map((a) => row(a.invoice?.invoiceNumber || "Invoice", formatCurrency(a.amount, currency))).join("")}
+        </table>` : ""}
+        ${unapplied > 0 ? `<p style="margin:0 0 16px;color:#0B3B2E;">${formatCurrency(unapplied, currency)} is held on your account as credit for future invoices.</p>` : ""}
+        <p style="margin:0;color:#374151;">Thank you for your business.<br /><strong>${companyName}</strong></p>
+      </td></tr>
+    </table>
+  </td></tr></table>
+</body>
+</html>`;
+
+  const text = [
+    `Payment Receipt – ${receipt.receiptNumber}`,
+    ``,
+    `Dear ${client?.name || "Client"},`,
+    `We acknowledge receipt of your payment.`,
+    ``,
+    `Date:     ${formatDate(receipt.receiptDate)}`,
+    `Amount:   ${formatCurrency(receipt.amount, currency)}`,
+    receipt.reference ? `Reference: ${receipt.reference}` : "",
+    whtIncome > 0 ? `Income tax withheld: ${formatCurrency(whtIncome, currency)}` : "",
+    whtVat > 0 ? `VAT withheld: ${formatCurrency(whtVat, currency)}` : "",
+    ...allocations.map((a) => `Applied to ${a.invoice?.invoiceNumber || "invoice"}: ${formatCurrency(a.amount, currency)}`),
+    unapplied > 0 ? `Held as credit: ${formatCurrency(unapplied, currency)}` : "",
+    ``,
+    companyName,
+  ].filter(Boolean).join("\n");
+
+  try {
+    const transporter = buildCompanySmtpTransporter(profile);
+    await transporter.sendMail({
+      from: resolveCompanyMailSender(profile),
+      to: toEmail,
+      subject,
+      text,
+      html,
+      replyTo: profile?.replyTo || undefined,
+      ...buildCompanyInternalCopyRecipients(profile),
+    });
+    return { success: true };
+  } catch (err) {
+    console.error("[clientEmailService] Failed to send client receipt email:", err.message);
+    return { success: false, reason: err.message };
+  }
+};

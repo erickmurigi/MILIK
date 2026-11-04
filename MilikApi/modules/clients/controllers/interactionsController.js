@@ -1,4 +1,5 @@
 import { createError } from "../../../utils/error.js";
+import { logAuditEvent } from "../../../utils/auditLogger.js";
 import ClientInteraction from "../models/ClientInteraction.js";
 import Client from "../models/Client.js";
 import { resolveActiveBusinessId, currentUserId } from "../services/businessScope.js";
@@ -71,6 +72,7 @@ export const createInteraction = async (req, res, next) => {
       createdBy: userId,
     });
 
+    logAuditEvent({ req, company: business, action: "client.interaction.created", category: "finance", severity: "info", targetType: "ClientInteraction", targetId: interaction._id, targetName: interaction.subject || type, message: `Client ${type} interaction logged`, metadata: { client: clientId } });
     res.status(201).json({
       success: true,
       data:    interaction,
@@ -90,6 +92,7 @@ export const deleteInteraction = async (req, res, next) => {
     if (!interaction) return next(createError(404, "Interaction not found"));
 
     await ClientInteraction.deleteOne({ _id: interaction._id, business });
+    logAuditEvent({ req, company: business, action: "client.interaction.deleted", category: "finance", severity: "info", targetType: "ClientInteraction", targetId: interaction._id, targetName: interaction.subject || interaction.type, message: `Client ${interaction.type} interaction deleted`, metadata: { client: String(interaction.client) } });
     res.status(200).json({ success: true, message: "Interaction deleted" });
   } catch (error) {
     next(error);

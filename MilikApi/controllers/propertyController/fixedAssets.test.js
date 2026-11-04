@@ -24,6 +24,8 @@ import {
 import { callController } from "../../test/callController.js";
 import { createTestCompany, createTestChartOfAccounts, createTestUser } from "../../test/factories.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+import FixedAsset from "../../models/FixedAsset.js";
+import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 
 const setup = async () => {
   const company = await createTestCompany();
@@ -157,6 +159,50 @@ describe("fixedAssets — dispose", () => {
     expect(res.statusCode).toBe(200);
     expect(res.payload.bookValue).toBe(11000);
     expect(res.payload.asset.status).toBe("disposed");
+  });
+
+  // Regression test: disposeFixedAsset posts up to 4 conditional GL legs (accumulated
+  // depreciation, proceeds, gain/loss, asset-at-cost) one at a time with a catch block that only
+  // reversed legs it had already pushed into an array — a leg whose postEntry call itself ghost-
+  // wrote (inserted successfully but the await still threw) was never pushed, so it could never
+  // be reversed and survived as a permanent orphaned entry. Fixed by wrapping every leg plus the
+  // asset's own status flip in one Mongo transaction (see disposeFixedAsset), so any leg's
+  // failure — including a ghost write — rolls back every write from that attempt atomically.
+  // This forces the failure on the LAST leg (CR Asset Account) after two earlier legs (DR
+  // Accumulated Depreciation, DR Loss on Disposal) have already "succeeded", proving the whole
+  // multi-leg disposal rolls back cleanly rather than leaving those two behind.
+  it("rolls back the whole disposal, leaving no orphaned entries, if the final leg's postEntry fails mid-disposal", async () => {
+    const ctx = await setup();
+    const asset = await createAsset(ctx);
+    await callController(runDepreciation, { user: ctx.user, body: { asOf: "2026-01-31" } }); // accumulated = 1000
+
+    // Force the final leg (CR Asset Account at cost) to fail deterministically — after the
+    // accumulated-depreciation leg and the loss-on-disposal leg would already have posted — by
+    // deleting the asset account's posting account outright, so postEntry's own
+    // account-existence check throws.
+    await ChartOfAccount.deleteOne({ _id: ctx.assetAccount._id });
+
+    await expect(
+      callController(disposeFixedAsset, {
+        user: ctx.user,
+        params: { id: asset._id },
+        body: { disposalDate: "2026-02-01", disposalProceeds: 0 },
+      })
+    ).rejects.toThrow();
+
+    // The whole request failed, so the asset itself must be untouched.
+    const reloadedAsset = await FixedAsset.findById(asset._id).lean();
+    expect(reloadedAsset.status).not.toBe("disposed");
+    expect(reloadedAsset.disposalDate).toBeFalsy();
+
+    // Neither of the two legs that would otherwise have posted before the forced failure may
+    // survive as an orphan — this is the exact shape of the ghost-write risk the fix closes.
+    const disposalEntries = await FinancialLedgerEntry.find({
+      business: ctx.company._id,
+      sourceTransactionType: "fixed_asset_disposal",
+      sourceTransactionId: asset._id,
+    }).lean();
+    expect(disposalEntries).toHaveLength(0);
   });
 
   it("rejects editing a disposed asset", async () => {

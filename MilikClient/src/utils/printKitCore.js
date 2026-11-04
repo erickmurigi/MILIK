@@ -249,8 +249,10 @@ const DOC_CSS = `
   .sec { position: relative; z-index: 1; }
 `;
 
-const cellText = (col, row, index) => {
-  const raw = Array.isArray(row) ? row[index] : typeof col.value === "function" ? col.value(row) : row?.[col.key];
+// colIndex picks the cell out of an array row; rowIndex is handed to value(row, rowIndex) like the list
+// table does, so a "#" column written as (r, i) => i + 1 numbers rows instead of printing NaN
+const cellText = (col, row, colIndex, rowIndex) => {
+  const raw = Array.isArray(row) ? row[colIndex] : typeof col.value === "function" ? col.value(row, rowIndex) : row?.[col.key];
   return raw ?? "";
 };
 
@@ -294,9 +296,9 @@ export const documentPageHtml = (spec) => {
   if (table) {
     const cols = table.columns || [];
     const head = cols.map((c) => `<th class="${c.align === "right" ? "num" : ""}" ${c.width ? `style="width:${escapeHtml(c.width)}"` : ""}>${escapeHtml(c.label)}</th>`).join("");
-    const body = (table.rows || []).map((row) => `<tr>${cols.map((c, i) => {
+    const body = (table.rows || []).map((row, rowIndex) => `<tr>${cols.map((c, i) => {
       const sub = typeof c.sub === "function" ? c.sub(row) : "";
-      return `<td class="${c.align === "right" ? "num" : ""}">${escapeHtml(cellText(c, row, i))}${sub ? `<span class="sub">${escapeHtml(sub)}</span>` : ""}</td>`;
+      return `<td class="${c.align === "right" ? "num" : ""}">${escapeHtml(cellText(c, row, i, rowIndex))}${sub ? `<span class="sub">${escapeHtml(sub)}</span>` : ""}</td>`;
     }).join("")}</tr>`).join("");
     tableHtml = `<table class="items"><thead><tr>${head}</tr></thead><tbody>${body || `<tr><td colspan="${Math.max(cols.length, 1)}" style="text-align:center;color:#94a3b8;padding:18px">${escapeHtml(table.empty || "No items")}</td></tr>`}</tbody></table>`;
   }

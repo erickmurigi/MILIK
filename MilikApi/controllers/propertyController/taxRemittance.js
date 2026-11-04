@@ -59,8 +59,15 @@ const aggregateVatForPeriod = async (businessId, accountIds, periodStart, period
       },
     },
     {
+      // Debits are split into actual KRA remittances and everything else (credit notes, reversals of
+      // sales), so the return can show output VAT net of adjustments instead of counting a credit
+      // note's VAT as "remitted". credit - debit (the balance) is unchanged.
       $group: {
-        _id: { accountId: "$accountId", direction: "$direction" },
+        _id: {
+          accountId: "$accountId",
+          direction: "$direction",
+          remittance: { $eq: ["$sourceTransactionType", "tax_remittance"] },
+        },
         total: { $sum: "$amount" },
       },
     },
@@ -69,9 +76,13 @@ const aggregateVatForPeriod = async (businessId, accountIds, periodStart, period
   const map = new Map();
   for (const row of rows) {
     const key   = String(row._id.accountId);
-    const entry = map.get(key) || { credit: 0, debit: 0 };
-    if (row._id.direction === "credit") entry.credit = round2(row.total);
-    if (row._id.direction === "debit")  entry.debit  = round2(row.total);
+    const entry = map.get(key) || { credit: 0, debit: 0, remittedDebit: 0, adjustmentDebit: 0 };
+    if (row._id.direction === "credit") entry.credit = round2(entry.credit + row.total);
+    if (row._id.direction === "debit") {
+      entry.debit = round2(entry.debit + row.total);
+      if (row._id.remittance) entry.remittedDebit = round2(entry.remittedDebit + row.total);
+      else entry.adjustmentDebit = round2(entry.adjustmentDebit + row.total);
+    }
     map.set(key, entry);
   }
   return map;
@@ -113,13 +124,17 @@ export const getVatReturnSummary = async (req, res, next) => {
     const totalsMap     = await aggregateVatForPeriod(businessId, vatAccountIds, periodStart, periodEnd);
 
     const breakdown = vatAccounts.map((account) => {
-      const totals       = totalsMap.get(String(account._id)) || { credit: 0, debit: 0 };
-      const vatCollected = round2(totals.credit);
-      const vatRemitted  = round2(totals.debit);
+      const totals       = totalsMap.get(String(account._id)) || { credit: 0, debit: 0, remittedDebit: 0, adjustmentDebit: 0 };
+      const vatCharged   = round2(totals.credit);
+      const vatAdjustments = round2(totals.adjustmentDebit || 0);
+      const vatCollected = round2(vatCharged - vatAdjustments);
+      const vatRemitted  = round2(totals.remittedDebit || 0);
       return {
         accountId:    String(account._id),
         accountCode:  account.code,
         accountName:  account.name,
+        vatCharged,
+        vatAdjustments,
         vatCollected,
         vatRemitted,
         balance: round2(vatCollected - vatRemitted),
@@ -268,114 +283,134 @@ export const remitVat = async (req, res, next) => {
     const periodLabel = new Date(Number(year), Number(month) - 1, 1)
       .toLocaleString("en-KE", { month: "long", year: "numeric" });
 
-    // Create the TaxRemittance record before posting GL so its _id is the sourceTransactionId
-    remittance = await TaxRemittance.create({
-      business: businessId,
-      periodYear:  Number(year),
-      periodMonth: Number(month),
-      taxType: "vat_output",
-      vatAccount2140Amount,
-      vatAccount2190Amount,
-      totalOutputVat:  totalBalance,
-      alreadyRemitted,
-      amountRemitted:  amount,
-      status: "remitted",
-      paymentDate:      txDate,
-      paymentReference: paymentReference || "",
-      cashbookAccountId,
-      notes: notes || "",
-      createdBy:  actorUserId,
-      remittedBy: actorUserId,
-      remittedAt: new Date(),
-    });
+    // Claim the payment reference ONCE, before the transaction even opens — session.withTransaction
+    // below will silently retry its whole callback on a transient transaction error, and
+    // claimPaymentReference/releasePaymentReference don't take a session (PaymentReferenceLock
+    // can't join the Mongo transaction), so claiming it from inside a retryable callback can
+    // double-claim the same reference against itself on retry. Pre-generating the TaxRemittance's
+    // _id lets the claim (keyed to that id) happen up front, outside any retry loop, while the
+    // record itself is still created inside the transaction below.
+    const remittanceId = new mongoose.Types.ObjectId();
+    await claimPaymentReference({ business: businessId, reference: paymentReference, sourceModel: "TaxRemittance", sourceId: remittanceId });
 
+    let touchedAccountIds = [];
+
+    // The TaxRemittance record and every GL leg below are wrapped in one Mongo transaction instead
+    // of create-then-post-then-manually-delete-on-catch. The old manual rollback
+    // (TaxRemittance.deleteOne + FinancialLedgerEntry.deleteMany) assumed "the call threw => nothing
+    // was written" - false under a ghost write (a write that commits on the primary but loses its
+    // acknowledgment, e.g. a dropped connection or a replica election mid-request), which can leave
+    // one GL leg inserted with no offsetting leg and no TaxRemittance left to explain it. A real
+    // transaction rolls back every write from this attempt atomically, inserts included, if any
+    // step fails. If the transaction itself fails after the reference was already claimed above,
+    // the claim is released as an explicit compensating action in the outer catch below.
+    const session = await mongoose.startSession();
     try {
-      await claimPaymentReference({ business: businessId, reference: paymentReference, sourceModel: "TaxRemittance", sourceId: remittance._id });
-    } catch (refErr) {
-      await TaxRemittance.deleteOne({ _id: remittance._id });
-      return next(refErr);
-    }
+      try {
+        await session.withTransaction(async () => {
+          touchedAccountIds = [];
 
-    // Post GL entries. If any step throws, clean up the remittance record and re-throw.
-    const journalGroupId    = new mongoose.Types.ObjectId();
-    const touchedAccountIds = [];
+          // Create the TaxRemittance record before posting GL so its _id is the sourceTransactionId
+          [remittance] = await TaxRemittance.create([{
+            _id: remittanceId,
+            business: businessId,
+            periodYear:  Number(year),
+            periodMonth: Number(month),
+            taxType: "vat_output",
+            vatAccount2140Amount,
+            vatAccount2190Amount,
+            totalOutputVat:  totalBalance,
+            alreadyRemitted,
+            amountRemitted:  amount,
+            status: "remitted",
+            paymentDate:      txDate,
+            paymentReference: paymentReference || "",
+            cashbookAccountId,
+            notes: notes || "",
+            createdBy:  actorUserId,
+            remittedBy: actorUserId,
+            remittedAt: new Date(),
+          }], { session });
 
-    const commonEntry = {
-      business:              businessId,
-      sourceTransactionType: "tax_remittance",
-      sourceTransactionId:   String(remittance._id),
-      transactionDate:       txDate,
-      statementPeriodStart:  periodStart,
-      statementPeriodEnd:    periodEnd,
-      category:              "TAX_REMITTANCE",
-      journalGroupId,
-      payer:    "n/a",
-      receiver: "n/a",
-      notes:    `KRA VAT remittance â€“ ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
-      createdBy:    actorUserId,
-      approvedBy:   actorUserId,
-      approvedAt:   new Date(),
-      status:       "approved",
-      allowUnscoped: true,
-    };
+          const journalGroupId = new mongoose.Types.ObjectId();
+          const commonEntry = {
+            business:              businessId,
+            sourceTransactionType: "tax_remittance",
+            sourceTransactionId:   String(remittance._id),
+            transactionDate:       txDate,
+            statementPeriodStart:  periodStart,
+            statementPeriodEnd:    periodEnd,
+            category:              "TAX_REMITTANCE",
+            journalGroupId,
+            payer:    "n/a",
+            receiver: "n/a",
+            notes:    `KRA VAT remittance â€“ ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
+            createdBy:    actorUserId,
+            approvedBy:   actorUserId,
+            approvedAt:   new Date(),
+            status:       "approved",
+            allowUnscoped: true,
+          };
 
-    try {
-      // Proportionally debit each VAT account based on outstanding balance.
-      // Ensures 2140 and 2190 are independently reduced â€” not lumped onto one account.
-      let remaining = amount;
-      for (const { account, balance } of balancePerAccount) {
-        if (balance <= 0 || remaining <= 0) continue;
-        const share = totalBalance > 0
-          ? round2((balance / totalBalance) * amount)
-          : remaining;
-        const debitAmount = round2(Math.min(remaining, share));
-        if (debitAmount <= 0) continue;
+          // Proportionally debit each VAT account based on outstanding balance.
+          // Ensures 2140 and 2190 are independently reduced â€” not lumped onto one account.
+          let remaining = amount;
+          for (const { account, balance } of balancePerAccount) {
+            if (balance <= 0 || remaining <= 0) continue;
+            const share = totalBalance > 0
+              ? round2((balance / totalBalance) * amount)
+              : remaining;
+            const debitAmount = round2(Math.min(remaining, share));
+            if (debitAmount <= 0) continue;
 
-        await postEntry({
-          ...commonEntry,
-          accountId: account._id,
-          amount:    debitAmount,
-          direction: "debit",
-          metadata:  { postingRole: "vat_payable_reduction", accountCode: account.code },
+            await postEntry({
+              ...commonEntry,
+              accountId: account._id,
+              amount:    debitAmount,
+              direction: "debit",
+              metadata:  { postingRole: "vat_payable_reduction", accountCode: account.code },
+              session,
+            });
+
+            touchedAccountIds.push(account._id);
+            remaining = round2(remaining - debitAmount);
+          }
+
+          // Absorb any sub-cent rounding dust into the primary VAT account
+          if (remaining > 0.009 && balancePerAccount[0]?.account) {
+            await postEntry({
+              ...commonEntry,
+              accountId: balancePerAccount[0].account._id,
+              amount:    remaining,
+              direction: "debit",
+              metadata:  { postingRole: "vat_payable_rounding", accountCode: balancePerAccount[0].account.code },
+              session,
+            });
+            touchedAccountIds.push(balancePerAccount[0].account._id);
+          }
+
+          // Credit cashbook â€” cash leaves the business to KRA
+          await postEntry({
+            ...commonEntry,
+            accountId: cashbookAccountId,
+            amount,
+            direction: "credit",
+            metadata:  { postingRole: "cashbook_outflow", kraReference: paymentReference || "" },
+            session,
+          });
+          touchedAccountIds.push(cashbookAccountId);
+
+          // Persist journalGroupId back onto the remittance record
+          remittance.journalGroupId = journalGroupId;
+          await remittance.save({ session });
         });
-
-        touchedAccountIds.push(account._id);
-        remaining = round2(remaining - debitAmount);
+      } finally {
+        await session.endSession();
       }
-
-      // Absorb any sub-cent rounding dust into the primary VAT account
-      if (remaining > 0.009 && balancePerAccount[0]?.account) {
-        await postEntry({
-          ...commonEntry,
-          accountId: balancePerAccount[0].account._id,
-          amount:    remaining,
-          direction: "debit",
-          metadata:  { postingRole: "vat_payable_rounding", accountCode: balancePerAccount[0].account.code },
-        });
-        touchedAccountIds.push(balancePerAccount[0].account._id);
-      }
-
-      // Credit cashbook â€” cash leaves the business to KRA
-      await postEntry({
-        ...commonEntry,
-        accountId: cashbookAccountId,
-        amount,
-        direction: "credit",
-        metadata:  { postingRole: "cashbook_outflow", kraReference: paymentReference || "" },
-      });
-      touchedAccountIds.push(cashbookAccountId);
-
-    } catch (glErr) {
-      // GL posting failed â€” delete the orphaned TaxRemittance and any partial GL entries
-      await TaxRemittance.deleteOne({ _id: remittance._id }).catch(() => {});
-      await FinancialLedgerEntry.deleteMany({ sourceTransactionType: "tax_remittance", sourceTransactionId: String(remittance._id) }).catch(() => {});
-      await releasePaymentReference({ business: businessId, reference: paymentReference, sourceModel: "TaxRemittance", sourceId: remittance._id }).catch(() => {});
-      throw glErr;
+    } catch (err) {
+      await releasePaymentReference({ business: businessId, reference: paymentReference, sourceModel: "TaxRemittance", sourceId: remittanceId }).catch(() => {});
+      throw err;
     }
-
-    // Persist journalGroupId back onto the remittance record
-    remittance.journalGroupId = journalGroupId;
-    await remittance.save();
 
     // Refresh cached account balances (non-blocking)
     aggregateChartOfAccountBalances(businessId, touchedAccountIds).catch(() => {});
@@ -414,17 +449,29 @@ export const voidRemittance = async (req, res, next) => {
       status: { $ne: "reversed" },
     }).lean();
 
+    // Reverse every leg inside one Mongo transaction (see deleteTenantInvoice for the same
+    // pattern). Without it, a later leg's reversal failing has no way to undo an earlier leg's
+    // reversal insert that already landed, and the remittance itself would stay half-voided.
+    // Any failure in this attempt rolls back every write from it, inserts included.
     const touchedAccountIds = [];
-    for (const entry of entries) {
-      await postReversal({ entryId: entry._id, reason: reason || "Remittance voided", userId: actorUserId });
-      if (entry.accountId) touchedAccountIds.push(entry.accountId);
-    }
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        touchedAccountIds.length = 0;
+        for (const entry of entries) {
+          const reversal = await postReversal({ entryId: entry._id, reason: reason || "Remittance voided", userId: actorUserId, session });
+          if (reversal?.reversalEntry?.accountId) touchedAccountIds.push(reversal.reversalEntry.accountId);
+        }
 
-    remittance.status     = "voided";
-    remittance.voidedAt   = new Date();
-    remittance.voidedBy   = actorUserId;
-    remittance.voidReason = reason || "";
-    await remittance.save();
+        remittance.status     = "voided";
+        remittance.voidedAt   = new Date();
+        remittance.voidedBy   = actorUserId;
+        remittance.voidReason = reason || "";
+        await remittance.save({ session });
+      });
+    } finally {
+      await session.endSession();
+    }
     await releasePaymentReference({ business: businessId, reference: remittance.paymentReference, sourceModel: "TaxRemittance", sourceId: remittance._id }).catch(() => {});
 
     aggregateChartOfAccountBalances(businessId, touchedAccountIds).catch(() => {});

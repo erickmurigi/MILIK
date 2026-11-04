@@ -85,6 +85,23 @@ const dayRange = (value = new Date()) => {
   return { start, end };
 };
 
+// Runs `fn(session)` inside one Mongo transaction opened and closed here. Every spot in this file that
+// posts or reverses MORE THAN ONE ledger leg per logical operation needs this: a leg can "ghost write"
+// (the insert/update commits on the server while the driver's write-acknowledgment is lost, so the
+// `await postEntry(...)`/`await postReversal(...)` call itself still throws) and, without a real
+// transaction, there is no way to tell that apart from a leg that genuinely never wrote — a caller's own
+// try/catch "rollback" can't undo a write it doesn't know happened. Wrapping the whole operation in one
+// transaction removes the ambiguity: MongoDB itself rolls back every write made inside an aborted
+// transaction, ghost writes included, so either every leg survives or none do.
+const withGLTransaction = async (fn) => {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(() => fn(session));
+  } finally {
+    await session.endSession();
+  }
+};
+
 // ─── Account resolution ───────────────────────────────────────────────────────
 //
 // These are fixed system accounts (one per business+code) whose _id never
@@ -253,10 +270,13 @@ export const postPropertySalePaymentLedger = async ({ businessId, payment, userI
     dimensions: dealDimensions(payment),
   };
 
-  await Promise.all([
-    postEntry({ ...base, accountId: debitAcc._id,  direction: "debit",  amount, notes: `Property sale ${typeLabel} received — ${ref}` }),
-    postEntry({ ...base, accountId: creditAcc._id, direction: "credit", amount, notes: isDeposit ? `Buyer deposit held — ${ref}` : `Property sale ${typeLabel} revenue — ${ref}` }),
-  ]);
+  // Both legs posted sequentially inside ONE transaction — was `Promise.all([postEntry, postEntry])`
+  // with no transaction and no rollback attempt at all: a failure on either leg left the other
+  // (if it had already written) as a permanent orphan with nothing offsetting it.
+  await withGLTransaction(async (session) => {
+    await postEntry({ ...base, accountId: debitAcc._id,  direction: "debit",  amount, notes: `Property sale ${typeLabel} received — ${ref}`, session });
+    await postEntry({ ...base, accountId: creditAcc._id, direction: "credit", amount, notes: isDeposit ? `Buyer deposit held — ${ref}` : `Property sale ${typeLabel} revenue — ${ref}`, session });
+  });
 };
 
 // ─── Payment void — reverse GL entries ───────────────────────────────────────
@@ -272,7 +292,14 @@ export const reversePropertySalePaymentLedger = async ({ businessId, payment, us
   if (!entries.length) return;
 
   const reason = `Void of property sale payment ${payment.paymentNumber || payment._id}`;
-  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+  // Sequential inside ONE transaction — was `Promise.all(entries.map(postReversal))`, which both runs
+  // concurrently against the same ledger (unsafe) and leaves any already-reversed leg permanently
+  // reversed with no undo if a later leg's reversal fails.
+  await withGLTransaction(async (session) => {
+    for (const entry of entries) {
+      await postReversal({ entryId: entry._id, reason, userId, session });
+    }
+  });
 };
 
 // ─── Deposit transfer to revenue — called at deal close ───────────────────────
@@ -323,10 +350,12 @@ export const transferDepositToRevenue = async ({ businessId, payment, userId }) 
     allowUnscoped: true,
   };
 
-  await Promise.all([
-    postEntry({ ...base, accountId: depositHeldAcc._id, direction: "debit",  amount, notes: `Deposit released to revenue on deal close — ${ref}` }),
-    postEntry({ ...base, accountId: revenueAcc._id,     direction: "credit", amount, notes: `Property sale revenue recognised from deposit — ${ref}` }),
-  ]);
+  // Sequential inside ONE transaction — see withGLTransaction's comment for why a Promise.all of two
+  // concurrent, un-transacted postEntry calls is unsafe.
+  await withGLTransaction(async (session) => {
+    await postEntry({ ...base, accountId: depositHeldAcc._id, direction: "debit",  amount, notes: `Deposit released to revenue on deal close — ${ref}`, session });
+    await postEntry({ ...base, accountId: revenueAcc._id,     direction: "credit", amount, notes: `Property sale revenue recognised from deposit — ${ref}`, session });
+  });
 };
 
 // ─── Deposit forfeiture — called when non-refundable deposit is retained ──────
@@ -378,10 +407,12 @@ export const forfeitDepositIncome = async ({ businessId, payment, userId, reason
     allowUnscoped: true,
   };
 
-  await Promise.all([
-    postEntry({ ...base, accountId: depositHeldAcc._id, direction: "debit",  amount, notes: msg }),
-    postEntry({ ...base, accountId: forfeitAcc._id,     direction: "credit", amount, notes: msg }),
-  ]);
+  // Sequential inside ONE transaction — see withGLTransaction's comment for why a Promise.all of two
+  // concurrent, un-transacted postEntry calls is unsafe.
+  await withGLTransaction(async (session) => {
+    await postEntry({ ...base, accountId: depositHeldAcc._id, direction: "debit",  amount, notes: msg, session });
+    await postEntry({ ...base, accountId: forfeitAcc._id,     direction: "credit", amount, notes: msg, session });
+  });
 };
 
 // ─── Stamp duty / transfer costs — called at deal close ───────────────────────
@@ -426,10 +457,12 @@ export const postStampDutyEntry = async ({ businessId, dealId, amount, cashbookA
     allowUnscoped: true,
   };
 
-  await Promise.all([
-    postEntry({ ...base, accountId: stampDutyAcc._id, direction: "debit",  amount: amountRounded, notes: `Stamp duty / transfer costs — deal ${dealId}` }),
-    postEntry({ ...base, accountId: creditAcc._id,    direction: "credit", amount: amountRounded, notes: `Stamp duty payment — deal ${dealId}` }),
-  ]);
+  // Sequential inside ONE transaction — see withGLTransaction's comment for why a Promise.all of two
+  // concurrent, un-transacted postEntry calls is unsafe.
+  await withGLTransaction(async (session) => {
+    await postEntry({ ...base, accountId: stampDutyAcc._id, direction: "debit",  amount: amountRounded, notes: `Stamp duty / transfer costs — deal ${dealId}`, session });
+    await postEntry({ ...base, accountId: creditAcc._id,    direction: "credit", amount: amountRounded, notes: `Stamp duty payment — deal ${dealId}`, session });
+  });
 };
 
 // ─── Commission accrual — Dr Commission Expense (or Owner Clearing, if the deal has an owner) / Cr Commission Payable ───
@@ -597,7 +630,13 @@ export const reversePropertySaleCommissionAccrual = async ({ businessId, commiss
   if (!entries.length) return;
 
   const msg = reason || `Commission cancelled — ${commission.commissionNumber || commission._id}`;
-  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason: msg, userId })));
+  // Sequential inside ONE transaction — see withGLTransaction's comment for why a Promise.all of
+  // concurrent, un-transacted reversals is unsafe.
+  await withGLTransaction(async (session) => {
+    for (const entry of entries) {
+      await postReversal({ entryId: entry._id, reason: msg, userId, session });
+    }
+  });
 };
 
 // ─── Commission payout reversal ───────────────────────────────────────────────
@@ -621,7 +660,13 @@ export const reversePropertySaleCommissionPayout = async ({ businessId, commissi
   if (!payoutEntries.length) return;
 
   const msg = reason || `Commission payout reversed — ${commission.commissionNumber || commission._id}`;
-  await Promise.all(payoutEntries.map((entry) => postReversal({ entryId: entry._id, reason: msg, userId })));
+  // Sequential inside ONE transaction — see withGLTransaction's comment for why a Promise.all of
+  // concurrent, un-transacted reversals is unsafe.
+  await withGLTransaction(async (session) => {
+    for (const entry of payoutEntries) {
+      await postReversal({ entryId: entry._id, reason: msg, userId, session });
+    }
+  });
 };
 
 // ─── Staged/tiered commission release ─────────────────────────────────────────
@@ -638,7 +683,15 @@ const reverseEntriesFor = async ({ businessId, sourceTransactionType, sourceTran
     status: { $nin: ["reversed", "void"] },
   }).lean();
   if (!entries.length) return;
-  await Promise.all(entries.map((entry) => postReversal({ entryId: entry._id, reason, userId })));
+  // Sequential inside ONE transaction — see withGLTransaction's comment for why a Promise.all of
+  // concurrent, un-transacted reversals is unsafe. This is a shared helper (tier release, owner tier
+  // release, agency commission payout, advocate recharge remittance, owner payout reversals all call
+  // it), so fixing it here covers every one of those call sites at once.
+  await withGLTransaction(async (session) => {
+    for (const entry of entries) {
+      await postReversal({ entryId: entry._id, reason, userId, session });
+    }
+  });
 };
 
 // Broker commission tier — Dr Commission Expense (or Owner Clearing) / Cr Commission Payable

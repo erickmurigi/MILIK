@@ -9,6 +9,7 @@ import {
   updateUnitStatus,
   getAvailableUnits,
   bulkImportUnits,
+  bulkSetUnitRentTaxSettings,
   getUnitUtilities,
   addUtilityToUnit,
   removeUtilityFromUnit,
@@ -25,6 +26,9 @@ router.post("/", verifyUser, createUnit)
 
 // Bulk import units
 router.post("/bulk-import", verifyUser, bulkImportUnits)
+
+// Bulk-set rent tax settings on every unit under a property
+router.put("/by-property/:propertyId/rent-tax-settings", verifyUser, bulkSetUnitRentTaxSettings)
 
 // Get all units
 router.get("/", verifyUser, getUnits)

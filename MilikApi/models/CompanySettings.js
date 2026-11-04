@@ -394,6 +394,34 @@ const CompanySettingsSchema = new mongoose.Schema(
     // the base `expenses.approve` one. null/0 = tiering disabled — anyone who can approve, approves
     // any amount (today's behavior), which keeps this fully backward-compatible by default.
     expenseApprovalThreshold: { type: Number, default: null, min: 0 },
+    // Contract Management billing options. Every threshold is null/off by default so existing
+    // companies keep today's behaviour (no approval step, invoices posted straight away).
+    clientBilling: {
+      type: new mongoose.Schema({
+        approvalThreshold:            { type: Number, default: null, min: 0 }, // contract TCV above this needs approval
+        maxDiscountWithoutApproval:   { type: Number, default: null, min: 0, max: 100 }, // line discount % above this needs approval
+        escalationRequiresApproval:   { type: Boolean, default: false },
+        billingRunPostsAsDraft:       { type: Boolean, default: false },
+        defaultPaymentTermsDays:      { type: Number, default: 30, min: 0 },
+        invoicePrefix:                { type: String, default: "CINV", trim: true },
+        creditNotePrefix:             { type: String, default: "CN", trim: true },
+        debitNotePrefix:              { type: String, default: "DN", trim: true },
+        quotePrefix:                  { type: String, default: "QUO", trim: true },
+        invoiceTerms:                 { type: String, default: "", trim: true },
+        mpesaPaybill:                 { type: String, default: "", trim: true },
+        bankDetails: {
+          type: new mongoose.Schema({
+            bankName:      { type: String, default: "", trim: true },
+            branch:        { type: String, default: "", trim: true },
+            accountName:   { type: String, default: "", trim: true },
+            accountNumber: { type: String, default: "", trim: true },
+            swiftCode:     { type: String, default: "", trim: true },
+          }, { _id: false }),
+          default: () => ({}),
+        },
+      }, { _id: false }),
+      default: () => ({}),
+    },
     mriRate: { type: Number, default: 0.075, min: 0, max: 1 },
     currencyCode: { type: String, default: "KES" },
     decimalPlaces: { type: Number, default: 2 },

@@ -206,58 +206,69 @@ export const remitWht = async (req, res, next) => {
     const alreadyRemitted = round2(priorRemittances.reduce((s, r) => s + Number(r.amountRemitted || 0), 0));
     const periodLabel     = new Date(Number(year), Number(month) - 1, 1).toLocaleString("en-KE", { month: "long", year: "numeric" });
 
-    remittance = await TaxRemittance.create({
-      business: businessId,
-      periodYear:  Number(year),
-      periodMonth: Number(month),
-      taxType: "wht",
-      alreadyRemitted,
-      amountRemitted: amount,
-      status: "remitted",
-      paymentDate:      txDate,
-      paymentReference: paymentReference || "",
-      cashbookAccountId,
-      notes: notes || "",
-      createdBy:  actorUserId,
-      remittedBy: actorUserId,
-      remittedAt: new Date(),
-    });
+    let touchedAccountIds = [];
 
-    const journalGroupId    = new mongoose.Types.ObjectId();
-    const touchedAccountIds = [];
-
-    const commonEntry = {
-      business:              businessId,
-      sourceTransactionType: "tax_remittance",
-      sourceTransactionId:   String(remittance._id),
-      transactionDate:       txDate,
-      statementPeriodStart:  periodStart,
-      statementPeriodEnd:    periodEnd,
-      category:              "TAX_REMITTANCE",
-      journalGroupId,
-      payer: "n/a", receiver: "n/a",
-      notes: `KRA WHT remittance â€“ ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
-      createdBy: actorUserId, approvedBy: actorUserId, approvedAt: new Date(),
-      status: "approved",
-      allowUnscoped: true,
-    };
-
+    // The two GL legs (Dr WHT Payable / Cr Cashbook) and the TaxRemittance record itself are
+    // wrapped in one Mongo transaction instead of create-then-post-then-manually-delete-on-catch.
+    // The old manual rollback (TaxRemittance.deleteOne + FinancialLedgerEntry.deleteMany) assumed
+    // "the call threw => nothing was written" - false under a ghost write (a write that commits on
+    // the primary but loses its acknowledgment, e.g. a dropped connection or a replica election
+    // mid-request), which can leave one leg inserted with no offsetting leg and no TaxRemittance
+    // left to explain it. A real transaction rolls back every write from this attempt atomically,
+    // inserts included, if any leg fails.
+    const session = await mongoose.startSession();
     try {
-      // Dr WHT Payable 2141 â€” reduces the liability
-      await postEntry({ ...commonEntry, accountId: whtAccount._id, amount, direction: "debit", metadata: { postingRole: "wht_payable_reduction", accountCode: "2141" } });
-      touchedAccountIds.push(whtAccount._id);
+      await session.withTransaction(async () => {
+        touchedAccountIds = [];
 
-      // Cr Cashbook â€” cash leaves to KRA
-      await postEntry({ ...commonEntry, accountId: cashbookAccountId, amount, direction: "credit", metadata: { postingRole: "cashbook_outflow", kraReference: paymentReference || "" } });
-      touchedAccountIds.push(cashbookAccountId);
-    } catch (glErr) {
-      await TaxRemittance.deleteOne({ _id: remittance._id }).catch(() => {});
-      await FinancialLedgerEntry.deleteMany({ sourceTransactionType: "tax_remittance", sourceTransactionId: String(remittance._id) }).catch(() => {});
-      throw glErr;
+        [remittance] = await TaxRemittance.create([{
+          business: businessId,
+          periodYear:  Number(year),
+          periodMonth: Number(month),
+          taxType: "wht",
+          alreadyRemitted,
+          amountRemitted: amount,
+          status: "remitted",
+          paymentDate:      txDate,
+          paymentReference: paymentReference || "",
+          cashbookAccountId,
+          notes: notes || "",
+          createdBy:  actorUserId,
+          remittedBy: actorUserId,
+          remittedAt: new Date(),
+        }], { session });
+
+        const journalGroupId = new mongoose.Types.ObjectId();
+        const commonEntry = {
+          business:              businessId,
+          sourceTransactionType: "tax_remittance",
+          sourceTransactionId:   String(remittance._id),
+          transactionDate:       txDate,
+          statementPeriodStart:  periodStart,
+          statementPeriodEnd:    periodEnd,
+          category:              "TAX_REMITTANCE",
+          journalGroupId,
+          payer: "n/a", receiver: "n/a",
+          notes: `KRA WHT remittance â€“ ${periodLabel}${paymentReference ? ` (Ref: ${paymentReference})` : ""}`,
+          createdBy: actorUserId, approvedBy: actorUserId, approvedAt: new Date(),
+          status: "approved",
+          allowUnscoped: true,
+        };
+
+        // Dr WHT Payable 2141 â€” reduces the liability
+        await postEntry({ ...commonEntry, accountId: whtAccount._id, amount, direction: "debit", metadata: { postingRole: "wht_payable_reduction", accountCode: "2141" }, session });
+        touchedAccountIds.push(whtAccount._id);
+
+        // Cr Cashbook â€” cash leaves to KRA
+        await postEntry({ ...commonEntry, accountId: cashbookAccountId, amount, direction: "credit", metadata: { postingRole: "cashbook_outflow", kraReference: paymentReference || "" }, session });
+        touchedAccountIds.push(cashbookAccountId);
+
+        remittance.journalGroupId = journalGroupId;
+        await remittance.save({ session });
+      });
+    } finally {
+      await session.endSession();
     }
-
-    remittance.journalGroupId = journalGroupId;
-    await remittance.save();
 
     aggregateChartOfAccountBalances(businessId, touchedAccountIds).catch(() => {});
 
@@ -292,17 +303,29 @@ export const voidWhtRemittance = async (req, res, next) => {
       status: { $ne: "reversed" },
     }).lean();
 
+    // Reverse every leg inside one Mongo transaction (see deleteTenantInvoice for the same
+    // pattern). Without it, a later leg's reversal failing has no way to undo an earlier leg's
+    // reversal insert that already landed, and the remittance itself would stay half-voided.
+    // Any failure in this attempt rolls back every write from it, inserts included.
     const touchedAccountIds = [];
-    for (const entry of entries) {
-      await postReversal({ entryId: entry._id, reason: reason || "WHT remittance voided", userId: actorUserId });
-      if (entry.accountId) touchedAccountIds.push(entry.accountId);
-    }
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        touchedAccountIds.length = 0;
+        for (const entry of entries) {
+          const reversal = await postReversal({ entryId: entry._id, reason: reason || "WHT remittance voided", userId: actorUserId, session });
+          if (reversal?.reversalEntry?.accountId) touchedAccountIds.push(reversal.reversalEntry.accountId);
+        }
 
-    remittance.status     = "voided";
-    remittance.voidedAt   = new Date();
-    remittance.voidedBy   = actorUserId;
-    remittance.voidReason = reason || "";
-    await remittance.save();
+        remittance.status     = "voided";
+        remittance.voidedAt   = new Date();
+        remittance.voidedBy   = actorUserId;
+        remittance.voidReason = reason || "";
+        await remittance.save({ session });
+      });
+    } finally {
+      await session.endSession();
+    }
 
     aggregateChartOfAccountBalances(businessId, touchedAccountIds).catch(() => {});
 

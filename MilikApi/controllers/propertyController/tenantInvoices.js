@@ -1852,7 +1852,7 @@ const recomputeTenantFinancialState = async ({ businessId, tenantId }) => {
   };
 };
 
-const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivableAccount: preResolvedReceivableAccount = null, session = null }) => {
+const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivableAccount: preResolvedReceivableAccount = null, session: externalSession = null }) => {
   const receivableAccount = preResolvedReceivableAccount || await resolveTenantReceivableAccount(invoice.business);
   const amount = Math.abs(Number(invoice.amount || 0));
   const taxSnapshot = invoice?.taxSnapshot || {};
@@ -1930,42 +1930,48 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
     || [_utilityLabel, _invMonthYear && `— ${_invMonthYear}`, `(${invoice.invoiceNumber})`]
         .filter(Boolean).join(" ");
 
-  const receivableLeg = await postEntry({
-    business: invoice.business,
-    property: invoice.property,
-    landlord: invoice.landlord,
-    tenant: invoice.tenant,
-    unit: invoice.unit,
-    sourceTransactionType: "invoice",
-    sourceTransactionId: String(invoice._id),
-    transactionDate: txDate,
-    statementPeriodStart: start,
-    statementPeriodEnd: end,
-    category: ledgerCategory,
-    amount,
-    direction: "debit",
-    debit: amount,
-    credit: 0,
-    accountId: receivableAccount._id,
-    journalGroupId,
-    payer: "tenant",
-    receiver: "manager",
-    notes: invoiceNarration,
-    metadata: {
-      ...commonMetadata,
-      postingRole: "tenant_receivable",
-    },
-    createdBy,
-    approvedBy: createdBy,
-    approvedAt: new Date(),
-    status: "approved",
-    session,
-  });
+  // Posts all three legs under one session. Called either with the caller's own externally
+  // supplied session (joins their transaction) or with a session this function opens and
+  // manages itself below — either way, every leg shares one real MongoDB transaction instead
+  // of the old manual catch-based "reverse whatever legs we captured a committed id for"
+  // cleanup, which could never see (let alone reverse) a leg whose postEntry ghost-wrote
+  // (inserted successfully but the await still threw) — that leg's result was never assigned,
+  // so it was permanently orphaned. A real transaction rolls back every write it contains,
+  // ghost writes included, on any failure.
+  const postLegs = async (session) => {
+    const receivableLeg = await postEntry({
+      business: invoice.business,
+      property: invoice.property,
+      landlord: invoice.landlord,
+      tenant: invoice.tenant,
+      unit: invoice.unit,
+      sourceTransactionType: "invoice",
+      sourceTransactionId: String(invoice._id),
+      transactionDate: txDate,
+      statementPeriodStart: start,
+      statementPeriodEnd: end,
+      category: ledgerCategory,
+      amount,
+      direction: "debit",
+      debit: amount,
+      credit: 0,
+      accountId: receivableAccount._id,
+      journalGroupId,
+      payer: "tenant",
+      receiver: "manager",
+      notes: invoiceNarration,
+      metadata: {
+        ...commonMetadata,
+        postingRole: "tenant_receivable",
+      },
+      createdBy,
+      approvedBy: createdBy,
+      approvedAt: new Date(),
+      status: "approved",
+      session,
+    });
 
-  let creditLeg;
-  let taxLeg;
-  try {
-    creditLeg = await postEntry({
+    const creditLeg = await postEntry({
       business: invoice.business,
       property: invoice.property,
       landlord: invoice.landlord,
@@ -1998,6 +2004,7 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
       session,
     });
 
+    let taxLeg;
     if (outputTaxAmount > 0 && invoice.category !== "DEPOSIT_CHARGE") {
       const companyTaxConfig = await getCompanyTaxConfiguration(invoice.business);
       const outputVatAccount = await resolveOutputVatAccount({
@@ -2038,31 +2045,26 @@ const postInvoiceJournal = async ({ invoice, createdBy, incomeAccount, receivabl
         session,
       });
     }
-  } catch (err) {
-    // If no Mongoose session is wrapping this call, manually reverse any committed legs so the
-    // GL does not end up with an orphaned DR-receivable and no offsetting CR-income.
-    if (!session) {
-      const rollbackIds = [receivableLeg?._id, creditLeg?._id].filter(Boolean);
-      await Promise.allSettled(
-        rollbackIds.map((id) =>
-          postReversal({
-            entryId: id,
-            reason: `Auto-reversal: GL balance protection for failed invoice journal (${invoice.invoiceNumber || invoice._id})`,
-            userId: createdBy,
-          }).catch(() => null)
-        )
-      );
-    }
-    throw err;
+
+    const entries = [receivableLeg, creditLeg];
+    if (taxLeg) entries.push(taxLeg);
+    return { journalGroupId, entries };
+  };
+
+  if (externalSession) {
+    return postLegs(externalSession);
   }
 
-  const entries = [receivableLeg, creditLeg];
-  if (taxLeg) entries.push(taxLeg);
-
-  return {
-    journalGroupId,
-    entries,
-  };
+  const ownSession = await mongoose.startSession();
+  try {
+    let result;
+    await ownSession.withTransaction(async () => {
+      result = await postLegs(ownSession);
+    });
+    return result;
+  } finally {
+    await ownSession.endSession();
+  }
 };
 
 const postInvoiceNoteJournal = async ({ note, createdBy, sourceInvoice = null, postingAccount }) => {
@@ -3642,7 +3644,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
       [String(businessId), String(unit)].join(":"),
       () =>
         Unit.findOne({ _id: unit, business: businessId })
-          .select("_id business property")
+          .select("_id business property rentTaxSettings")
           .lean()
     ),
     getOrLoadCachedValue(
@@ -3913,6 +3915,7 @@ export const createTenantInvoiceRecord = async ({ req, payload, options = {} }) 
     companyTaxConfig,
     requestedTaxCodeKey: payload?.taxCodeKey || req?.body?.taxCodeKey || null,
     requestedTaxMode: payload?.taxMode || req?.body?.taxMode || null,
+    unitTaxSettings: unitDoc?.rentTaxSettings || null,
     overrides: {
       isTaxable:
         typeof payload?.isTaxable === "boolean"
@@ -4226,7 +4229,7 @@ export const updateTakeOnBalance = async (req, res, next) => {
 
     const [propertyDoc, unitDoc, tenantDoc, companyDoc] = await Promise.all([
       Property.findOne({ _id: invoice.property, business: businessId }).select("_id business landlords depositHeldBy").lean(),
-      Unit.findOne({ _id: invoice.unit, business: businessId }).select("_id business property").lean(),
+      Unit.findOne({ _id: invoice.unit, business: businessId }).select("_id business property rentTaxSettings").lean(),
       Tenant.findOne({ _id: invoice.tenant, business: businessId }).select("_id business unit additionalUnits depositHeldBy").lean(),
       Company.findById(businessId).select("_id companyMode").lean(),
     ]);
@@ -4272,6 +4275,7 @@ export const updateTakeOnBalance = async (req, res, next) => {
       amount,
       category: normalizedCategory,
       companyTaxConfig,
+      unitTaxSettings: unitDoc?.rentTaxSettings || null,
       requestedTaxCodeKey:
         req.body.taxCodeKey ||
         invoice.taxSnapshot?.taxCodeKey ||

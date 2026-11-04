@@ -12,7 +12,17 @@ import { selectCurrentCompany, selectAllProperties, selectAllUnits, selectUnitIs
 import { adminRequests } from "../../utils/requestMethods";
 import { normalizeUppercaseInput } from "../../utils/listingPageUtils";
 import ListingImagesField from "../common/ListingImagesField";
+import AppSelect from "../common/AppSelect";
 import { useTerms } from "../../hooks/useTerm";
+
+// One-time starting guess only, applied when a unit is first created — never re-derived
+// at invoice time. See models/Unit.js's unitRentTaxSettingsSchema comment for why.
+const COMMERCIAL_UNIT_TYPE_KEYWORDS = ["shop", "office", "retail", "commercial", "warehouse", "godown", "kiosk", "stall"];
+const guessRentTaxableFromUnitType = (unitTypeLabel = "") => {
+  const key = String(unitTypeLabel || "").trim().toLowerCase();
+  if (!key) return false;
+  return COMMERCIAL_UNIT_TYPE_KEYWORDS.some((word) => key.includes(word));
+};
 
 const MILIK_ORANGE_BG = "bg-[#0B3B2E]";
 const normalizeBillingPeriodKey = (value = "") =>
@@ -97,6 +107,7 @@ const AddUnit = () => {
     videoUrl: "",
     virtualTourUrl: "",
     availableFrom: "",
+    rentTaxSettings: { enabled: false, taxCodeKey: "vat_standard", taxMode: "company_default", rateOverride: "" },
   });
 
   const [existingImages, setExistingImages] = useState([]);
@@ -109,6 +120,13 @@ const AddUnit = () => {
   const [depositTypeOptions, setDepositTypeOptions] = useState([]);
   const [billingPeriodOptions, setBillingPeriodOptions] = useState([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
   const [configuredUnitTypes, setConfiguredUnitTypes] = useState([]);
+  const [taxConfig, setTaxConfig] = useState({ taxSettings: { enabled: false, defaultVatRate: 16 }, taxCodes: [] });
+  const rentTaxSettingsTouchedRef = useRef(false);
+  const activeTaxCodes = useMemo(() => {
+    const rows = Array.isArray(taxConfig.taxCodes) ? taxConfig.taxCodes.filter((item) => item?.isActive !== false) : [];
+    if (rows.length > 0) return rows;
+    return [{ key: "vat_standard", name: "VAT Standard", rate: Number(taxConfig?.taxSettings?.defaultVatRate || 16) }];
+  }, [taxConfig]);
   const [depositTouched, setDepositTouched] = useState(Boolean(isEditMode));
   const [rentTouched, setRentTouched] = useState(Boolean(isEditMode));
   const [utilitiesTouched, setUtilitiesTouched] = useState(Boolean(isEditMode));
@@ -153,11 +171,16 @@ const AddUnit = () => {
             ? res.data.unitTypes.filter((t) => t?.isActive !== false && t?.name)
             : [];
           setConfiguredUnitTypes(activeUnitTypes);
+          setTaxConfig({
+            taxSettings: res?.data?.taxSettings || { enabled: false, defaultVatRate: 16 },
+            taxCodes: Array.isArray(res?.data?.taxCodes) ? res.data.taxCodes : [],
+          });
         })
         .catch(() => {
           setUtilityOptions([]);
           setDepositTypeOptions([]);
           setBillingPeriodOptions([{ key: "monthly", name: "Monthly", durationInMonths: 1 }]);
+          setTaxConfig({ taxSettings: { enabled: false, defaultVatRate: 16 }, taxCodes: [] });
         });
     }
   }, [dispatch, currentCompany?._id, isEditMode]);
@@ -197,7 +220,18 @@ const AddUnit = () => {
           availableFrom: existingUnit.availableFrom
             ? new Date(existingUnit.availableFrom).toISOString().slice(0, 10)
             : "",
+          rentTaxSettings: {
+            enabled: Boolean(existingUnit.rentTaxSettings?.enabled),
+            taxCodeKey: existingUnit.rentTaxSettings?.taxCodeKey || "vat_standard",
+            taxMode: existingUnit.rentTaxSettings?.taxMode || "company_default",
+            rateOverride:
+              existingUnit.rentTaxSettings?.rateOverride === null ||
+              existingUnit.rentTaxSettings?.rateOverride === undefined
+                ? ""
+                : String(existingUnit.rentTaxSettings.rateOverride),
+          },
         });
+        rentTaxSettingsTouchedRef.current = true;
       }
     }
   }, [isEditMode, unitId, units]);
@@ -395,6 +429,9 @@ const AddUnit = () => {
       const next = { ...prev, [name]: nextValue };
       if (name === "rent" && !depositTouched && !isEditMode) {
         next.deposit = nextValue;
+      }
+      if (name === "unitType" && !isEditMode && !rentTaxSettingsTouchedRef.current) {
+        next.rentTaxSettings = { ...prev.rentTaxSettings, enabled: guessRentTaxableFromUnitType(nextValue) };
       }
       return next;
     });
@@ -599,6 +636,13 @@ const AddUnit = () => {
       minimumLeaseTermMonths: formData.minimumLeaseTermMonths === "" ? 0 : Number(formData.minimumLeaseTermMonths),
       videoUrl: formData.videoUrl?.trim() || "",
       virtualTourUrl: formData.virtualTourUrl?.trim() || "",
+      rentTaxSettings: {
+        enabled: Boolean(formData.rentTaxSettings.enabled),
+        taxCodeKey: formData.rentTaxSettings.taxCodeKey || "vat_standard",
+        taxMode: formData.rentTaxSettings.taxMode || "company_default",
+        rateOverride:
+          formData.rentTaxSettings.rateOverride === "" ? null : Number(formData.rentTaxSettings.rateOverride || 0),
+      },
       ...(isEditMode ? { availableFrom: formData.availableFrom || null } : {}),
       business: currentCompany._id,
       ...(isEditMode
@@ -661,7 +705,9 @@ const AddUnit = () => {
       listingTitle: "", bedrooms: "", bathrooms: "", parkingSpaces: "", floorNumber: "",
       petsAllowed: false, rentNegotiable: false, minimumLeaseTermMonths: "",
       videoUrl: "", virtualTourUrl: "", availableFrom: "",
+      rentTaxSettings: { enabled: false, taxCodeKey: "vat_standard", taxMode: "company_default", rateOverride: "" },
     });
+    rentTaxSettingsTouchedRef.current = false;
     setStagedImageFiles([]);
     setFieldErrors({});
     setGeneralError("");
@@ -858,6 +904,88 @@ const AddUnit = () => {
                   />
                   Owner occupied
                 </label>
+              </div>
+            </div>
+
+            <div className="border border-slate-200 bg-white">
+              <div className="border-b border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                <span className="text-[11px] font-black uppercase tracking-wide text-slate-800">Rent Tax (VAT)</span>
+                <span className="ml-2 text-[11px] text-slate-500">
+                  Explicit, per-{termUnit.toLowerCase()} setting — residential {termRent.toLowerCase()} is normally VAT-exempt, commercial is normally taxable. Leave off unless this {termUnit.toLowerCase()} should charge VAT on {termRent.toLowerCase()}.
+                </span>
+              </div>
+              <div className="grid grid-cols-1 items-end gap-x-3 gap-y-2 p-2.5 md:grid-cols-4">
+                <label className="flex h-7 items-center gap-2 text-xs font-bold text-slate-900">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.rentTaxSettings.enabled)}
+                    onChange={(e) => {
+                      rentTaxSettingsTouchedRef.current = true;
+                      setFormData((prev) => ({
+                        ...prev,
+                        rentTaxSettings: { ...prev.rentTaxSettings, enabled: e.target.checked },
+                      }));
+                    }}
+                    disabled={loading}
+                  />
+                  Charge VAT on {termRent.toLowerCase()}
+                </label>
+                <div>
+                  <label className={labelClass}>Tax code</label>
+                  <AppSelect
+                    value={formData.rentTaxSettings.taxCodeKey || null}
+                    onChange={(v) => {
+                      rentTaxSettingsTouchedRef.current = true;
+                      setFormData((prev) => ({
+                        ...prev,
+                        rentTaxSettings: { ...prev.rentTaxSettings, taxCodeKey: v ?? "" },
+                      }));
+                    }}
+                    options={activeTaxCodes.map((taxCode) => ({ value: taxCode.key, label: `${taxCode.name} (${Number(taxCode.rate || 0)}%)` }))}
+                    disabled={loading || !formData.rentTaxSettings.enabled}
+                    size="sm"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Tax mode</label>
+                  <AppSelect
+                    value={formData.rentTaxSettings.taxMode || null}
+                    onChange={(v) => {
+                      rentTaxSettingsTouchedRef.current = true;
+                      setFormData((prev) => ({
+                        ...prev,
+                        rentTaxSettings: { ...prev.rentTaxSettings, taxMode: v ?? "" },
+                      }));
+                    }}
+                    options={[
+                      { value: "company_default", label: "Use Company Default" },
+                      { value: "exclusive", label: "Tax Exclusive" },
+                      { value: "inclusive", label: "Tax Inclusive" },
+                    ]}
+                    disabled={loading || !formData.rentTaxSettings.enabled}
+                    size="sm"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Rate override (%)</label>
+                  <input
+                    type="number"
+                    value={formData.rentTaxSettings.rateOverride}
+                    onChange={(e) => {
+                      rentTaxSettingsTouchedRef.current = true;
+                      const { value } = e.target;
+                      setFormData((prev) => ({
+                        ...prev,
+                        rentTaxSettings: { ...prev.rentTaxSettings, rateOverride: value },
+                      }));
+                    }}
+                    placeholder="Use tax code's rate"
+                    min="0"
+                    step="0.01"
+                    disabled={loading || !formData.rentTaxSettings.enabled}
+                    className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-500`}
+                  />
+                </div>
               </div>
             </div>
 

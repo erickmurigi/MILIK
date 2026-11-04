@@ -305,6 +305,26 @@ const ClientsList       = lazy(() => import("./pages/Clients/ClientsList"));
 const ClientDetail      = lazy(() => import("./pages/Clients/ClientDetail"));
 const ClientsContracts  = lazy(() => import("./pages/Clients/ClientsContracts"));
 const ClientsInvoices   = lazy(() => import("./pages/Clients/ClientsInvoices"));
+const ClientForm            = lazy(() => import("./pages/Clients/ClientForm"));
+const ClientReceipts        = lazy(() => import("./pages/Clients/ClientReceipts"));
+const AddClientReceipt      = lazy(() => import("./pages/Clients/AddClientReceipt"));
+const ClientMpesaUnmatched  = lazy(() => import("./pages/Clients/ClientMpesaUnmatched"));
+const ClientWhtCertificates = lazy(() => import("./pages/Clients/ClientWhtCertificates"));
+const ClientCollections     = lazy(() => import("./pages/Clients/ClientCollections"));
+const ClientDunningSettings = lazy(() => import("./pages/Clients/ClientDunningSettings"));
+const ClientReports         = lazy(() => import("./pages/Clients/ClientReports"));
+const ClientEtimsSettings   = lazy(() => import("./pages/Clients/ClientEtimsSettings"));
+const ContractForm          = lazy(() => import("./pages/Clients/ContractForm"));
+const ContractDetail        = lazy(() => import("./pages/Clients/ContractDetail"));
+const InvoiceForm           = lazy(() => import("./pages/Clients/InvoiceForm"));
+const InvoiceDetail         = lazy(() => import("./pages/Clients/InvoiceDetail"));
+const BillingRun            = lazy(() => import("./pages/Clients/BillingRun"));
+const BillingRunHistory     = lazy(() => import("./pages/Clients/BillingRunHistory"));
+const BillingSettings       = lazy(() => import("./pages/Clients/BillingSettings"));
+const CreditNotes           = lazy(() => import("./pages/Clients/CreditNotes"));
+const Quotes                = lazy(() => import("./pages/Clients/Quotes"));
+const QuoteForm             = lazy(() => import("./pages/Clients/QuoteForm"));
+const RevenueRecognition    = lazy(() => import("./pages/Clients/RevenueRecognition"));
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const EXTRA_SESSION_KEYS = ["milik_active_company_id"];
@@ -891,8 +911,34 @@ function App() {
             {/* ── Client Management module ──────────────────────────────── */}
             <Route path="/clients/dashboard"          element={<Guard resource="clients"><ClientsDashboard /></Guard>} />
             <Route path="/clients/contracts"         element={<Guard resource="clients"><ClientsContracts /></Guard>} />
+            <Route path="/clients/contracts/new"     element={<Guard resource="clients" action="create"><ContractForm /></Guard>} />
+            <Route path="/clients/contracts/:id/edit" element={<Guard resource="clients" action="edit"><ContractForm /></Guard>} />
+            <Route path="/clients/contracts/:id"     element={<Guard resource="clients"><ContractDetail /></Guard>} />
+            <Route path="/clients/billing/run"       element={<Guard resource="clients"><BillingRun /></Guard>} />
+            <Route path="/clients/billing/runs"      element={<Guard resource="clients"><BillingRunHistory /></Guard>} />
+            <Route path="/clients/billing/runs/:id"  element={<Guard resource="clients"><BillingRunHistory /></Guard>} />
+            <Route path="/clients/billing/settings"  element={<Guard resource="clients"><BillingSettings /></Guard>} />
             <Route path="/clients/invoices"          element={<Guard resource="clients"><ClientsInvoices /></Guard>} />
+            <Route path="/clients/invoices/new"      element={<Guard resource="clients" action="create"><InvoiceForm /></Guard>} />
+            <Route path="/clients/invoices/:id/edit" element={<Guard resource="clients" action="edit"><InvoiceForm /></Guard>} />
+            <Route path="/clients/invoices/:id"      element={<Guard resource="clients"><InvoiceDetail /></Guard>} />
+            <Route path="/clients/notes"             element={<Guard resource="clients"><CreditNotes /></Guard>} />
+            <Route path="/clients/quotes"            element={<Guard resource="clients"><Quotes /></Guard>} />
+            <Route path="/clients/quotes/new"        element={<Guard resource="clients" action="create"><QuoteForm /></Guard>} />
+            <Route path="/clients/quotes/:id/edit"   element={<Guard resource="clients" action="edit"><QuoteForm /></Guard>} />
+            <Route path="/clients/revenue"           element={<Guard resource="clients"><RevenueRecognition /></Guard>} />
             <Route path="/clients"                   element={<Guard resource="clients"><ClientsList /></Guard>} />
+            <Route path="/clients/new"               element={<Guard resource="clients" action="create"><ClientForm /></Guard>} />
+            <Route path="/clients/receipts"          element={<Guard resource="clients"><ClientReceipts /></Guard>} />
+            <Route path="/clients/receipts/new"      element={<Guard resource="clients" action="create"><AddClientReceipt /></Guard>} />
+            <Route path="/clients/mpesa-unmatched"   element={<Guard resource="clients"><ClientMpesaUnmatched /></Guard>} />
+            <Route path="/clients/wht-certificates"  element={<Guard resource="clients"><ClientWhtCertificates /></Guard>} />
+            <Route path="/clients/collections"       element={<Guard resource="clients"><ClientCollections /></Guard>} />
+            <Route path="/clients/collections/settings" element={<Guard resource="clients"><ClientDunningSettings /></Guard>} />
+            <Route path="/clients/reports/:report"   element={<Guard resource="clients"><ClientReports /></Guard>} />
+            <Route path="/clients/etims"             element={<Guard resource="clients"><ClientEtimsSettings /></Guard>} />
+            <Route path="/clients/:id/edit"          element={<Guard resource="clients" action="edit"><ClientForm /></Guard>} />
+            {/* Keep last: /clients/:id would otherwise swallow the static paths above. */}
             <Route path="/clients/:id"               element={<Guard resource="clients"><ClientDetail /></Guard>} />
 
             {/* ── System setup ──────────────────────────────────────────── */}

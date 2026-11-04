@@ -91,6 +91,34 @@ const routeNames = {
   '/settings': 'Operational Settings',
   '/communications/sms': 'SMS Manager',
   '/communications/email': 'Email Manager',
+  '/clients': 'Clients',
+  '/clients/dashboard': 'Dashboard',
+  '/clients/new': 'New Client',
+  '/clients/contracts': 'Contracts',
+  '/clients/invoices': 'Client Invoices',
+  '/clients/receipts': 'Client Receipts',
+  '/clients/receipts/new': 'Record Receipt',
+  '/clients/mpesa-unmatched': 'Unmatched M-Pesa',
+  '/clients/wht-certificates': 'WHT Certificates',
+  '/clients/collections': 'Collections',
+  '/clients/collections/settings': 'Dunning Settings',
+  '/clients/reports/ar-aging': 'AR Aging',
+  '/clients/reports/revenue': 'Client Revenue',
+  '/clients/reports/billing-forecast': 'Billing Forecast',
+  '/clients/reports/contract-register': 'Contract Register',
+  '/clients/reports/renewals': 'Renewals',
+  '/clients/reports/sales-vat': 'Sales VAT',
+  '/clients/reports/wht-by-client': 'WHT by Client',
+  '/clients/etims': 'KRA eTIMS',
+  '/clients/contracts/new': 'New Contract',
+  '/clients/billing/run': 'Billing Run',
+  '/clients/billing/runs': 'Billing Runs',
+  '/clients/billing/settings': 'Billing Settings',
+  '/clients/invoices/new': 'New Invoice',
+  '/clients/notes': 'Credit & Debit Notes',
+  '/clients/quotes': 'Quotes',
+  '/clients/quotes/new': 'New Quote',
+  '/clients/revenue': 'Revenue Recognition',
   '/carwash/dashboard': 'Dashboard',
   '/carwash/jobs': 'Jobs',
   '/carwash/jobs/new': 'New Job',
@@ -187,7 +215,14 @@ export const getPageTitle = (pathname) => {
   // callers that navigate here normally pass the real client name via
   // location.state.tabTitle (see ClientsList.jsx etc.), which takes priority
   // over this. Without it the tab title fell back to the raw ObjectId.
+  if (/^\/clients\/contracts\/[a-f0-9]{24}$/i.test(pathname)) return 'Contract';
+  if (/^\/clients\/contracts\/[a-f0-9]{24}\/edit$/i.test(pathname)) return 'Edit Contract';
+  if (/^\/clients\/invoices\/[a-f0-9]{24}$/i.test(pathname)) return 'Invoice';
+  if (/^\/clients\/invoices\/[a-f0-9]{24}\/edit$/i.test(pathname)) return 'Edit Invoice';
+  if (/^\/clients\/quotes\/[a-f0-9]{24}\/edit$/i.test(pathname)) return 'Quote';
+  if (/^\/clients\/billing\/runs\/[a-f0-9]{24}$/i.test(pathname)) return 'Billing Run Detail';
   if (/^\/clients\/[a-f0-9]{24}$/i.test(pathname)) return 'Client Details';
+  if (/^\/clients\/[a-f0-9]{24}\/edit$/i.test(pathname)) return 'Edit Client';
 
   if (parts.length > 0) {
     const last = parts[parts.length - 1];

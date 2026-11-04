@@ -11,6 +11,22 @@ const unitUtilitySchema = new mongoose.Schema(
   { _id: true }
 );
 
+// Mirrors Property.commissionTaxSettings' shape. Deliberately has NO schema-level default object —
+// an untouched unit must stay `undefined` here (not an auto-materialized {enabled:false,...}), because
+// Mongoose applies subdocument defaults on every hydration (not just on create), and a default object
+// would get silently persisted to pre-existing units the first time any OTHER field on them is saved,
+// permanently losing the "never configured, fall back to the company-wide rent taxability switch" signal
+// that resolveInvoiceTaxability() in taxCalculationService.js depends on.
+const unitRentTaxSettingsSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+    taxCodeKey: { type: String, default: "vat_standard", trim: true },
+    taxMode: { type: String, enum: ["company_default", "exclusive", "inclusive"], default: "company_default" },
+    rateOverride: { type: Number, default: null, min: 0 },
+  },
+  { _id: false }
+);
+
 // Mirrors Property.securityDeposits' sub-schema shape (depositType/chargeMode/amount/currency/refundable)
 // so non-rent deposit types configured on the property can be propagated down to a unit and edited per-unit.
 const unitDepositSchema = new mongoose.Schema(
@@ -84,6 +100,12 @@ const UnitSchema = new mongoose.Schema(
     deposits: {
       type: [unitDepositSchema],
       default: [],
+    },
+
+    // No `default` here on purpose — see unitRentTaxSettingsSchema comment above.
+    rentTaxSettings: {
+      type: unitRentTaxSettingsSchema,
+      default: undefined,
     },
 
     billingFrequency: {

@@ -13,11 +13,28 @@ import TenantInvoice from "../../models/TenantInvoice.js";
 import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../../models/ChartOfAccount.js";
+import Unit from "../../models/Unit.js";
 import {
   createTestChartOfAccounts,
+  createTestCompanySettings,
   createTestLease,
   createTestUser,
 } from "../../test/factories.js";
+
+const enableTaxOnRent = (company) =>
+  createTestCompanySettings({
+    company,
+    taxSettings: {
+      enabled: true,
+      defaultTaxMode: "exclusive",
+      defaultTaxCodeKey: "vat_standard",
+      defaultVatRate: 16,
+      roundingPrecision: 2,
+      outputVatAccountCode: "2140",
+      invoiceTaxableByDefault: true,
+      invoiceTaxabilityByCategory: { rent: true, utility: true, penalty: false, deposit: false },
+    },
+  });
 
 // Builds a minimal req.user-bearing object usable both as `req` for
 // createTenantInvoiceRecord (which reads req.user/req.body) and as the
@@ -478,5 +495,175 @@ describe("getTenantInvoiceNotes — validation", () => {
     const outsider = await createTestUser({});
     const outsiderView = await callController(getTenantInvoiceNotes, { query: { tenant: String(tenant._id) }, user: outsider });
     expect(outsiderView.payload).toHaveLength(0);
+  });
+});
+
+// postInvoiceJournal posts the receivable, income, and (when taxable) output VAT legs under
+// one real transaction — found during a Tax Report accuracy audit that its manual catch-based
+// rollback could never see a leg whose postEntry ghost-wrote (inserted successfully but the
+// await still threw), permanently orphaning it. See postInvoiceJournal in tenantInvoices.js.
+describe("createTenantInvoiceRecord — output VAT posting atomicity", () => {
+  it("posts receivable, income, and output VAT legs for a taxable invoice", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({ rentAmount: 10000 });
+    await createTestChartOfAccounts(company._id);
+    await enableTaxOnRent(company);
+    const user = await createTestUser({ company });
+
+    const invoice = await createTenantInvoiceRecord({
+      req: { user, body: {} },
+      payload: {
+        business: String(company._id),
+        property: String(property._id),
+        landlord: String(landlord._id),
+        tenant: String(tenant._id),
+        unit: String(unit._id),
+        category: "RENT_CHARGE",
+        amount: 10000,
+        description: "Rent charge",
+        invoiceDate: new Date(),
+        dueDate: new Date(),
+      },
+    });
+
+    expect(invoice.taxSnapshot?.taxAmount).toBeGreaterThan(0);
+
+    const entries = await FinancialLedgerEntry.find({
+      sourceTransactionType: "invoice",
+      sourceTransactionId: String(invoice._id),
+    }).lean();
+    expect(entries).toHaveLength(3);
+
+    const vatLeg = entries.find((e) => e.metadata?.postingRole === "output_vat_payable");
+    expect(vatLeg).toBeTruthy();
+    expect(vatLeg.credit).toBeCloseTo(invoice.taxSnapshot.taxAmount, 2);
+  });
+
+  it("rolls back the receivable and income legs, leaving no orphaned entry, if the output VAT leg fails mid-post", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({ rentAmount: 10000 });
+    await createTestChartOfAccounts(company._id);
+    await enableTaxOnRent(company);
+    const user = await createTestUser({ company });
+
+    // Force resolveOutputVatAccount to fail: remove its exact code match AND every account
+    // whose name would otherwise satisfy its fallback regex (2141 "Withholding Tax Payable"
+    // and 2170 "PAYE Tax Payable" both match /vat|tax payable/i too).
+    await ChartOfAccount.deleteMany({
+      business: company._id,
+      $or: [{ code: "2140" }, { name: { $regex: "vat|tax payable", $options: "i" } }],
+    });
+
+    await expect(
+      createTenantInvoiceRecord({
+        req: { user, body: {} },
+        payload: {
+          business: String(company._id),
+          property: String(property._id),
+          landlord: String(landlord._id),
+          tenant: String(tenant._id),
+          unit: String(unit._id),
+          category: "RENT_CHARGE",
+          amount: 10000,
+          description: "Rent charge",
+          invoiceDate: new Date(),
+          dueDate: new Date(),
+        },
+      })
+    ).rejects.toThrow();
+
+    // The invoice document itself is intentionally kept (marked postingStatus: "failed" by the
+    // outer catch in createTenantInvoiceRecord) — what this test proves is that no GL entry
+    // survives for it, i.e. the receivable + income legs that posted before the VAT leg failed
+    // were rolled back, not left as an orphaned, unbalanced pair.
+    const invoices = await TenantInvoice.find({ business: company._id, tenant: tenant._id, category: "RENT_CHARGE" }).lean();
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0].postingStatus).toBe("failed");
+
+    const entries = await FinancialLedgerEntry.find({
+      sourceTransactionType: "invoice",
+      sourceTransactionId: { $in: invoices.map((i) => String(i._id)) },
+    }).lean();
+    expect(entries).toHaveLength(0);
+  });
+});
+
+// Regression coverage for unit-level rent VAT classification: a unit's own rentTaxSettings
+// (see models/Unit.js) must override the company-wide invoiceTaxabilityByCategory.rent switch
+// in both directions, and a never-configured unit must fall back to the company switch unchanged.
+describe("createTenantInvoiceRecord — unit-level rent VAT override", () => {
+  const makeInvoicePayload = ({ company, property, landlord, tenant, unit }) => ({
+    business: String(company._id),
+    property: String(property._id),
+    landlord: String(landlord._id),
+    tenant: String(tenant._id),
+    unit: String(unit._id),
+    category: "RENT_CHARGE",
+    amount: 10000,
+    description: "Rent charge",
+    invoiceDate: new Date(),
+    dueDate: new Date(),
+  });
+
+  it("taxes rent when the unit is explicitly enabled even though the company-wide rent switch is off", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({ rentAmount: 10000 });
+    await createTestChartOfAccounts(company._id);
+    await createTestCompanySettings({
+      company,
+      taxSettings: {
+        enabled: true,
+        defaultTaxMode: "exclusive",
+        defaultTaxCodeKey: "vat_standard",
+        defaultVatRate: 16,
+        roundingPrecision: 2,
+        outputVatAccountCode: "2140",
+        invoiceTaxableByDefault: false,
+        invoiceTaxabilityByCategory: { rent: false, utility: false, penalty: false, deposit: false },
+      },
+    });
+    await Unit.findByIdAndUpdate(unit._id, {
+      rentTaxSettings: { enabled: true, taxCodeKey: "vat_standard", taxMode: "company_default", rateOverride: null },
+    });
+    const user = await createTestUser({ company });
+
+    const invoice = await createTenantInvoiceRecord({
+      req: { user, body: {} },
+      payload: makeInvoicePayload({ company, property, landlord, tenant, unit }),
+    });
+
+    expect(invoice.taxSnapshot?.isTaxable).toBe(true);
+    expect(invoice.taxSnapshot?.taxAmount).toBeGreaterThan(0);
+  });
+
+  it("exempts rent when the unit is explicitly disabled even though the company-wide rent switch is on", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({ rentAmount: 10000 });
+    await createTestChartOfAccounts(company._id);
+    await enableTaxOnRent(company);
+    await Unit.findByIdAndUpdate(unit._id, {
+      rentTaxSettings: { enabled: false, taxCodeKey: "vat_standard", taxMode: "company_default", rateOverride: null },
+    });
+    const user = await createTestUser({ company });
+
+    const invoice = await createTenantInvoiceRecord({
+      req: { user, body: {} },
+      payload: makeInvoicePayload({ company, property, landlord, tenant, unit }),
+    });
+
+    expect(invoice.taxSnapshot?.isTaxable).toBe(false);
+    expect(Number(invoice.taxSnapshot?.taxAmount || 0)).toBe(0);
+  });
+
+  it("falls back to the company-wide rent switch unchanged when the unit has never been configured", async () => {
+    const { tenant, unit, property, company, landlord } = await createTestLease({ rentAmount: 10000 });
+    await createTestChartOfAccounts(company._id);
+    await enableTaxOnRent(company);
+    // No Unit.rentTaxSettings write at all — this is every pre-existing unit in production today.
+    const user = await createTestUser({ company });
+
+    const invoice = await createTenantInvoiceRecord({
+      req: { user, body: {} },
+      payload: makeInvoicePayload({ company, property, landlord, tenant, unit }),
+    });
+
+    expect(invoice.taxSnapshot?.isTaxable).toBe(true);
+    expect(invoice.taxSnapshot?.taxAmount).toBeGreaterThan(0);
   });
 });

@@ -17,8 +17,6 @@ import PaginationBar from '../../components/PaginationBar';
 import { useTerms } from '../../hooks/useTerm';
 import printTabularList from '../../utils/printList';
 
-const GREEN_BG = 'bg-[#0B3B2E]';
-const ORANGE = '#F97316';
 const DEFAULT_RATE = 16;
 
 const parseDate = (value) => {
@@ -126,6 +124,12 @@ const TaxReports = () => {
       .filter((invoice) => {
         if (filters.propertyId && String(invoice?.property?._id || invoice?.property) !== String(filters.propertyId)) return false;
         if (['cancelled', 'reversed'].includes(String(invoice?.status || '').toLowerCase())) return false;
+        // taxSnapshot is computed and saved on the invoice BEFORE GL posting is even attempted,
+        // so an invoice whose posting genuinely failed (e.g. a misconfigured VAT account) still
+        // carries a non-zero taxSnapshot.taxAmount despite having no ledger entry at all — this
+        // report must only reflect tax actually in the books. "not_applicable" (off-ledger mode,
+        // posting deliberately skipped by design) is not a failure and stays included.
+        if (['failed', 'unposted'].includes(String(invoice?.postingStatus || '').toLowerCase())) return false;
         return Number(invoice?.taxSnapshot?.taxAmount || 0) > 0;
       })
       .map((invoice) => ({
@@ -335,20 +339,21 @@ const TaxReports = () => {
           </table>
         </div>
       </div>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-100 p-2">
-        <div className="flex w-full max-w-full min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="print:hidden">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 p-2 print:hidden">
+        <div className="mx-auto flex w-full max-w-full min-h-0 flex-1 flex-col gap-2">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
             <ListToolbar>
-              <div className="flex flex-col gap-0.5">
-                <label className="text-[8px] font-semibold uppercase text-slate-400">Start Date</label>
-                <input type="date" value={filters.startDate} onChange={setFilter("startDate")}
-                  className="h-[20px] border border-orange-300 bg-orange-50 px-1.5 text-[9px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
-              <div className="flex flex-col gap-0.5">
-                <label className="text-[8px] font-semibold uppercase text-slate-400">End Date</label>
-                <input type="date" value={filters.endDate} onChange={setFilter("endDate")}
-                  className="h-[20px] border border-orange-300 bg-orange-50 px-1.5 text-[9px] text-slate-700 focus:outline-none focus:ring-1 focus:ring-[#0B3B2E]" />
-              </div>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Net: {formatMoney(totals.netAmount)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Tax: {formatMoney(totals.taxAmount)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Gross: {formatMoney(totals.grossAmount)}</span>
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Default VAT Rate: {Number(companyTaxConfig?.taxSettings?.defaultVatRate || DEFAULT_RATE)}%</span>
+
+              <ListToolbar.Divider />
+
+              <span className="shrink-0 text-[10px] font-semibold text-slate-500">From</span>
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={filters.startDate} onChange={setFilter("startDate")} />
+              <span className="shrink-0 text-[10px] font-semibold text-slate-500">To</span>
+              <ListToolbar.Input width="w-[5.5rem]" type="date" value={filters.endDate} onChange={setFilter("endDate")} />
               <AppSelect
                 value={filters.propertyId}
                 onChange={(v) => setFilters((prev) => ({ ...prev, propertyId: v ?? '' }))}
@@ -358,18 +363,15 @@ const TaxReports = () => {
                 clearable
                 compact
               />
-              <div className="ml-auto flex shrink-0 items-center gap-0.5">
+
+              <ListToolbar.Divider />
+
+              <div className="ml-auto flex shrink-0 items-center gap-1">
                 <ListToolbar.Button icon={FaFileDownload} variant="accent" onClick={handleExportCSV} disabled={!canExportReports} title={canExportReports ? "Export CSV" : "You do not have permission to export reports"}>Export CSV</ListToolbar.Button>
-                <ListToolbar.Button icon={FaPrint} onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}>Print</ListToolbar.Button>
+                <ListToolbar.Button icon={FaPrint} variant="outline" onClick={handlePrint} disabled={!canExportReports} title={canExportReports ? "Print" : "You do not have permission to print reports"}>Print</ListToolbar.Button>
               </div>
             </ListToolbar>
-          </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
-            <div className={`${GREEN_BG} px-3 py-2 text-white`}>
-              <h3 className="text-xs font-bold">Tax Breakdown</h3>
-              <p className="mt-1 text-xs text-emerald-50">Default company VAT rate: {Number(companyTaxConfig?.taxSettings?.defaultVatRate || DEFAULT_RATE)}%</p>
-            </div>
             <div className="min-h-0 flex-1 overflow-hidden flex flex-col">
               <MilikTable
                 minWidth="1000px"
@@ -387,20 +389,20 @@ const TaxReports = () => {
                 ]}
                 rows={paginatedRows}
                 rowKey="id"
-                loading={loading}
+                loading={loading && rows.length === 0}
                 empty="No tax rows found for the selected period."
                 renderRow={(row) => (
                   <>
-                    <td className="px-3 py-1 border-r border-gray-100">{new Date(row.date).toLocaleDateString()}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">{row.source}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 font-semibold text-slate-900">{row.reference}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">{row.propertyName}</td>
-                    <td className="px-3 py-1 border-r border-gray-100">{row.partyName}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 uppercase">{row.taxCode}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right">{row.taxRate.toFixed(2)}%</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold">{formatMoney(row.netAmount)}</td>
-                    <td className="px-3 py-1 border-r border-gray-100 text-right font-semibold text-orange-700">{formatMoney(row.taxAmount)}</td>
-                    <td className="px-3 py-1 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">{new Date(row.date).toLocaleDateString()}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">{row.source}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 font-semibold text-slate-900">{row.reference}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">{row.propertyName}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">{row.partyName}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100">{row.taxCode}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right">{row.taxRate.toFixed(2)}%</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right">{formatMoney(row.netAmount)}</td>
+                    <td className="px-3 py-1.5 border-r border-gray-100 text-right font-semibold text-slate-900">{formatMoney(row.taxAmount)}</td>
+                    <td className="px-3 py-1.5 text-right font-bold text-slate-900">{formatMoney(row.grossAmount)}</td>
                   </>
                 )}
               />

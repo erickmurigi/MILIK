@@ -54,6 +54,9 @@ const LEDGER_CATEGORIES = [
   "YEAR_END_CLOSE",
   "CLIENT_INVOICE",
   "CLIENT_PAYMENT",
+  "CLIENT_CREDIT_NOTE",
+  "CLIENT_DEBIT_NOTE",
+  "CLIENT_REVENUE_RECOGNITION",
 ];
 
 const SOURCE_TYPES = [
@@ -106,6 +109,8 @@ const SOURCE_TYPES = [
   "expense_requisition",
   "client_invoice",
   "client_payment",
+  "client_invoice_note",
+  "client_revenue_recognition",
   "other",
 ];
 

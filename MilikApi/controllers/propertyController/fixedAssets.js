@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import FixedAsset from "../../models/FixedAsset.js";
-import { postEntry, postReversal } from "../../services/ledgerPostingService.js";
+import { postEntry } from "../../services/ledgerPostingService.js";
 import { aggregateChartOfAccountBalances } from "../../services/chartAccountAggregationService.js";
 import { toObjectId } from "../../utils/db.js";
 import { resolveBusinessId, currentUserId } from "../../utils/requestContext.js";
@@ -441,62 +441,67 @@ export const disposeFixedAsset = async (req, res, next) => {
       notes: `Asset disposal — ${asset.name} on ${disposalAt.toISOString().split("T")[0]}`,
     };
 
-    const postedLegs = [];
+    // All conditional legs below, plus the asset's own status flip, are posted inside ONE Mongo
+    // transaction. Without this, a sequential run of up-to-4 postEntry calls is vulnerable to a
+    // ghost write: a leg's insert can commit on the server while the driver's write
+    // acknowledgment is lost, so the call still throws — but by then there's no reference to
+    // that leg's _id to clean it up (the `leg = await postEntry(...)` assignment never
+    // completed), leaving a permanently orphaned, un-reversed leg with nothing to balance it.
+    // A real transaction makes this atomic: either every leg posts and the asset flips to
+    // "disposed" together, or the whole attempt — including any ghost-written leg — rolls back
+    // and nothing is left behind. This replaces the previous catch-based partial-leg reversal
+    // loop, which only protected legs that had already completed and been pushed, and whose own
+    // sequential reversals had no safety net if one of them failed too.
+    const disposalSession = await mongoose.startSession();
     try {
-      // 1. DR Accumulated Depreciation (clear contra-asset)
-      if (accumulated > 0) {
-        const leg = await postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "debit", amount: accumulated });
-        postedLegs.push(leg);
-        touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
-      }
-
-      // 2. DR Proceeds Account (if provided and proceeds > 0)
-      if (proceedsAccountId && proceeds > 0) {
-        const leg = await postEntry({ ...basePayload, accountId: proceedsAccountId, direction: "debit", amount: proceeds });
-        postedLegs.push(leg);
-        touchedAccounts.add(String(proceedsAccountId));
-      }
-
-      // 3. DR Loss on Disposal / CR Gain on Disposal (balancing leg via depreciationExpenseAccount)
-      //    netGainLoss > 0 → gain → CR; netGainLoss < 0 → loss → DR
-      if (Math.abs(netGainLoss) > 0.005) {
-        const gainLossDir = netGainLoss > 0 ? "credit" : "debit";
-        const leg = await postEntry({
-          ...basePayload,
-          accountId: asset.depreciationExpenseAccount._id,
-          direction: gainLossDir,
-          amount: Math.abs(netGainLoss),
-          notes: `${netGainLoss > 0 ? "Gain" : "Loss"} on disposal — ${asset.name}`,
-        });
-        postedLegs.push(leg);
-        touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
-      }
-
-      // 4. CR Asset Account (remove at cost)
-      if (cost > 0) {
-        const leg = await postEntry({ ...basePayload, accountId: asset.assetAccount._id, direction: "credit", amount: cost });
-        postedLegs.push(leg);
-        touchedAccounts.add(String(asset.assetAccount._id));
-      }
-    } catch (glError) {
-      for (const leg of postedLegs) {
-        if (leg?._id) {
-          await postReversal({ entryId: leg._id, reason: `Auto-reversal: GL balance protection for failed disposal of ${asset.name}`, userId }).catch(() => null);
+      await disposalSession.withTransaction(async () => {
+        // 1. DR Accumulated Depreciation (clear contra-asset)
+        if (accumulated > 0) {
+          await postEntry({ ...basePayload, accountId: asset.accumulatedDepreciationAccount._id, direction: "debit", amount: accumulated, session: disposalSession });
+          touchedAccounts.add(String(asset.accumulatedDepreciationAccount._id));
         }
-      }
-      throw glError;
+
+        // 2. DR Proceeds Account (if provided and proceeds > 0)
+        if (proceedsAccountId && proceeds > 0) {
+          await postEntry({ ...basePayload, accountId: proceedsAccountId, direction: "debit", amount: proceeds, session: disposalSession });
+          touchedAccounts.add(String(proceedsAccountId));
+        }
+
+        // 3. DR Loss on Disposal / CR Gain on Disposal (balancing leg via depreciationExpenseAccount)
+        //    netGainLoss > 0 → gain → CR; netGainLoss < 0 → loss → DR
+        if (Math.abs(netGainLoss) > 0.005) {
+          const gainLossDir = netGainLoss > 0 ? "credit" : "debit";
+          await postEntry({
+            ...basePayload,
+            accountId: asset.depreciationExpenseAccount._id,
+            direction: gainLossDir,
+            amount: Math.abs(netGainLoss),
+            notes: `${netGainLoss > 0 ? "Gain" : "Loss"} on disposal — ${asset.name}`,
+            session: disposalSession,
+          });
+          touchedAccounts.add(String(asset.depreciationExpenseAccount._id));
+        }
+
+        // 4. CR Asset Account (remove at cost)
+        if (cost > 0) {
+          await postEntry({ ...basePayload, accountId: asset.assetAccount._id, direction: "credit", amount: cost, session: disposalSession });
+          touchedAccounts.add(String(asset.assetAccount._id));
+        }
+
+        asset.status = "disposed";
+        asset.disposalDate = disposalAt;
+        asset.disposalProceeds = proceeds;
+        asset.disposalNotes = String(disposalNotes);
+        asset.disposedBy = userId || null;
+        await asset.save({ session: disposalSession });
+      });
+    } finally {
+      await disposalSession.endSession();
     }
 
     if (touchedAccounts.size) {
       await aggregateChartOfAccountBalances(businessId, [...touchedAccounts]);
     }
-
-    asset.status = "disposed";
-    asset.disposalDate = disposalAt;
-    asset.disposalProceeds = proceeds;
-    asset.disposalNotes = String(disposalNotes);
-    asset.disposedBy = userId || null;
-    await asset.save();
 
     return res.status(200).json({
       success: true,

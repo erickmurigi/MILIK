@@ -153,6 +153,15 @@ import clientRoutes         from "./modules/clients/routes/clients.js";
 import clientContractRoutes from "./modules/clients/routes/contracts.js";
 import clientInvoiceRoutes  from "./modules/clients/routes/invoices.js";
 import clientInteractionRoutes from "./modules/clients/routes/interactions.js";
+import clientCreditNoteRoutes from "./modules/clients/routes/creditNotes.js";
+import clientBillingRoutes  from "./modules/clients/routes/billing.js";
+import clientRevenueRoutes  from "./modules/clients/routes/revenue.js";
+import clientQuoteRoutes    from "./modules/clients/routes/quotes.js";
+import clientReceiptRoutes  from "./modules/clients/routes/receipts.js";
+import clientCollectionRoutes from "./modules/clients/routes/collections.js";
+import clientReportRoutes   from "./modules/clients/routes/reports.js";
+import clientEtimsRoutes    from "./modules/clients/routes/etims.js";
+import clientPortalRoutes   from "./modules/clients/routes/portal.js";
 import publicListingsRoute  from "./routes/publicListings.js";
 import rentalListingLeadsRoute from "./routes/rentalListingLeads.js";
 import cookieParser from "cookie-parser";
@@ -755,6 +764,15 @@ app.use("/api/inventory/supplier-payments", invSupplierPaymentRoutes);
 app.use("/api/clients/contracts",         clientContractRoutes);
 app.use("/api/clients/invoices",          clientInvoiceRoutes);
 app.use("/api/clients/interactions",      clientInteractionRoutes);
+app.use("/api/clients/notes",             clientCreditNoteRoutes);
+app.use("/api/clients/billing",           clientBillingRoutes);
+app.use("/api/clients/revenue",           clientRevenueRoutes);
+app.use("/api/clients/quotes",            clientQuoteRoutes);
+app.use("/api/clients/receipts",          clientReceiptRoutes);
+app.use("/api/clients/collections",       clientCollectionRoutes);
+app.use("/api/clients/reports",           clientReportRoutes);
+app.use("/api/clients/etims",             clientEtimsRoutes);
+app.use("/api/clients/portal",            clientPortalRoutes);
 app.use("/api/clients",                   clientRoutes);
 
 app.get("/privacy-policy", (req, res) => {
@@ -945,7 +963,7 @@ async function startServer() {
         const now = new Date();
         try {
           const ri = await ClientInvoiceModel.updateMany(
-            { status: { $in: ["sent", "partial"] }, dueDate: { $lt: now } },
+            { status: { $in: ["posted", "sent", "partial", "partially_paid"] }, dueDate: { $lt: now } },
             { $set: { status: "overdue" } }
           );
           if (ri.modifiedCount) console.log(`[Overdue Cron] Marked ${ri.modifiedCount} invoice(s) as overdue`);
@@ -983,6 +1001,65 @@ async function startServer() {
       console.log("[RenewalReminder Cron] Scheduled — daily at 08:30 EAT");
     } catch (cronErr) {
       console.error("[RenewalReminder Cron] Failed to schedule:", cronErr?.message || cronErr);
+    }
+
+    // ── Contract billing crons (Contract Management) ─────────────────────────
+    // 06:00 EAT daily: apply due price escalations, then expire / auto-renew ended contracts and
+    //                  expire stale quotes.
+    // 06:30 EAT daily: billing run for contracts flagged autoBill (idempotent per schedule period).
+    // 06:45 EAT on the 1st: recognise deferred revenue through the month just ended.
+    try {
+      const cron = await import("node-cron");
+      const { runContractEscalations, processContractLifecycle } = await import("./modules/clients/services/clientContractService.js");
+      const { runAutoBillingForAllCompanies } = await import("./modules/clients/services/clientBillingService.js");
+      const { runRevenueRecognitionForAllCompanies } = await import("./modules/clients/services/clientRevenueService.js");
+      cron.default.schedule("0 6 * * *", async () => {
+        try {
+          const esc = await runContractEscalations({});
+          if (esc.escalated || esc.pendingApproval || esc.failures.length) console.log("[ContractEscalation Cron]", JSON.stringify(esc));
+          const life = await processContractLifecycle({});
+          if (life.expired || life.autoRenewed || life.quotesExpired || life.failures.length) console.log("[ContractLifecycle Cron]", JSON.stringify(life));
+        } catch (err) {
+          console.error("[ContractEscalation Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      cron.default.schedule("30 6 * * *", async () => {
+        try {
+          const results = await runAutoBillingForAllCompanies({});
+          if (results.length) console.log("[ClientAutoBilling Cron]", JSON.stringify(results));
+        } catch (err) {
+          console.error("[ClientAutoBilling Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      cron.default.schedule("45 6 1 * *", async () => {
+        try {
+          const results = await runRevenueRecognitionForAllCompanies({});
+          if (results.length) console.log("[RevenueRecognition Cron]", JSON.stringify(results));
+        } catch (err) {
+          console.error("[RevenueRecognition Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      const { processClientDunning } = await import("./modules/clients/services/dunningService.js");
+      const { processEtimsRetries } = await import("./modules/clients/services/etimsService.js");
+      // 09:00 EAT daily: client dunning reminders. Every 15 min: retry failed/pending eTIMS submissions.
+      cron.default.schedule("0 9 * * *", async () => {
+        try {
+          const result = await processClientDunning();
+          if (result) console.log("[ClientDunning Cron]", JSON.stringify(result));
+        } catch (err) {
+          console.error("[ClientDunning Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      cron.default.schedule("*/15 * * * *", async () => {
+        try {
+          await processEtimsRetries();
+        } catch (err) {
+          console.error("[EtimsRetry Cron] Error:", err?.message || err);
+        }
+      }, { timezone: "Africa/Nairobi" });
+      console.log("[ContractBilling Crons] Scheduled — escalation/lifecycle 06:00, auto-billing 06:30 daily; revenue recognition 06:45 on the 1st; dunning 09:00; eTIMS retries every 15 min (EAT)");
+    } catch (cronErr) {
+      console.error("[ContractBilling Crons] Failed to schedule:", cronErr?.message || cronErr);
     }
     // ── Lease expiry push reminder cron ──────────────────────────────────────
     // Runs at 08:45 EAT daily. Pushes to PMS-access users at 30/7/1 days before a lease's end date.

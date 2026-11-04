@@ -97,6 +97,7 @@ const PropertyCommissionSettings = () => {
   const [formData, setFormData] = useState(defaultForm);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [bulkRentTaxSaving, setBulkRentTaxSaving] = useState(false);
   const [taxConfig, setTaxConfig] = useState({
     taxSettings: { enabled: false, defaultVatRate: 16 },
     taxCodes: [],
@@ -290,6 +291,28 @@ const PropertyCommissionSettings = () => {
       toast.error(error || `Failed to update ${termProperty.toLowerCase()} commission settings`);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleBulkSetRentTax = async (enabled) => {
+    if (!selectedProperty) {
+      toast.error('Select a property first');
+      return;
+    }
+    const verb = enabled ? 'mark every unit as VAT-taxable on rent' : 'mark every unit as rent VAT-exempt';
+    if (!window.confirm(`This will ${verb} for every unit under ${selectedProperty.propertyName}, overwriting any unit-level setting already made. Continue?`)) {
+      return;
+    }
+    setBulkRentTaxSaving(true);
+    try {
+      await adminRequests.put(`/units/by-property/${selectedProperty._id}/rent-tax-settings`, {
+        rentTaxSettings: { enabled, taxCodeKey: 'vat_standard', taxMode: 'company_default', rateOverride: null },
+      });
+      toast.success(`Rent VAT ${enabled ? 'enabled' : 'disabled'} on every unit under ${selectedProperty.propertyName}`);
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to update units');
+    } finally {
+      setBulkRentTaxSaving(false);
     }
   };
 
@@ -563,6 +586,31 @@ const PropertyCommissionSettings = () => {
                       />
                     </div>
 
+                  </div>
+                </div>
+
+                <div className={`${CARD} p-3`}>
+                  <h2 className="text-xs font-black uppercase tracking-wide text-slate-800">Rent VAT — Bulk Apply to Units</h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Rent VAT is set per unit (not per {termProperty.toLowerCase()}), since a {termProperty.toLowerCase()} can mix taxable commercial units with exempt residential ones. Use this to set every unit under {selectedProperty ? selectedProperty.propertyName : 'the selected ' + termProperty.toLowerCase()} at once — it overwrites each unit's existing setting. Edit a single unit directly for exceptions.
+                  </p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => handleBulkSetRentTax(true)}
+                      disabled={!selectedProperty || bulkRentTaxSaving}
+                      className="border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Mark all units taxable
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkSetRentTax(false)}
+                      disabled={!selectedProperty || bulkRentTaxSaving}
+                      className="border border-slate-300 px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Mark all units exempt
+                    </button>
                   </div>
                 </div>
               </div>

@@ -399,25 +399,45 @@ const reverseJournalLedgerEntries = async ({ journal, userId, reason }) => {
 
   if (!originalEntries.length) return [];
 
-  const reversalResults = await Promise.all(
-    originalEntries.map((entry) =>
-      postReversal({
-        entryId: entry._id,
-        reason: reason || `Reversal of journal ${journal.journalNo}`,
-        userId,
-      })
-    )
-  );
-
   const touchedAccountIds = new Set();
   originalEntries.forEach((entry) => {
     if (entry?.accountId) touchedAccountIds.add(String(entry.accountId));
   });
-  reversalResults.forEach((result) => {
-    if (result?.reversalEntry?.accountId) {
-      touchedAccountIds.add(String(result.reversalEntry.accountId));
-    }
-  });
+
+  // Every original leg's reversal, plus the journal's own status flip, is wrapped in ONE Mongo
+  // transaction and run SEQUENTIALLY (not Promise.all — a session must not run concurrent ops).
+  // Without this, postReversal's insert can ghost-write (commit on the server while the driver's
+  // ack is lost) and still reject — and running reversals concurrently with no rollback at all
+  // means a failure on leg N leaves legs 1..N-1 reversed and the rest untouched: a real,
+  // unbalanced, half-reversed GL state with no retry-safety. The transaction makes it all-or-
+  // nothing: either every leg reverses and the journal flips to "reversed" together, or the whole
+  // attempt rolls back — nothing left half-done, and a retry starts clean.
+  const reversalResults = [];
+  const reversalSession = await mongoose.startSession();
+  try {
+    await reversalSession.withTransaction(async () => {
+      for (const entry of originalEntries) {
+        const result = await postReversal({
+          entryId: entry._id,
+          reason: reason || `Reversal of journal ${journal.journalNo}`,
+          userId,
+          session: reversalSession,
+        });
+        reversalResults.push(result);
+        if (result?.reversalEntry?.accountId) {
+          touchedAccountIds.add(String(result.reversalEntry.accountId));
+        }
+      }
+
+      journal.status = "reversed";
+      journal.reversedAt = new Date();
+      journal.reversedBy = userId;
+      journal.reversalReason = reason || "Journal reversed";
+      await journal.save({ session: reversalSession });
+    });
+  } finally {
+    await reversalSession.endSession();
+  }
 
   if (touchedAccountIds.size > 0) {
     await aggregateChartOfAccountBalances(journal.business, Array.from(touchedAccountIds));
@@ -504,50 +524,60 @@ const postJournalToLedger = async ({ journal, actorUserId }) => {
     },
   };
 
+  // Both legs, plus the Journal document's own status flip, are posted inside ONE Mongo
+  // transaction. Without this, a sequential postEntry/postEntry pair is vulnerable to a
+  // ghost write: the credit leg's insert can commit on the server while the driver's write
+  // acknowledgment is lost, so the call still throws — but by then there's no reference to
+  // that leg's _id to clean it up (the `creditLeg = await postEntry(...)` assignment never
+  // completed), leaving a permanently orphaned, un-reversed credit leg with no offsetting
+  // debit. A real transaction makes this atomic: either both legs post and the journal flips
+  // to "posted" together, or the whole attempt rolls back and nothing is left behind.
   let debitLeg, creditLeg;
+  const glSession = await mongoose.startSession();
   try {
-    debitLeg = await postEntry({
-      ...commonPayload,
-      accountId: journal.debitAccount,
-      direction: "debit",
-      debit: amount,
-      credit: 0,
-      metadata: {
-        ...commonPayload.metadata,
-        includeInLandlordStatement: Boolean(statementPostingConfig.debitLeg?.includeInLandlordStatement),
-        ...(statementPostingConfig.debitLeg?.statementBucket
-          ? { statementBucket: statementPostingConfig.debitLeg.statementBucket }
-          : {}),
-      },
-    });
+    await glSession.withTransaction(async () => {
+      debitLeg = await postEntry({
+        ...commonPayload,
+        accountId: journal.debitAccount,
+        direction: "debit",
+        debit: amount,
+        credit: 0,
+        metadata: {
+          ...commonPayload.metadata,
+          includeInLandlordStatement: Boolean(statementPostingConfig.debitLeg?.includeInLandlordStatement),
+          ...(statementPostingConfig.debitLeg?.statementBucket
+            ? { statementBucket: statementPostingConfig.debitLeg.statementBucket }
+            : {}),
+        },
+        session: glSession,
+      });
 
-    creditLeg = await postEntry({
-      ...commonPayload,
-      accountId: journal.creditAccount,
-      direction: "credit",
-      debit: 0,
-      credit: amount,
-      metadata: {
-        ...commonPayload.metadata,
-        includeInLandlordStatement: Boolean(statementPostingConfig.creditLeg?.includeInLandlordStatement),
-        ...(statementPostingConfig.creditLeg?.statementBucket
-          ? { statementBucket: statementPostingConfig.creditLeg.statementBucket }
-          : {}),
-      },
+      creditLeg = await postEntry({
+        ...commonPayload,
+        accountId: journal.creditAccount,
+        direction: "credit",
+        debit: 0,
+        credit: amount,
+        metadata: {
+          ...commonPayload.metadata,
+          includeInLandlordStatement: Boolean(statementPostingConfig.creditLeg?.includeInLandlordStatement),
+          ...(statementPostingConfig.creditLeg?.statementBucket
+            ? { statementBucket: statementPostingConfig.creditLeg.statementBucket }
+            : {}),
+        },
+        session: glSession,
+      });
+
+      journal.status = "posted";
+      journal.postedAt = new Date();
+      journal.postedBy = actorUserId;
+      journal.journalGroupId = journalGroupId;
+      journal.ledgerEntries = [debitLeg._id, creditLeg._id];
+      await journal.save({ session: glSession });
     });
-  } catch (error) {
-    if (debitLeg?._id) {
-      await postReversal({ entryId: debitLeg._id, reason: `Auto-reversal: GL balance protection for journal ${journal.journalNo}`, userId: actorUserId }).catch(() => null);
-    }
-    throw error;
+  } finally {
+    await glSession.endSession();
   }
-
-  journal.status = "posted";
-  journal.postedAt = new Date();
-  journal.postedBy = actorUserId;
-  journal.journalGroupId = journalGroupId;
-  journal.ledgerEntries = [debitLeg._id, creditLeg._id];
-  await journal.save();
 
   await aggregateChartOfAccountBalances(journal.business, [
     String(journal.debitAccount),
@@ -876,17 +906,13 @@ export const reverseJournalEntry = async (req, res, next) => {
     const actorUserId = await resolveActorUserId(req, businessId);
     const reason = String(req.body?.reason || "").trim();
 
+    // Reverses every leg and flips the journal's own status to "reversed" inside one atomic
+    // transaction (see reverseJournalLedgerEntries) — nothing further to save here.
     await reverseJournalLedgerEntries({
       journal,
       userId: actorUserId,
       reason,
     });
-
-    journal.status = "reversed";
-    journal.reversedAt = new Date();
-    journal.reversedBy = actorUserId;
-    journal.reversalReason = reason || "Journal reversed";
-    await journal.save();
 
     emitToCompany(businessId, "journal:reversed", { journalId: journal._id });
 
