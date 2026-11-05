@@ -9,6 +9,8 @@ const PrinterSchema = new mongoose.Schema({
   printCaptainOrder:{type:Boolean,default:false}
 });
 
+PrinterSchema.index({ business: 1 });
+
 export default mongoose.model("Printer",PrinterSchema)
 
 

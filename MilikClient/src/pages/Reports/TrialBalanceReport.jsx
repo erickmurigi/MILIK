@@ -209,7 +209,8 @@ const TrialBalanceReport = () => {
   const preparedBy = currentUser?.name || currentUser?.username || currentUser?.email || "System";
 
   const handleRowClick = (row) => {
-    if (!row?._id) return;
+    // computed lines (Retained Earnings from prior years) have no account to drill into
+    if (!row?._id || row.isComputed) return;
     navigate(`/accounts/chart-of-accounts/${row._id}/activity`, {
       state: { trialBalanceDrillDown: { endDate: filters.asOfDate } },
     });

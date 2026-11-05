@@ -107,7 +107,7 @@ const RemittanceTable = ({ rows, showPeriod, voidingId, onVoid, canVoid, loading
 export default function WhtRemittance() {
   const company     = useSelector(selectCurrentCompany);
   const currentUser = useSelector(selectCurrentUser);
-  const { confirm } = useConfirm();
+  const confirm = useConfirm();
 
   const canProcess = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
   const canReverse = hasCompanyPermission(currentUser, company, "financialReports", "reverse", "accounts");

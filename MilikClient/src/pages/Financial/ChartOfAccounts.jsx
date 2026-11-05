@@ -103,6 +103,16 @@ const normalizeGroup = (value = "", type = "") => {
 const subGroupOptionsForType = (type = "") =>
   SUBGROUP_OPTIONS_BY_TYPE[String(type || "").toLowerCase()] || [];
 
+// Balances arrive signed to the account's normal side (positive = normal). Shown as an amount and the side it
+// actually sits on, as the Trial Balance does, so a credit balance on an asset can't pass for a debit one.
+const sideOf = (type, balance) => {
+  const normal = NORMAL_BALANCE_BY_TYPE[String(type || "").toLowerCase()] || "Debit";
+  if (Number(balance) >= 0) return normal === "Debit" ? "Dr" : "Cr";
+  return normal === "Debit" ? "Cr" : "Dr";
+};
+const fmtSided = (type, balance) => (Math.abs(Number(balance || 0)) < 0.005 ? formatMoney(0) : `${formatMoney(Math.abs(balance))} ${sideOf(type, balance)}`);
+const isWrongSide = (account) => Number(account.balance || 0) < -0.005 && !account.isContra;
+
 const classLabel = (account) => {
   if (account?.subGroup) return account.subGroup;
   const t = String(account?.type || "").toLowerCase();
@@ -309,6 +319,15 @@ const ChartOfAccounts = () => {
       return { ...group, classes, count: visibleGroupAccounts.length, totalBalance, groupType };
     });
   }, [filteredAccounts, normalizedSearch, typeFilter, balanceFilter]);
+
+  // Double-entry check across the whole chart: debit-side balances must equal credit-side balances. Only
+  // meaningful when every account is loaded (no module filter), and independent of the on-screen filters.
+  const ledgerCheck = useMemo(() => {
+    if (moduleScope || !accounts.length) return null;
+    const net = accounts.reduce((s, a) => s + (NORMAL_BALANCE_BY_TYPE[a.type] === "Credit" ? -1 : 1) * Number(a.balance || 0), 0);
+    return { balanced: Math.abs(net) < 0.01, difference: Math.abs(net) };
+  }, [accounts, moduleScope]);
+  const wrongSideCount = useMemo(() => accounts.filter(isWrongSide).length, [accounts]);
 
   // ── Form helpers ──
   const parentOptions = useMemo(() =>
@@ -532,14 +551,19 @@ const ChartOfAccounts = () => {
   const handlePrintList = () => {
     if (!visibleAccountsInOrder.length) { toast.info("There are nothing to print — adjust the filters."); return; }
     setPrinting(true);
-    const grandTotal = visibleAccountsInOrder.reduce((s, a) => s + Number(a.balance || 0), 0);
+    let totalDr = 0, totalCr = 0;
+    for (const a of visibleAccountsInOrder) {
+      if (sideOf(a.type, a.balance) === "Dr") totalDr += Math.abs(Number(a.balance || 0));
+      else totalCr += Math.abs(Number(a.balance || 0));
+    }
     const printed = printTabularList({
       title: "Chart of Accounts",
       subtitle: `${visibleAccountsInOrder.length.toLocaleString()} account${visibleAccountsInOrder.length !== 1 ? "s" : ""}`,
       company: currentCompany,
       summaryItems: [
         ["Total Accounts", visibleAccountsInOrder.length.toLocaleString()],
-        ["Net Balance", formatMoney(grandTotal)],
+        ["Debit Balances", formatMoney(totalDr)],
+        ["Credit Balances", formatMoney(totalCr)],
       ],
       columns: [
         { label: "Code", value: (a) => a.code || "-" },
@@ -547,11 +571,11 @@ const ChartOfAccounts = () => {
         { label: "Type", value: (a) => a._group },
         { label: "Class", value: (a) => a._class },
         { label: "Normal Side", value: (a) => a.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[a.type] || "-" },
-        { label: "Balance", align: "right", bold: true, value: (a) => formatMoney(Number(a.balance || 0)) },
+        { label: "Balance to Date", align: "right", bold: true, value: (a) => fmtSided(a.type, a.balance) },
         { label: "Status", value: (a) => (a.isActive === false ? "INACTIVE" : a.isHeader ? "HEADER" : "POSTING") },
       ],
       rows: visibleAccountsInOrder,
-      totalsRow: [`Total (${visibleAccountsInOrder.length.toLocaleString()} accounts)`, "", "", "", "", formatMoney(grandTotal), ""],
+      totalsRow: [`Total (${visibleAccountsInOrder.length.toLocaleString()} accounts)`, "", "", "", "", `Dr ${formatMoney(totalDr)} · Cr ${formatMoney(totalCr)}`, ""],
     });
     if (!printed) toast.error("Pop-up blocked — allow pop-ups for this site to print");
     setPrinting(false);
@@ -561,11 +585,12 @@ const ChartOfAccounts = () => {
   const handleExportCsv = () => {
     if (!visibleAccountsInOrder.length) { toast.info("There is nothing to export — adjust the filters."); return; }
     setExporting(true);
-    const header = ["Code", "Account Name", "Type", "Class", "Normal Side", "Balance", "Status"];
+    const header = ["Code", "Account Name", "Type", "Class", "Normal Side", "Balance", "Side", "Status"];
     const rows = visibleAccountsInOrder.map((a) => [
       a.code || "", a.name || "", a._group, a._class,
       a.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[a.type] || "",
-      Number(a.balance || 0).toFixed(2),
+      Math.abs(Number(a.balance || 0)).toFixed(2),
+      sideOf(a.type, a.balance),
       a.isActive === false ? "INACTIVE" : a.isHeader ? "HEADER" : "POSTING",
     ]);
     const csv = [header, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -650,6 +675,24 @@ const ChartOfAccounts = () => {
           <ListToolbar.Button icon={FaCompressAlt} variant="outline" onClick={collapseAll}>Collapse All</ListToolbar.Button>
 
           <div className="ml-auto flex shrink-0 items-center gap-1">
+            {!loading && ledgerCheck && (
+              <span
+                className={`border px-1.5 py-0.5 text-[10px] font-bold ${ledgerCheck.balanced ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700"}`}
+                title="Total debit balances against total credit balances across every account"
+              >
+                {ledgerCheck.balanced ? "Debits = Credits" : `Out of balance by ${formatMoney(ledgerCheck.difference)}`}
+              </span>
+            )}
+            {!loading && wrongSideCount > 0 && (
+              <button
+                type="button"
+                onClick={() => { setBalanceFilter("withBalances"); setStatusFilter(""); setTypeFilter(""); setSearchInput(""); }}
+                className="border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700"
+                title="Accounts whose balance sits on the opposite side to their type, shown in red below"
+              >
+                {wrongSideCount} wrong-side balance{wrongSideCount === 1 ? "" : "s"}
+              </button>
+            )}
             {selectedIds.length > 0 && (
               <span className="border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">
                 {selectedIds.length} selected
@@ -705,7 +748,7 @@ const ChartOfAccounts = () => {
                       {group.count} {group.count === 1 ? "account" : "accounts"}
                     </span>
                     <span className="ml-auto text-xs font-bold text-white/80 tabular-nums">
-                      {formatMoney(group.totalBalance)}
+                      {fmtSided(group.groupType, group.totalBalance)}
                     </span>
                     <button
                       onClick={() => setCollapsed((prev) => ({ ...prev, [group.key]: !prev[group.key] }))}
@@ -725,7 +768,7 @@ const ChartOfAccounts = () => {
                             <th style={{ width: "12%" }} className="text-left px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Code</th>
                             <th style={{ width: "40%" }} className="text-left px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Account Name</th>
                             <th style={{ width: "12%" }} className="text-left px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Normal Side</th>
-                            <th style={{ width: "18%" }} className="text-right px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10">Balance</th>
+                            <th style={{ width: "18%" }} className="text-right px-3 py-1.5 text-[10px] font-black uppercase tracking-widest border-r border-white/10" title="Every posting to date, as the Trial Balance and the account's ledger show it">Balance to Date</th>
                             <th style={{ width: "14%" }} className="text-right px-3 py-1.5 text-[10px] font-black uppercase tracking-widest">Status</th>
                           </tr>
                         </thead>
@@ -817,20 +860,35 @@ const ChartOfAccounts = () => {
                                         {account.code}
                                       </td>
                                       <td className="px-3 py-1.5 border-r border-gray-100">
-                                        <span
-                                          className="font-semibold text-slate-900"
-                                          style={{ paddingLeft: `${Number(account.level || 0) * 16}px` }}
-                                        >
-                                          {account.name}
-                                        </span>
+                                        {account?.isPosting !== false && !account?.isHeader ? (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => { e.stopPropagation(); navigate(`${activityBase}/${account._id}/activity`); }}
+                                            className="text-left font-semibold text-slate-900 hover:text-[#0B3B2E] hover:underline"
+                                            style={{ paddingLeft: `${Number(account.level || 0) * 16}px` }}
+                                            title="Open ledger activity"
+                                          >
+                                            {account.name}
+                                          </button>
+                                        ) : (
+                                          <span className="font-semibold text-slate-900" style={{ paddingLeft: `${Number(account.level || 0) * 16}px` }}>
+                                            {account.name}
+                                          </span>
+                                        )}
+                                        {account.isContra && (
+                                          <span className="ml-1.5 px-1 py-0.5 text-[9px] bg-slate-100 text-slate-500 font-bold uppercase" title="Contra account: it rightly sits on the opposite side to its type">Contra</span>
+                                        )}
                                       </td>
                                       <td className="px-3 py-1.5 border-r border-gray-100 text-slate-500">
                                         {account.normalBalanceSide || NORMAL_BALANCE_BY_TYPE[account.type] || "—"}
                                       </td>
-                                      <td className={`px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums ${
-                                        balance !== 0 ? "text-slate-900" : "text-slate-300"
-                                      }`}>
-                                        {formatMoney(balance)}
+                                      <td
+                                        className={`px-3 py-1.5 border-r border-gray-100 text-right font-bold tabular-nums ${
+                                          isWrongSide(account) ? "text-rose-700" : balance !== 0 ? "text-slate-900" : "text-slate-300"
+                                        }`}
+                                        title={isWrongSide(account) ? `Wrong-side balance: a ${account.type} account normally carries a ${NORMAL_BALANCE_BY_TYPE[account.type]?.toLowerCase()} balance. Open its ledger to see why.` : undefined}
+                                      >
+                                        {fmtSided(account.type, balance)}
                                       </td>
                                       <td className="px-3 py-1.5 text-right" onClick={(e) => e.stopPropagation()}>
                                         <div className="inline-flex gap-1 items-center justify-end">

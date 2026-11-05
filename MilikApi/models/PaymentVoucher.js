@@ -97,6 +97,17 @@ const PaymentVoucherSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    // Links a later expense (e.g. paying a contractor for move-out repairs) back to the
+    // TenantInvoice that already had its cost recovered from the landlord's remittance at
+    // deposit-settlement time (see incomeOwnershipService.js + landlordStatementService.js).
+    // Lets the landlord-statement voucher loop skip this voucher so the same money isn't
+    // deducted from the landlord twice.
+    sourceInvoice: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "TenantInvoice",
+      default: null,
+      index: true,
+    },
 
     liabilityAccount: {
       type: mongoose.Schema.Types.ObjectId,

@@ -4,7 +4,6 @@ import Company from "../../models/Company.js";
 import CompanySettings from "../../models/CompanySettings.js";
 import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import JournalEntry from "../../models/JournalEntry.js";
-import AccountingPeriod from "../../models/AccountingPeriod.js";
 import Tenant from "../../models/Tenant.js";
 import TenantInvoice from "../../models/TenantInvoice.js";
 import TenantInvoiceNote from "../../models/TenantInvoiceNote.js";
@@ -18,7 +17,6 @@ import { computeVendorApAgingRows } from "./serviceProviders.js";
 import { round2 } from "../../utils/math.js";
 import { ensureSystemChartOfAccounts, findSystemAccountByCode } from "../../services/chartOfAccountsService.js";
 import { computeAccountBalance, getNormalBalanceSide } from "../../services/accountingClassificationService.js";
-import { postEntry } from "../../services/ledgerPostingService.js";
 import { escapeRegex } from "../../utils/escapeRegex.js";
 import {
   isOperatingIncomeAccount,
@@ -28,6 +26,9 @@ import {
 } from "../../utils/accountClassifiers.js";
 import { isSelfManagingLandlordCompany } from "../../utils/companyModules.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
+import { fiscalStartMonthIndex, fiscalYearFromStart, fiscalYearOf } from "../../utils/fiscalPeriods.js";
+import { closeFiscalYear } from "../../services/accountingPeriodService.js";
+import { buildAccountsDashboard, findCashAccounts } from "../../services/accountsDashboardService.js";
 import { createError } from "../../utils/error.js";
 
 const toObjectId = (value) => {
@@ -244,16 +245,31 @@ export const getTrialBalanceReport = async (req, res, next) => {
       return next(createError(400, "Invalid as-of date supplied."));
     }
 
-    const [accounts, ledgerMap] = await Promise.all([
+    // As in Xero / QuickBooks: income and expense accounts show this fiscal year only, and everything
+    // they earned in earlier years is one Retained Earnings line. Same split as the Balance Sheet, and
+    // still balances, since the two parts add up to the all-time figures.
+    const company = await Company.findById(businessId).select("fiscalStartMonth").lean();
+    const fiscalYear = fiscalYearOf(asOfDate, fiscalStartMonthIndex(company));
+    const priorYearsEnd = new Date(fiscalYear.startDate.getTime() - 1);
+
+    const [accounts, ledgerMap, yearLedgerMap, priorLedgerMap] = await Promise.all([
       ChartOfAccount.find({ business: businessId, isPosting: { $ne: false }, isHeader: { $ne: true } })
         .sort({ code: 1 })
         .lean(),
       buildLedgerMap({ businessId, asOfDate }),
+      buildLedgerMap({ businessId, startDate: fiscalYear.startDate, endDate: asOfDate }),
+      buildLedgerMap({ businessId, asOfDate: priorYearsEnd }),
     ]);
 
+    let priorEarnings = 0;
     const rows = accounts
       .map((account) => {
-        const ledger = ledgerMap.get(String(account._id)) || { debit: 0, credit: 0 };
+        const isPnl = account.type === "income" || account.type === "expense";
+        if (isPnl) {
+          const prior = deriveRowBalance(account, priorLedgerMap.get(String(account._id)) || { debit: 0, credit: 0 }, { useStoredBalanceFallback: false });
+          priorEarnings += (account.type === "income" ? 1 : -1) * Number(prior.netBalance || 0);
+        }
+        const ledger = (isPnl ? yearLedgerMap : ledgerMap).get(String(account._id)) || { debit: 0, credit: 0 };
         const derived = deriveRowBalance(account, ledger, { useStoredBalanceFallback: false });
 
         return {
@@ -273,6 +289,25 @@ export const getTrialBalanceReport = async (req, res, next) => {
       })
       .filter((row) => includeZeroBalances || Math.abs(Number(row.netBalance || 0)) > 0.00001);
 
+    priorEarnings = round2(priorEarnings);
+    if (includeZeroBalances || Math.abs(priorEarnings) > 0.00001) {
+      rows.push({
+        _id: "retained-earnings",
+        code: "RE",
+        name: `${priorEarnings >= 0 ? "Retained Earnings" : "Accumulated Losses"} (before ${fiscalYear.label})`,
+        type: "equity",
+        group: "equity",
+        subGroup: "Retained Earnings",
+        debit: priorEarnings < 0 ? -priorEarnings : 0,
+        credit: priorEarnings > 0 ? priorEarnings : 0,
+        netBalance: priorEarnings,
+        debitBalance: priorEarnings < 0 ? -priorEarnings : 0,
+        creditBalance: priorEarnings > 0 ? priorEarnings : 0,
+        balanceSource: "computed-prior-years",
+        isComputed: true,
+      });
+    }
+
     const totals = rows.reduce(
       (acc, row) => {
         acc.debit += Number(row.debitBalance || 0);
@@ -287,6 +322,7 @@ export const getTrialBalanceReport = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       asOfDate,
+      fiscalYear: { label: fiscalYear.label, startYmd: fiscalYear.startYmd, endYmd: fiscalYear.endYmd },
       count: rows.length,
       rows,
       totals: {
@@ -438,7 +474,14 @@ export const getBalanceSheetReport = async (req, res, next) => {
       return next(createError(400, "Invalid as-of date supplied."));
     }
 
-    const [accounts, ledgerMap] = await Promise.all([
+    // Profit splits at the start of the fiscal year containing the as-of date: before it is Retained
+    // Earnings, from it is Current Year Earnings. Both are worked out here, not posted (as Xero and
+    // QuickBooks do), so closing a year never needs a closing journal.
+    const company = await Company.findById(businessId).select("fiscalStartMonth").lean();
+    const fiscalYear = fiscalYearOf(asOfDate, fiscalStartMonthIndex(company));
+    const priorYearsEnd = new Date(fiscalYear.startDate.getTime() - 1);
+
+    const [accounts, ledgerMap, priorLedgerMap] = await Promise.all([
       ChartOfAccount.find({
         business: businessId,
         isPosting: { $ne: false },
@@ -452,25 +495,25 @@ export const getBalanceSheetReport = async (req, res, next) => {
         .sort({ code: 1 })
         .lean(),
       buildLedgerMap({ businessId, asOfDate }),
+      buildLedgerMap({ businessId, asOfDate: priorYearsEnd }),
     ]);
 
     const assetRows = [];
     const liabilityRows = [];
     const equityRows = [];
     let currentEarnings = 0;
+    let priorEarnings = 0;
 
     for (const account of accounts) {
       const ledger = ledgerMap.get(String(account._id)) || { debit: 0, credit: 0 };
       const derived = deriveRowBalance(account, ledger, { useStoredBalanceFallback: false });
       const signedAmount = round2(derived.netBalance);
 
-      if (account.type === "income") {
-        currentEarnings += signedAmount;
-        continue;
-      }
-
-      if (account.type === "expense") {
-        currentEarnings -= signedAmount;
+      if (account.type === "income" || account.type === "expense") {
+        const prior = round2(deriveRowBalance(account, priorLedgerMap.get(String(account._id)) || { debit: 0, credit: 0 }, { useStoredBalanceFallback: false }).netBalance);
+        const sign = account.type === "income" ? 1 : -1;
+        currentEarnings += sign * signedAmount;
+        priorEarnings += sign * prior;
         continue;
       }
 
@@ -494,13 +537,31 @@ export const getBalanceSheetReport = async (req, res, next) => {
       if (account.type === "equity") equityRows.push(row);
     }
 
-    currentEarnings = round2(currentEarnings);
+    // currentEarnings ran to the as-of date across all years; take the prior years out of it
+    priorEarnings = round2(priorEarnings);
+    currentEarnings = round2(currentEarnings - priorEarnings);
+
+    if (includeZeroBalances || Math.abs(priorEarnings) > 0.00001) {
+      equityRows.push({
+        _id: "retained-earnings",
+        code: "RE",
+        name: priorEarnings >= 0 ? "Retained Earnings" : "Accumulated Losses",
+        type: "equity",
+        group: "equity",
+        subGroup: "Retained Earnings",
+        amount: priorEarnings,
+        netBalance: priorEarnings,
+        isAbnormalBalance: priorEarnings < 0,
+        balanceSource: "computed-prior-years",
+        isComputed: true,
+      });
+    }
 
     if (includeZeroBalances || Math.abs(currentEarnings) > 0.00001) {
       equityRows.push({
         _id: "current-period-earnings",
         code: "CYE",
-        name: currentEarnings >= 0 ? "Current Period Earnings" : "Current Period Loss",
+        name: `${currentEarnings >= 0 ? "Current Year Earnings" : "Current Year Loss"} (${fiscalYear.label})`,
         type: "equity",
         group: "equity",
         subGroup: "Retained Earnings",
@@ -540,6 +601,8 @@ export const getBalanceSheetReport = async (req, res, next) => {
         total: totalEquity,
         count: equityRows.length,
         currentPeriodEarnings: currentEarnings,
+        retainedEarnings: priorEarnings,
+        fiscalYear: { label: fiscalYear.label, startYmd: fiscalYear.startYmd, endYmd: fiscalYear.endYmd },
       },
       summary: {
         totalAssets,
@@ -1513,17 +1576,7 @@ export const getCashFlowReport = async (req, res, next) => {
       return next(createError(400, "Start date cannot be after end date."));
     }
 
-    const cashAccounts = await ChartOfAccount.find({
-      business: businessId,
-      type: "asset",
-      isHeader: { $ne: true },
-      isPosting: { $ne: false },
-      $or: [
-        { subGroup: { $regex: /cash|bank|petty/i } },
-        { name: { $regex: /cash|bank|petty/i } },
-        { group: { $regex: /cash|bank/i } },
-      ],
-    }).sort({ code: 1 }).lean();
+    const cashAccounts = await findCashAccounts(businessId);
 
     if (!cashAccounts.length) {
       return res.status(200).json({
@@ -1569,7 +1622,9 @@ export const getCashFlowReport = async (req, res, next) => {
         { $match: { business: businessOid, accountId: { $in: cashAccountIds }, ...cashOnlyMatch, transactionDate: { $gte: startDate, $lte: endDate } } },
         {
           $group: {
-            _id: "$journalGroupId",
+            // older postings (petty cash, car wash) have no journal group: tie their legs by source
+            // document so a transfer between two cash accounts still nets to zero
+            _id: { $ifNull: ["$journalGroupId", { t: "$sourceTransactionType", id: "$sourceTransactionId" }] },
             debit: { $sum: debitExpr },
             credit: { $sum: creditExpr },
             sourceTransactionType: { $first: "$sourceTransactionType" },
@@ -1593,7 +1648,7 @@ export const getCashFlowReport = async (req, res, next) => {
     // fall through. A cash movement is Investing if it clears/acquires a Fixed Assets account,
     // Financing if it clears a Long-term Liability or Equity/Capital account, Operating otherwise —
     // which is also where virtually every day-to-day collection and payment belongs.
-    const groupIds = cashByGroup.map((r) => r._id).filter(Boolean);
+    const groupIds = cashByGroup.map((r) => r._id).filter((id) => id instanceof mongoose.Types.ObjectId);
     const offsettingLegs = groupIds.length
       ? await FinancialLedgerEntry.find({
           business: businessId,
@@ -1644,7 +1699,7 @@ export const getCashFlowReport = async (req, res, next) => {
       // cancel the original within the same period.
       if (Math.abs(net) < 0.01) continue;
 
-      const gid = row._id ? String(row._id) : null;
+      const gid = row._id instanceof mongoose.Types.ObjectId ? String(row._id) : null;
       // No journalGroupId (legacy data) can't be classified by an offsetting leg — defaults to
       // Operating, the correct default since that's where the overwhelming majority of cash
       // movements genuinely belong.
@@ -2067,90 +2122,15 @@ export const getAPAgingReport = async (req, res, next) => {
   }
 };
 
-// ─── Cash Monthly Summary ─────────────────────────────────────────────────────
-// Returns cashIn / cashOut per month for the last N months (default 6).
-// cashIn  = debits  to cashbook accounts (money received into cash/bank)
-// cashOut = credits from cashbook accounts (money paid out of cash/bank)
-export const getCashMonthlySummary = async (req, res, next) => {
+// ─── Accounts dashboard ──────────────────────────────────────────────────────
+// Every figure on the Financial Accounts dashboard in one call, counted the same way as the reports
+// it links to (see services/accountsDashboardService.js).
+export const getAccountsDashboard = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
-
-    const months = Math.max(1, Math.min(24, Number(req.query.months || 6)));
-    const from = new Date();
-    from.setMonth(from.getMonth() - (months - 1));
-    from.setDate(1);
-    from.setHours(0, 0, 0, 0);
-
-    const businessOid = new mongoose.Types.ObjectId(String(businessId));
-
-    // Dynamic lookup: find all posting cash/bank accounts for this company.
-    // Primary: name/subGroup/group regex (same strategy as Cash Flow report).
-    // Fallback: standard account codes used during system setup.
-    const cashbookAccounts = await ChartOfAccount.find({
-      business: businessId,
-      isPosting: { $ne: false },
-      isHeader: { $ne: true },
-      type: "asset",
-      $or: [
-        { subGroup: { $regex: /cash|bank|petty/i } },
-        { name:     { $regex: /cash|bank|petty/i } },
-        { group:    { $regex: /cash|bank/i } },
-        { code:     { $in: ["1100", "1110", "1130", "1310", "1311"] } },
-      ],
-    }, { _id: 1 }).lean();
-
-    if (!cashbookAccounts.length) return res.status(200).json({ success: true, data: [] });
-
-    const accountIds = cashbookAccounts.map((a) => a._id);
-
-    // Use explicit debit/credit fields first; fall back to direction+amount for legacy entries.
-    const debitExpr = {
-      $cond: [{ $gt: ["$debit", 0] }, "$debit", {
-        $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0],
-      }],
-    };
-    const creditExpr = {
-      $cond: [{ $gt: ["$credit", 0] }, "$credit", {
-        $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0],
-      }],
-    };
-
-    const rows = await FinancialLedgerEntry.aggregate([
-      {
-        $match: {
-          business: businessOid,
-          accountId: { $in: accountIds },
-          transactionDate: { $gte: from },
-          status: "approved",
-          category: { $ne: "REVERSAL" },
-        },
-      },
-      {
-        $group: {
-          _id: { y: { $year: "$transactionDate" }, m: { $month: "$transactionDate" } },
-          cashIn:  { $sum: debitExpr },
-          cashOut: { $sum: creditExpr },
-        },
-      },
-    ]).allowDiskUse(true);
-
-    // Build lookup: "YYYY-M" → { cashIn, cashOut }
-    const map = {};
-    for (const row of rows) {
-      const key = `${row._id.y}-${row._id.m}`;
-      map[key] = { cashIn: round2(row.cashIn || 0), cashOut: round2(row.cashOut || 0) };
-    }
-
-    // Return one entry per month in chronological order
-    const data = Array.from({ length: months }, (_, i) => {
-      const d = new Date(from.getFullYear(), from.getMonth() + i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      const label = d.toLocaleDateString("en-GB", { month: "short" });
-      return { month: label, cashIn: map[key]?.cashIn ?? 0, cashOut: map[key]?.cashOut ?? 0 };
-    });
-
-    return res.status(200).json({ success: true, data });
+    const data = await buildAccountsDashboard(businessId, { months: req.query.months });
+    return res.status(200).json({ success: true, ...data });
   } catch (error) {
     next(error);
   }
@@ -2381,136 +2361,24 @@ export const getFinancialRatios = async (req, res, next) => {
 };
 
 // ─── YEAR-END CLOSE ───────────────────────────────────────────────────────────
-// Closes all income/expense accounts for the given fiscal year into Retained
-// Earnings (account 3200). Posts a closing journal entry and locks the period.
+// Kept for older clients; the Accounting Periods page closes a year through /accounting-periods/year-close.
+// Locks every period of the fiscal year and posts nothing: retained earnings are worked out on the
+// Balance Sheet from the fiscal year (see getBalanceSheetReport).
 export const performYearEndClose = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Business required"));
 
-    const { periodId, fiscalYear, narration } = req.body || {};
-    if (!fiscalYear) return next(createError(400, "fiscalYear (e.g. 2025) is required"));
-
-    const year = parseInt(fiscalYear, 10);
-    if (!year || year < 2000) return next(createError(400, "Invalid fiscalYear"));
-
-    const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
-    const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
-
-    // Check period exists and is closed (not open)
-    let period = null;
-    if (periodId) {
-      period = await AccountingPeriod.findOne({ _id: periodId, business: businessId });
-      if (!period) return next(createError(404, "Accounting period not found"));
-      if (period.status === "open") return next(createError(400, "Close the period before running year-end close"));
-      if (period.yearEndClosed) return next(createError(400, "Year-end close has already been run for this period"));
+    let { fiscalYearStart } = req.body || {};
+    if (!fiscalYearStart) {
+      const year = parseInt(req.body?.fiscalYear, 10);
+      if (!year || year < 2000) return next(createError(400, "Choose the fiscal year to close"));
+      const company = await Company.findById(businessId).select("fiscalStartMonth").lean();
+      fiscalYearStart = fiscalYearFromStart(year, fiscalStartMonthIndex(company)).key;
     }
 
-    const bizId = new mongoose.Types.ObjectId(String(businessId));
-
-    // Sum income and expense ledger entries for the year.
-    // Must use REPORT_LEDGER_STATUSES (approved + reversed) so that reversed
-    // originals and their correcting entries net to zero — same logic as every
-    // other financial report. Using "approved" only would double-count the
-    // debit leg of a reversal while missing the original credit, understating income.
-    const rows = await FinancialLedgerEntry.aggregate([
-      {
-        $match: {
-          business: bizId,
-          status: { $in: REPORT_LEDGER_STATUSES },
-          transactionDate: { $gte: yearStart, $lte: yearEnd },
-        },
-      },
-      {
-        $lookup: {
-          from: "chartofaccounts",
-          localField: "accountId",
-          foreignField: "_id",
-          as: "account",
-        },
-      },
-      { $unwind: "$account" },
-      { $match: { "account.type": { $in: ["income", "expense"] } } },
-      {
-        $group: {
-          _id: { accountId: "$accountId", type: "$account.type" },
-          totalDebit: { $sum: "$debit" },
-          totalCredit: { $sum: "$credit" },
-        },
-      },
-    ]).allowDiskUse(true);
-
-    let totalIncomeCredit = 0;
-    let totalExpenseDebit = 0;
-    for (const row of rows) {
-      if (row._id.type === "income") totalIncomeCredit += row.totalCredit - row.totalDebit;
-      if (row._id.type === "expense") totalExpenseDebit += row.totalDebit - row.totalCredit;
-    }
-
-    const netIncome = totalIncomeCredit - totalExpenseDebit;
-    if (Math.abs(netIncome) < 0.01) {
-      return res.status(400).json({
-        message: "Net income for the year is zero — nothing to close",
-        netIncome,
-      });
-    }
-
-    // Resolve retained earnings account (code 3200)
-    await ensureSystemChartOfAccounts(businessId);
-    const retainedEarningsAccount = await findSystemAccountByCode(businessId, "3200");
-    if (!retainedEarningsAccount) {
-      return next(createError(400, "Retained Earnings account (3200) not found. Ensure your chart of accounts is set up correctly."));
-    }
-
-    // Resolve an income summary account — we use retained earnings directly here
-    // (single-step close: net income → retained earnings)
-    const userId = req.user?._id || req.user?.id;
-    const closeNarration = narration || `Year-end close ${year}: net income KES ${netIncome.toFixed(2)} → Retained Earnings`;
-
-    // Post to retained earnings: debit if net loss, credit if net income
-    const direction = netIncome >= 0 ? "credit" : "debit";
-    const amount = Math.abs(netIncome);
-
-    await postEntry({
-      business: String(businessId),
-      sourceTransactionType: "year_end_close",
-      sourceTransactionId: `YEC-${year}`,
-      transactionDate: yearEnd,
-      statementPeriodStart: yearStart,
-      statementPeriodEnd: yearEnd,
-      category: "YEAR_END_CLOSE",
-      accountId: retainedEarningsAccount._id,
-      amount,
-      direction,
-      debit: direction === "debit" ? amount : 0,
-      credit: direction === "credit" ? amount : 0,
-      payer: "system",
-      receiver: "retained_earnings",
-      notes: closeNarration,
-      createdBy: userId,
-      approvedBy: userId,
-      approvedAt: new Date(),
-      status: "approved",
-      allowUnscoped: true,
-      allowNoAccount: false,
-    });
-
-    // Lock the period if provided
-    if (period) {
-      period.yearEndClosed = true;
-      period.status = "locked";
-      period.lockedBy = userId || null;
-      period.lockedAt = new Date();
-      await period.save();
-    }
-
-    return res.status(200).json({
-      success: true,
-      message: `Year-end close completed for ${year}. Net ${netIncome >= 0 ? "income" : "loss"} of KES ${amount.toFixed(2)} closed to Retained Earnings.`,
-      netIncome: +netIncome.toFixed(2),
-      retainedEarningsAccountCode: retainedEarningsAccount.code,
-      periodLocked: !!period,
-    });
+    const result = await closeFiscalYear({ businessId, fiscalYearStart, user: req.user, req });
+    return res.status(200).json({ success: true, message: `${result.fiscalYear} closed: ${result.locked} periods locked.`, ...result });
   } catch (err) {
     next(err);
   }
@@ -2994,125 +2862,6 @@ export const getLiabilitySubledgerAccounts = async (req, res, next) => {
   }
 };
 
-// Returns monthly income/expense/net totals for the last N months in a single DB query.
-// Used by AccountsDashboard to replace 6 individual income-statement calls.
-// Applies the same account classifiers as getIncomeStatementReport so the chart
-// matches the Income Statement — landlord pass-through accounts are excluded.
-export const getIncomeMonthlySummary = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    if (!businessId) return next(createError(400, "Missing business"));
-    const businessOid = new mongoose.Types.ObjectId(String(businessId));
-
-    const months = Math.min(Math.max(parseInt(req.query.months || "6", 10), 1), 24);
-    const now = new Date();
-
-    const ranges = Array.from({ length: months }, (_, i) => {
-      const d = new Date(now.getFullYear(), now.getMonth() - (months - 1 - i), 1);
-      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
-      end.setHours(23, 59, 59, 999);
-      return {
-        label: d.toLocaleDateString("en-GB", { month: "short" }),
-        startDate: d,
-        endDate: end,
-        key: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
-      };
-    });
-
-    // Fetch company mode + all income/expense accounts (need code/name/subGroup for classifiers)
-    const [company, allIncomeAccounts, allExpenseAccounts] = await Promise.all([
-      Company.findById(businessId, { companyMode: 1, modules: 1 }).lean(),
-      ChartOfAccount.find({ business: businessId, type: "income",  isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1, code: 1, name: 1, subGroup: 1 }).lean(),
-      ChartOfAccount.find({ business: businessId, type: "expense", isPosting: { $ne: false }, isHeader: { $ne: true } }, { _id: 1, code: 1, name: 1, subGroup: 1 }).lean(),
-    ]);
-
-    // Apply the same classifier as the Income Statement so the chart matches it exactly
-    const selfManaging = isSelfManagingLandlordCompany(company);
-    const incomeClassifier  = selfManaging ? isSelfManagingLandlordIncomeAccount  : isOperatingIncomeAccount;
-    const expenseClassifier = selfManaging ? isSelfManagingLandlordExpenseAccount : isOperatingExpenseAccount;
-
-    const incomeAccounts  = allIncomeAccounts.filter(incomeClassifier);
-    const expenseAccounts = allExpenseAccounts.filter(expenseClassifier);
-
-    const incomeIdSet = new Set(incomeAccounts.map((a) => String(a._id)));
-    const allIds = [
-      ...incomeAccounts.map((a) => a._id),
-      ...expenseAccounts.map((a) => a._id),
-    ];
-
-    if (!allIds.length) {
-      return res.json(ranges.map((r) => ({ month: r.label, income: 0, expenses: 0, net: 0 })));
-    }
-
-    const debitExpr = {
-      $cond: [
-        { $gt: ["$debit", 0] },
-        "$debit",
-        { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0] },
-      ],
-    };
-    const creditExpr = {
-      $cond: [
-        { $gt: ["$credit", 0] },
-        "$credit",
-        { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0] },
-      ],
-    };
-
-    // Use the same date-range boundaries as buildLedgerMap (explicit $gte/$lte) instead
-    // of $dateToString (UTC) so the monthly buckets match the Income Statement exactly.
-    const monthBranches = ranges.map((r) => ({
-      case: { $and: [{ $gte: ["$transactionDate", r.startDate] }, { $lte: ["$transactionDate", r.endDate] }] },
-      then: r.key,
-    }));
-
-    const agg = await FinancialLedgerEntry.aggregate([
-      {
-        $match: {
-          business: businessOid,
-          accountId: { $in: allIds },
-          status: { $in: REPORT_LEDGER_STATUSES },
-          transactionDate: { $gte: ranges[0].startDate, $lte: ranges[ranges.length - 1].endDate },
-        },
-      },
-      { $addFields: { ym: { $switch: { branches: monthBranches, default: null } } } },
-      { $match: { ym: { $ne: null } } },
-      {
-        $group: {
-          _id: { ym: "$ym", accountId: "$accountId" },
-          debit: { $sum: debitExpr },
-          credit: { $sum: creditExpr },
-        },
-      },
-    ]).allowDiskUse(true);
-
-    // Aggregate into month buckets
-    const byMonth = new Map();
-    for (const row of agg) {
-      const ym = row._id.ym;
-      if (!byMonth.has(ym)) byMonth.set(ym, { income: 0, expenses: 0 });
-      const bucket = byMonth.get(ym);
-      const isIncome = incomeIdSet.has(String(row._id.accountId));
-      if (isIncome) {
-        bucket.income += row.credit - row.debit; // credit-normal for income
-      } else {
-        bucket.expenses += row.debit - row.credit; // debit-normal for expense
-      }
-    }
-
-    const result = ranges.map((r) => {
-      const b = byMonth.get(r.key) || { income: 0, expenses: 0 };
-      const income = round2(b.income);
-      const expenses = round2(b.expenses);
-      return { month: r.label, income, expenses, net: round2(income - expenses) };
-    });
-
-    return res.json(result);
-  } catch (err) {
-    next(err);
-  }
-};
-
 export const getTenantSummaryReport = async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
@@ -3544,8 +3293,7 @@ export default {
   getIncomeStatementReport,
   getBalanceSheetReport,
   getCashFlowReport,
-  getCashMonthlySummary,
-  getIncomeMonthlySummary,
+  getAccountsDashboard,
   getARAgingReport,
   getAPAgingReport,
   getRentalCollectionReport,

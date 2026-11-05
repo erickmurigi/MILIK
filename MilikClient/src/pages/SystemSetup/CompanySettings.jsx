@@ -588,6 +588,11 @@ const LATE_PENALTY_BENEFICIARY_OPTIONS = [
   { value: "landlord", label: "Landlord — late penalties flow to the landlord statement" },
 ];
 
+const LEASE_FEE_BENEFICIARY_OPTIONS = [
+  { value: "manager", label: "Property Manager — keeps lease/placement fees" },
+  { value: "landlord", label: "Landlord — lease fees flow to the landlord statement" },
+];
+
 const MANUAL_RECEIPT_CONFIRMATION_OPTIONS = [
   { value: "on_review", label: "On review — save as draft, someone else confirms once the money is verified" },
   { value: "on_save", label: "On save — receipt posts to the ledger immediately, no separate confirm step" },
@@ -1233,7 +1238,7 @@ const CompanySettings = () => {
   });
   const [savingAutoInvoicing, setSavingAutoInvoicing] = useState(false);
   const [triggeringAutoInvoicing, setTriggeringAutoInvoicing] = useState(false);
-  const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager", manualReceiptConfirmation: "on_review" });
+  const [incomeRules, setIncomeRules] = useState({ latePenaltyBeneficiary: "manager", leaseFeeBeneficiary: "manager", manualReceiptConfirmation: "on_review" });
   const [savingIncomeRules, setSavingIncomeRules] = useState(false);
   const [expenseApprovalThreshold, setExpenseApprovalThreshold] = useState("");
   const [savingExpenseApproval, setSavingExpenseApproval] = useState(false);
@@ -1309,6 +1314,7 @@ const CompanySettings = () => {
       const ir = response.data?.incomeRules || {};
       setIncomeRules({
         latePenaltyBeneficiary: ir.latePenaltyBeneficiary || "manager",
+        leaseFeeBeneficiary: ir.leaseFeeBeneficiary || "manager",
         manualReceiptConfirmation: ir.manualReceiptConfirmation || "on_review",
       });
       setExpenseApprovalThreshold(
@@ -2203,7 +2209,6 @@ const CompanySettings = () => {
                 { label: "Utilities (water, electricity, garbage, etc.)", goes: "Landlord", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
                 { label: "Service Charge", goes: "Landlord", color: "text-emerald-700 bg-emerald-50 border-emerald-200" },
                 { label: "Security / Utility Deposits", goes: "Landlord (deposit section)", color: "text-blue-700 bg-blue-50 border-blue-200" },
-                { label: "Lease Fee (placement fee)", goes: "Property Manager", color: "text-rose-700 bg-rose-50 border-rose-200" },
                 { label: "Management Commission", goes: "Property Manager", color: "text-rose-700 bg-rose-50 border-rose-200" },
                 { label: "Other Charge (generic)", goes: "Property Manager", color: "text-rose-700 bg-rose-50 border-rose-200" },
               ].map(({ label, goes, color }) => (
@@ -2224,6 +2229,19 @@ const CompanySettings = () => {
               value={incomeRules.latePenaltyBeneficiary}
               onChange={(v) => setIncomeRules((p) => ({ ...p, latePenaltyBeneficiary: v }))}
               options={LATE_PENALTY_BENEFICIARY_OPTIONS}
+              getLabel={(o) => o.label}
+              getValue={(o) => o.value}
+            />
+          </div>
+
+          {/* Configurable: Lease Fee */}
+          <div>
+            <AppSelect
+              label="Lease Fee Income"
+              hint="Who receives lease/placement fees charged to tenants? Either way, a lease fee settled through funds the landlord already holds (e.g. a landlord-held deposit) is automatically recovered from that landlord's remittance."
+              value={incomeRules.leaseFeeBeneficiary}
+              onChange={(v) => setIncomeRules((p) => ({ ...p, leaseFeeBeneficiary: v }))}
+              options={LEASE_FEE_BENEFICIARY_OPTIONS}
               getLabel={(o) => o.label}
               getValue={(o) => o.value}
             />

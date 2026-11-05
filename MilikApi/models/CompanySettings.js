@@ -292,6 +292,15 @@ const incomeRulesSchema = new mongoose.Schema(
       enum: ["landlord", "manager"],
       default: "manager",
     },
+    // Lease/placement/admin fee invoices (OTHER_CHARGE, metadata.billItemKey: "lease_fee").
+    // Same shape as latePenaltyBeneficiary above — decides who the money belongs to when
+    // such a fee is settled through funds the landlord already holds (paidDirectToLandlord),
+    // which must then be recovered from the landlord's remittance (see incomeOwnershipService.js).
+    leaseFeeBeneficiary: {
+      type: String,
+      enum: ["landlord", "manager"],
+      default: "manager",
+    },
     // Governs manually-entered receipts only (the New Receipt / Add Receipt forms) —
     // automated feeds (M-Pesa, etc.) are unaffected. "on_save" posts a receipt to the
     // ledger the moment it's saved, no separate confirm step. "on_review" keeps the

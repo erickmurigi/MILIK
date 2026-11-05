@@ -97,7 +97,7 @@ const PRELOAD_ENTRIES = [
   ['/accounts/vat-remittance',            () => import('../pages/Financial/VatRemittance')],
   ['/accounts/wht-remittance',            () => import('../pages/Financial/WhtRemittance')],
   ['/accounts/accounting-periods',        () => import('../pages/Financial/AccountingPeriods')],
-  ['/accounts/year-end-close',            () => import('../pages/Financial/YearEndClose')],
+  ['/accounts/year-end-close',            () => import('../pages/Financial/AccountingPeriods')],
   ['/accounts/financial-ratios',          () => import('../pages/Reports/FinancialRatiosDashboard')],
 
   // Car Wash

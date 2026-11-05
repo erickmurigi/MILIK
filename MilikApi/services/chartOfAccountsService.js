@@ -183,13 +183,19 @@ export const ensureSystemChartOfAccounts = async (businessId, options = {}) => {
     throw new Error("A valid business id is required to initialize chart of accounts.");
   }
 
+  // Cached per company and per set of active modules: switching a module on re-seeds its accounts at once,
+  // while repeat calls with the same modules (every Chart of Accounts load) cost nothing.
   const cacheKey = String(normalizedBusinessId);
-  const cachedAt = ensureCache.get(cacheKey);
-  if (!options.force && cachedAt && Date.now() - cachedAt < ENSURE_CACHE_TTL_MS) {
+  const passedScopesKey = Array.isArray(options.scopes) ? [...options.scopes].sort().join(",") : null;
+  const cached = ensureCache.get(cacheKey);
+  if (
+    !options.force && cached && Date.now() - cached.at < ENSURE_CACHE_TTL_MS
+    && (passedScopesKey === null || cached.scopesKey === passedScopesKey)
+  ) {
     return;
   }
 
-  const activeScopes = await getCompanyActiveScopes(normalizedBusinessId);
+  const activeScopes = Array.isArray(options.scopes) ? options.scopes : await getCompanyActiveScopes(normalizedBusinessId);
   const relevantAccounts = SYSTEM_CHART_TEMPLATE.filter((account) =>
     moduleScopesForAccount(account).some((s) => activeScopes.includes(s))
   );
@@ -236,7 +242,7 @@ export const ensureSystemChartOfAccounts = async (businessId, options = {}) => {
     }
   }
 
-  ensureCache.set(cacheKey, Date.now());
+  ensureCache.set(cacheKey, { at: Date.now(), scopesKey: [...activeScopes].sort().join(",") });
 
   // Return void - the return value was not used by any callers
   // Previously this returned all accounts which was wasteful on every invoice save
@@ -250,22 +256,27 @@ export const findChartOfAccounts = async ({
   group = null,
   search = null,
   moduleScope = null,
+  activeScopes = null,   // the company's active module scopes, when the caller has already read them
+  alwaysIncludeIds = [], // accounts listed whatever their module tag (e.g. every account with ledger postings)
 }) => {
   const normalizedBusinessId = normalizeBusinessId(businessId);
   if (!normalizedBusinessId) {
     throw new Error("A valid business id is required to fetch chart of accounts.");
   }
 
-  const scopes = moduleScope
-    ? normalizeModuleScopes(moduleScope)
-    : await getCompanyActiveScopes(normalizedBusinessId);
-  await ensureSystemChartOfAccounts(normalizedBusinessId, { force: scopes.includes("carwash") || scopes.includes("hr") || scopes.includes("inventory") || scopes.includes("clients") });
+  const companyScopes = activeScopes || await getCompanyActiveScopes(normalizedBusinessId);
+  const scopes = moduleScope ? normalizeModuleScopes(moduleScope) : companyScopes;
+  await ensureSystemChartOfAccounts(normalizedBusinessId, { scopes: companyScopes });
 
   const query = { business: normalizedBusinessId };
-  // In the all-modules view an account a user added is always listed, whatever its module tag says: hiding an account
-  // (which may already carry a balance) because it is tagged for a module the company does not use is never right.
-  // An explicit module filter still filters strictly.
-  const userAccounts = moduleScope ? [] : [{ isSystem: { $ne: true } }];
+  // In the all-modules view an account a user added is always listed, whatever its module tag says, and so is any
+  // account holding a balance: hiding money because it sits on an account tagged for a module the company has
+  // switched off would make the chart disagree with the Trial Balance. An explicit module filter still filters strictly.
+  const userAccounts = moduleScope ? [] : [
+    { isSystem: { $ne: true } },
+    { balance: { $nin: [0, null] } },
+    ...(alwaysIncludeIds.length ? [{ _id: { $in: alwaysIncludeIds } }] : []),
+  ];
 
   if (code) query.code = String(code).trim().toUpperCase();
   if (type) query.type = String(type).trim().toLowerCase();

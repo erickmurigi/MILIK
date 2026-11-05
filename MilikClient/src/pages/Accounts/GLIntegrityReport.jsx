@@ -1,13 +1,16 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTabState } from "../../hooks/useTabState";
 import { useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import {
-  FaCheckCircle, FaExclamationCircle, FaExclamationTriangle, FaExternalLinkAlt,
-  FaHistory, FaInfoCircle, FaShieldAlt, FaSyncAlt, FaTools, FaUndo, FaWrench,
+  FaCheckCircle, FaExclamationCircle, FaExclamationTriangle, FaExternalLinkAlt, FaInfoCircle, FaListUl,
+  FaSyncAlt, FaTimes, FaTools, FaUndo, FaWrench,
 } from "react-icons/fa";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
+import { ListToolbar } from "../../components/common/ListToolbar";
+import MilikTable from "../../components/common/MilikTable";
+import AppSelect from "../../components/common/AppSelect";
+import { useTabState } from "../../hooks/useTabState";
 import { selectCurrentCompany, selectCurrentUser } from "../../redux/selectors";
 import { hasCompanyPermission } from "../../utils/permissions";
 import {
@@ -24,1271 +27,702 @@ import {
   runGLIntegrityReport,
 } from "../../redux/apiCalls";
 import { useConfirm } from "../../context/ConfirmContext";
-import AppSelect from "../../components/common/AppSelect";
 import { fmtDate } from "../../utils/dates";
 
-const GRN = "#0B3B2E";
-const fmtTs = (d) =>
-  d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-const fmtNum = (n) =>
-  Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const labelClass = "mb-1 block text-xs font-bold text-slate-900";
+const inputClass = "h-7 w-full border bg-white px-2.5 text-sm text-slate-900 placeholder:text-slate-500 outline-none transition focus:ring-1 border-slate-300 focus:border-[#0B3B2E] focus:ring-[#0B3B2E]/20";
+const Required = () => <span className="ml-0.5 font-black text-red-600">*</span>;
+
+const fmtTs = (d) => (d ? new Date(d).toLocaleString("en-GB", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—");
+const fmtNum = (n) => Number(n || 0).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// the API sends errors as { message }
+const errorText = (err, fallback) => err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
 
 const sourceNavUrl = (sourceType, sourceId) => {
   if (!sourceType || !sourceId) return null;
   const t = String(sourceType).toLowerCase();
-  // Use ?receipt=<id> so the Receipts page auto-opens by _id, not as a tenant filter
-  if (t === "rent_payment" || t === "receipt")        return `/receipts?receipt=${sourceId}`;
-  // Use ?invoice=<id> pattern consistently for invoices
-  if (t === "invoice" || t === "tenant_invoice")      return `/invoices/rental?invoice=${sourceId}`;
-  if (t === "invoice_note")                           return `/invoices/notes`;
-  if (t === "late_penalty_batch")                     return `/invoices/late-penalties`;
-  if (t === "payment_voucher")                        return `/accounts/payment-vouchers`;
-  if (t === "landlord_receipt")                       return `/receipts/landlord`;
-  if (t === "landlord_payment")                       return `/landlord-payments`;
-  if (t === "journal_entry")                          return `/accounts/journals`;
+  if (t === "rent_payment" || t === "receipt") return `/receipts?receipt=${sourceId}`;
+  if (t === "invoice" || t === "tenant_invoice") return `/invoices/rental?invoice=${sourceId}`;
+  if (t === "invoice_note") return "/invoices/notes";
+  if (t === "late_penalty_batch") return "/invoices/late-penalties";
+  if (t === "payment_voucher") return "/accounts/payment-vouchers";
+  if (t === "landlord_receipt") return "/receipts/landlord";
+  if (t === "landlord_payment") return "/landlord-payments";
+  if (t === "journal_entry") return "/accounts/journals";
   return null;
 };
+const accountActivityUrl = (accountId) => `/accounts/chart-of-accounts/${accountId}/activity`;
 
-const STATUS_CFG = {
-  clean:    { icon: FaCheckCircle,        cls: "border-emerald-200 bg-emerald-50", text: "text-emerald-700", label: "All Clear"      },
-  warnings: { icon: FaExclamationTriangle, cls: "border-amber-200 bg-amber-50",    text: "text-amber-700",   label: "Warnings Found" },
-  critical: { icon: FaExclamationCircle,  cls: "border-red-200 bg-red-50",         text: "text-red-700",     label: "Critical Issues"},
+const RESULT = {
+  pass:   { label: "Pass",     cls: "text-emerald-700", icon: FaCheckCircle },
+  review: { label: "Review",   cls: "text-amber-700",   icon: FaExclamationTriangle },
+  fail:   { label: "Fail",     cls: "text-red-700",     icon: FaExclamationCircle },
+  info:   { label: "Info",     cls: "text-slate-600",   icon: FaInfoCircle },
 };
-const SEV_ICON = {
-  critical: <FaExclamationCircle  size={11} className="text-red-500 shrink-0" />,
-  warning:  <FaExclamationTriangle size={11} className="text-amber-500 shrink-0" />,
-  info:     <FaInfoCircle          size={11} className="text-blue-400 shrink-0" />,
-};
-const SEV_BADGE = {
-  critical: "border-red-200 bg-red-50 text-red-700",
-  warning:  "border-amber-200 bg-amber-50 text-amber-700",
-  info:     "border-blue-200 bg-blue-50 text-blue-700",
-};
-const STATUS_PILL = {
-  clean:    "bg-emerald-100 text-emerald-700",
-  warnings: "bg-amber-100 text-amber-700",
-  critical: "bg-red-100 text-red-600",
-};
-const OUTCOME_PILL = {
-  success: "bg-emerald-100 text-emerald-700",
-  failed:  "bg-red-100 text-red-600",
+const RUN_STATUS = {
+  clean:    { label: "Clean",    cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  warnings: { label: "Warnings", cls: "border-amber-200 bg-amber-50 text-amber-700" },
+  critical: { label: "Critical", cls: "border-red-200 bg-red-50 text-red-700" },
 };
 
-const TH = ({ children, right }) => (
-  <th className={`border-b border-slate-200 bg-slate-50 px-3 py-2 text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 ${right ? "text-right" : "text-left"}`}>
-    {children}
-  </th>
+// small inner tables inside an expanded check
+const SubTable = ({ head, children }) => (
+  <table className="w-full border border-slate-200 bg-white text-[11px] normal-case">
+    <thead>
+      <tr className="border-b border-slate-200 bg-slate-50">
+        {head.map((h) => (
+          <th key={h.label} className={`px-2.5 py-1 text-[10px] font-black uppercase tracking-wide text-slate-600 ${h.right ? "text-right" : "text-left"}`}>{h.label}</th>
+        ))}
+      </tr>
+    </thead>
+    <tbody>{children}</tbody>
+  </table>
 );
-const TD = ({ children, right, cls = "" }) => (
-  <td className={`border-b border-slate-100 px-3 py-1.5 text-[11px] text-slate-700 last:border-0 ${right ? "text-right tabular-nums" : ""} ${cls}`}>
-    {children}
-  </td>
+const Td = ({ children, right, cls = "" }) => (
+  <td className={`border-b border-slate-100 px-2.5 py-1 ${right ? "text-right tabular-nums" : ""} ${cls}`}>{children}</td>
+);
+const Hint = ({ children }) => <p className="mb-1.5 text-[11px] text-slate-600 normal-case">{children}</p>;
+const iconBtn = "inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40";
+
+const Modal = ({ title, icon: Icon, onClose, busy, children, footer, width = "max-w-lg" }) => (
+  <div className="fixed inset-0 z-[130] flex items-start justify-center overflow-y-auto bg-slate-950/45 px-4 py-6 backdrop-blur-[2px] sm:items-center">
+    <div className={`flex max-h-[92vh] w-full ${width} flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl`}>
+      <div className="flex flex-shrink-0 items-center justify-between gap-3 bg-[#0B3B2E] px-4 py-2.5 text-white">
+        <h3 className="flex min-w-0 items-center gap-2 text-sm font-black uppercase tracking-wide">
+          {Icon && <Icon size={12} />}<span className="truncate">{title}</span>
+        </h3>
+        <button type="button" onClick={() => !busy && onClose()} disabled={busy} className="text-white/70 hover:text-white"><FaTimes size={13} /></button>
+      </div>
+      <div className="flex-1 space-y-2 overflow-y-auto bg-slate-50/60 p-3">{children}</div>
+      <div className="flex flex-shrink-0 items-center justify-end gap-2 border-t border-slate-200 bg-white px-4 py-2.5">{footer}</div>
+    </div>
+  </div>
+);
+const CancelButton = ({ onClick, busy }) => (
+  <button type="button" onClick={onClick} disabled={busy} className="h-8 border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+);
+const PrimaryButton = ({ children, danger, ...props }) => (
+  <button type="button" {...props} className={`inline-flex h-8 items-center gap-1.5 px-4 text-xs font-black text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${danger ? "bg-red-700 hover:bg-red-800" : "bg-[#0B3B2E] hover:bg-[#0A3127]"}`}>{children}</button>
+);
+const Section = ({ title, children }) => (
+  <div className="border border-slate-200 bg-white">
+    <div className="border-b border-slate-200 bg-slate-50 px-3 py-1.5"><h3 className="text-[11px] font-black uppercase tracking-wide text-slate-800">{title}</h3></div>
+    <div className="p-2.5">{children}</div>
+  </div>
 );
 
-const TABS = [
-  { id: "check",   label: "Health Check",   icon: FaShieldAlt },
-  { id: "repair",  label: "Repair Centre",  icon: FaWrench    },
-  { id: "history", label: "History",        icon: FaHistory   },
-];
-
-// ─── Balance-Group Modal ───────────────────────────────────────────────────────
-function BalanceGroupModal({ group, accounts, businessId, healthRunId, onClose, onDone, navigate }) {
-  const [accountId,    setAccountId]   = useState("");
-  const [notes,        setNotes]       = useState("");
-  const [saving,       setSaving]      = useState(false);
-  const [voidingGroup, setVoidingGroup] = useState(false);
-  const [entries,      setEntries]     = useState(null);  // null = loading, [] = none
-  const [entriesErr,   setEntriesErr]  = useState(false);
+// ─── Fix an unbalanced journal group ─────────────────────────────────────────
+function BalanceGroupModal({ group, accounts, healthRunId, onClose, onDone, navigate }) {
+  const [accountId, setAccountId] = useState("");
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [entries, setEntries] = useState(null);
 
   useEffect(() => {
-    if (!group?.journalGroupId || !businessId) return;
-    setEntries(null);
-    setEntriesErr(false);
-    getGlGroupEntries(group.journalGroupId, { business: businessId })
+    let live = true;
+    getGlGroupEntries(group.journalGroupId)
       .then((d) => {
+        if (!live) return;
         const loaded = d?.entries ?? [];
         setEntries(loaded);
-        // For orphaned groups, auto-populate the correcting account with the
-        // imbalanced entry's account so the user can post with one click.
-        if (group.sourceOrphaned && !accountId) {
+        // a deleted source: preselect the account of the leg left without a partner
+        if (group.sourceOrphaned) {
           const active = loaded.filter((e) => e.status !== "reversed");
-          const imbalanced = group.difference > 0
-            ? active.find((e) => e.debit  > 0)  // credit missing → debit entry is the orphan
-            : active.find((e) => e.credit > 0);  // debit missing  → credit entry is the orphan
-          const autoId = String(imbalanced?.accountId || "");
-          if (autoId) setAccountId(autoId);
+          const leg = group.difference > 0 ? active.find((e) => e.debit > 0) : active.find((e) => e.credit > 0);
+          if (leg?.accountId) setAccountId(String(leg.accountId));
         }
       })
-      .catch(() => { setEntriesErr(true); setEntries([]); });
-  }, [group?.journalGroupId, businessId]); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch(() => live && setEntries([]));
+    return () => { live = false; };
+  }, [group]);
 
-  if (!group) return null;
+  const direction = group.difference > 0 ? "Credit" : "Debit";
+  const amount = Math.abs(group.difference);
+  const sourceUrl = sourceNavUrl(group.sourceType, group.sourceId);
+  const active = (entries || []).filter((e) => e.status !== "reversed");
 
-  const direction       = group.difference > 0 ? "Credit" : "Debit";
-  const amount          = Math.abs(group.difference);
-  const postingAccounts = accounts.filter((a) => a.isPosting && !a.isHeader);
-  const sourceUrl       = sourceNavUrl(group.sourceType, group.sourceId);
-  const sourceLabel     = group.sourceRef || (group.sourceId ? `…${String(group.sourceId).slice(-12)}` : null);
-  const busy            = saving || voidingGroup;
-
-  const submit = async () => {
-    if (!accountId) { toast.error("Select a correcting account"); return; }
-    setSaving(true);
+  const post = async () => {
+    setBusy(true);
     try {
-      await apiRepairBalanceGroup(group.journalGroupId, { business: businessId, accountId, notes, healthRunId });
-      toast.success("Correcting entry posted — group is now balanced");
+      await apiRepairBalanceGroup(group.journalGroupId, { accountId, notes, healthRunId });
+      toast.success("Correcting entry posted. The group is balanced.");
       onDone();
     } catch (err) {
-      toast.error(err?.response?.data?.error || "Repair failed");
+      toast.error(errorText(err, "Repair failed"));
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
-
-  const voidOrphaned = async () => {
-    setVoidingGroup(true);
+  const voidAll = async () => {
+    setBusy(true);
     try {
-      const res = await apiVoidOrphanedJournalGroup(group.journalGroupId, { business: businessId });
-      toast.success(`Orphaned entries voided — ${res.voidedCount} entr${res.voidedCount === 1 ? "y" : "ies"} removed from ledger`);
+      const res = await apiVoidOrphanedJournalGroup(group.journalGroupId, {});
+      toast.success(`${res.voidedCount} orphaned entr${res.voidedCount === 1 ? "y" : "ies"} voided`);
       onDone();
     } catch (err) {
-      toast.error(err?.response?.data?.error || "Void failed");
+      toast.error(errorText(err, "Void failed"));
     } finally {
-      setVoidingGroup(false);
+      setBusy(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-[520px] max-h-[90vh] flex flex-col border border-slate-200 bg-white shadow-xl">
-        {/* Header */}
-        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 shrink-0" style={{ backgroundColor: GRN }}>
-          <FaWrench size={11} className="text-white/70" />
-          <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white">Post Correcting Entry</span>
-          <button onClick={onClose} className="ml-auto text-white/60 hover:text-white text-lg leading-none">&times;</button>
+    <Modal
+      title="Unbalanced journal group" icon={FaWrench} onClose={onClose} busy={busy} width="max-w-xl"
+      footer={<>
+        <CancelButton onClick={onClose} busy={busy} />
+        {group.sourceOrphaned && <PrimaryButton danger onClick={voidAll} disabled={busy}>Void all entries</PrimaryButton>}
+        <PrimaryButton onClick={post} disabled={busy || !accountId}><FaWrench size={10} /> Post correction</PrimaryButton>
+      </>}
+    >
+      {group.sourceOrphaned ? (
+        <div className="flex gap-2 border border-red-300 bg-red-50 p-2.5 text-xs text-red-800">
+          <FaExclamationCircle className="mt-0.5 shrink-0" />
+          <span>The source {group.sourceType} was deleted, so these entries are orphaned. Void them, or post a correction to balance them.</span>
         </div>
+      ) : sourceUrl ? (
+        <div className="flex items-start justify-between gap-2 border border-slate-200 bg-white p-2.5 text-xs text-slate-700">
+          <span>Best fix: correct the original {group.sourceType} itself, so the audit trail stays clean.</span>
+          <button type="button" onClick={() => { onClose(); navigate(sourceUrl); }} className="inline-flex shrink-0 items-center gap-1 font-bold text-[#0B3B2E] hover:underline">
+            Open {group.sourceRef || "source"} <FaExternalLinkAlt size={9} />
+          </button>
+        </div>
+      ) : null}
 
-        <div className="overflow-y-auto px-4 py-4 space-y-4">
-
-          {/* Source advisory — adapt to whether source exists */}
-          {group.sourceOrphaned ? (
-            <div className="flex items-start gap-2.5 border border-red-200 bg-red-50 px-3 py-2.5">
-              <FaExclamationCircle size={11} className="mt-0.5 text-red-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-red-800">Source document deleted</div>
-                <div className="text-[10px] text-red-700 mt-0.5">
-                  The original <strong>{group.sourceType}</strong> transaction no longer exists in the database. The GL entries below are orphaned. Post a correcting entry to zero out the imbalance, then consider voiding the remaining entries manually.
-                </div>
-              </div>
-            </div>
-          ) : sourceUrl ? (
-            <div className="flex items-start gap-2.5 border border-blue-200 bg-blue-50 px-3 py-2.5">
-              <FaInfoCircle size={11} className="mt-0.5 text-blue-500 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <div className="text-[10px] font-bold text-blue-800">Fix at source — recommended</div>
-                <div className="text-[10px] text-blue-700 mt-0.5">
-                  Open the original <strong>{group.sourceType}</strong> and correct the amount there. That is the cleanest fix and keeps your audit trail accurate.
-                </div>
-                <button
-                  onClick={() => { onClose(); navigate(sourceUrl); }}
-                  className="mt-1.5 flex items-center gap-1 text-[10px] font-bold text-blue-700 hover:text-blue-900"
-                >
-                  Open {group.sourceType} {sourceLabel} <FaExternalLinkAlt size={8} />
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {/* Group summary */}
-          <div className="border border-slate-100 bg-slate-50 px-3 py-2.5 space-y-1.5">
-            {[
-              ["Journal Group", String(group.journalGroupId).slice(-12)],
-              ["Source Type",   group.sourceType || "—"],
-              ["Date",          fmtDate(group.date)],
-              ["Debit Total",   `KES ${fmtNum(group.debit)}`],
-              ["Credit Total",  `KES ${fmtNum(group.credit)}`],
-            ].map(([label, val]) => (
-              <div key={label} className="flex items-center justify-between">
-                <span className="text-[10px] text-slate-500">{label}</span>
-                <span className="text-[10px] font-semibold text-slate-800 font-mono">{val}</span>
-              </div>
+      <Section title={`Entries · Dr ${fmtNum(group.debit)} / Cr ${fmtNum(group.credit)}`}>
+        {entries === null ? (
+          <p className="text-xs text-slate-500">Loading entries…</p>
+        ) : (
+          <SubTable head={[{ label: "Account" }, { label: "Debit", right: true }, { label: "Credit", right: true }, { label: "Source" }]}>
+            {active.map((e) => (
+              <tr key={String(e._id)}>
+                <Td>{e.accountCode} {e.accountName}</Td>
+                <Td right>{e.debit > 0 ? fmtNum(e.debit) : ""}</Td>
+                <Td right>{e.credit > 0 ? fmtNum(e.credit) : ""}</Td>
+                <Td cls={e.sourceTransactionType === "manual_adjustment" ? "font-semibold text-amber-800" : "text-slate-500"}>
+                  {e.sourceTransactionType === "manual_adjustment" ? "correction" : e.sourceTransactionType || "—"}
+                </Td>
+              </tr>
             ))}
-            <div className="flex items-center justify-between border-t border-slate-200 pt-1.5">
-              <span className="text-[10px] font-bold text-red-600">Imbalance</span>
-              <span className="text-[10px] font-bold text-red-600 font-mono">KES {fmtNum(amount)} ({direction} missing)</span>
-            </div>
-          </div>
+          </SubTable>
+        )}
+        <p className="mt-1.5 text-xs font-bold text-red-700">Missing: {direction} of KES {fmtNum(amount)}</p>
+      </Section>
 
-          {/* Actual GL entries in this group */}
+      <Section title="Correcting entry (last resort)">
+        <div className="grid grid-cols-1 gap-2">
           <div>
-            <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 mb-1.5">Entries in this journal group</div>
-            {entries === null ? (
-              <div className="flex items-center gap-2 py-3 text-[10px] text-slate-400">
-                <FaSyncAlt size={9} className="animate-spin" /> Loading entries…
-              </div>
-            ) : entriesErr ? (
-              <div className="text-[10px] text-red-400">Could not load entries.</div>
-            ) : entries.length === 0 ? (
-              <div className="text-[10px] text-slate-400 italic">No entries found.</div>
-            ) : (() => {
-              const active   = entries.filter((e) => e.status !== "reversed");
-              const reversed = entries.filter((e) => e.status === "reversed");
-              const totalDr  = active.reduce((s, e) => s + e.debit,  0);
-              const totalCr  = active.reduce((s, e) => s + e.credit, 0);
-              return (
-                <div className="border border-slate-100 overflow-hidden">
-                  <table className="w-full">
-                    <thead><tr>
-                      <TH>Account</TH><TH right>Debit</TH><TH right>Credit</TH><TH>Type</TH>
-                    </tr></thead>
-                    <tbody>
-                      {active.map((e) => (
-                        <tr key={String(e._id)}>
-                          <TD cls="text-[10px]">{e.accountCode} {e.accountName}</TD>
-                          <TD right cls="text-emerald-700 font-mono text-[10px]">{e.debit  > 0 ? fmtNum(e.debit)  : ""}</TD>
-                          <TD right cls="text-blue-700 font-mono text-[10px]">{e.credit > 0 ? fmtNum(e.credit) : ""}</TD>
-                          <TD cls={`text-[9px] ${e.sourceTransactionType === "manual_adjustment" ? "text-amber-600 font-semibold" : "text-slate-400"}`}>
-                            {e.sourceTransactionType === "manual_adjustment" ? "correction" : e.sourceTransactionType || "—"}
-                          </TD>
-                        </tr>
-                      ))}
-                      {/* Totals row */}
-                      <tr className="border-t-2 border-slate-200 bg-slate-50">
-                        <td className="px-3 py-1 text-[9px] font-black uppercase text-slate-400">Active Total</td>
-                        <td className={`px-3 py-1 text-right text-[10px] font-bold tabular-nums ${totalDr !== totalCr ? "text-red-600" : "text-emerald-700"}`}>{fmtNum(totalDr)}</td>
-                        <td className={`px-3 py-1 text-right text-[10px] font-bold tabular-nums ${totalDr !== totalCr ? "text-red-600" : "text-blue-700"}`}>{fmtNum(totalCr)}</td>
-                        <td />
-                      </tr>
-                      {/* Reversed entries — collapsed, dimmed */}
-                      {reversed.length > 0 && (
-                        <tr><td colSpan={4} className="px-3 py-1 text-[9px] text-slate-400 bg-slate-50 border-t border-dashed border-slate-200">
-                          {reversed.length} reversed entr{reversed.length === 1 ? "y" : "ies"} (excluded from totals)
-                        </td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })()}
-          </div>
-
-          {/* Correcting entry section */}
-          <div className="border-t border-slate-200 pt-4 space-y-3">
-            <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400">
-              Post correcting entry — last resort only
-            </div>
-            <div className="text-[10px] text-slate-500">
-              A <strong className={direction === "Credit" ? "text-blue-700" : "text-emerald-700"}>{direction} of KES {fmtNum(amount)}</strong> will be posted to the account below.
-              Only use this if you cannot fix the original transaction.
-            </div>
-
-          {/* Account selector */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-600 mb-1">
-              Correcting Account <span className="text-red-500">*</span>
-            </label>
+            <span className={labelClass}>Account to post the {direction.toLowerCase()} to<Required /></span>
             <AppSelect
-              value={accountId}
-              onChange={(v) => setAccountId(v ?? "")}
-              options={postingAccounts.map((a) => ({ value: a._id, label: `${a.code} – ${a.name}` }))}
-              placeholder="— select account —"
-              searchable
-              size="md"
+              value={accountId} onChange={(v) => setAccountId(v ?? "")} searchable size="sm" placeholder="Select account"
+              options={accounts.map((a) => ({ value: String(a._id), label: `${a.code} – ${a.name}` }))}
             />
-            <p className="mt-1 text-[9px] text-slate-400">
-              If unsure, use a suspense/clearing account and investigate before period close.
-            </p>
+            <p className="mt-1 text-[11px] text-slate-500">Unsure? Use a suspense account and investigate before the period closes.</p>
           </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-600 mb-1">Notes (optional)</label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Why is this correction being posted?"
-              className="w-full border border-slate-200 px-2.5 py-1.5 text-[11px] focus:outline-none focus:border-slate-400"
-            />
-          </div>
-
-          </div>{/* end correcting entry section */}
-
-          {/* Buttons */}
-          <div className="flex items-center justify-end gap-2 pt-1 shrink-0">
-            <button onClick={onClose} disabled={busy}
-              className="border border-slate-200 px-4 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-              Cancel
-            </button>
-            {group.sourceOrphaned && (
-              <button onClick={voidOrphaned} disabled={busy}
-                className="flex items-center gap-1.5 bg-red-600 px-4 py-1.5 text-[11px] font-bold text-white hover:bg-red-700 disabled:opacity-50">
-                {voidingGroup ? "Voiding…" : "Void All Entries"}
-              </button>
-            )}
-            <button onClick={submit} disabled={busy || !accountId}
-              className="px-5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-              style={{ backgroundColor: GRN }}>
-              {saving ? "Posting…" : "Post Correction"}
-            </button>
-          </div>
+          <label><span className={labelClass}>Notes</span>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Why is this correction posted?" className={inputClass} />
+          </label>
         </div>
-      </div>
-    </div>
+      </Section>
+    </Modal>
   );
 }
 
-// ─── Abnormal-Balance Fix Modal ───────────────────────────────────────────────
-function AbnormalBalanceModal({ row, accounts, businessId, healthRunId, onClose, onDone }) {
+// ─── Clear an abnormal balance ───────────────────────────────────────────────
+function AbnormalBalanceModal({ row, accounts, healthRunId, onClose, onDone }) {
   const [offsetId, setOffsetId] = useState("");
-  const [notes,    setNotes]    = useState("");
-  const [saving,   setSaving]   = useState(false);
+  const [notes, setNotes] = useState("");
+  const [busy, setBusy] = useState(false);
+  const postSide = row.side === "Dr" ? "credit" : "debit";
 
-  if (!row) return null;
-
-  // netBalance > 0 means debit balance; for credit-normal accounts that's abnormal
-  const balanceSign  = row.netBalance > 0 ? "Debit" : "Credit";
-  const corrDir      = row.netBalance > 0 ? "Credit" : "Debit";
-  const postingAccts = accounts.filter((a) => a.isPosting && !a.isHeader);
-
-  const submit = async () => {
-    if (!offsetId) { toast.error("Select an offset account"); return; }
-    setSaving(true);
+  const post = async () => {
+    setBusy(true);
     try {
-      const res = await apiRepairAbnormal({
-        business: businessId,
-        accountId: String(row.accountId),
-        offsetAccountId: offsetId,
-        notes: notes.trim() || undefined,
-        healthRunId,
-      });
-      toast.success(`Correcting entry posted — KES ${res.amount?.toLocaleString("en-KE", { minimumFractionDigits: 2 })} ${res.direction}`);
+      const res = await apiRepairAbnormal({ accountId: String(row.accountId), offsetAccountId: offsetId, notes: notes.trim(), healthRunId });
+      toast.success(`Correction posted: KES ${fmtNum(res.amount)} ${res.direction}`);
       onDone();
     } catch (err) {
-      toast.error(err?.response?.data?.error || "Repair failed");
+      toast.error(errorText(err, "Repair failed"));
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-[480px] max-h-[90vh] flex flex-col border border-slate-200 bg-white shadow-xl">
-        {/* Header */}
-        <div className="flex items-center gap-2 border-b border-slate-100 px-4 py-3 shrink-0" style={{ backgroundColor: GRN }}>
-          <FaWrench size={11} className="text-white/70" />
-          <span className="text-[11px] font-black uppercase tracking-[0.12em] text-white">Clear Abnormal Balance</span>
-          <button onClick={onClose} className="ml-auto text-white/60 hover:text-white text-lg leading-none">&times;</button>
-        </div>
-
-        <div className="overflow-y-auto px-4 py-4 space-y-4">
-          {/* Warning advisory */}
-          <div className="flex items-start gap-2.5 border border-amber-200 bg-amber-50 px-3 py-2.5">
-            <FaExclamationTriangle size={11} className="mt-0.5 text-amber-500 shrink-0" />
-            <div className="text-[10px] text-amber-800">
-              <strong>{row.code} {row.name}</strong> has a net <strong>{balanceSign} balance of KES {fmtNum(Math.abs(row.netBalance))}</strong>,
-              which is abnormal for a <span className="capitalize">{row.type}</span> account.
-              This posts a <strong>{corrDir} of KES {fmtNum(Math.abs(row.netBalance))}</strong> to bring it to zero.
-              Select an offset account that makes sense economically — for unallocated receipts a cash or income account is typical.
-            </div>
-          </div>
-
-          {/* Offset account */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-600 mb-1">Offset Account <span className="text-red-500">*</span></label>
-            <AppSelect
-              options={postingAccts.map((a) => ({ value: String(a._id), label: `${a.code} — ${a.name}` }))}
-              value={offsetId}
-              onChange={setOffsetId}
-              placeholder="Select offset account…"
-            />
-            <p className="mt-1 text-[9px] text-slate-400">
-              The correction to <strong>{row.code}</strong> will be offset here to keep the GL balanced.
-            </p>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className="block text-[10px] font-bold text-slate-600 mb-1">Notes (optional)</label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder={`GL Clear Abnormal Balance: ${corrDir} KES ${fmtNum(Math.abs(row.netBalance))} — restoring ${row.code} to zero`}
-              className="w-full border border-slate-200 px-3 py-2 text-[11px] text-slate-700 placeholder-slate-300 resize-none focus:outline-none focus:border-slate-400"
-            />
-          </div>
-        </div>
-
-        {/* Buttons */}
-        <div className="flex items-center justify-end gap-2 px-4 pb-4 shrink-0">
-          <button onClick={onClose} disabled={saving}
-            className="border border-slate-200 px-4 py-1.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
-            Cancel
-          </button>
-          <button onClick={submit} disabled={saving || !offsetId}
-            className="px-5 py-1.5 text-[11px] font-bold text-white disabled:opacity-50"
-            style={{ backgroundColor: GRN }}>
-            {saving ? "Posting…" : "Post Correction"}
-          </button>
-        </div>
+    <Modal
+      title={`Clear ${row.code} ${row.name}`} icon={FaWrench} onClose={onClose} busy={busy}
+      footer={<><CancelButton onClick={onClose} busy={busy} /><PrimaryButton onClick={post} disabled={busy || !offsetId || notes.trim().length < 5}>Post correction</PrimaryButton></>}
+    >
+      <div className="flex gap-2 border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+        <FaExclamationTriangle className="mt-0.5 shrink-0" />
+        <span>
+          This {row.type} account has a <strong>{row.side === "Dr" ? "debit" : "credit"} balance of KES {fmtNum(row.amount)}</strong>. Clearing posts a {postSide} of that amount here and the opposite to the offset account, bringing it to zero.
+          Only do this once you know why the balance is there: open its ledger first. A wrong-side balance is usually a mis-posted entry that should be corrected at source.
+        </span>
       </div>
-    </div>
+      <Section title="Correction">
+        <div className="grid grid-cols-1 gap-2">
+          <div>
+            <span className={labelClass}>Offset account<Required /></span>
+            <AppSelect
+              value={offsetId} onChange={(v) => setOffsetId(v ?? "")} searchable size="sm" placeholder="Select account"
+              options={accounts.filter((a) => String(a._id) !== String(row.accountId)).map((a) => ({ value: String(a._id), label: `${a.code} – ${a.name}` }))}
+            />
+          </div>
+          <label><span className={labelClass}>Reason<Required /></span>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Reversal posted without its original in March" className={inputClass} />
+          </label>
+        </div>
+      </Section>
+    </Modal>
   );
 }
 
-// ─── Main Component ────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
 export default function GLIntegrityReport() {
-  const company      = useSelector(selectCurrentCompany);
-  const currentUser  = useSelector(selectCurrentUser);
-  const businessId   = company?._id;
-  const confirm      = useConfirm();
-  const navigate     = useNavigate();
+  const company = useSelector(selectCurrentCompany);
+  const currentUser = useSelector(selectCurrentUser);
+  const businessId = company?._id;
+  const confirm = useConfirm();
+  const navigate = useNavigate();
+  // the repair endpoints are guarded by ledger.repair
+  const canRepair = hasCompanyPermission(currentUser, company, "ledger", "repair", "accounts");
 
-  // Repair actions are write operations — require Full Access on accounts module
-  const canRepair = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
-
-  const [activeTab,  setActiveTab]  = useTabState("/accounts/gl-integrity:activeTab", "check");
-  const [loading,    setLoading]    = useState(false);
-  const [report,     setReport]     = useTabState("/accounts/gl-integrity:report", null);
-  const [history,    setHistory]    = useTabState("/accounts/gl-integrity:history", []);
+  const [view, setView] = useTabState("/accounts/gl-integrity:view", "checks");
+  const [report, setReport] = useTabState("/accounts/gl-integrity:report", null);
+  const [history, setHistory] = useTabState("/accounts/gl-integrity:history", []);
+  const [corrections, setCorrections] = useTabState("/accounts/gl-integrity:corrections", []);
+  const [loading, setLoading] = useState(false);
   const [histLoading, setHistLoading] = useState(false);
-  const [accounts,   setAccounts]   = useState([]);
-  const [repairing,      setRepairing]      = useState(new Set());
-  const [groupModal,     setGroupModal]     = useState(null);
-  const [abnormalModal,  setAbnormalModal]  = useState(null);
-  const [expandedRun,    setExpandedRun]    = useState(null);
-  const [corrections,  setCorrections]  = useTabState("/accounts/gl-integrity:corrections", []);
-  const [showCorrections, setShowCorrections] = useState(false);
+  const [accounts, setAccounts] = useState([]);
+  const [busy, setBusy] = useState(new Set());
+  const [groupModal, setGroupModal] = useState(null);
+  const [abnormalModal, setAbnormalModal] = useState(null);
+  const [expanded, setExpanded] = useState(new Set());
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
 
   const healthRunId = report?.healthRunId;
-
-  // ── Data loaders ────────────────────────────────────────────────────────────
-  const runCheck = useCallback(async () => {
-    if (!businessId) return;
-    setLoading(true);
-    try {
-      const data = await runGLIntegrityReport({ business: businessId });
-      setReport(data);
-      setActiveTab("check");
-    } catch (err) {
-      toast.error(err?.response?.data?.error || "Health check failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [businessId]);
+  const start = (k) => setBusy((s) => new Set(s).add(k));
+  const end = (k) => setBusy((s) => { const n = new Set(s); n.delete(k); return n; });
 
   const loadHistory = useCallback(async () => {
     if (!businessId) return;
     setHistLoading(true);
-    try {
-      setHistory(await getGLHealthHistory({ business: businessId }));
-    } catch {
-      // silent — history is non-critical
-    } finally {
-      setHistLoading(false);
-    }
-  }, [businessId]);
+    try { setHistory(await getGLHealthHistory()); } catch { /* history is secondary */ } finally { setHistLoading(false); }
+  }, [businessId, setHistory]);
 
   const loadCorrections = useCallback(async () => {
     if (!businessId) return;
-    try {
-      const data = await getActiveGlCorrections({ business: businessId });
-      setCorrections(data?.corrections ?? []);
-    } catch {
-      // non-critical
-    }
-  }, [businessId]);
+    try { setCorrections((await getActiveGlCorrections())?.corrections ?? []); } catch { /* secondary */ }
+  }, [businessId, setCorrections]);
 
-  // load accounts, history and active corrections on mount
-  useEffect(() => {
+  const runCheck = useCallback(async () => {
     if (!businessId) return;
-    getChartOfAccounts({ business: businessId, limit: 500 })
-      .then((res) => setAccounts(res?.data ?? res ?? []))
-      .catch(() => {});
-    loadHistory();
-    loadCorrections();
-  }, [businessId, loadHistory, loadCorrections]);
-
-  // ── Repair actions ───────────────────────────────────────────────────────────
-  const startRepair = (key) => setRepairing((s) => { const n = new Set(s); n.add(key); return n; });
-  const endRepair   = (key) => setRepairing((s) => { const n = new Set(s); n.delete(key); return n; });
-
-  const doRecompute = async () => {
-    const ok = await confirm({
-      title: "Recompute All COA Balances",
-      message: "This rebuilds every account's cached balance from the raw ledger entries. Safe to run at any time.",
-      confirmText: "Recompute",
-    });
-    if (!ok) return;
-    startRepair("recompute");
+    setLoading(true);
     try {
-      const res = await apiRepairRecompute({ business: businessId, healthRunId });
-      toast.success(`Balances recomputed — ${res.accountsUpdated} accounts updated`);
-      runCheck().then(loadHistory);
-    } catch (err) {
-      toast.error(err?.response?.data?.error || "Recompute failed");
-    } finally {
-      endRepair("recompute");
-    }
-  };
-
-  const doRepostInvoices = async () => {
-    const ok = await confirm({
-      title: "Repost Invoice Ledger",
-      message: "Posts GL entries for any tenant invoice that has no ledger entry. Does not duplicate existing entries.",
-      confirmText: "Repost Invoices",
-    });
-    if (!ok) return;
-    startRepair("invoices");
-    try {
-      const res = await apiRepairRepost({ business: businessId, healthRunId });
-      toast.success(`Done — ${res.posted} invoice(s) reposted, ${res.skipped} skipped`);
-      if (res.errors?.length) toast.warn(`${res.errors.length} error(s) — check console`, { autoClose: 6000 });
-      runCheck().then(loadHistory);
-    } catch (err) {
-      toast.error(err?.response?.data?.error || "Repost failed");
-    } finally {
-      endRepair("invoices");
-    }
-  };
-
-  const onGroupRepaired = () => {
-    setGroupModal(null);
-    runCheck().then(loadHistory);
-  };
-
-  const onAbnormalRepaired = () => {
-    setAbnormalModal(null);
-    runCheck().then(loadHistory);
-    loadCorrections();
-  };
-
-  const doReverseCorrection = async (groupId, entryIds = []) => {
-    const ok = await confirm({
-      title:       "Undo GL Correction",
-      message:     `This will reverse the manual correcting entry posted to journal group …${String(groupId).slice(-8)}. The GL will return to its state before the correction so you can find and fix the original transaction.`,
-      confirmText: "Undo Correction",
-    });
-    if (!ok) return;
-    const key = `reverse-${groupId}`;
-    startRepair(key);
-    try {
-      const res = await apiReverseGlCorrection(groupId, { business: businessId, healthRunId, entryIds });
-      toast.success(`Correction voided — ${res.reversedCount} entr${res.reversedCount === 1 ? "y" : "ies"} removed from ledger`);
-      runCheck().then(loadHistory);
+      setReport(await runGLIntegrityReport());
+      setView("checks");
       loadCorrections();
     } catch (err) {
-      toast.error(err?.response?.data?.error || "Reverse failed");
+      toast.error(errorText(err, "Health check failed"));
     } finally {
-      endRepair(key);
+      setLoading(false);
+    }
+  }, [businessId, setReport, setView, loadCorrections]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    getChartOfAccounts({ limit: 500 })
+      .then((res) => setAccounts((res?.data ?? res ?? []).filter((a) => a.isPosting !== false && !a.isHeader)))
+      .catch(() => {});
+    loadCorrections();
+  }, [businessId, loadCorrections]);
+  useEffect(() => { if (view === "history") loadHistory(); }, [view, loadHistory]);
+
+  const afterRepair = () => { setGroupModal(null); setAbnormalModal(null); runCheck().then(loadHistory); };
+
+  const runMaintenance = async (key) => {
+    setMenuOpen(false);
+    const isRecompute = key === "recompute";
+    const ok = await confirm({
+      title: isRecompute ? "Recompute account balances" : "Repost missing invoice ledger",
+      message: isRecompute
+        ? "Rebuilds every account's stored balance from the ledger. Posts nothing, safe at any time."
+        : "Posts the missing receivable and income lines for tenant invoices that have none. Invoices that already have entries are skipped.",
+      confirmText: isRecompute ? "Recompute" : "Repost",
+    });
+    if (!ok) return;
+    start(key);
+    try {
+      const res = isRecompute ? await apiRepairRecompute({ healthRunId }) : await apiRepairRepost({ healthRunId });
+      toast.success(isRecompute ? `${res.accountsUpdated} account balances recomputed` : `${res.posted} invoice(s) reposted, ${res.skipped} skipped`);
+      if (!isRecompute && res.errors?.length) toast.warn(`${res.errors.length} invoice(s) could not be reposted`);
+      runCheck().then(loadHistory);
+    } catch (err) {
+      toast.error(errorText(err, "Maintenance failed"));
+    } finally {
+      end(key);
     }
   };
 
+  const undoCorrection = async (groupId, entryIds = []) => {
+    const ok = await confirm({
+      title: "Undo GL correction",
+      message: "Reverses the manual correcting entry so the ledger is back to how it was before it. Fix the original transaction afterwards.",
+      confirmText: "Undo",
+    });
+    if (!ok) return;
+    const key = `undo-${groupId}`;
+    start(key);
+    try {
+      const res = await apiReverseGlCorrection(groupId, { healthRunId, entryIds });
+      toast.success(`Correction undone: ${res.reversedCount} entr${res.reversedCount === 1 ? "y" : "ies"} reversed`);
+      runCheck().then(loadHistory);
+    } catch (err) {
+      toast.error(errorText(err, "Undo failed"));
+    } finally {
+      end(key);
+    }
+  };
 
-  // ── Derived ─────────────────────────────────────────────────────────────────
-  const status   = report?.overallStatus;
-  const detail   = report?.detail || {};
-  const issues   = report?.issues || [];
-  const glBal    = detail.glBalance || {};
-  const groups   = detail.unbalancedGroups || [];
-  const abnormal = detail.abnormalBalances || [];
-  const journals = detail.journalsWithNoLedger || [];
-  const criticalCount = issues.filter((i) => i.severity === "critical").length;
-  const warningCount  = issues.filter((i) => i.severity === "warning").length;
+  // ── One row per check ──────────────────────────────────────────────────────
+  const checks = useMemo(() => {
+    if (!report) return [];
+    const d = report.detail || {};
+    const gl = d.glBalance || {};
+    const groups = d.unbalancedGroups || [];
+    const abnormal = d.abnormalBalances || [];
+    const mismatches = d.storedBalanceMismatches || [];
+    const late = d.closedPeriodPostings || [];
+    const journals = d.journalsWithNoLedger || [];
+    const ungrouped = d.ungroupedEntries || [];
+    const recs = d.reconciliations || [];
+    const lateCount = late.reduce((s, p) => s + p.entries, 0);
 
-  // ── Render tabs ──────────────────────────────────────────────────────────────
+    return [
+      { key: "gl", label: "Debits equal credits", status: gl.balanced ? "pass" : "fail",
+        result: gl.balanced ? "Balanced" : `Out by KES ${fmtNum(Math.abs(gl.difference))}`,
+        detail: `Dr ${fmtNum(gl.totalDebit)} · Cr ${fmtNum(gl.totalCredit)}` },
+      { key: "groups", label: "Every transaction balances", status: groups.length ? "fail" : "pass",
+        result: groups.length ? `${groups.length} unbalanced` : "All balanced", detail: "Each journal group's debits equal its credits", expand: groups.length > 0 },
+      { key: "orphaned", label: "Entries on deleted accounts", status: d.orphanedEntriesCount ? "fail" : "pass",
+        result: d.orphanedEntriesCount ? `${d.orphanedEntriesCount} entries` : "None", detail: "Entries whose account no longer exists", expand: d.orphanedEntriesCount > 0 },
+      ...recs.map((r) => ({
+        key: r.key, label: r.label, status: Math.abs(r.difference) >= 0.01 ? "review" : "pass", rec: r,
+        result: Math.abs(r.difference) >= 0.01 ? `Off by KES ${fmtNum(Math.abs(r.difference))}` : "Agrees",
+        detail: `${r.account ? `${r.account.code} ${r.account.name}: ` : ""}GL ${fmtNum(r.gl)} · sub-ledger ${fmtNum(r.subledger)}`,
+        expand: Math.abs(r.difference) >= 0.01,
+      })),
+      { key: "abnormal", label: "Balances on the expected side", status: abnormal.length ? "review" : "pass",
+        result: abnormal.length ? `${abnormal.length} to review` : "All normal", detail: "Contra accounts such as accumulated depreciation are expected on the other side and skipped", expand: abnormal.length > 0 },
+      { key: "stored", label: "Stored balances match the ledger", status: mismatches.length ? "review" : "pass",
+        result: mismatches.length ? `${mismatches.length} out of date` : "Up to date", detail: "Chart of Accounts balances against the ledger", expand: mismatches.length > 0 },
+      { key: "late", label: "No postings into closed periods", status: late.length ? "review" : "pass",
+        result: late.length ? `${lateCount} entries in ${late.length} period(s)` : "None", detail: "Entries created after their period closed, including posting windows", expand: late.length > 0 },
+      { key: "inactive", label: "Entries on inactive accounts", status: d.inactiveAccountEntries ? "review" : "pass",
+        result: d.inactiveAccountEntries ? `${d.inactiveAccountEntries} entries` : "None", detail: "Reactivate the accounts or reclassify the entries", expand: d.inactiveAccountEntries > 0 },
+      { key: "journals", label: "Posted journals have ledger lines", status: journals.length ? "review" : "pass",
+        result: journals.length ? `${journals.length} without lines` : "All posted", detail: "Journals marked posted with nothing in the ledger", expand: journals.length > 0 },
+      { key: "ungrouped", label: "Corrections are grouped", status: ungrouped.length ? "review" : "pass",
+        result: ungrouped.length ? `${ungrouped.length} ungrouped` : "All grouped", detail: "Correction entries without a journal group can't be checked as a pair", expand: ungrouped.length > 0 },
+      { key: "corrections", label: "Manual GL corrections", status: "info",
+        result: corrections.length ? `${corrections.length} active` : "None", detail: "Correcting entries posted from this page, which can be undone", expand: corrections.length > 0 },
+    ];
+  }, [report, corrections]);
+
+  // open every failing check when a new report arrives
+  useEffect(() => {
+    setExpanded(new Set(checks.filter((c) => c.expand && c.status !== "info").map((c) => c.key)));
+  }, [report]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const counts = useMemo(() => checks.reduce((acc, c) => ({ ...acc, [c.status]: (acc[c.status] || 0) + 1 }), {}), [checks]);
+  const runStatus = RUN_STATUS[report?.overallStatus];
+
+  const renderCheckDetail = (c) => {
+    const d = report?.detail || {};
+    switch (c.key) {
+      case "groups":
+        return (
+          <SubTable head={[{ label: "Source" }, { label: "Date" }, { label: "Debit", right: true }, { label: "Credit", right: true }, { label: "Difference", right: true }, { label: "" }]}>
+            {(d.unbalancedGroups || []).map((g) => {
+              const url = sourceNavUrl(g.sourceType, g.sourceId);
+              return (
+                <tr key={g.journalGroupId}>
+                  <Td>
+                    <span className="font-semibold text-slate-900">{g.sourceType || "Journal"}</span>
+                    {g.sourceOrphaned ? <span className="ml-1.5 font-semibold text-red-700">source deleted</span>
+                      : url ? <button type="button" onClick={() => navigate(url)} className="ml-1.5 text-[#0B3B2E] hover:underline">{g.sourceRef || "open"} <FaExternalLinkAlt size={8} className="inline" /></button>
+                        : <span className="ml-1.5 text-slate-500">{g.sourceRef || ""}</span>}
+                  </Td>
+                  <Td>{fmtDate(g.date)}</Td>
+                  <Td right>{fmtNum(g.debit)}</Td>
+                  <Td right>{fmtNum(g.credit)}</Td>
+                  <Td right cls="font-bold text-red-700">{fmtNum(g.difference)}</Td>
+                  <Td right>
+                    {canRepair && g.hasCorrectionEntry && (
+                      <button type="button" className={iconBtn} disabled={busy.has(`undo-${g.journalGroupId}`)} onClick={() => undoCorrection(g.journalGroupId)}><FaUndo size={10} /> Undo</button>
+                    )}
+                    {canRepair && <button type="button" className={iconBtn} onClick={() => setGroupModal(g)}><FaWrench size={10} /> Fix</button>}
+                  </Td>
+                </tr>
+              );
+            })}
+          </SubTable>
+        );
+      case "abnormal":
+        return (
+          <>
+            <Hint>A balance on the wrong side usually means an entry was posted to the wrong account, or a reversal has no original. Open the ledger and correct the transaction at source; clearing the balance is the last resort.</Hint>
+            <SubTable head={[{ label: "Account" }, { label: "Type" }, { label: "Balance", right: true }, { label: "" }]}>
+              {(d.abnormalBalances || []).map((row) => (
+                <tr key={row.accountId}>
+                  <Td>
+                    <span className="font-semibold text-slate-900">{row.code}</span> <span className="text-slate-700">{row.name}</span>
+                    {row.isClearing && <span className="ml-1.5 text-slate-500">· clearing account: should net to zero</span>}
+                  </Td>
+                  <Td cls="capitalize">{row.type}</Td>
+                  <Td right cls="font-bold text-amber-800">{row.side} {fmtNum(row.amount)}</Td>
+                  <Td right>
+                    <button type="button" className={iconBtn} onClick={() => navigate(accountActivityUrl(row.accountId))}><FaListUl size={10} /> Ledger</button>
+                    {canRepair && <button type="button" className={iconBtn} onClick={() => setAbnormalModal(row)}><FaWrench size={10} /> Clear</button>}
+                  </Td>
+                </tr>
+              ))}
+            </SubTable>
+          </>
+        );
+      case "stored":
+        return (
+          <>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <Hint>Only the stored figure is stale; the ledger is right. Recompute refreshes it and posts nothing.</Hint>
+              {canRepair && <ListToolbar.Button variant="outline" icon={FaSyncAlt} disabled={busy.has("recompute")} onClick={() => runMaintenance("recompute")}>Recompute balances</ListToolbar.Button>}
+            </div>
+            <SubTable head={[{ label: "Account" }, { label: "Stored", right: true }, { label: "Ledger", right: true }, { label: "Difference", right: true }]}>
+              {(d.storedBalanceMismatches || []).map((m) => (
+                <tr key={m.accountId}>
+                  <Td><span className="font-semibold text-slate-900">{m.code}</span> {m.name}</Td>
+                  <Td right>{fmtNum(m.stored)}</Td>
+                  <Td right>{fmtNum(m.ledger)}</Td>
+                  <Td right cls="font-bold text-amber-800">{fmtNum(m.difference)}</Td>
+                </tr>
+              ))}
+            </SubTable>
+          </>
+        );
+      case "late":
+        return (
+          <>
+            <Hint>Usually entries posted through a posting window, or by a module that wrote to the ledger directly. Check each was intended.</Hint>
+            <SubTable head={[{ label: "Period" }, { label: "Status" }, { label: "Closed" }, { label: "Entries", right: true }, { label: "Debits", right: true }]}>
+              {(d.closedPeriodPostings || []).map((p) => (
+                <tr key={p.periodId}>
+                  <Td cls="font-semibold text-slate-900">{p.name}</Td>
+                  <Td cls="capitalize">{p.status}</Td>
+                  <Td>{fmtTs(p.closedAt)}</Td>
+                  <Td right>{p.entries}</Td>
+                  <Td right>{fmtNum(p.debit)}</Td>
+                </tr>
+              ))}
+            </SubTable>
+          </>
+        );
+      case "orphaned":
+        return <Hint>These entries point to accounts that were deleted from the Chart of Accounts. Recreate the accounts (or ask your administrator), then run the check again.</Hint>;
+      case "inactive":
+        return <Hint>Entries sit on accounts that are now inactive. They still count in the totals; reactivate the accounts in the Chart of Accounts or reclassify the entries.</Hint>;
+      case "journals":
+        return (
+          <>
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <Hint>Journals marked posted with no ledger lines. Tenant invoices missing their ledger can be reposted.</Hint>
+              {canRepair && <ListToolbar.Button variant="outline" icon={FaTools} disabled={busy.has("invoices")} onClick={() => runMaintenance("invoices")}>Repost invoice ledger</ListToolbar.Button>}
+            </div>
+            <div className="flex flex-wrap gap-1.5 normal-case">
+              {(d.journalsWithNoLedger || []).map((j) => (
+                <span key={j.id} className="border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] text-slate-700">{j.journalNo || "Journal"} · {fmtDate(j.date)}</span>
+              ))}
+            </div>
+          </>
+        );
+      case "ungrouped":
+        return (
+          <SubTable head={[{ label: "Source" }, { label: "Date" }, { label: "Debit", right: true }, { label: "Credit", right: true }]}>
+            {(d.ungroupedEntries || []).map((e) => (
+              <tr key={e.id}>
+                <Td>{e.sourceType} <span className="text-slate-500">…{String(e.sourceId || "").slice(-8)}</span></Td>
+                <Td>{fmtDate(e.date)}</Td>
+                <Td right>{e.debit ? fmtNum(e.debit) : ""}</Td>
+                <Td right>{e.credit ? fmtNum(e.credit) : ""}</Td>
+              </tr>
+            ))}
+          </SubTable>
+        );
+      case "corrections":
+        return (
+          <SubTable head={[{ label: "Posted" }, { label: "Lines" }, { label: "" }]}>
+            {corrections.map((c2) => (
+              <tr key={c2.journalGroupId}>
+                <Td cls="whitespace-nowrap">{fmtTs(c2.postedAt)}</Td>
+                <Td>
+                  {c2.entries.map((e) => (
+                    <span key={String(e._id)} className="block">
+                      <span className="font-bold">{e.direction === "credit" ? "Cr" : "Dr"}</span> {fmtNum(e.direction === "credit" ? e.credit : e.debit)} · {e.accountCode} {e.accountName}
+                      {e.notes && <span className="text-slate-500"> · {e.notes}</span>}
+                    </span>
+                  ))}
+                </Td>
+                <Td right>
+                  {canRepair && (
+                    <button type="button" className={iconBtn} disabled={busy.has(`undo-${c2.journalGroupId}`)} onClick={() => undoCorrection(c2.journalGroupId, c2.entries.map((e) => e._id))}>
+                      <FaUndo size={10} /> Undo
+                    </button>
+                  )}
+                </Td>
+              </tr>
+            ))}
+          </SubTable>
+        );
+      default:
+        if (c.rec) {
+          return (
+            <div className="flex items-center justify-between gap-2">
+              <Hint>The sub-ledger and its GL account should be equal. A difference usually means an entry was posted to this account by hand, or a sub-ledger record was changed without its posting.</Hint>
+              <ListToolbar.Button variant="outline" icon={FaExternalLinkAlt} onClick={() => navigate(c.rec.link)}>Open</ListToolbar.Button>
+            </div>
+          );
+        }
+        return null;
+    }
+  };
+
+  const checkColumns = [
+    { label: "Check", width: "30%" },
+    { label: "Result", width: "18%" },
+    { label: "Detail", width: "52%" },
+  ];
+  const historyColumns = [
+    { label: "Date & time", width: "22%" },
+    { label: "Ran by", width: "26%" },
+    { label: "Status", width: "14%" },
+    { label: "Issues", width: "12%", align: "right" },
+    { label: "Repairs", width: "12%", align: "right" },
+  ];
+  const cell = "px-3 py-1.5 border-r border-gray-100 normal-case";
+
   return (
     <DashboardLayout>
-      <div className="flex h-full flex-col overflow-hidden bg-slate-100">
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-100 p-1 sm:p-2">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden border border-slate-200 bg-white">
+          <ListToolbar>
+            {[{ key: "checks", label: "Checks" }, { key: "history", label: "History" }].map((t) => (
+              <ListToolbar.Button key={t.key} variant={view === t.key ? "primary" : "outline"} onClick={() => setView(t.key)}>{t.label}</ListToolbar.Button>
+            ))}
+            <ListToolbar.Divider />
+            {report && view === "checks" && (
+              <>
+                {runStatus && <span className={`shrink-0 border px-1.5 py-0.5 text-[10px] font-bold ${runStatus.cls}`}>{runStatus.label}</span>}
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Checked: <span className="font-normal">{fmtTs(report.runAt)}</span></span>
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Fail: {counts.fail || 0}</span>
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Review: {counts.review || 0}</span>
+                <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Pass: {counts.pass || 0}</span>
+              </>
+            )}
+            {view === "history" && history.length > 0 && (
+              <span className="shrink-0 border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-bold text-slate-700">Runs: {history.length}</span>
+            )}
+            <div className="ml-auto" />
+            {canRepair && (
+              <>
+                <ListToolbar.Button ref={menuRef} variant="outline" icon={FaTools} onClick={() => setMenuOpen((o) => !o)}>Maintenance</ListToolbar.Button>
+                <ListToolbar.Menu open={menuOpen} onClose={() => setMenuOpen(false)} anchorRef={menuRef} width="w-64">
+                  <ListToolbar.MenuItem icon={FaSyncAlt} disabled={busy.has("recompute")} onClick={() => runMaintenance("recompute")}>Recompute account balances</ListToolbar.MenuItem>
+                  <ListToolbar.MenuItem icon={FaTools} disabled={busy.has("invoices")} onClick={() => runMaintenance("invoices")}>Repost missing invoice ledger</ListToolbar.MenuItem>
+                </ListToolbar.Menu>
+                <ListToolbar.Divider />
+              </>
+            )}
+            <ListToolbar.Button icon={FaSyncAlt} onClick={runCheck} disabled={loading}>{loading ? "Running…" : "Run Check"}</ListToolbar.Button>
+          </ListToolbar>
 
-        {/* Top bar */}
-        <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-5 py-2.5">
-          <FaShieldAlt size={11} style={{ color: GRN }} />
-          <span className="text-[10px] font-black uppercase tracking-[0.15em]" style={{ color: GRN }}>
-            GL Health Centre
-          </span>
-          {report && (
-            <span className={`ml-1 inline-flex items-center px-2 py-0 text-[8px] font-bold uppercase tracking-[0.1em] ${STATUS_PILL[status] || "bg-slate-100 text-slate-500"}`}>
-              {status}
-            </span>
-          )}
-          <div className="ml-auto">
-            <button
-              onClick={runCheck}
-              disabled={loading}
-              className="flex h-7 items-center gap-1.5 px-4 text-[11px] font-bold text-white disabled:opacity-60"
-              style={{ backgroundColor: GRN }}
-            >
-              <FaSyncAlt size={9} className={loading ? "animate-spin" : ""} />
-              {loading ? "Running…" : "Run Check"}
-            </button>
-          </div>
-        </div>
-
-        {/* Tab nav */}
-        <div className="flex shrink-0 border-b border-slate-200 bg-white">
-          {TABS.map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              onClick={() => { setActiveTab(id); if (id === "history") loadHistory(); }}
-              className={`flex items-center gap-1.5 border-b-2 px-5 py-2.5 text-[10px] font-bold uppercase tracking-[0.1em] transition-colors ${
-                activeTab === id
-                  ? "border-b-[#0B3B2E] text-[#0B3B2E]"
-                  : "border-transparent text-slate-400 hover:text-slate-600"
-              }`}
-            >
-              <Icon size={9} />
-              {label}
-              {id === "check" && report && issues.length > 0 && (
-                <span className={`ml-1 h-4 min-w-[1rem] px-1 text-[8px] font-black text-white flex items-center justify-center ${
-                  criticalCount ? "bg-red-500" : "bg-amber-500"
-                }`}>
-                  {issues.length}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab content */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
-          {/* ── HEALTH CHECK TAB ── */}
-          {activeTab === "check" && (
-            <>
-              {!report && !loading && (
-                <div className="border border-dashed border-slate-300 py-24 text-center">
-                  <FaShieldAlt size={32} className="mx-auto mb-3 text-slate-300" />
-                  <p className="text-[11px] font-semibold text-slate-500">Click "Run Check" to audit your general ledger</p>
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    Verifies GL balance, journal groups, orphaned entries, abnormal signs &amp; more
-                  </p>
-                </div>
-              )}
-
-              {report && (
-                <>
-                  {/* Status banner */}
-                  {STATUS_CFG[status] && (() => {
-                    const cfg = STATUS_CFG[status];
-                    const Icon = cfg.icon;
-                    return (
-                      <div className={`flex items-center gap-3 border px-4 py-3 ${cfg.cls}`}>
-                        <Icon size={18} className={cfg.text} />
-                        <div>
-                          <div className={`text-[12px] font-black ${cfg.text}`}>{cfg.label}</div>
-                          <div className="text-[10px] text-slate-500">
-                            Checked {fmtTs(report.runAt)} ·{" "}
-                            {criticalCount > 0 && <span className="text-red-600 font-bold">{criticalCount} critical</span>}
-                            {criticalCount > 0 && warningCount > 0 && ", "}
-                            {warningCount > 0 && <span className="text-amber-600">{warningCount} warning(s)</span>}
-                            {issues.length === 0 && "No issues found"}
-                          </div>
-                        </div>
-                        {issues.length > 0 && canRepair && (
-                          <button
-                            onClick={() => setActiveTab("repair")}
-                            className="ml-auto flex h-7 items-center gap-1.5 border border-current px-3 text-[10px] font-bold"
-                            style={{ color: GRN, borderColor: GRN }}
-                          >
-                            <FaTools size={9} /> Go to Repairs
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Issues list */}
-                  {issues.length > 0 && (
-                    <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-slate-100 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: GRN }}>
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">
-                          Issues · {issues.length}
-                        </span>
-                      </div>
-                      <div className="divide-y divide-slate-100">
-                        {issues.map((issue, i) => (
-                          <div key={i} className="flex items-start gap-2.5 px-4 py-2.5">
-                            <div className="mt-0.5">{SEV_ICON[issue.severity] || SEV_ICON.info}</div>
-                            <div>
-                              <span className={`inline-flex items-center border px-1.5 py-0 text-[8px] font-bold uppercase tracking-[0.1em] mr-2 ${SEV_BADGE[issue.severity] || SEV_BADGE.info}`}>
-                                {issue.severity}
-                              </span>
-                              <span className="text-[11px] text-slate-700">{issue.issue}</span>
-                            </div>
-                          </div>
+          {view === "checks" ? (
+            <MilikTable
+              columns={checkColumns}
+              rows={checks}
+              rowKey="key"
+              loading={loading && !report}
+              tableFixed
+              minWidth={800}
+              empty="Run Check to audit the general ledger: totals, every transaction, sub-ledgers, closed periods and more."
+              expandedKeys={expanded}
+              onExpandedKeysChange={setExpanded}
+              renderRow={(c) => {
+                const r = RESULT[c.status];
+                const Icon = r.icon;
+                return (
+                  <>
+                    <td className={`${cell} font-semibold text-slate-900`}>{c.label}</td>
+                    <td className={`${cell} font-bold ${r.cls}`}><Icon size={10} className="mr-1 inline" />{r.label}<span className="ml-1.5 font-normal text-slate-600">{c.result}</span></td>
+                    <td className="px-3 py-1.5 normal-case text-slate-600">{c.detail}</td>
+                  </>
+                );
+              }}
+              renderExpanded={(c) => (c.expand ? renderCheckDetail(c) : <p className="text-[11px] normal-case text-slate-500">Nothing to show.</p>)}
+            />
+          ) : (
+            <MilikTable
+              columns={historyColumns}
+              rows={history}
+              loading={histLoading && history.length === 0}
+              tableFixed
+              minWidth={700}
+              empty="No checks run yet."
+              renderRow={(run) => {
+                const s = RUN_STATUS[run.overallStatus];
+                const ranBy = [run.ranBy?.surname, run.ranBy?.otherNames].filter(Boolean).join(" ") || run.ranByName || "—";
+                return (
+                  <>
+                    <td className={`${cell} text-slate-700`}>{fmtTs(run.runAt)}</td>
+                    <td className={`${cell} text-slate-700`}>{ranBy}</td>
+                    <td className={cell}>{s && <span className={`border px-1.5 py-0.5 text-[9px] font-bold ${s.cls}`}>{s.label}</span>}</td>
+                    <td className={`${cell} text-right tabular-nums`}>{run.issueCount}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{run.repairs?.length || 0}</td>
+                  </>
+                );
+              }}
+              renderExpanded={(run) => (
+                <div className="space-y-2 normal-case">
+                  <div>
+                    <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Issues found</div>
+                    {run.issues?.length ? run.issues.map((iss, i) => (
+                      <p key={i} className="text-[11px] text-slate-700"><span className={`font-bold ${iss.severity === "critical" ? "text-red-700" : "text-amber-800"}`}>{iss.severity}</span> · {iss.issue}</p>
+                    )) : <p className="text-[11px] text-slate-500">None</p>}
+                  </div>
+                  <div>
+                    <div className="mb-1 text-[10px] font-black uppercase tracking-wide text-slate-500">Repairs applied</div>
+                    {run.repairs?.length ? (
+                      <SubTable head={[{ label: "When" }, { label: "Repair" }, { label: "Outcome" }, { label: "Records", right: true }]}>
+                        {run.repairs.map((rep, i) => (
+                          <tr key={i}>
+                            <Td cls="whitespace-nowrap">{fmtTs(rep.appliedAt)}</Td>
+                            <Td>{rep.description}{rep.errorMessage && <span className="block text-red-700">{rep.errorMessage.slice(0, 160)}</span>}</Td>
+                            <Td cls={rep.outcome === "failed" ? "font-bold text-red-700" : "font-bold text-emerald-700"}>{rep.outcome}</Td>
+                            <Td right>{rep.recordsAffected}</Td>
+                          </tr>
                         ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* GL balance summary */}
-                  <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <div className="border-b border-slate-100 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: GRN }}>
-                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">GL Balance Summary</span>
-                    </div>
-                    <div className="flex overflow-hidden">
-                      {[
-                        { label: "Total Debits",  val: fmtNum(glBal.totalDebit),  cls: "text-slate-800" },
-                        { label: "Total Credits", val: fmtNum(glBal.totalCredit), cls: "text-slate-800" },
-                        { label: "Difference",    val: fmtNum(glBal.difference),  cls: "text-red-600"   },
-                        { label: "Balanced", val: glBal.balanced ? "Yes" : "No",
-                          cls: glBal.balanced ? "text-emerald-700" : "text-red-600" },
-                      ].map((item) => (
-                        <div key={item.label} className="flex flex-1 flex-col border-r border-slate-100 px-4 py-3 last:border-r-0">
-                          <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">{item.label}</div>
-                          <div className={`mt-1 text-[13px] font-black tabular-nums ${item.cls}`}>{item.val}</div>
-                        </div>
-                      ))}
-                    </div>
+                      </SubTable>
+                    ) : <p className="text-[11px] text-slate-500">None</p>}
                   </div>
-
-                  {/* Counter cards */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: "Orphaned Entries",          val: detail.orphanedEntriesCount   ?? 0 },
-                      { label: "Inactive Account Entries",  val: detail.inactiveAccountEntries  ?? 0 },
-                      { label: "Journals With No Ledger",   val: journals.length                    },
-                    ].map((item) => (
-                      <div key={item.label} className={`border px-4 py-3 shadow-sm ${item.val > 0 ? "border-red-200 bg-red-50" : "border-slate-200 bg-white"}`}>
-                        <div className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-400">{item.label}</div>
-                        <div className={`mt-1 text-2xl font-black ${item.val > 0 ? "text-red-600" : "text-emerald-700"}`}>{item.val}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Unbalanced groups */}
-                  {groups.length > 0 && (
-                    <div className="border border-red-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-red-100 bg-red-50 px-4 py-2.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
-                          Unbalanced Journal Groups · {groups.length}
-                        </span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead><tr>
-                            <TH>Group ID</TH><TH>Source Type</TH><TH>Source ID</TH><TH>Date</TH>
-                            <TH right>Debit</TH><TH right>Credit</TH><TH right>Difference</TH>
-                          </tr></thead>
-                          <tbody>
-                            {groups.map((g) => (
-                              <tr key={g.journalGroupId} className="hover:bg-slate-50">
-                                <TD cls="font-mono text-[10px] text-slate-400">{String(g.journalGroupId).slice(-8)}</TD>
-                                <TD>{g.sourceType || "—"}</TD>
-                                <TD cls="font-mono text-[10px]">
-                                  {g.sourceOrphaned
-                                    ? <span className="text-red-500 font-semibold not-italic">Source deleted</span>
-                                    : g.sourceRef || (g.sourceId ? `…${String(g.sourceId).slice(-12)}` : "—")}
-                                </TD>
-                                <TD>{fmtDate(g.date)}</TD>
-                                <TD right>{fmtNum(g.debit)}</TD>
-                                <TD right>{fmtNum(g.credit)}</TD>
-                                <TD right cls="font-bold text-red-600">{fmtNum(g.difference)}</TD>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Abnormal balances */}
-                  {abnormal.length > 0 && (
-                    <div className="border border-amber-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">
-                          Abnormal Account Balances · {abnormal.length}
-                        </span>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead><tr>
-                            <TH>Code</TH><TH>Account Name</TH><TH>Type</TH><TH right>Net Balance</TH>
-                          </tr></thead>
-                          <tbody>
-                            {abnormal.map((row) => (
-                              <tr key={row.accountId} className="hover:bg-slate-50">
-                                <TD cls="font-mono text-[10px]">{row.code}</TD>
-                                <TD>{row.name}</TD>
-                                <TD cls="capitalize">{row.type}</TD>
-                                <TD right cls={`font-bold ${row.netBalance < 0 ? "text-red-600" : "text-amber-600"}`}>
-                                  {fmtNum(row.netBalance)}
-                                </TD>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </>
+                </div>
               )}
-            </>
+            />
           )}
-
-          {/* ── REPAIR CENTRE TAB ── */}
-          {activeTab === "repair" && (
-            <>
-              {/* ── Active GL Corrections (collapsed by default) ── */}
-              {corrections.length > 0 && (
-                <div className="border border-amber-200 bg-white shadow-sm overflow-hidden mb-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowCorrections((v) => !v)}
-                    className="w-full border-b border-amber-100 bg-amber-50 px-4 py-2.5 flex items-center gap-2 text-left hover:bg-amber-100 transition-colors"
-                  >
-                    <FaUndo size={10} className="text-amber-600 shrink-0" />
-                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">
-                      Active GL Corrections · {corrections.length}
-                    </span>
-                    <span className="ml-1 text-[10px] text-amber-500 flex-1">Manual correcting entries that can be reversed</span>
-                    <span className="text-[10px] font-bold text-amber-600 shrink-0">
-                      {showCorrections ? "▲ Hide" : "▼ Show"}
-                    </span>
-                  </button>
-                  {showCorrections && (
-                    <div className="divide-y divide-slate-100">
-                      {corrections.map((c) => (
-                        <div key={c.journalGroupId} className="flex items-start gap-3 px-4 py-3">
-                          <FaWrench size={11} className="mt-0.5 text-amber-400 shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[11px] font-bold text-slate-700">Journal Group</span>
-                              <span className="font-mono text-[10px] text-slate-400">…{String(c.journalGroupId).slice(-8)}</span>
-                              <span className="text-[10px] text-slate-400">{fmtTs(c.postedAt)}</span>
-                            </div>
-                            <div className="mt-1 space-y-0.5">
-                              {c.entries.map((e) => (
-                                <div key={String(e._id)} className="flex items-center gap-2 text-[10px] text-slate-600">
-                                  <span className={`w-10 font-bold ${e.direction === "credit" ? "text-blue-600" : "text-emerald-600"}`}>
-                                    {e.direction === "credit" ? "CR" : "DR"}
-                                  </span>
-                                  <span className="font-mono tabular-nums">KES {fmtNum(e.direction === "credit" ? e.credit : e.debit)}</span>
-                                  <span className="text-slate-400">→ {e.accountCode} {e.accountName}</span>
-                                  {e.notes && <span className="text-slate-400 truncate max-w-[200px]">· {e.notes}</span>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                          {canRepair && (
-                            <button
-                              onClick={() => doReverseCorrection(c.journalGroupId, c.entries.map((e) => e._id))}
-                              disabled={repairing.has(`reverse-${c.journalGroupId}`)}
-                              className="shrink-0 flex h-7 items-center gap-1.5 border border-amber-300 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                            >
-                              {repairing.has(`reverse-${c.journalGroupId}`) ? (
-                                <><FaSyncAlt size={8} className="animate-spin" /> Undoing…</>
-                              ) : (
-                                <><FaUndo size={8} /> Undo</>
-                              )}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {!report ? (
-                <div className="border border-dashed border-slate-300 py-24 text-center">
-                  <FaWrench size={32} className="mx-auto mb-3 text-slate-300" />
-                  <p className="text-[11px] font-semibold text-slate-500">Run a health check first to see available repairs</p>
-                  <button
-                    onClick={runCheck}
-                    className="mt-4 px-5 py-2 text-[11px] font-bold text-white"
-                    style={{ backgroundColor: GRN }}
-                  >
-                    Run Check Now
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-
-                  {/* Read-only notice for view-only users */}
-                  {!canRepair && (
-                    <div className="flex items-center gap-2 border border-amber-200 bg-amber-50 px-4 py-2.5">
-                      <FaInfoCircle size={11} className="text-amber-500 shrink-0" />
-                      <span className="text-[10px] text-amber-700">
-                        You have view-only access. Contact your administrator to perform repairs.
-                      </span>
-                    </div>
-                  )}
-
-                  {/* ── Safe Maintenance ── */}
-                  <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
-                    <div className="border-b border-slate-100 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: GRN }}>
-                      <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">Safe Maintenance</span>
-                      <span className="ml-2 text-[10px] text-slate-400">Non-destructive — can be run anytime</span>
-                    </div>
-                    <div className="divide-y divide-slate-100">
-
-                      {/* Recompute Balances */}
-                      <div className="flex items-start gap-3 px-4 py-3">
-                        <FaSyncAlt size={12} className="mt-0.5 text-slate-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[11px] font-bold text-slate-700">Recompute All COA Balances</div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            Rebuilds each account's cached balance directly from the ledger.
-                            Fixes any mismatch between what the Chart of Accounts shows and what the GL contains.
-                          </div>
-                        </div>
-                        <button
-                          onClick={doRecompute}
-                          disabled={!canRepair || repairing.has("recompute")}
-                          title={!canRepair ? "Full Access required" : undefined}
-                          className="shrink-0 flex h-7 items-center gap-1.5 border border-slate-200 px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {repairing.has("recompute") ? <><FaSyncAlt size={8} className="animate-spin" /> Running…</> : "Recompute"}
-                        </button>
-                      </div>
-
-                      {/* Repost Invoices */}
-                      <div className="flex items-start gap-3 px-4 py-3">
-                        <FaTools size={12} className="mt-0.5 text-slate-400 shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[11px] font-bold text-slate-700">Repost Missing Invoice Ledger</div>
-                          <div className="text-[10px] text-slate-500 mt-0.5">
-                            Finds tenant invoices that have no GL entries and posts the missing receivable and income lines.
-                            Skips invoices that already have entries — no duplicates.
-                          </div>
-                          {journals.length > 0 && (
-                            <div className="mt-1.5 inline-flex items-center gap-1 border border-amber-200 bg-amber-50 px-2 py-0.5">
-                              <FaExclamationTriangle size={8} className="text-amber-500" />
-                              <span className="text-[9px] font-bold text-amber-700">{journals.length} journal(s) with no ledger entries</span>
-                            </div>
-                          )}
-                        </div>
-                        <button
-                          onClick={doRepostInvoices}
-                          disabled={!canRepair || repairing.has("invoices")}
-                          title={!canRepair ? "Full Access required" : undefined}
-                          className="shrink-0 flex h-7 items-center gap-1.5 border border-slate-200 px-3 text-[10px] font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {repairing.has("invoices") ? <><FaSyncAlt size={8} className="animate-spin" /> Running…</> : "Repost"}
-                        </button>
-                      </div>
-
-                    </div>
-                  </div>
-
-                  {/* ── Unbalanced Groups ── */}
-                  {groups.length > 0 && (
-                    <div className="border border-red-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-red-100 bg-red-50 px-4 py-2.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
-                          Unbalanced Journal Groups · {groups.length}
-                        </span>
-                        <span className="ml-2 text-[10px] text-red-400">Each can be fixed by posting a correcting entry</span>
-                      </div>
-                      <div className="divide-y divide-slate-100">
-                        {groups.map((g) => (
-                          <div key={g.journalGroupId} className="flex items-start gap-3 px-4 py-3">
-                            <FaExclamationCircle size={12} className="mt-0.5 text-red-400 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[11px] font-bold text-slate-700">{g.sourceType || "Journal"}</span>
-                                <span className="font-mono text-[10px] text-slate-400">{String(g.journalGroupId).slice(-8)}</span>
-                                <span className="text-[10px] text-slate-500">{fmtDate(g.date)}</span>
-                                {(() => {
-                                  if (g.sourceOrphaned)
-                                    return <span className="text-[10px] text-red-500 font-semibold">Source deleted</span>;
-                                  const url   = sourceNavUrl(g.sourceType, g.sourceId);
-                                  const label = g.sourceRef || `…${String(g.sourceId || "").slice(-10)}`;
-                                  return url ? (
-                                    <button
-                                      onClick={() => navigate(url)}
-                                      className="flex items-center gap-1 font-mono text-[10px] text-blue-600 hover:text-blue-800 hover:underline"
-                                    >
-                                      {label} <FaExternalLinkAlt size={8} />
-                                    </button>
-                                  ) : g.sourceId ? (
-                                    <span className="font-mono text-[10px] text-slate-400">{label}</span>
-                                  ) : null;
-                                })()}
-                              </div>
-                              <div className="mt-0.5 text-[10px] text-slate-500">
-                                Dr {fmtNum(g.debit)} / Cr {fmtNum(g.credit)} ·{" "}
-                                <span className="font-bold text-red-600">Δ KES {fmtNum(g.difference)}</span>
-                                {" · "}{g.difference > 0 ? "missing credit leg" : "missing debit leg"}
-                              </div>
-                            </div>
-                            {canRepair ? (
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {g.hasCorrectionEntry && (
-                                  <button
-                                    onClick={() => doReverseCorrection(g.journalGroupId)}
-                                    disabled={repairing.has(`reverse-${g.journalGroupId}`)}
-                                    className="flex h-7 items-center gap-1.5 border border-amber-200 bg-amber-50 px-3 text-[10px] font-bold text-amber-700 hover:bg-amber-100 disabled:opacity-50"
-                                  >
-                                    {repairing.has(`reverse-${g.journalGroupId}`) ? (
-                                      <><FaSyncAlt size={8} className="animate-spin" /> Undoing…</>
-                                    ) : (
-                                      <><FaUndo size={8} /> Undo</>
-                                    )}
-                                  </button>
-                                )}
-                                <button
-                                  onClick={() => setGroupModal(g)}
-                                  className="flex h-7 items-center gap-1.5 border border-red-200 bg-red-50 px-3 text-[10px] font-bold text-red-700 hover:bg-red-100"
-                                >
-                                  <FaWrench size={8} /> Fix
-                                </button>
-                              </div>
-                            ) : (
-                              <span className="shrink-0 text-[9px] text-slate-400 italic self-center">View Only</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Orphaned entries (info only) ── */}
-                  {(detail.orphanedEntriesCount ?? 0) > 0 && (
-                    <div className="border border-red-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-red-100 bg-red-50 px-4 py-2.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-red-700">
-                          Orphaned Entries · {detail.orphanedEntriesCount}
-                        </span>
-                      </div>
-                      <div className="px-4 py-3 flex items-start gap-2.5">
-                        <FaInfoCircle size={12} className="mt-0.5 text-slate-400 shrink-0" />
-                        <div className="text-[10px] text-slate-600">
-                          These ledger entries reference accounts that no longer exist in your Chart of Accounts.
-                          This is usually caused by a manual account deletion.<br />
-                          <span className="font-semibold text-slate-700">
-                            To fix: recreate the missing accounts in COA (or contact your administrator), then re-run the health check.
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Inactive account entries (info only) ── */}
-                  {(detail.inactiveAccountEntries ?? 0) > 0 && (
-                    <div className="border border-amber-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">
-                          Inactive Account Entries · {detail.inactiveAccountEntries}
-                        </span>
-                      </div>
-                      <div className="px-4 py-3 flex items-start gap-2.5">
-                        <FaInfoCircle size={12} className="mt-0.5 text-amber-400 shrink-0" />
-                        <div className="text-[10px] text-slate-600">
-                          Entries have been posted to accounts that are now inactive.
-                          This does not affect GL balance but the affected accounts should be reviewed.
-                          <span className="font-semibold text-slate-700"> Go to Chart of Accounts → reactivate or reassign these accounts.</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* ── Abnormal balances ── */}
-                  {abnormal.length > 0 && (
-                    <div className="border border-amber-200 bg-white shadow-sm overflow-hidden">
-                      <div className="border-b border-amber-100 bg-amber-50 px-4 py-2.5">
-                        <span className="text-[10px] font-black uppercase tracking-[0.12em] text-amber-700">
-                          Abnormal Balances · {abnormal.length}
-                        </span>
-                      </div>
-                      <div className="px-4 py-3 flex items-start gap-2.5">
-                        <FaInfoCircle size={12} className="mt-0.5 text-amber-400 shrink-0" />
-                        <div className="text-[10px] text-slate-600">
-                          These accounts carry a balance on their abnormal side (e.g. an asset account with a net credit).
-                          This may indicate a reversed entry with no original, a data issue, or a genuine negative balance.
-                          <span className="font-semibold text-slate-700"> Review each account's ledger before clicking Fix.</span>
-                        </div>
-                      </div>
-                      <div className="overflow-x-auto border-t border-amber-100">
-                        <table className="w-full">
-                          <thead><tr>
-                            <TH>Code</TH><TH>Account</TH><TH>Type</TH><TH right>Net Balance</TH>
-                            {canRepair && <TH></TH>}
-                          </tr></thead>
-                          <tbody>
-                            {abnormal.map((row) => (
-                              <tr key={row.accountId} className="hover:bg-slate-50">
-                                <TD cls="font-mono text-[10px]">{row.code}</TD>
-                                <TD>{row.name}</TD>
-                                <TD cls="capitalize">{row.type}</TD>
-                                <TD right cls={`font-bold ${row.netBalance < 0 ? "text-red-600" : "text-amber-600"}`}>
-                                  {fmtNum(row.netBalance)}
-                                </TD>
-                                {canRepair && (
-                                  <TD>
-                                    <button
-                                      onClick={() => setAbnormalModal(row)}
-                                      className="flex items-center gap-1 px-2.5 py-1 text-[9px] font-bold text-white"
-                                      style={{ backgroundColor: GRN }}
-                                    >
-                                      <FaWrench size={8} /> Fix
-                                    </button>
-                                  </TD>
-                                )}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* All clear in repair centre */}
-                  {issues.length === 0 && (
-                    <div className="border border-emerald-200 bg-emerald-50 px-4 py-10 text-center">
-                      <FaCheckCircle size={28} className="mx-auto mb-3 text-emerald-400" />
-                      <p className="text-[11px] font-bold text-emerald-700">No issues require repair</p>
-                      <p className="mt-1 text-[10px] text-emerald-600">Your GL is healthy. Run a new check after any major posting batch.</p>
-                    </div>
-                  )}
-
-                </div>
-              )}
-            </>
-          )}
-
-          {/* ── HISTORY TAB ── */}
-          {activeTab === "history" && (
-            <>
-              {histLoading && (
-                <div className="py-16 text-center text-[11px] text-slate-400">
-                  <FaSyncAlt size={16} className="mx-auto mb-2 animate-spin text-slate-300" /> Loading history…
-                </div>
-              )}
-
-              {!histLoading && history.length === 0 && (
-                <div className="border border-dashed border-slate-300 py-24 text-center">
-                  <FaHistory size={32} className="mx-auto mb-3 text-slate-300" />
-                  <p className="text-[11px] font-semibold text-slate-500">No scan history yet</p>
-                  <p className="mt-1 text-[10px] text-slate-400">Run the first health check to start the audit trail</p>
-                </div>
-              )}
-
-              {!histLoading && history.length > 0 && (
-                <div className="border border-slate-200 bg-white shadow-sm overflow-hidden">
-                  <div className="border-b border-slate-100 px-4 py-2.5" style={{ borderLeftWidth: 3, borderLeftColor: GRN }}>
-                    <span className="text-[10px] font-black uppercase tracking-[0.12em] text-slate-600">
-                      Scan History · {history.length} run(s)
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead><tr>
-                        <TH>Date &amp; Time</TH>
-                        <TH>Ran By</TH>
-                        <TH>Status</TH>
-                        <TH right>Issues</TH>
-                        <TH right>Repairs</TH>
-                        <TH></TH>
-                      </tr></thead>
-                      <tbody>
-                        {history.map((run) => {
-                          const expanded = expandedRun === String(run._id);
-                          return (
-                            <React.Fragment key={run._id}>
-                              <tr
-                                className="hover:bg-slate-50 cursor-pointer"
-                                onClick={() => setExpandedRun(expanded ? null : String(run._id))}
-                              >
-                                <TD cls="font-mono text-[10px]">{fmtTs(run.runAt)}</TD>
-                                <TD>{run.ranBy?.name || run.ranBy?.username || "System"}</TD>
-                                <TD>
-                                  <span className={`inline-flex items-center px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.08em] ${STATUS_PILL[run.overallStatus] || "bg-slate-100 text-slate-500"}`}>
-                                    {run.overallStatus}
-                                  </span>
-                                </TD>
-                                <TD right cls={run.issueCount > 0 ? "font-bold text-red-600" : "text-emerald-700"}>{run.issueCount}</TD>
-                                <TD right cls={run.repairs?.length ? "font-bold text-slate-700" : "text-slate-400"}>{run.repairs?.length || 0}</TD>
-                                <TD cls="text-[10px] text-slate-400 select-none">{expanded ? "▲" : "▼"}</TD>
-                              </tr>
-
-                              {expanded && (
-                                <tr>
-                                  <td colSpan={6} className="bg-slate-50 px-4 py-3 border-b border-slate-100">
-                                    {/* Issues at time of scan */}
-                                    {run.issues?.length > 0 && (
-                                      <div className="mb-3">
-                                        <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 mb-1.5">Issues Found</div>
-                                        <div className="space-y-1">
-                                          {run.issues.map((iss, i) => (
-                                            <div key={i} className="flex items-start gap-2">
-                                              {SEV_ICON[iss.severity] || SEV_ICON.info}
-                                              <span className="text-[10px] text-slate-600">{iss.issue}</span>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Repairs applied */}
-                                    {run.repairs?.length > 0 ? (
-                                      <div>
-                                        <div className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 mb-1.5">Repairs Applied</div>
-                                        <div className="space-y-1.5">
-                                          {run.repairs.map((rep, i) => (
-                                            <div key={i} className="flex items-start gap-2.5 border border-slate-100 bg-white px-3 py-2">
-                                              <span className={`mt-0.5 inline-flex items-center px-1.5 py-0 text-[8px] font-bold uppercase ${OUTCOME_PILL[rep.outcome] || "bg-slate-100 text-slate-500"}`}>
-                                                {rep.outcome}
-                                              </span>
-                                              <div className="flex-1 min-w-0">
-                                                <div className="text-[10px] font-semibold text-slate-700">{rep.description}</div>
-                                                <div className="text-[9px] text-slate-400 mt-0.5">
-                                                  {fmtTs(rep.appliedAt)} · {rep.recordsAffected} record(s) affected
-                                                  {rep.errorMessage && <span className="ml-1 text-red-500"> · {rep.errorMessage.slice(0, 100)}</span>}
-                                                </div>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <div className="text-[10px] text-slate-400 italic">No repairs recorded for this scan run</div>
-                                    )}
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-
         </div>
-
-        {/* Balance Group Modal */}
-        {groupModal && (
-          <BalanceGroupModal
-            group={groupModal}
-            accounts={accounts}
-            businessId={businessId}
-            healthRunId={healthRunId}
-            onClose={() => setGroupModal(null)}
-            onDone={onGroupRepaired}
-            navigate={navigate}
-          />
-        )}
-
-        {/* Abnormal Balance Fix Modal */}
-        {abnormalModal && (
-          <AbnormalBalanceModal
-            row={abnormalModal}
-            accounts={accounts}
-            businessId={businessId}
-            healthRunId={healthRunId}
-            onClose={() => setAbnormalModal(null)}
-            onDone={onAbnormalRepaired}
-          />
-        )}
-
       </div>
+
+      {groupModal && <BalanceGroupModal group={groupModal} accounts={accounts} healthRunId={healthRunId} onClose={() => setGroupModal(null)} onDone={afterRepair} navigate={navigate} />}
+      {abnormalModal && <AbnormalBalanceModal row={abnormalModal} accounts={accounts} healthRunId={healthRunId} onClose={() => setAbnormalModal(null)} onDone={afterRepair} />}
     </DashboardLayout>
   );
 }

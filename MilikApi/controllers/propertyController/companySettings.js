@@ -1380,13 +1380,20 @@ export const updateIncomeRules = async (req, res, next) => {
       settings = await createSettingsIfMissing(businessId);
     }
 
-    const { latePenaltyBeneficiary, manualReceiptConfirmation } = req.body || {};
+    const { latePenaltyBeneficiary, leaseFeeBeneficiary, manualReceiptConfirmation } = req.body || {};
 
     if (latePenaltyBeneficiary !== undefined) {
       if (!["landlord", "manager"].includes(latePenaltyBeneficiary)) {
         return next(createError(400, "latePenaltyBeneficiary must be 'landlord' or 'manager'."));
       }
       settings.set("incomeRules.latePenaltyBeneficiary", latePenaltyBeneficiary);
+    }
+
+    if (leaseFeeBeneficiary !== undefined) {
+      if (!["landlord", "manager"].includes(leaseFeeBeneficiary)) {
+        return next(createError(400, "leaseFeeBeneficiary must be 'landlord' or 'manager'."));
+      }
+      settings.set("incomeRules.leaseFeeBeneficiary", leaseFeeBeneficiary);
     }
 
     if (manualReceiptConfirmation !== undefined) {

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import FinancialLedgerEntry from "../models/FinancialLedgerEntry.js";
 import ChartOfAccount from "../models/ChartOfAccount.js";
 import AccountingPeriod from "../models/AccountingPeriod.js";
+import { currentUserKey } from "../utils/requestScope.js";
 import { resolvePropertyAccountingContext } from "./propertyAccountingService.js";
 import { createError } from "../utils/error.js";
 
@@ -135,7 +136,10 @@ const enrichPayloadFromProperty = async (payload = {}) => {
   };
 };
 
-const checkPeriodLock = async (businessId, transactionDate) => {
+// Throws when the date falls in a closed or locked period. A closed (not locked) period lets one user
+// post into it while a posting window opened for them is still running — see openPostingWindow in
+// accountingPeriodService.js. Exported for modules that write ledger rows without postEntry.
+export const assertPeriodOpen = async (businessId, transactionDate) => {
   if (!businessId || !transactionDate) return;
   const date = new Date(transactionDate);
   const blocked = await AccountingPeriod.findOne({
@@ -143,15 +147,24 @@ const checkPeriodLock = async (businessId, transactionDate) => {
     status: { $in: ["closed", "locked"] },
     startDate: { $lte: date },
     endDate: { $gte: date },
-  }).select("name status startDate endDate").lean();
-  if (blocked) {
-    throw createError(400, 
-      `Cannot post to a ${blocked.status} period "${blocked.name}" ` +
-      `(${blocked.startDate.toISOString().slice(0, 10)} – ${blocked.endDate.toISOString().slice(0, 10)}). ` +
-      `Reopen the period or post to a different date.`
-    );
+  }).select("name status startDate endDate postingWindows").lean();
+  if (!blocked) return;
+
+  if (blocked.status === "closed") {
+    const userKey = currentUserKey();
+    const now = Date.now();
+    if (userKey && (blocked.postingWindows || []).some((w) => w.userKey === userKey && new Date(w.until).getTime() > now)) return;
   }
+
+  const range = `(${blocked.startDate.toISOString().slice(0, 10)} – ${blocked.endDate.toISOString().slice(0, 10)})`;
+  throw createError(400,
+    blocked.status === "locked"
+      ? `Cannot post to the locked period "${blocked.name}" ${range}. Locked periods are final: post to a later date.`
+      : `Cannot post to the closed period "${blocked.name}" ${range}. Reopen it, open a short posting window on it (Accounting Periods), or post to a different date.`
+  );
 };
+
+const checkPeriodLock = assertPeriodOpen;
 
 export const postEntry = async (payload = {}) => {
   const { session = null, ...entryPayload } = payload || {};

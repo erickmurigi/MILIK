@@ -17,6 +17,7 @@ const GLHealthRunSchema = new mongoose.Schema(
   {
     business:      { type: mongoose.Schema.Types.ObjectId, ref: "Company", required: true, index: true },
     ranBy:         { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    ranByName:     { type: String, default: "" },
     runAt:         { type: Date, default: () => new Date() },
     overallStatus: { type: String, enum: ["clean", "warnings", "critical"], default: "clean" },
     issueCount:    { type: Number, default: 0 },

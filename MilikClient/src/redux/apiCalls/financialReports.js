@@ -58,23 +58,9 @@ export const getCashFlowReport = async (params = {}) => {
   return res.data;
 };
 
-export const getCashMonthlySummary = async (params = {}) => {
-  const search = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== "") search.append(key, value);
-  });
-  const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/cash-monthly-summary${query ? `?${query}` : ""}`, { timeout: 30_000 });
-  return res.data;
-};
-
-export const getIncomeMonthlySummary = async (params = {}) => {
-  const search = new URLSearchParams();
-  Object.entries(params).forEach(([key, value]) => {
-    if (value !== null && value !== undefined && value !== "") search.append(key, value);
-  });
-  const query = search.toString();
-  const res = await adminRequests.get(`/financial-reports/income-monthly-summary${query ? `?${query}` : ""}`, { timeout: 30_000 });
+// Every figure on the Financial Accounts dashboard, counted the same way as the reports it links to.
+export const getAccountsDashboard = async () => {
+  const res = await adminRequests.get("/financial-reports/accounts-dashboard", { timeout: 60_000 });
   return res.data;
 };
 
@@ -120,8 +106,3 @@ export const getLiabilitySubledgerAccounts = async (params = {}) => {
   return res.data?.accounts || [];
 };
 
-// ─── YEAR-END CLOSE ───────────────────────────────────────────────────────────
-export const performYearEndClose = async (payload = {}) => {
-  const res = await adminRequests.post("/financial-reports/year-end-close", payload);
-  return res.data;
-};

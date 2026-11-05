@@ -17,6 +17,7 @@ import { resolveAuditActorUserId } from "../../utils/systemActor.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
 import { round2 } from "../../utils/math.js";
+import { isClearingAccount, isContraAccount, runExtendedChecks } from "../../services/glHealthChecks.js";
 
 const toOid  = (id) => new mongoose.Types.ObjectId(String(id));
 const currentMonthBounds = () => {
@@ -87,7 +88,7 @@ export const checkInvoiceLedgerEntries = async (req, res, next) => {
   try {
     const { propertyId } = req.params;
     const { period } = req.query;
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
 
     if (!businessId) {
       return next(createError(400, "Business context required"));
@@ -186,7 +187,7 @@ const resolveTenantReceivableAccount = async (businessId) => {
 export const repostInvoicesToLedger = async (req, res, next) => {
   try {
     const { propertyId, period } = req.body;
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
     const userId = req.user?._id || req.user?.id;
 
     if (!businessId || !userId) {
@@ -281,7 +282,7 @@ export const repostInvoicesToLedger = async (req, res, next) => {
 
 export const recomputeChartBalances = async (req, res, next) => {
   try {
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
     if (!businessId) {
       return next(createError(400, "Business context required"));
     }
@@ -304,7 +305,7 @@ export const recomputeChartBalances = async (req, res, next) => {
 
 export const checkLedgerBalance = async (req, res, next) => {
   try {
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
     if (!businessId) {
       return next(createError(400, "Business context required"));
     }
@@ -407,7 +408,7 @@ export const checkUtilityReceiptLedgerEntries = async (req, res, next) => {
     // req.query.businessId was trusted ahead of the caller's own company — any
     // authenticated user could read another company's GL entries. Every sibling
     // function in this file already scopes by req.user.company alone; matched that.
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
     const { propertyId, landlordId, periodStart, periodEnd } = req.query;
     const match = {
       business: businessId,
@@ -435,11 +436,8 @@ export const checkUtilityReceiptLedgerEntries = async (req, res, next) => {
 // usage, negative normal-side balances, and missing critical system accounts.
 export const runIntegrityReport = async (req, res, next) => {
   try {
-    // Was trusting a client-supplied business/company ahead of the caller's own
-    // company — any authenticated user could run (and see the results of) an
-    // integrity report scoped to another company. Matched this file's own
-    // established norm: req.user.company alone, no override.
-    const businessId = req.user?.company;
+    // resolveBusinessId only honours a requested company the caller can access (cross-tenant safe)
+    const businessId = resolveBusinessId(req);
 
     if (!businessId) return next(createError(400, "Business context required"));
 
@@ -488,6 +486,7 @@ export const runIntegrityReport = async (req, res, next) => {
       accountTypeMap,
       journalsWithNoLedger,
       ungroupedEntries,
+      extended,
     ] = await Promise.all([
       FinancialLedgerEntry.aggregate([
         { $match: { business: bizId, status: { $in: REPORT_STATUSES } } },
@@ -542,7 +541,7 @@ export const runIntegrityReport = async (req, res, next) => {
         // excluded here so typeIndex below never contains them, which makes the abnormalBalances
         // filter (which only flags accounts it can find in typeIndex) skip them automatically.
         { business: bizId, isActive: true, subGroup: { $ne: "Memo Accounts" } },
-        { _id: 1, code: 1, name: 1, type: 1 }
+        { _id: 1, code: 1, name: 1, type: 1, subGroup: 1 }
       ).lean(),
       JournalEntry.find(
         { business: bizId, status: "posted", ledgerEntries: { $size: 0 } },
@@ -561,6 +560,7 @@ export const runIntegrityReport = async (req, res, next) => {
         { business: bizId, status: { $in: REPORT_STATUSES }, journalGroupId: null, "metadata.correctionOf": { $exists: true } },
         { sourceTransactionType: 1, sourceTransactionId: 1, debit: 1, credit: 1, amount: 1, direction: 1, transactionDate: 1 }
       ).limit(50).lean(),
+      runExtendedChecks(bizId),
     ]);
 
     const totalDebit = Number(totals?.totalDebit || 0);
@@ -582,10 +582,13 @@ export const runIntegrityReport = async (req, res, next) => {
 
     const typeIndex = new Map(accountTypeMap.map((a) => [String(a._id), a]));
 
+    // Contra accounts (accumulated depreciation, provisions) sit on the opposite side by design and are
+    // left out. side/amount spell the balance out (netBalance is debit minus credit, which on its own
+    // read as a normal liability balance when it was a debit one).
     const abnormalBalances = accountBalances
       .filter((row) => {
         const acc = typeIndex.get(String(row._id));
-        if (!acc) return false;
+        if (!acc || extended.contraIds.has(String(row._id))) return false;
         const isDebitNormal = ["asset", "expense"].includes(acc.type);
         return isDebitNormal ? row.netBalance < -1 : row.netBalance > 1;
       })
@@ -597,6 +600,9 @@ export const runIntegrityReport = async (req, res, next) => {
           name: acc?.name,
           type: acc?.type,
           netBalance: row.netBalance,
+          side: row.netBalance > 0 ? "Dr" : "Cr",
+          amount: round2(Math.abs(row.netBalance)),
+          isClearing: isClearingAccount(acc),
         };
       })
       .slice(0, 50);
@@ -639,14 +645,23 @@ export const runIntegrityReport = async (req, res, next) => {
     // silently relying on no caller ever forgetting a journalGroupId again. Scoped to correction
     // entries specifically (metadata.correctionOf) — see the query above for why.
     if (ungroupedEntries.length)   issues.push({ severity: "warning", issue: `${ungroupedEntries.length} correction entry/entries posted without a journal group — can't be checked for a balanced pair` });
+    const { storedBalanceMismatches, closedPeriodPostings, reconciliations } = extended;
+    const unreconciled = reconciliations.filter((r) => Math.abs(r.difference) >= 0.01);
+    if (unreconciled.length) issues.push({ severity: "warning", issue: `${unreconciled.length} sub-ledger(s) don't agree with their GL account: ${unreconciled.map((r) => r.label).join("; ")}` });
+    if (storedBalanceMismatches.length) issues.push({ severity: "warning", issue: `${storedBalanceMismatches.length} account(s) show a stored balance different from the ledger. Recompute balances to refresh them` });
+    if (closedPeriodPostings.length) issues.push({ severity: "warning", issue: `${closedPeriodPostings.reduce((s, p) => s + p.entries, 0)} entry/entries were posted into ${closedPeriodPostings.length} period(s) after they closed` });
 
     const overallStatus = issues.some((i) => i.severity === "critical") ? "critical" : issues.length ? "warnings" : "clean";
     const runAt = new Date();
 
     // Save scan to history (non-blocking on failure)
+    const actorId = String(req.user?._id || req.user?.id || "");
     const healthRun = await GLHealthRun.create({
       business:      businessId,
-      ranBy:         req.user?._id || req.user?.id || null,
+      // the built-in admin has no user record ("milik-admin"), which used to fail this insert and
+      // silently drop the run, so its repairs could never be logged
+      ranBy:         mongoose.Types.ObjectId.isValid(actorId) ? actorId : null,
+      ranByName:     [req.user?.surname, req.user?.otherNames].filter(Boolean).join(" ") || req.user?.name || (req.user?.isSystemAdmin ? "Milik Admin" : req.user?.email || ""),
       runAt,
       overallStatus,
       issueCount:    issues.length,
@@ -676,6 +691,9 @@ export const runIntegrityReport = async (req, res, next) => {
           credit: e.credit,
           date: e.transactionDate,
         })),
+        storedBalanceMismatches,
+        closedPeriodPostings,
+        reconciliations,
       },
     });
   } catch (err) {
@@ -686,15 +704,14 @@ export const runIntegrityReport = async (req, res, next) => {
 // ─── HEALTH HISTORY ──────────────────────────────────────────────────────────
 export const getHealthHistory = async (req, res, next) => {
   try {
-    // Was trusting a client-supplied business/company ahead of the caller's own
-    // company — see the matching comment on runIntegrityReport above.
-    const businessId = req.user?.company;
+    // resolveBusinessId only honours a requested company the caller can access (cross-tenant safe)
+    const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Business context required"));
 
     const runs = await GLHealthRun.find({ business: businessId })
       .sort({ runAt: -1 })
       .limit(50)
-      .populate("ranBy", "username name")
+      .populate("ranBy", "surname otherNames email")
       .lean();
 
     return res.status(200).json(runs);
@@ -710,7 +727,7 @@ export const repairBalanceGroup = async (req, res, next) => {
   try {
     const { groupId } = req.params;
     const { accountId, notes, healthRunId } = req.body;
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
 
     if (!groupId || !mongoose.Types.ObjectId.isValid(groupId))
       return next(createError(400, "Valid journal group ID required"));
@@ -836,7 +853,7 @@ export const repairBalanceGroup = async (req, res, next) => {
 export const repairClearAbnormalBalance = async (req, res, next) => {
   try {
     const { accountId, offsetAccountId, notes, healthRunId } = req.body;
-    const businessId = req.user?.company;
+    const businessId = resolveBusinessId(req);
 
     if (!businessId)
       return next(createError(400, "Business context required"));
@@ -846,6 +863,11 @@ export const repairClearAbnormalBalance = async (req, res, next) => {
       return next(createError(400, "Select an offset account"));
     if (String(accountId) === String(offsetAccountId))
       return next(createError(400, "Offset account must differ from the account being corrected"));
+    if (String(notes || "").trim().length < 5)
+      return next(createError(400, "Give a reason for clearing this balance (at least 5 characters)"));
+    // zeroing accumulated depreciation would erase every asset's depreciation
+    if (await isContraAccount(new mongoose.Types.ObjectId(String(businessId)), accountId))
+      return next(createError(400, "This is a contra account (e.g. accumulated depreciation): its balance is correct and must not be cleared"));
 
     const bizId     = new mongoose.Types.ObjectId(String(businessId));
     const accOid    = new mongoose.Types.ObjectId(String(accountId));
@@ -927,11 +949,8 @@ export const repairClearAbnormalBalance = async (req, res, next) => {
 
 // ─── REPAIR: RECOMPUTE ALL COA BALANCES ─────────────────────────────────────
 export const repairRecomputeBalances = async (req, res, next) => {
-  // Was trusting a client-supplied business/company ahead of the caller's own
-  // company — this is a WRITE endpoint (recomputes chart-of-account balances), so
-  // the old behavior let any authenticated user corrupt another company's balances.
-  // Matched this file's own established norm: req.user.company alone, no override.
-  const businessId = req.user?.company;
+  // resolveBusinessId only honours a requested company the caller can access (cross-tenant safe)
+  const businessId = resolveBusinessId(req);
   if (!businessId) return next(createError(400, "Business context required"));
   const healthRunId = req.body?.healthRunId;
 
@@ -993,7 +1012,7 @@ export const repairRepostInvoices = async (req, res, next) => {
 // ─── LIST ALL ACTIVE MANUAL GL CORRECTION ENTRIES ────────────────────────────
 // GET /api/ledger/repair/active-corrections
 export const getActiveCorrections = async (req, res, next) => {
-  const businessId = req.user?.company;
+  const businessId = resolveBusinessId(req);
   if (!businessId) return next(createError(400, "Business context required"));
 
   try {
@@ -1037,7 +1056,7 @@ export const getActiveCorrections = async (req, res, next) => {
 export const reverseGlCorrectionEntry = async (req, res, next) => {
   const { groupId } = req.params;
   const { healthRunId, entryIds } = req.body;
-  const businessId = req.user?.company;
+  const businessId = resolveBusinessId(req);
 
   if (!businessId) return next(createError(400, "Business context required"));
   const isUngrouped = groupId === "ungrouped";
@@ -1092,7 +1111,7 @@ export const reverseGlCorrectionEntry = async (req, res, next) => {
 // Changes status of any manual_adjustment entries that are still "reversed"
 // (from older Undo runs) to "void" so they are excluded from COA/Trial Balance.
 export const voidReversedCorrections = async (req, res, next) => {
-  const businessId = req.user?.company;
+  const businessId = resolveBusinessId(req);
   if (!businessId) return next(createError(400, "Business context required"));
 
   try {
@@ -1125,7 +1144,7 @@ export const voidReversedCorrections = async (req, res, next) => {
 // which legs exist and which is missing before deciding how to correct.
 export const getGroupEntries = async (req, res, next) => {
   const { groupId } = req.params;
-  const businessId  = req.user?.company;
+  const businessId  = resolveBusinessId(req);
 
   if (!businessId) return next(createError(400, "Business context required"));
   if (!mongoose.Types.ObjectId.isValid(groupId)) return next(createError(400, "Invalid groupId"));
@@ -1167,7 +1186,7 @@ export const getGroupEntries = async (req, res, next) => {
 // trial balance entirely without adding more ledger noise.
 export const voidOrphanedJournalGroup = async (req, res, next) => {
   const { groupId }   = req.params;
-  const businessId = req.user?.company;
+  const businessId = resolveBusinessId(req);
 
   if (!businessId) return next(createError(400, "Business context required"));
   if (!mongoose.Types.ObjectId.isValid(groupId)) return next(createError(400, "Invalid groupId"));

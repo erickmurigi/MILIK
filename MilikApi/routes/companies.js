@@ -16,6 +16,13 @@ import {
   toggleCompanyLock,
   updateCompany,
 } from '../controllers/company.js';
+import {
+  downloadCompanyBackup,
+  getCompanyResetPreview,
+  getLatestCompanyReset,
+  retryCompanyDataReset,
+  startCompanyDataReset,
+} from '../controllers/companyDataReset.js';
 import { verifyUser, verifySuperAdmin } from '../controllers/verifyToken.js';
 
 const router = express.Router();
@@ -28,6 +35,11 @@ router.get('/:id', verifyUser, getCompany);
 router.put('/:id', verifyUser, validateRequest(updateCompanySchema), updateCompany);
 router.patch('/:id/toggle-lock', verifySuperAdmin, toggleCompanyLock);
 router.delete('/:id', verifySuperAdmin, deleteCompany);
+router.get('/:id/data-reset/preview', verifySuperAdmin, getCompanyResetPreview);
+router.get('/:id/data-reset/backup', verifySuperAdmin, downloadCompanyBackup);
+router.get('/:id/data-reset/latest', verifySuperAdmin, getLatestCompanyReset);
+router.post('/:id/data-reset', verifySuperAdmin, startCompanyDataReset);
+router.post('/:id/data-reset/:jobId/retry', verifySuperAdmin, retryCompanyDataReset);
 router.get('/:id/users', verifyUser, getCompanyUsers);
 
 export default router;

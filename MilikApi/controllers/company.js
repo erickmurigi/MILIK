@@ -1827,7 +1827,7 @@ export const toggleCompanyLock = async (req, res, next) => {
       req,
       company: company._id,
       action: 'company.lock_toggle',
-      category: 'companies',
+      category: 'company',
       severity: 'critical',
       targetType: 'Company',
       targetId: company._id,

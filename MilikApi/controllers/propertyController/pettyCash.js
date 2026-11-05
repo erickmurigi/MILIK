@@ -11,6 +11,7 @@ import { createError } from "../../utils/error.js";
 import { parsePagination } from "../../utils/pagination.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { round2 } from "../../utils/math.js";
+import { assertPeriodOpen } from "../../services/ledgerPostingService.js";
 
 const numberOrZero = (v) => {
   const n = Number(v);
@@ -41,6 +42,8 @@ async function nextSequence(business, key) {
 async function postDisbursementLedger({ disbursement, account, userId }) {
   const businessId = toId(account.business);
   const txDate = disbursement.date || new Date();
+  // these rows are written directly, not through postEntry, so the period check is done here
+  await assertPeriodOpen(businessId, txDate);
   const amount = numberOrZero(disbursement.amount);
   const sourceId = String(disbursement._id);
 
@@ -59,6 +62,7 @@ async function postDisbursementLedger({ disbursement, account, userId }) {
     unit: toId(disbursement.unit) || null,
     sourceTransactionType: "petty_cash_disbursement",
     sourceTransactionId: sourceId,
+    journalGroupId: new mongoose.Types.ObjectId(), // ties both legs together for the Cash Flow report
     transactionDate: txDate,
     statementPeriodStart: txDate,
     statementPeriodEnd: txDate,
@@ -110,6 +114,8 @@ async function reverseDisbursementLedger({ disbursement, userId, voidReason }) {
   }).lean();
 
   if (existing.length === 0) return;
+  await assertPeriodOpen(disbursement.business, new Date());
+  const journalGroupId = new mongoose.Types.ObjectId();
 
   const reversals = existing.map(
     (e) =>
@@ -120,6 +126,7 @@ async function reverseDisbursementLedger({ disbursement, userId, voidReason }) {
         accountId: e.accountId,
         sourceTransactionType: "petty_cash_disbursement",
         sourceTransactionId: String(disbursement._id),
+        journalGroupId,
         transactionDate: new Date(),
         statementPeriodStart: e.statementPeriodStart,
         statementPeriodEnd: e.statementPeriodEnd,
@@ -153,6 +160,7 @@ async function reverseDisbursementLedger({ disbursement, userId, voidReason }) {
 async function postReplenishmentLedger({ replenishment, account, userId }) {
   const businessId = toId(account.business);
   const txDate = new Date();
+  await assertPeriodOpen(businessId, txDate);
   const amount = numberOrZero(replenishment.amount);
   const sourceId = String(replenishment._id);
 
@@ -160,6 +168,7 @@ async function postReplenishmentLedger({ replenishment, account, userId }) {
     business: businessId,
     sourceTransactionType: "petty_cash_replenishment",
     sourceTransactionId: sourceId,
+    journalGroupId: new mongoose.Types.ObjectId(), // a bank-to-petty-cash transfer nets to zero in cash reports
     transactionDate: txDate,
     statementPeriodStart: txDate,
     statementPeriodEnd: txDate,

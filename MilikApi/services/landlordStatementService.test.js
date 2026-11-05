@@ -1239,4 +1239,210 @@ describe("generateLandlordStatement", () => {
     expect(row.balanceBF).toBe(0);
     expect(row.closingBalance).toBe(12000);
   }, 60000);
+
+  // Regression test for the landlord-direct-payment recovery gap: a lease fee (manager's own
+  // income by default — incomeRules.leaseFeeBeneficiary defaults to "manager") settled through
+  // a landlord-held deposit (paidDirectToLandlord) never reached the manager; this must now be
+  // automatically recovered from the landlord's remittance this period.
+  it("recovers manager-owned lease-fee income from the landlord's remittance when paid direct-to-landlord", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle,
+      category: "OTHER_CHARGE",
+      amount: 3000,
+      invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+      metadata: { billItemKey: "lease_fee" },
+    });
+
+    await createTestReceipt({
+      invoiceBundle,
+      amount: 3000,
+      paymentDate,
+      allocate: true,
+      isConfirmed: true,
+      paymentMethod: "deposit_applied",
+      paidDirectToLandlord: true,
+      cashbook: "",
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const recoveryRow = statement.metadata.deductionRows.find(
+      (row) => row.category === "other_charge" && row.amount === 3000
+    );
+    expect(recoveryRow).toBeTruthy();
+    expect(recoveryRow.description).toMatch(/Recovered manager income/);
+    expect(statement.metadata.summary.extraDeductions).toBeGreaterThanOrEqual(3000);
+    // Never an addition — this money was never the landlord's to forward in the first place.
+    expect(statement.metadata.additionRows.some((row) => row.amount === 3000)).toBe(false);
+  }, 60000);
+
+  // Exit charges (move-out repairs/damages raised by the Deposit Settlement flow) always
+  // deduct from the landlord's remittance when settled from a landlord-held deposit, even
+  // though chargeOwner is "landlord" — the manager still has to front the cash to pay a
+  // contractor, since the landlord's deposit funds aren't in the manager's cashbook.
+  it("withholds move-out exit-charge funds from the landlord's remittance when the deposit was landlord-held", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle,
+      category: "OTHER_CHARGE",
+      amount: 2500,
+      invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+      description: "Painting & Repairs",
+      metadata: { depositSettlement: true, moveOutCharge: true, chargeOwner: "landlord", includeInLandlordStatement: true },
+    });
+
+    await createTestReceipt({
+      invoiceBundle,
+      amount: 2500,
+      paymentDate,
+      allocate: true,
+      isConfirmed: true,
+      paymentMethod: "deposit_applied",
+      paidDirectToLandlord: true,
+      cashbook: "",
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const withheldRow = statement.metadata.deductionRows.find(
+      (row) => row.category === "other_charge" && row.amount === 2500
+    );
+    expect(withheldRow).toBeTruthy();
+    expect(withheldRow.description).toMatch(/Withheld for move-out charge/);
+  }, 60000);
+
+  // The same landlord-owned exit charge, collected NORMALLY (cash into the manager's own
+  // account, not through a landlord-held deposit) must become an addition instead — the
+  // manager is holding cash that belongs to the landlord and needs to forward it.
+  it("adds a landlord-owned exit charge to the landlord's remittance when collected normally", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle,
+      category: "OTHER_CHARGE",
+      amount: 1800,
+      invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+      description: "Cleaning fee",
+      metadata: { depositSettlement: true, moveOutCharge: true, chargeOwner: "landlord", includeInLandlordStatement: true },
+    });
+
+    await createTestReceipt({
+      invoiceBundle,
+      amount: 1800,
+      paymentDate,
+      allocate: true,
+      isConfirmed: true,
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    const additionRow = statement.metadata.additionRows.find((row) => row.amount === 1800);
+    expect(additionRow).toBeTruthy();
+    expect(statement.metadata.deductionRows.some((row) => row.amount === 1800)).toBe(false);
+  }, 60000);
+
+  // A Payment Voucher linked (via sourceInvoice) back to a move-out charge that already had
+  // its cost recovered at settlement time must not deduct the landlord's remittance again.
+  it("excludes a payment voucher linked to an already-recovered move-out charge from deductions", async () => {
+    const leaseBundle = await createTestLease({ rentAmount: 12000 });
+    const { property, landlord, company } = leaseBundle;
+    await createTestChartOfAccounts(company._id);
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const invoiceDate = periodStart;
+    const paymentDate = new Date(periodStart.getTime() + 60 * 1000);
+
+    const invoiceBundle = await createTestInvoice({
+      leaseBundle,
+      category: "OTHER_CHARGE",
+      amount: 2500,
+      invoiceDate,
+      dueDate: new Date(periodStart.getTime() + 7 * 24 * 60 * 60 * 1000),
+      description: "Painting & Repairs",
+      metadata: { depositSettlement: true, moveOutCharge: true, chargeOwner: "landlord", includeInLandlordStatement: true },
+    });
+
+    await createTestReceipt({
+      invoiceBundle,
+      amount: 2500,
+      paymentDate,
+      allocate: true,
+      isConfirmed: true,
+      paymentMethod: "deposit_applied",
+      paidDirectToLandlord: true,
+      cashbook: "",
+    });
+
+    // The manager later pays a contractor out of the funds withheld above — linked back to
+    // the same invoice so it isn't double-deducted.
+    await PaymentVoucher.create({
+      voucherNo: `PV-TEST-${Date.now()}`,
+      category: "landlord_maintenance",
+      status: "paid",
+      business: company._id,
+      property: property._id,
+      landlord: landlord._id,
+      amount: 2500,
+      dueDate: paymentDate,
+      paidDate: paymentDate,
+      narration: "Painter — move-out repairs",
+      sourceInvoice: invoiceBundle.invoice._id,
+    });
+
+    const statement = await generateLandlordStatement({
+      propertyId: String(property._id),
+      landlordId: String(landlord._id),
+      statementPeriodStart: periodStart,
+      statementPeriodEnd: new Date(),
+    });
+
+    // Exactly one deduction for this amount — from the recovery at settlement time, not
+    // a second one from the linked voucher.
+    const matchingDeductions = statement.metadata.deductionRows.filter((row) => row.amount === 2500);
+    expect(matchingDeductions).toHaveLength(1);
+    expect(matchingDeductions[0].description).toMatch(/Withheld for move-out charge/);
+  }, 60000);
 });

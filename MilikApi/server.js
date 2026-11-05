@@ -43,6 +43,7 @@ import paymentVoucherRoutes from "./routes/propertyRoutes/paymentVouchers.js";
 import http from "http";
 import cors from "cors";
 import compression from "compression";
+import { requestScopeMiddleware } from "./utils/requestScope.js";
 import companyRoutes from "./routes/companies.js";
 import trialRoutes from "./routes/trial.js";
 import companySettingsRoutes from "./routes/companySettings.js";
@@ -565,6 +566,8 @@ const landlordPortalAuthLimiter = rateLimit({
 
 app.use(generalLimiter);
 app.use(cookieParser());
+// lets deep service code (the ledger period check) see who the request is for
+app.use(requestScopeMiddleware);
 
 app.get("/health", (req, res) => {
   const mongoReady = mongoose.connection.readyState === 1;

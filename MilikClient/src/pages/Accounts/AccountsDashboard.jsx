@@ -1,263 +1,237 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSelector } from "react-redux";
 import { useQuery } from "@tanstack/react-query";
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, ReferenceLine,
 } from "recharts";
 import {
-  FaArchive, FaArrowDown, FaArrowUp, FaBalanceScale, FaBook, FaCalendarAlt, FaChartLine, FaChartPie,
-  FaCoins, FaCreditCard, FaExclamationTriangle, FaFileInvoice, FaFileInvoiceDollar, FaHourglassHalf,
-  FaLayerGroup, FaReceipt, FaShieldAlt, FaTruck, FaUniversity, FaUsers, FaWallet,
+  FaArrowDown, FaArrowUp, FaBalanceScale, FaBook, FaCalendarAlt, FaChartLine, FaChartPie, FaCheckCircle,
+  FaCoins, FaCreditCard, FaFileInvoice, FaFileInvoiceDollar, FaLayerGroup, FaReceipt, FaShieldAlt,
+  FaSyncAlt, FaTruck, FaUniversity, FaUsers, FaWallet,
 } from "react-icons/fa";
 import { selectCurrentCompany } from "../../redux/selectors";
 import ModuleShell from "../../components/Layout/ModuleShell";
-import DashboardCard, {
-  DashboardStatCard, DashboardLinkButton, DashboardQuickAccess, DashboardSummaryRows,
-} from "../../components/Dashboard/DashboardCard";
+import DashboardCard, { DashboardStatCard, DashboardLinkButton, DashboardQuickAccess } from "../../components/Dashboard/DashboardCard";
 import { formatMoney } from "../../utils/money";
-import {
-  getJournalEntries, getChartOfAccounts, getIncomeMonthlySummary, getCashMonthlySummary, getAccountingPeriods, getPaymentVouchers,
-} from "../../redux/apiCalls";
+import { getAccountsDashboard } from "../../redux/apiCalls";
 
-const GRN  = "#0B3B2E";
-const ORG  = "#FF8C00";
+const GRN = "#0B3B2E";
+const ORG = "#FF8C00";
 const ROSE = "#E11D48";
 
-// ─── Where everything lives ───────────────────────────────────────────────────
 const QUICK_GROUPS = [
   {
     title: "General Ledger",
     links: [
-      { label: "Chart of Accounts",   to: "/accounts/chart-of-accounts",  Icon: FaLayerGroup },
-      { label: "Journal Entries",     to: "/accounts/journals",           Icon: FaBook },
+      { label: "Chart of Accounts", to: "/accounts/chart-of-accounts", Icon: FaLayerGroup },
+      { label: "Journal Entries", to: "/accounts/journals", Icon: FaBook },
       { label: "Bank Reconciliation", to: "/accounts/bank-reconciliation", Icon: FaUniversity },
+      { label: "GL Integrity", to: "/accounts/gl-integrity", Icon: FaShieldAlt },
     ],
   },
   {
     title: "Payables & Expenses",
     links: [
-      { label: "Payment Vouchers",     to: "/accounts/payment-vouchers",  Icon: FaCreditCard },
-      { label: "Petty Cash Ledger",    to: "/accounts/petty-cash",        Icon: FaCoins },
-      { label: "Petty Cash Accounts",  to: "/accounts/petty-cash/accounts", Icon: FaWallet },
-      { label: "Expense Requisitions", to: "/accounts/expenses",          Icon: FaFileInvoice },
-      { label: "Service Providers",    to: "/accounts/service-providers", Icon: FaUsers },
-    ],
-  },
-  {
-    title: "Period Management",
-    links: [
+      { label: "Payment Vouchers", to: "/accounts/payment-vouchers", Icon: FaCreditCard },
+      { label: "Petty Cash Ledger", to: "/accounts/petty-cash", Icon: FaCoins },
+      { label: "Petty Cash Accounts", to: "/accounts/petty-cash/accounts", Icon: FaWallet },
+      { label: "Expense Requisitions", to: "/accounts/expenses", Icon: FaFileInvoice },
+      { label: "Service Providers", to: "/accounts/service-providers", Icon: FaUsers },
       { label: "Accounting Periods", to: "/accounts/accounting-periods", Icon: FaCalendarAlt },
-      { label: "Year-End Close",     to: "/accounts/year-end-close",     Icon: FaArchive },
-      { label: "GL Integrity",       to: "/accounts/gl-integrity",       Icon: FaShieldAlt },
-      { label: "Financial Ratios",   to: "/accounts/financial-ratios",   Icon: FaChartPie },
     ],
   },
   {
     title: "Reports & Assets",
     links: [
-      { label: "Trial Balance",    to: "/accounts/trial-balance",           Icon: FaBalanceScale },
-      { label: "Income Statement", to: "/accounts/income-statement",        Icon: FaChartLine },
-      { label: "Balance Sheet",    to: "/accounts/balance-sheet",           Icon: FaFileInvoiceDollar },
-      { label: "Cash Flow",        to: "/accounts/cash-flow",               Icon: FaReceipt },
-      { label: "Tax Reports",      to: "/accounts/tax-reports",             Icon: FaFileInvoice },
-      { label: "Budget Plans",     to: "/accounts/budget",                  Icon: FaChartPie },
-      { label: "Budget vs Actual", to: "/accounts/budget/analysis",         Icon: FaChartLine },
-      { label: "Fixed Assets",     to: "/accounts/fixed-assets",            Icon: FaTruck },
-      { label: "Depreciation",     to: "/accounts/fixed-assets/depreciation", Icon: FaArrowDown },
+      { label: "Trial Balance", to: "/accounts/trial-balance", Icon: FaBalanceScale },
+      { label: "Income Statement", to: "/accounts/income-statement", Icon: FaChartLine },
+      { label: "Balance Sheet", to: "/accounts/balance-sheet", Icon: FaFileInvoiceDollar },
+      { label: "Cash Flow", to: "/accounts/cash-flow", Icon: FaReceipt },
+      { label: "Tax Reports", to: "/accounts/tax-reports", Icon: FaFileInvoice },
+      { label: "Financial Ratios", to: "/accounts/financial-ratios", Icon: FaChartPie },
+      { label: "Budget Plans", to: "/accounts/budget", Icon: FaChartPie },
+      { label: "Budget vs Actual", to: "/accounts/budget/analysis", Icon: FaChartLine },
+      { label: "Fixed Assets", to: "/accounts/fixed-assets", Icon: FaTruck },
+      { label: "Depreciation", to: "/accounts/fixed-assets/depreciation", Icon: FaArrowDown },
     ],
   },
 ];
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 const shortKES = (v) => {
   const n = Math.abs(Number(v || 0));
   const sign = Number(v) < 0 ? "-" : "";
   if (n >= 1_000_000) return `${sign}${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000)     return `${sign}${(n / 1_000).toFixed(0)}K`;
+  if (n >= 1_000) return `${sign}${(n / 1_000).toFixed(0)}K`;
   return `${sign}${n.toFixed(0)}`;
 };
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) : "—");
-const lastOf = (rows) => (Array.isArray(rows) && rows.length ? rows[rows.length - 1] : {});
+const money = (v) => formatMoney(v, 0);
+const signedMoney = (v) => (Number(v) < 0 ? `-${money(Math.abs(v))}` : money(v));
+const activityUrl = (accountId) => `/accounts/chart-of-accounts/${accountId}/activity`;
 
-const statusBadge = (status) => ({
-  draft:    "border-slate-200 bg-slate-50 text-slate-600",
+const STATUS_BADGE = {
+  draft: "border-slate-200 bg-slate-50 text-slate-600",
   approved: "border-blue-200 bg-blue-50 text-blue-700",
-  paid:     "border-emerald-200 bg-emerald-50 text-emerald-700",
-  posted:   "border-emerald-200 bg-emerald-50 text-emerald-700",
+  paid: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  posted: "border-emerald-200 bg-emerald-50 text-emerald-700",
   reversed: "border-amber-200 bg-amber-50 text-amber-700",
-}[status] || "border-slate-200 bg-slate-50 text-slate-500");
+};
+const Badge = ({ status }) => (
+  <span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${STATUS_BADGE[status] || "border-slate-200 bg-slate-50 text-slate-500"}`}>{status}</span>
+);
 
-const payeeOf = (v) =>
-  v?.serviceProvider?.name || v?.payeeName || v?.landlord?.landlordName || v?.landlord?.name || v?.narration || "—";
+const TooltipBox = ({ label, rows }) => (
+  <div className="border border-slate-200 bg-white px-3 py-2 shadow-lg">
+    <div className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-700">{label}</div>
+    {rows.map(({ name, value, color }) => (
+      <div key={name} className="flex items-center gap-2 text-[10px]">
+        <div className="h-2 w-2 shrink-0" style={{ backgroundColor: color }} />
+        <span className="text-slate-500">{name}:</span>
+        <span className="font-bold text-slate-900">{signedMoney(value)}</span>
+      </div>
+    ))}
+  </div>
+);
 
-// ─── Chart tooltips ───────────────────────────────────────────────────────────
-const ChartTooltip = ({ active, payload, label }) => {
+const CashTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
-  return (
-    <div className="border border-slate-200 bg-white px-3 py-2 shadow-lg">
-      <div className="mb-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-700">{label}</div>
-      {payload.map((p) => (
-        <div key={p.name} className="flex items-center gap-2 text-[10px]">
-          <div className="h-2 w-2 shrink-0" style={{ backgroundColor: p.fill || p.color }} />
-          <span className="text-slate-500">{p.name}:</span>
-          <span className="font-bold text-slate-900">{formatMoney(p.value, 0)}</span>
-        </div>
-      ))}
-    </div>
-  );
+  const m = payload[0].payload;
+  return <TooltipBox label={label} rows={[
+    { name: "Cash in", value: m.cashIn, color: GRN },
+    { name: "Cash out", value: m.cashOut, color: ORG },
+    { name: "Net movement", value: m.cashIn - m.cashOut, color: "#94a3b8" },
+  ]} />;
 };
 
-const NetTooltip = ({ active, payload, label }) => {
+const ProfitTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
-  const val = payload[0]?.value ?? 0;
-  return (
-    <div className="border border-slate-200 bg-white px-3 py-2 shadow-lg">
-      <div className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-slate-700">{label}</div>
-      <div className="flex items-center gap-2 text-[10px]">
-        <div className="h-2 w-2 shrink-0" style={{ backgroundColor: val >= 0 ? GRN : ROSE }} />
-        <span className="text-slate-500">{val >= 0 ? "Net Profit" : "Net Loss"}:</span>
-        <span className="font-bold" style={{ color: val >= 0 ? GRN : ROSE }}>{formatMoney(Math.abs(val), 0)}</span>
-      </div>
-    </div>
-  );
+  const m = payload[0].payload;
+  return <TooltipBox label={label} rows={[
+    { name: "Income", value: m.income, color: GRN },
+    { name: "Expenses", value: m.expenses, color: ORG },
+    { name: m.net >= 0 ? "Net profit" : "Net loss", value: m.net, color: m.net >= 0 ? GRN : ROSE },
+  ]} />;
+};
+
+// What needs doing, worst first. Every item says exactly what is wrong and opens the page that fixes it.
+const buildAttention = (d) => {
+  const items = [];
+  for (const a of d.cash?.overdrawn || []) {
+    const acc = d.cash.accounts.find((x) => x.code === a.code);
+    items.push({ tone: "bad", text: `${a.name} (${a.code}) is overdrawn: ${signedMoney(a.balance)}`, hint: "A cash account can't hold less than nothing. Check its ledger for a payment posted to the wrong account.", to: acc ? activityUrl(acc._id) : "/accounts/chart-of-accounts" });
+  }
+  const health = d.glHealth;
+  if (!health) items.push({ tone: "warn", text: "The GL health check has never been run", to: "/accounts/gl-integrity" });
+  else if (health.overallStatus !== "clean") {
+    items.push({ tone: health.overallStatus === "critical" ? "bad" : "warn", text: `GL health check found ${health.issueCount} issue${health.issueCount === 1 ? "" : "s"} (${fmtDate(health.runAt)})`, to: "/accounts/gl-integrity" });
+  }
+  if (!d.period) items.push({ tone: "warn", text: "No accounting period covers today", hint: "Postings dated today aren't checked against a period.", to: "/accounts/accounting-periods" });
+  else if (d.period.status !== "open") items.push({ tone: "warn", text: `Today's period (${d.period.name}) is ${d.period.status}`, hint: "Postings dated today will be refused.", to: "/accounts/accounting-periods" });
+  if (d.vouchers?.overdue?.count) items.push({ tone: "bad", text: `${d.vouchers.overdue.count} approved voucher${d.vouchers.overdue.count === 1 ? "" : "s"} past due: ${money(d.vouchers.overdue.amount)}`, to: "/accounts/payment-vouchers" });
+  if (d.vouchers?.approved?.count) items.push({ tone: "info", text: `${d.vouchers.approved.count} approved voucher${d.vouchers.approved.count === 1 ? "" : "s"} waiting to be paid: ${money(d.vouchers.approved.amount)}`, to: "/accounts/payment-vouchers" });
+  if (d.vouchers?.draft?.count) items.push({ tone: "info", text: `${d.vouchers.draft.count} draft voucher${d.vouchers.draft.count === 1 ? "" : "s"} waiting for approval: ${money(d.vouchers.draft.amount)}`, to: "/accounts/payment-vouchers" });
+  if (d.journals?.draft) {
+    const pending = d.journals.pendingApproval ? `, ${d.journals.pendingApproval} awaiting approval` : "";
+    items.push({ tone: "info", text: `${d.journals.draft} draft journal${d.journals.draft === 1 ? "" : "s"} not posted${pending}`, to: "/accounts/journals" });
+  }
+  return items;
+};
+
+const TONE = {
+  bad: { dot: "bg-rose-600", text: "text-rose-800", bg: "hover:bg-rose-50" },
+  warn: { dot: "bg-amber-500", text: "text-amber-800", bg: "hover:bg-amber-50" },
+  info: { dot: "bg-slate-400", text: "text-slate-700", bg: "hover:bg-slate-50" },
 };
 
 const TH = "px-3 py-2 text-[10px] font-black uppercase tracking-widest text-white";
+const Empty = ({ loading, children }) => (
+  <tr><td colSpan={5} className="px-3 py-8 text-center text-xs font-semibold text-slate-400">{loading ? "Loading…" : children}</td></tr>
+);
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
 const AccountsDashboard = () => {
   const navigate = useNavigate();
   const biz = useSelector(selectCurrentCompany)?._id || "";
 
-  const { data: stats, isFetching: statsLoading } = useQuery({
-    queryKey: ["acc-dashboard-stats", biz],
+  const { data, isFetching, isError, refetch } = useQuery({
+    queryKey: ["acc-dashboard", biz],
     enabled: Boolean(biz),
     staleTime: 60_000,
     placeholderData: (prev) => prev,
-    queryFn: async () => {
-      const now = new Date();
-      const startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
-      const endDate = now.toISOString().split("T")[0];
-      const journals = (status) => getJournalEntries({ business: biz, company: biz, status, startDate, endDate, limit: 1 });
-      const vouchers = (status) => getPaymentVouchers({ business: biz, company: biz, status, limit: 1 }).catch(() => ({ total: 0 }));
-      const [coa, draftJournals, postedJournals, periods, draftVouchers, approvedVouchers] = await Promise.all([
-        getChartOfAccounts({ business: biz }),
-        journals("draft"),
-        journals("posted"),
-        getAccountingPeriods({ business: biz }).catch(() => []),
-        vouchers("draft"),
-        vouchers("approved"),
-      ]);
-      const today = new Date();
-      return {
-        accounts: Array.isArray(coa) ? coa.filter((a) => a?.isActive !== false).length : 0,
-        draftJournals: draftJournals.total ?? 0,
-        postedJournals: postedJournals.total ?? 0,
-        draftVouchers: draftVouchers.total ?? 0,
-        approvedVouchers: approvedVouchers.total ?? 0,
-        period: Array.isArray(periods) ? periods.find((p) => new Date(p.startDate) <= today && new Date(p.endDate) >= today) || null : null,
-      };
-    },
+    queryFn: getAccountsDashboard,
   });
 
-  const { data: charts, isFetching: chartsLoading } = useQuery({
-    queryKey: ["acc-dashboard-charts", biz],
-    enabled: Boolean(biz),
-    staleTime: 5 * 60_000,
-    placeholderData: (prev) => prev,
-    queryFn: async () => {
-      const [cash, income] = await Promise.all([
-        getCashMonthlySummary({ business: biz, months: 6 }).then((d) => d?.data ?? []).catch(() => []),
-        getIncomeMonthlySummary({ business: biz, months: 6 }).catch(() => []),
-      ]);
-      return { cash, income: Array.isArray(income) ? income : [] };
-    },
-  });
-
-  const { data: recent, isFetching: recentLoading } = useQuery({
-    queryKey: ["acc-dashboard-recent", biz],
-    enabled: Boolean(biz),
-    staleTime: 60_000,
-    placeholderData: (prev) => prev,
-    queryFn: async () => {
-      const [vouchers, journals] = await Promise.all([
-        getPaymentVouchers({ business: biz, company: biz, limit: 6 }).catch(() => ({ data: [] })),
-        getJournalEntries({ business: biz, company: biz, limit: 6 }).catch(() => ({ data: [] })),
-      ]);
-      return { vouchers: vouchers.data ?? [], journals: journals.data ?? [] };
-    },
-  });
-
-  const s = stats || {};
-  const cashData = charts?.cash ?? [];
-  const netData = charts?.income ?? [];
-  const thisMonthCash = lastOf(cashData);
-  const thisMonthNet = Number(lastOf(netData).net || 0);
-  const pendingVouchers = (s.draftVouchers ?? 0) + (s.approvedVouchers ?? 0);
-  const loading = statsLoading && !stats;
-  const period = s.period;
+  const d = data || {};
+  const loading = !data;
+  const months = d.months || [];
+  const tm = d.thisMonth || {};
+  const monthName = tm.startDate ? new Date(tm.startDate).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : "this month";
+  const cash = d.cash || { accounts: [], total: 0, overdrawn: [] };
+  const unpaid = d.vouchers?.unpaid || { count: 0, amount: 0 };
+  const overdue = d.vouchers?.overdue || { count: 0, amount: 0 };
+  const attention = useMemo(() => (data ? buildAttention(data) : []), [data]);
+  const show = (v) => (loading ? "…" : v);
 
   return (
     <ModuleShell>
       <div className="flex-1 min-h-0 overflow-y-auto space-y-1.5">
 
-        {/* ── Needs attention ─────────────────────────────────────────────── */}
-        {!loading && !period && (
-          <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 px-4 py-3">
-            <FaExclamationTriangle className="mt-0.5 flex-shrink-0 text-amber-600" size={14} />
-            <div className="min-w-0 flex-1">
-              <div className="text-xs font-black text-amber-800">No accounting period covers today</div>
-              <div className="mt-0.5 text-[11px] text-amber-700">Postings dated today are not held to a fiscal period until one is set up.</div>
-            </div>
-            <button type="button" onClick={() => navigate("/accounts/accounting-periods")} className="flex-shrink-0 border border-amber-300 bg-white px-3 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-50">
-              Manage Periods
-            </button>
+        {isError && (
+          <div className="flex items-center justify-between gap-3 border border-rose-200 bg-rose-50 px-4 py-2 text-[11px] font-bold text-rose-800">
+            Couldn't load the dashboard figures{data ? "; showing the last figures loaded" : ""}.
+            <button type="button" onClick={() => refetch()} className="border border-rose-300 bg-white px-3 py-1 text-[11px] font-bold hover:bg-rose-50">Retry</button>
           </div>
         )}
 
-        {/* ── KPI stat cards ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 xl:grid-cols-5">
-          <DashboardStatCard compact label="Cash In · this month"  value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashIn, 0)}  icon={FaArrowDown} tone="green"  sub="Cashbook receipts" />
-          <DashboardStatCard compact label="Cash Out · this month" value={chartsLoading && !charts ? "…" : formatMoney(thisMonthCash.cashOut, 0)} icon={FaArrowUp}   tone="orange" sub="Cashbook payments" />
-          <DashboardStatCard compact label={thisMonthNet >= 0 ? "Net Profit · this month" : "Net Loss · this month"} value={chartsLoading && !charts ? "…" : formatMoney(Math.abs(thisMonthNet), 0)} icon={FaChartLine} tone={thisMonthNet >= 0 ? "green" : "red"} sub="Income less expenses" />
-          <DashboardStatCard compact label="Vouchers Pending" value={loading ? "…" : pendingVouchers} icon={FaCreditCard} tone="orange" sub={loading ? "" : `${s.draftVouchers ?? 0} draft · ${s.approvedVouchers ?? 0} approved`} onClick={() => navigate("/accounts/payment-vouchers")} />
-          <DashboardStatCard compact label="Draft Journals" value={loading ? "…" : (s.draftJournals ?? 0)} icon={FaHourglassHalf} tone="green" sub={loading ? "" : `${s.postedJournals ?? 0} posted this month`} onClick={() => navigate("/accounts/journals")} />
+          <DashboardStatCard compact label="Cash & Bank · now" value={show(signedMoney(cash.total))} icon={FaUniversity}
+            tone={cash.overdrawn.length ? "red" : "green"}
+            sub={loading ? "" : cash.overdrawn.length ? `${cash.overdrawn.length} account${cash.overdrawn.length === 1 ? "" : "s"} overdrawn` : `${cash.accounts.length} cash & bank accounts`}
+            onClick={() => navigate("/accounts/cash-flow")} />
+          <DashboardStatCard compact label={`Cash In · ${monthName}`} value={show(money(tm.cashIn))} icon={FaArrowDown} tone="green"
+            sub="Received into cash & bank" onClick={() => navigate("/accounts/cash-flow")} />
+          <DashboardStatCard compact label={`Cash Out · ${monthName}`} value={show(money(tm.cashOut))} icon={FaArrowUp} tone="orange"
+            sub="Paid out of cash & bank" onClick={() => navigate("/accounts/cash-flow")} />
+          <DashboardStatCard compact label={`${Number(tm.net) < 0 ? "Net Loss" : "Net Profit"} · ${monthName}`} value={show(money(Math.abs(tm.net || 0)))} icon={FaChartLine}
+            tone={Number(tm.net) < 0 ? "red" : "green"}
+            sub={loading ? "" : `Income ${money(tm.income)} · Expenses ${money(tm.expenses)}`}
+            onClick={() => navigate("/accounts/income-statement")} />
+          <DashboardStatCard compact label="Unpaid Vouchers" value={show(money(unpaid.amount))} icon={FaCreditCard}
+            tone={overdue.count ? "red" : unpaid.count ? "orange" : "slate"}
+            sub={loading ? "" : unpaid.count ? `${unpaid.count} voucher${unpaid.count === 1 ? "" : "s"}${overdue.count ? ` · ${overdue.count} past due` : ""}` : "Nothing waiting to be paid"}
+            onClick={() => navigate("/accounts/payment-vouchers")} />
         </div>
 
-        {/* ── Main two-column area ────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_280px]">
-
-          {/* Left */}
+        <div className="grid grid-cols-1 items-start gap-1.5 xl:grid-cols-[1fr_300px]">
           <div className="flex flex-col gap-1.5">
-
             <div className="grid grid-cols-1 gap-1.5 lg:grid-cols-2">
-              <DashboardCard title="Cash In / Cash Out" right={<span className="text-[10px] font-bold text-slate-400">last 6 months</span>}>
+              <DashboardCard title="Cash In / Cash Out" right={<span className="text-[10px] font-bold text-slate-400">last 6 months · as Cash Flow report</span>}>
                 <div className="px-2 py-3">
                   <ResponsiveContainer width="100%" height={210}>
-                    <BarChart data={cashData} barCategoryGap="30%" barGap={3}>
+                    <BarChart data={months} barCategoryGap="30%" barGap={3}>
                       <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
-                      <Tooltip content={<ChartTooltip />} cursor={{ fill: "#f8fafc" }} />
+                      <Tooltip content={<CashTooltip />} cursor={{ fill: "#f8fafc" }} />
                       <Legend iconType="square" iconSize={8} wrapperStyle={{ fontSize: "9px", paddingTop: "8px" }} />
-                      <Bar dataKey="cashIn"  name="Cash In"  fill={GRN} radius={0} />
-                      <Bar dataKey="cashOut" name="Cash Out" fill={ORG} radius={0} />
+                      <Bar dataKey="cashIn" name="Cash In" fill={GRN} radius={0} isAnimationActive={false} />
+                      <Bar dataKey="cashOut" name="Cash Out" fill={ORG} radius={0} isAnimationActive={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </DashboardCard>
 
-              <DashboardCard title="Net Profit / Loss" right={<span className="text-[10px] font-bold text-slate-400">last 6 months</span>}>
+              <DashboardCard title="Net Profit / Loss" right={<span className="text-[10px] font-bold text-slate-400">last 6 months · as Income Statement</span>}>
                 <div className="px-2 py-3">
                   <ResponsiveContainer width="100%" height={210}>
-                    <BarChart data={netData} barCategoryGap="40%">
+                    <BarChart data={months} barCategoryGap="40%">
                       <CartesianGrid strokeDasharray="2 2" stroke="#f1f5f9" vertical={false} />
                       <XAxis dataKey="month" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={shortKES} tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} width={38} />
-                      <Tooltip content={<NetTooltip />} cursor={{ fill: "#f8fafc" }} />
-                      <Bar dataKey="net" name="Net" radius={0}>
-                        {netData.map((entry) => <Cell key={entry.month} fill={entry.net >= 0 ? GRN : ROSE} />)}
+                      <ReferenceLine y={0} stroke="#cbd5e1" />
+                      <Tooltip content={<ProfitTooltip />} cursor={{ fill: "#f8fafc" }} />
+                      <Bar dataKey="net" name="Net" radius={0} isAnimationActive={false}>
+                        {months.map((m) => <Cell key={m.key} fill={m.net >= 0 ? GRN : ROSE} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
@@ -272,23 +246,26 @@ const AccountsDashboard = () => {
                     <tr className="bg-[#0B3B2E]">
                       <th className={`${TH} text-left`}>Voucher No.</th>
                       <th className={`${TH} text-left`}>Payee</th>
-                      <th className={`${TH} text-left`}>Due</th>
+                      <th className={`${TH} text-left`}>Due / Paid</th>
                       <th className={`${TH} text-left`}>Status</th>
                       <th className={`${TH} text-right`}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(recent?.vouchers ?? []).length ? recent.vouchers.map((v) => (
-                      <tr key={v._id} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" onClick={() => navigate("/accounts/payment-vouchers")}>
-                        <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{v.voucherNo}</td>
-                        <td className="max-w-[220px] truncate px-3 py-2 font-semibold text-slate-800">{payeeOf(v)}</td>
-                        <td className="px-3 py-2 text-slate-500">{fmtDate(v.dueDate)}</td>
-                        <td className="px-3 py-2"><span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(v.status)}`}>{v.status}</span></td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(v.amount, 0)}</td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan={5} className="px-3 py-8 text-center text-xs font-semibold text-slate-400">{recentLoading && !recent ? "Loading…" : "No payment vouchers yet."}</td></tr>
-                    )}
+                    {(d.recent?.vouchers || []).length ? d.recent.vouchers.map((v) => {
+                      const late = v.status === "approved" && v.dueDate && new Date(v.dueDate) < new Date(new Date().toDateString());
+                      return (
+                        <tr key={v._id} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" onClick={() => navigate("/accounts/payment-vouchers")}>
+                          <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{v.voucherNo}</td>
+                          <td className="max-w-[220px] truncate px-3 py-2 font-semibold text-slate-800" title={v.payee}>{v.payee || "—"}</td>
+                          <td className={`px-3 py-2 ${late ? "font-bold text-rose-700" : "text-slate-500"}`}>
+                            {v.status === "paid" ? `Paid ${fmtDate(v.paidDate)}` : `Due ${fmtDate(v.dueDate)}${late ? " · past due" : ""}`}
+                          </td>
+                          <td className="px-3 py-2"><Badge status={v.status} /></td>
+                          <td className="px-3 py-2 text-right font-bold tabular-nums text-slate-900">{money(v.amount)}</td>
+                        </tr>
+                      );
+                    }) : <Empty loading={loading}>No payment vouchers yet.</Empty>}
                   </tbody>
                 </table>
               </div>
@@ -298,7 +275,7 @@ const AccountsDashboard = () => {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[560px] text-xs">
                   <thead>
-                    <tr className="bg-slate-800">
+                    <tr className="bg-[#0B3B2E]">
                       <th className={`${TH} text-left`}>Journal No.</th>
                       <th className={`${TH} text-left`}>Date</th>
                       <th className={`${TH} text-left`}>Narration</th>
@@ -307,35 +284,75 @@ const AccountsDashboard = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {(recent?.journals ?? []).length ? recent.journals.map((j) => (
+                    {(d.recent?.journals || []).length ? d.recent.journals.map((j) => (
                       <tr key={j._id} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50" onClick={() => navigate("/accounts/journals")}>
-                        <td className="px-3 py-2 font-mono font-bold text-slate-600">{j.journalNo}</td>
+                        <td className="px-3 py-2 font-mono font-bold text-[#0B3B2E]">{j.journalNo}</td>
                         <td className="px-3 py-2 text-slate-500">{fmtDate(j.date)}</td>
-                        <td className="max-w-[260px] truncate px-3 py-2 font-semibold text-slate-800">{j.narration || j.reference || "—"}</td>
-                        <td className="px-3 py-2"><span className={`border px-1.5 py-0.5 text-[9px] font-bold uppercase ${statusBadge(j.status)}`}>{j.status}</span></td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-900">{formatMoney(j.amount, 0)}</td>
+                        <td className="max-w-[260px] truncate px-3 py-2 font-semibold text-slate-800" title={j.narration}>{j.narration || "—"}</td>
+                        <td className="px-3 py-2"><Badge status={j.status} /></td>
+                        <td className="px-3 py-2 text-right font-bold tabular-nums text-slate-900">{money(j.amount)}</td>
                       </tr>
-                    )) : (
-                      <tr><td colSpan={5} className="px-3 py-8 text-center text-xs font-semibold text-slate-400">{recentLoading && !recent ? "Loading…" : "No journal entries yet."}</td></tr>
-                    )}
+                    )) : <Empty loading={loading}>No journal entries yet.</Empty>}
                   </tbody>
                 </table>
               </div>
             </DashboardCard>
           </div>
 
-          {/* Right */}
           <div className="flex flex-col gap-1.5">
-            <DashboardCard title="Ledger Summary">
-              <DashboardSummaryRows
-                loading={loading}
-                rows={[
-                  { label: "GL Accounts", note: "active in the chart", value: s.accounts ?? 0 },
-                  { label: "Draft Journals", note: "this month", value: s.draftJournals ?? 0, tone: (s.draftJournals ?? 0) > 0 ? "warn" : undefined },
-                  { label: "Posted Journals", note: "this month", value: s.postedJournals ?? 0, tone: "good" },
-                  { label: "Vouchers Awaiting Payment", note: "draft + approved", value: pendingVouchers, tone: pendingVouchers > 0 ? "warn" : undefined },
-                ]}
-              />
+            <DashboardCard
+              title="Needs Attention"
+              right={
+                <button type="button" onClick={() => refetch()} disabled={isFetching} title="Refresh figures" className="text-[#0B3B2E] hover:text-[#FF8C00] disabled:opacity-40">
+                  <FaSyncAlt size={10} className={isFetching ? "animate-spin" : ""} />
+                </button>
+              }
+            >
+              {loading ? (
+                <div className="px-3 py-6 text-center text-xs font-semibold text-slate-400">Loading…</div>
+              ) : attention.length ? (
+                <div className="divide-y divide-slate-100">
+                  {attention.map((a) => (
+                    <button key={a.text} type="button" onClick={() => navigate(a.to)} className={`flex w-full items-start gap-2 px-3 py-1.5 text-left ${TONE[a.tone].bg}`} title={a.hint || ""}>
+                      <span className={`mt-1 h-2 w-2 shrink-0 ${TONE[a.tone].dot}`} />
+                      <span className="min-w-0">
+                        <span className={`block text-[11px] font-bold ${TONE[a.tone].text}`}>{a.text}</span>
+                        {a.hint && <span className="block text-[10px] text-slate-500">{a.hint}</span>}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-3 text-[11px] font-bold text-emerald-700">
+                  <FaCheckCircle className="shrink-0" /> All clear: nothing waiting, GL check clean.
+                </div>
+              )}
+              {!loading && d.glHealth?.overallStatus === "clean" && attention.length > 0 && (
+                <div className="border-t border-slate-100 px-3 py-1.5 text-[10px] text-slate-500">GL health check clean · {fmtDate(d.glHealth.runAt)}</div>
+              )}
+            </DashboardCard>
+
+            <DashboardCard title="Cash & Bank Balances" right={<DashboardLinkButton onClick={() => navigate("/accounts/cash-flow")}>Cash Flow →</DashboardLinkButton>}>
+              {loading ? (
+                <div className="px-3 py-6 text-center text-xs font-semibold text-slate-400">Loading…</div>
+              ) : cash.accounts.length ? (
+                <div className="divide-y divide-slate-100">
+                  {cash.accounts.map((a) => (
+                    <button key={a._id} type="button" onClick={() => navigate(activityUrl(a._id))} className="flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left hover:bg-[#F1F6F3]">
+                      <span className="min-w-0 truncate text-xs font-bold text-slate-700" title={`${a.code} ${a.name}`}>
+                        <span className="mr-1 font-mono text-[10px] font-normal text-slate-400">{a.code}</span>{a.name}
+                      </span>
+                      <span className={`shrink-0 text-xs font-extrabold tabular-nums ${a.balance < 0 ? "text-rose-700" : "text-slate-900"}`}>{signedMoney(a.balance)}</span>
+                    </button>
+                  ))}
+                  <div className="flex items-center justify-between bg-slate-50 px-3 py-1.5">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Total</span>
+                    <span className={`text-xs font-black tabular-nums ${cash.total < 0 ? "text-rose-700" : "text-[#0B3B2E]"}`}>{signedMoney(cash.total)}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="px-3 py-4 text-[11px] text-slate-500">No cash or bank accounts in the chart of accounts yet.</div>
+              )}
             </DashboardCard>
 
             {QUICK_GROUPS.map(({ title, links }) => (

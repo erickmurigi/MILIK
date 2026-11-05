@@ -3,216 +3,127 @@ import FinancialLedgerEntry from "../../models/FinancialLedgerEntry.js";
 import { toObjectId } from "../../utils/db.js";
 import { resolveBusinessId } from "../../utils/requestContext.js";
 import { createError } from "../../utils/error.js";
+import {
+  closeFiscalYear,
+  closePeriod,
+  createPeriod,
+  deletePeriod,
+  endPostingWindow,
+  openPostingWindow,
+  generateFiscalYear,
+  listPeriods,
+  lockPeriod,
+  periodChecklist,
+  reopenPeriod,
+  updatePeriod,
+  yearCloseChecklist,
+} from "../../services/accountingPeriodService.js";
 
-// â”€â”€â”€ LIST â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const getAccountingPeriods = async (req, res, next) => {
+const withBusiness = (handler) => async (req, res, next) => {
   try {
     const businessId = resolveBusinessId(req);
     if (!businessId) return next(createError(400, "Missing business"));
-
-    const periods = await AccountingPeriod.find({ business: businessId })
-      .populate("closedBy", "name email")
-      .populate("lockedBy", "name email")
-      .populate("reopenedBy", "name email")
-      .sort({ startDate: -1 })
-      .limit(120)
-      .lean();
-
-    return res.status(200).json(periods);
+    await handler(req, res, businessId);
   } catch (err) {
     next(err);
   }
 };
 
-// â”€â”€â”€ GET ONE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const getAccountingPeriod = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId })
-      .populate("closedBy", "name email")
-      .populate("lockedBy", "name email")
-      .lean();
-    if (!period) return next(createError(404, "Period not found"));
-    return res.status(200).json(period);
-  } catch (err) {
-    next(err);
-  }
-};
+// Periods grouped by fiscal year, with ledger activity and the date gaps between them.
+export const getAccountingPeriods = withBusiness(async (req, res, businessId) => {
+  res.status(200).json(await listPeriods(businessId));
+});
 
-// â”€â”€â”€ CREATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const createAccountingPeriod = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    if (!businessId) return next(createError(400, "Missing business"));
+export const getAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId }).lean();
+  if (!period) throw createError(404, "Period not found");
+  res.status(200).json(period);
+});
 
-    const { name, startDate, endDate, notes } = req.body;
-    if (!name || !startDate || !endDate)
-      return next(createError(400, "name, startDate and endDate are required"));
+export const createAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  const { name, startDate, endDate, notes } = req.body || {};
+  res.status(201).json(await createPeriod({ businessId, name, startDate, endDate, notes, user: req.user, req }));
+});
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999);
+export const generateAccountingYear = withBusiness(async (req, res, businessId) => {
+  res.status(201).json(await generateFiscalYear({ businessId, fiscalYearStart: req.body?.fiscalYearStart, user: req.user, req }));
+});
 
-    if (start >= end)
-      return next(createError(400, "startDate must be before endDate"));
+export const updateAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  const { name, notes, startDate, endDate } = req.body || {};
+  res.status(200).json(await updatePeriod({ businessId, id: req.params.id, name, notes, startDate, endDate, user: req.user, req }));
+});
 
-    // Prevent overlapping open/closed periods
-    const overlap = await AccountingPeriod.findOne({
-      business: businessId,
-      status: { $in: ["open", "closed"] },
-      $or: [
-        { startDate: { $lte: end }, endDate: { $gte: start } },
-      ],
-    }).lean();
-    if (overlap)
-      return next(createError(409, `Period overlaps with existing period "${overlap.name}" (${overlap.status})`));
+export const deleteAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  await deletePeriod({ businessId, id: req.params.id, req });
+  res.status(200).json({ message: "Period deleted" });
+});
 
-    const period = await AccountingPeriod.create({
-      business: businessId,
-      name,
-      startDate: start,
-      endDate: end,
-      notes: notes || "",
-      status: "open",
-    });
+export const getAccountingPeriodChecklist = withBusiness(async (req, res, businessId) => {
+  res.status(200).json(await periodChecklist({ businessId, id: req.params.id }));
+});
 
-    return res.status(201).json(period);
-  } catch (err) {
-    next(err);
-  }
-};
+export const closeAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  const period = await closePeriod({ businessId, id: req.params.id, user: req.user, req });
+  res.status(200).json({ message: "Period closed", period });
+});
 
-// â”€â”€â”€ UPDATE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const updateAccountingPeriod = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId });
-    if (!period) return next(createError(404, "Period not found"));
+export const reopenAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  const period = await reopenPeriod({ businessId, id: req.params.id, reason: req.body?.reason, user: req.user, req });
+  res.status(200).json({ message: "Period reopened", period });
+});
 
-    if (period.status === "locked")
-      return next(createError(400, "Locked periods cannot be edited"));
+export const lockAccountingPeriod = withBusiness(async (req, res, businessId) => {
+  const period = await lockPeriod({ businessId, id: req.params.id, user: req.user, req });
+  res.status(200).json({ message: "Period locked permanently", period });
+});
 
-    const { name, notes } = req.body;
-    if (name) period.name = name;
-    if (notes !== undefined) period.notes = notes;
+export const openAccountingPostingWindow = withBusiness(async (req, res, businessId) => {
+  const { minutes, reason } = req.body || {};
+  const period = await openPostingWindow({ businessId, id: req.params.id, minutes, reason, user: req.user, req });
+  res.status(200).json({ message: "Posting window opened", period });
+});
 
-    await period.save();
-    return res.status(200).json(period);
-  } catch (err) {
-    next(err);
-  }
-};
+export const endAccountingPostingWindow = withBusiness(async (req, res, businessId) => {
+  const period = await endPostingWindow({ businessId, id: req.params.id, user: req.user, req });
+  res.status(200).json({ message: "Posting window ended", period });
+});
 
-// â”€â”€â”€ CLOSE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const closeAccountingPeriod = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId });
-    if (!period) return next(createError(404, "Period not found"));
+export const getYearCloseChecklist = withBusiness(async (req, res, businessId) => {
+  res.status(200).json(await yearCloseChecklist({ businessId, fiscalYearStart: req.query.fiscalYearStart }));
+});
 
-    if (period.status !== "open")
-      return next(createError(400, `Period is already ${period.status}`));
+export const closeAccountingYear = withBusiness(async (req, res, businessId) => {
+  res.status(200).json(await closeFiscalYear({ businessId, fiscalYearStart: req.body?.fiscalYearStart, user: req.user, req }));
+});
 
-    period.status = "closed";
-    period.closedBy = req.user?._id || null;
-    period.closedAt = new Date();
-    await period.save();
+// Entry counts and totals for one period.
+export const getAccountingPeriodStats = withBusiness(async (req, res, businessId) => {
+  const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId }).lean();
+  if (!period) throw createError(404, "Period not found");
 
-    return res.status(200).json({ message: "Period closed successfully", period });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// â”€â”€â”€ REOPEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const reopenAccountingPeriod = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId });
-    if (!period) return next(createError(404, "Period not found"));
-
-    if (period.status === "locked")
-      return next(createError(400, "Locked periods cannot be reopened"));
-
-    if (period.yearEndClosed)
-      return next(createError(400, "Year-end closed periods cannot be reopened"));
-
-    if (period.status === "open")
-      return next(createError(400, "Period is already open"));
-
-    period.status = "open";
-    period.reopenedBy = req.user?._id || null;
-    period.reopenedAt = new Date();
-    await period.save();
-
-    return res.status(200).json({ message: "Period reopened successfully", period });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// â”€â”€â”€ LOCK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const lockAccountingPeriod = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId });
-    if (!period) return next(createError(404, "Period not found"));
-
-    if (period.status === "locked")
-      return next(createError(400, "Period is already locked"));
-
-    if (period.status === "open")
-      return next(createError(400, "Close the period before locking it"));
-
-    period.status = "locked";
-    period.lockedBy = req.user?._id || null;
-    period.lockedAt = new Date();
-    await period.save();
-
-    return res.status(200).json({ message: "Period locked permanently", period });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// â”€â”€â”€ PERIOD STATS (entry counts, amounts for the period) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-export const getAccountingPeriodStats = async (req, res, next) => {
-  try {
-    const businessId = resolveBusinessId(req);
-    const period = await AccountingPeriod.findOne({ _id: req.params.id, business: businessId }).lean();
-    if (!period) return next(createError(404, "Period not found"));
-
-    const [stats] = await FinancialLedgerEntry.aggregate([
-      {
-        $match: {
-          business: toObjectId(businessId),
-          transactionDate: { $gte: period.startDate, $lte: period.endDate },
-          status: { $in: ["approved", "reversed"] },
-        },
+  const [stats] = await FinancialLedgerEntry.aggregate([
+    {
+      $match: {
+        business: toObjectId(businessId),
+        transactionDate: { $gte: period.startDate, $lte: period.endDate },
+        status: { $in: ["approved", "reversed"] },
       },
-      {
-        $group: {
-          _id: null,
-          totalEntries: { $sum: 1 },
-          totalDebits: { $sum: "$debit" },
-          totalCredits: { $sum: "$credit" },
-          approvedCount: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
-          reversedCount: { $sum: { $cond: [{ $eq: ["$status", "reversed"] }, 1, 0] } },
-        },
+    },
+    {
+      $group: {
+        _id: null,
+        totalEntries: { $sum: 1 },
+        totalDebits: { $sum: "$debit" },
+        totalCredits: { $sum: "$credit" },
+        approvedCount: { $sum: { $cond: [{ $eq: ["$status", "approved"] }, 1, 0] } },
+        reversedCount: { $sum: { $cond: [{ $eq: ["$status", "reversed"] }, 1, 0] } },
       },
-    ]).allowDiskUse(true);
+    },
+  ]).allowDiskUse(true);
 
-    return res.status(200).json({
-      period,
-      stats: stats || {
-        totalEntries: 0,
-        totalDebits: 0,
-        totalCredits: 0,
-        approvedCount: 0,
-        reversedCount: 0,
-      },
-    });
-  } catch (err) {
-    next(err);
-  }
-};
+  res.status(200).json({
+    period,
+    stats: stats || { totalEntries: 0, totalDebits: 0, totalCredits: 0, approvedCount: 0, reversedCount: 0 },
+  });
+});

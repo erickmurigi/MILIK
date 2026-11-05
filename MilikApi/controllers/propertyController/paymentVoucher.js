@@ -26,6 +26,7 @@ import {
 } from "../../services/propertyAccountingService.js";
 import Tenant from "../../models/Tenant.js";
 import Unit from "../../models/Unit.js";
+import TenantInvoice from "../../models/TenantInvoice.js";
 import {
   computeTenantDepositPosition,
   findUnbilledRentPeriods,
@@ -958,6 +959,35 @@ const resolveVoucherSourceRequisition = async ({
   return requisition;
 };
 
+// Links a voucher (paying a contractor, etc.) back to the move-out charge invoice whose cost
+// was already recovered from the landlord's remittance when the deposit was settled — see
+// incomeOwnershipService.js / landlordStatementService.js. Deliberately permissive about which
+// invoice can be linked (any invoice in this business): the whole point is this is picked by a
+// human who knows which charge the payment is for, not re-derived from category/metadata here.
+const resolveVoucherSourceInvoice = async ({ businessId, invoiceId = null, currentVoucherId = null }) => {
+  if (!invoiceId || !isValidObjectId(invoiceId)) return null;
+
+  const invoice = await TenantInvoice.findOne({ _id: invoiceId, business: businessId })
+    .select("_id invoiceNumber category metadata")
+    .lean();
+  if (!invoice) {
+    throw createError(400, "Source invoice was not found.");
+  }
+
+  const existingLink = await PaymentVoucher.findOne({
+    sourceInvoice: invoice._id,
+    business: businessId,
+    status: { $ne: "reversed" },
+  })
+    .select("_id voucherNo")
+    .lean();
+  if (existingLink && (!currentVoucherId || String(existingLink._id) !== String(currentVoucherId))) {
+    throw createError(400, `Invoice ${invoice.invoiceNumber || invoice._id} is already linked to voucher ${existingLink.voucherNo}.`);
+  }
+
+  return invoice;
+};
+
 const syncRequisitionAfterVoucherLink = async ({ requisition, voucher, actorUserId = null }) => {
   if (!requisition || !voucher) return;
   requisition.linkedVoucher = voucher._id;
@@ -1544,6 +1574,11 @@ export const createPaymentVoucher = async (req, res, next) => {
       propertyId: input.property || null,
     });
 
+    const sourceInvoice = await resolveVoucherSourceInvoice({
+      businessId,
+      invoiceId: input.sourceInvoice || null,
+    });
+
     const accountingContext = await resolveVoucherLandlordContext({
       businessId,
       propertyId: input.property || null,
@@ -1593,6 +1628,7 @@ export const createPaymentVoucher = async (req, res, next) => {
       reference: input.reference || "",
       business: businessId,
       sourceRequisition: sourceRequisition?._id || null,
+      sourceInvoice: sourceInvoice?._id || null,
       tenant: depositRefund?.tenantId || null,
       depositHeldBy: depositRefund?.depositHeldBy || null,
     };
@@ -1888,6 +1924,14 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
       payload.sourceRequisition = existing.sourceRequisition;
     }
 
+    const requestedSourceInvoiceId = Object.prototype.hasOwnProperty.call(payload, "sourceInvoice")
+      ? payload.sourceInvoice
+      : existing.sourceInvoice;
+
+    if (existing.sourceInvoice && Object.prototype.hasOwnProperty.call(payload, "sourceInvoice")) {
+      payload.sourceInvoice = existing.sourceInvoice;
+    }
+
     const effectiveCategory = payload.category || existing.category || "";
     const propertyId = Object.prototype.hasOwnProperty.call(payload, "property")
       ? payload.property || null
@@ -1911,11 +1955,16 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
     if (voucherRequiresExplicitDebitAccount(effectiveCategory) && !linesHaveExpenseAccounts(effectiveLines) && !isValidObjectId(payload.debitAccount || existing.debitAccount || null)) {
       return next(createError(400, "Debit posting account is required for this voucher category."));
     }
-    const [sourceRequisition, accountingContext, saleOwnerContext] = await Promise.all([
+    const [sourceRequisition, sourceInvoice, accountingContext, saleOwnerContext] = await Promise.all([
       resolveVoucherSourceRequisition({
         businessId: business,
         requisitionId: requestedSourceRequisitionId || null,
         propertyId,
+        currentVoucherId: existing._id,
+      }),
+      resolveVoucherSourceInvoice({
+        businessId: business,
+        invoiceId: requestedSourceInvoiceId || null,
         currentVoucherId: existing._id,
       }),
       resolveVoucherLandlordContext({
@@ -1933,6 +1982,7 @@ const updatePaymentVoucherHandler = async (req, res, next) => {
 
     payload.landlord = accountingContext.landlordId || null;
     payload.sourceRequisition = sourceRequisition?._id || existing.sourceRequisition || null;
+    payload.sourceInvoice = sourceInvoice?._id || existing.sourceInvoice || null;
     payload.saleOwner = saleOwnerContext.saleOwnerId || null;
     payload.saleProject = saleOwnerContext.saleProjectId || null;
 

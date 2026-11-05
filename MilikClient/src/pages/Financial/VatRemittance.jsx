@@ -122,7 +122,7 @@ export default function VatRemittance() {
 
   const canProcess = hasCompanyPermission(currentUser, company, "financialReports", "process", "accounts");
   const canReverse = hasCompanyPermission(currentUser, company, "financialReports", "reverse", "accounts");
-  const { confirm } = useConfirm();
+  const confirm = useConfirm();
 
   const now = new Date();
   const [year,  setYear]  = useTabState("/accounts/vat-remittance:year",  now.getFullYear());

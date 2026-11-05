@@ -20,6 +20,7 @@ import CompanySettings from "../models/CompanySettings.js";
 import Company from "../models/Company.js";
 import { isSelfManagingLandlordCompany } from "../utils/companyModules.js";
 import { buildCommissionTaxSnapshot, getCompanyTaxConfiguration } from "./taxCalculationService.js";
+import { resolveChargeOwner, isExitCharge } from "./incomeOwnershipService.js";
 import { round2 } from "../utils/math.js";
 
 const toDate = (value, fallback = new Date()) => {
@@ -1570,6 +1571,7 @@ const createStatementAccumulator = ({
   tenantMap,
   snapshotMap,
   latePenaltyToLandlord,
+  incomeRules = {},
   property,
   invoiceStatementMap,
   noteStatementMap,
@@ -1580,6 +1582,18 @@ const createStatementAccumulator = ({
   prepaymentRecognition,
 }) => {
   const rowsMap = new Map();
+  // invoiceId -> amount paid via a paidDirectToLandlord receipt / a normal (manager-collected)
+  // receipt this period. Populated while walking receipt allocations below; read back in the
+  // invoicesInPeriod loop to decide additions vs. recovery deductions for OTHER_CHARGE/
+  // LATE_PENALTY_CHARGE invoices. See incomeOwnershipService.js for the ownership rule itself.
+  const directPaidByInvoiceId = new Map();
+  const normalPaidByInvoiceId = new Map();
+  const recordInvoicePayment = (invoiceId, amount, paidDirectToLandlord) => {
+    const id = String(invoiceId || "");
+    if (!id || !(Math.abs(Number(amount || 0)) > 0)) return;
+    const map = paidDirectToLandlord ? directPaidByInvoiceId : normalPaidByInvoiceId;
+    map.set(id, round2(Number(map.get(id) || 0) + Number(amount || 0)));
+  };
 
   const ensureRow = (tenantId, unitId, fallback = {}) => {
     const resolvedUnitId = getEntityId(unitId || fallback.unitId || fallback.unit);
@@ -1698,6 +1712,12 @@ const createStatementAccumulator = ({
   };
 
   const shouldIncludeInvoiceInLandlordStatement = (invoice = {}) => {
+    // A charge normally invisible to the landlord statement (a manager-owned lease fee, a
+    // generic OTHER_CHARGE) still needs to be seen once it's been settled through funds the
+    // landlord already holds (paidDirectToLandlord) — that money needs recovering from the
+    // landlord's remittance, which can't happen if this invoice never reaches the loop below.
+    if (directPaidByInvoiceId.has(String(invoice?._id || ""))) return true;
+
     const metadata = invoice?.metadata || {};
     if (typeof metadata.includeInLandlordStatement === "boolean") {
       return metadata.includeInLandlordStatement;
@@ -2488,6 +2508,10 @@ const createStatementAccumulator = ({
     applyReceiptBeforeToBalance,
     applyReceiptInPeriodToBalance,
     applyMixedDepositReceiptToBalance,
+    incomeRules,
+    directPaidByInvoiceId,
+    normalPaidByInvoiceId,
+    recordInvoicePayment,
   };
 };
 
@@ -2582,8 +2606,8 @@ const resolveStatementContext = async ({
     Company.findById(businessObjectId, { companyMode: 1 }).lean(),
   ]);
 
-  const latePenaltyToLandlord =
-    (companySettingsDoc?.incomeRules?.latePenaltyBeneficiary || "manager") === "landlord";
+  const incomeRules = companySettingsDoc?.incomeRules || {};
+  const latePenaltyToLandlord = (incomeRules?.latePenaltyBeneficiary || "manager") === "landlord";
   // Self-managing landlord companies have no manager, no commission, and no manager/
   // landlord deposit-holder split — this statement becomes a "Property Performance
   // Statement" for their own records rather than a remittance document. The row-building
@@ -2747,7 +2771,7 @@ const gatherStatementSourceData = async ({
         },
       ],
     })
-      .select("_id voucherNo category amount narration reference dueDate paidDate approvedAt paidAt createdAt expenseRecord landlord property status")
+      .select("_id voucherNo category amount narration reference dueDate paidDate approvedAt paidAt createdAt expenseRecord landlord property status sourceInvoice")
       .lean(),
 
     FinancialLedgerEntry.find({
@@ -3035,6 +3059,7 @@ export const generateLandlordStatement = async ({
     periodEndTime,
     prepaymentRecognition,
     latePenaltyToLandlord,
+    incomeRules,
     selfManaged,
     previousCutoffAt,
     latestProcessedStatement,
@@ -3085,6 +3110,7 @@ export const generateLandlordStatement = async ({
     tenantMap,
     snapshotMap,
     latePenaltyToLandlord,
+    incomeRules,
     property,
     invoiceStatementMap,
     noteStatementMap,
@@ -3165,6 +3191,31 @@ export const generateLandlordStatement = async ({
     }
   }
 
+  const additionRows = [];
+  const extraDeductionRows = [];
+  const advanceRecoveryRows = [];
+  const earlyPayoutRows = [];
+  let totalAdditions = 0;
+  let totalExtraDeductions = 0;
+  let totalAdvanceRecoveries = 0;
+  let totalEarlyPayouts = 0;
+  // Display-only: the portion of totalAdditions that is a landlord-held deposit
+  // recognition (category "deposit_remittance"). It's already shown once, correctly, in
+  // the Deposit Remittance / "Deposits You Now Hold" section, so it's excluded from the
+  // generic Additions total shown to the landlord (see displayAdditionsTotal below).
+  let depositRemittanceAdditionsTotal = 0;
+
+  // Pre-pass: know which invoices were paid via a paidDirectToLandlord receipt (and how
+  // much via a normal one) BEFORE the invoices loop below runs — populates
+  // directPaidByInvoiceId/normalPaidByInvoiceId only, no other side effects. The full
+  // receipt-processing pass (applyReceiptInPeriodToBalance) still runs later, unchanged.
+  for (const receipt of receiptsInPeriod) {
+    getReceiptAllocationRows(receipt).forEach((allocationRow) => {
+      if (!allocationRow?.invoice) return;
+      accumulator.recordInvoicePayment(allocationRow.invoice, allocationRow?.appliedAmount, receipt.paidDirectToLandlord);
+    });
+  }
+
   for (const invoice of invoicesInPeriod) {
     // Deposit charges carry includeInLandlordStatement:false (that flag keeps them out of
     // the ledger entries / general rent totals below) — but the dedicated Deposit memo
@@ -3225,6 +3276,51 @@ export const generateLandlordStatement = async ({
         invoice.description || invoice.invoiceNumber || "",
         invoice.metadata || {}
       );
+    } else {
+      // OTHER_CHARGE / LATE_PENALTY_CHARGE — the only categories that reach here (RENT_CHARGE/
+      // UTILITY_CHARGE handled above, DEPOSIT_CHARGE already `continue`d earlier). Neither
+      // ever touched row.invoicedRent/invoicedUtility (correct — they're not rent or utility),
+      // but until now neither ever reached additionRows/extraDeductionRows either, silently
+      // understating "Total income this period" by exactly this amount. See
+      // incomeOwnershipService.js for the owner/exit-charge rules.
+      const invoiceId = String(invoice._id || "");
+      const directPaid = Number(accumulator.directPaidByInvoiceId.get(invoiceId) || 0);
+      const normalPaid = Number(accumulator.normalPaidByInvoiceId.get(invoiceId) || 0);
+      const owner = resolveChargeOwner({ invoice, incomeRules: accumulator.incomeRules });
+      const exitCharge = isExitCharge(invoice);
+      const description = invoice.description || invoice.invoiceNumber || "Tenant charge";
+
+      // Collected normally (manager's own cashbook) but the money is the landlord's —
+      // the manager is holding cash that needs forwarding. Mirrors notesInPeriod's identical
+      // OTHER_CHARGE/LATE_PENALTY_CHARGE handling below for debit notes.
+      if (normalPaid > 0 && owner === "landlord") {
+        totalAdditions = round2(totalAdditions + normalPaid);
+        additionRows.push({
+          date: getInvoiceStatementDate(invoice),
+          description,
+          amount: normalPaid,
+          category: String(invoice.category || "").toLowerCase(),
+          sourceId: String(invoice._id),
+        });
+      }
+
+      // Settled through funds the landlord already holds (a landlord-held deposit applied
+      // at move-out) — the landlord has this money, but it was never the landlord's to keep:
+      // it's either the manager's own income (owner === "manager") or it funds work the
+      // manager still has to go do on the landlord's behalf (an exit charge, always). Either
+      // way, recover it from this period's remittance.
+      if (directPaid > 0 && (owner === "manager" || exitCharge)) {
+        totalExtraDeductions = round2(totalExtraDeductions + directPaid);
+        extraDeductionRows.push({
+          date: getInvoiceStatementDate(invoice),
+          description: exitCharge
+            ? `Withheld for move-out charge — ${description}`
+            : `Recovered manager income — ${description}`,
+          amount: directPaid,
+          category: String(invoice.category || "").toLowerCase(),
+          sourceId: String(invoice._id),
+        });
+      }
     }
 
     if (invoice.invoiceNumber) row.referenceNumbers.push(invoice.invoiceNumber);
@@ -3269,20 +3365,6 @@ export const generateLandlordStatement = async ({
       },
     });
   }
-
-  const additionRows = [];
-  const extraDeductionRows = [];
-  const advanceRecoveryRows = [];
-  const earlyPayoutRows = [];
-  let totalAdditions = 0;
-  let totalExtraDeductions = 0;
-  let totalAdvanceRecoveries = 0;
-  let totalEarlyPayouts = 0;
-  // Display-only: the portion of totalAdditions that is a landlord-held deposit
-  // recognition (category "deposit_remittance"). It's already shown once, correctly, in
-  // the Deposit Remittance / "Deposits You Now Hold" section, so it's excluded from the
-  // generic Additions total shown to the landlord (see displayAdditionsTotal below).
-  let depositRemittanceAdditionsTotal = 0;
 
   for (const note of notesInPeriod) {
     // Same reasoning as the invoicesInPeriod loop above: deposit debit/credit notes must
@@ -3710,6 +3792,14 @@ export const generateLandlordStatement = async ({
 
       const expenseRecordId = String(voucher?.expenseRecord || "");
       if (expenseRecordId && expenseRecordIdsInPeriod.has(expenseRecordId)) {
+        return null;
+      }
+
+      // Linked to the move-out charge it's actually paying for — that charge already had its
+      // cost recovered from the landlord's remittance when the deposit was settled (see
+      // incomeOwnershipService.js). Spending it now is internal to the manager; it must not
+      // deduct the landlord's remittance a second time.
+      if (voucher?.sourceInvoice) {
         return null;
       }
 

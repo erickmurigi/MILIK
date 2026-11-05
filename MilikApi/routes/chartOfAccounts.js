@@ -21,8 +21,9 @@ import { aggregateChartOfAccountBalances, invalidateBalanceCache } from "../serv
 import { clearInvoiceAccountCache } from "../controllers/propertyController/tenantInvoices.js";
 import { postCorrection } from "../services/ledgerPostingService.js";
 import { resolveAuditActorUserId } from "../utils/systemActor.js";
+import { findContraAccountIds } from "../services/glHealthChecks.js";
 import {
-  entrySignedForAccount,
+  computeAccountBalance,
   normalizeAccountGroup,
   getNormalBalanceSide,
   getSubGroupOptionsForType,
@@ -70,6 +71,7 @@ const buildLedgerActivityMatch = ({ business, accountId, start, end, direction, 
 
   if (!includeReversed) {
     match.reversalOf = null;
+    match.category = { $ne: "REVERSAL" };
   }
 
   if (direction === "debit" || direction === "credit") {
@@ -120,6 +122,19 @@ const serializeAccount = (account = {}) => ({
   accountClass: String(account.subGroup || "").trim() || "",
 });
 
+// Debit and credit of a ledger row: explicit debit/credit first, direction + amount for older rows.
+const debitExpr = {
+  $cond: [{ $gt: ["$debit", 0] }, "$debit", { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "debit"] }, { $ifNull: ["$amount", 0] }, 0] }],
+};
+const creditExpr = {
+  $cond: [{ $gt: ["$credit", 0] }, "$credit", { $cond: [{ $eq: [{ $toLower: { $ifNull: ["$direction", ""] } }, "credit"] }, { $ifNull: ["$amount", 0] }, 0] }],
+};
+const entryDebit = (e) => (Number(e.debit) > 0 ? Number(e.debit) : String(e.direction).toLowerCase() === "debit" ? Number(e.amount || 0) : 0);
+const entryCredit = (e) => (Number(e.credit) > 0 ? Number(e.credit) : String(e.direction).toLowerCase() === "credit" ? Number(e.amount || 0) : 0);
+
+// The chart with every balance worked out from the ledger at read time, in two database round trips: the
+// ledger totals, the company's modules and its contra accounts together, then the accounts. Stored balances that
+// have drifted are written back in the background, so the page never waits on a write.
 router.get("/", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req, res) => {
   try {
     const business = resolveBusiness(req);
@@ -128,23 +143,75 @@ router.get("/", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req,
       return res.status(400).json({ success: false, status: 400, message: "business query parameter is required", error: "business query parameter is required" });
     }
 
-    await ensureSystemChartOfAccounts(business);
-    await aggregateChartOfAccountBalances(business);
+    const businessOid = toObjectId(business);
+    const [activeScopes, ledgerTotals, contraIds] = await Promise.all([
+      getCompanyActiveScopes(businessOid),
+      FinancialLedgerEntry.aggregate([
+        { $match: { business: businessOid, status: { $nin: ["void", "draft"] } } },
+        { $group: { _id: "$accountId", debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
+      ]).allowDiskUse(true),
+      findContraAccountIds(businessOid),
+    ]);
+    const totals = new Map(ledgerTotals.filter((t) => t._id).map((t) => [String(t._id), t]));
 
     const accounts = await findChartOfAccounts({
-      businessId: business,
+      businessId: businessOid,
       code: req.query.code || null,
       type: req.query.type || null,
       group: req.query.group || null,
       search: req.query.search || null,
       moduleScope: req.query.moduleScope || null,
+      activeScopes,
+      // an account with postings is always listed, whatever module it is tagged for
+      alwaysIncludeIds: ledgerTotals.map((t) => t._id).filter(Boolean),
     });
 
-    return res.status(200).json(accounts.map(serializeAccount));
+    const drifted = [];
+    const rows = accounts.map((account) => {
+      const t = totals.get(String(account._id)) || { debit: 0, credit: 0 };
+      const balance = computeAccountBalance({ type: account.type, debit: t.debit, credit: t.credit });
+      if (Number(account.balance || 0) !== Number(balance || 0)) {
+        drifted.push({ updateOne: { filter: { _id: account._id }, update: { $set: { balance } } } });
+      }
+      // isContra: an account that rightly sits on the other side to its type (accumulated depreciation,
+      // bad-debt allowances), so the page does not flag its balance as wrong-side.
+      return { ...serializeAccount({ ...account, balance }), isContra: contraIds.has(String(account._id)) };
+    });
+    if (drifted.length) {
+      ChartOfAccount.bulkWrite(drifted, { ordered: false }).catch((err) => console.error("Chart balance write-back failed:", err?.message));
+    }
+
+    return res.status(200).json(rows);
   } catch (err) {
     console.error("Failed to fetch ChartOfAccounts:", err);
     return res.status(500).json({ success: false, status: 500, message: err?.message || "Failed to fetch ChartOfAccounts", error: err?.message || "Failed to fetch ChartOfAccounts" });
   }
+});
+
+// Ledger activity for one account, newest first, a page at a time. Opening, closing, period totals and every
+// running balance are summed in the database over the whole filtered ledger, so they stay right however many
+// entries the account has. The debit/credit filter narrows the rows shown, never the balances.
+//
+// Everything runs in one parallel round trip: the account, one pass that sums opening + period + row count, the
+// page itself (names joined in the same query), and the sum of entries newer than the page. The sort matches the
+// { business, accountId, transactionDate, createdAt } index, so a page reads only its own rows.
+const SORT_NEWEST = { transactionDate: -1, createdAt: -1 };
+const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+const sumGroup = (expr) => ({ $sum: { $cond: [expr, 1, 0] } });
+const userNameExpr = (path) => ({
+  $let: {
+    vars: { u: { $first: path } },
+    in: {
+      $cond: [
+        { $or: [{ $not: ["$$u"] }, { $eq: ["$$u.isSystemAuditUser", true] }] },
+        null,
+        { $trim: { input: { $concat: [{ $ifNull: ["$$u.surname", ""] }, " ", { $ifNull: ["$$u.otherNames", ""] }] } } },
+      ],
+    },
+  },
+});
+const lookupOne = (from, localField, project, as) => ({
+  $lookup: { from, localField, foreignField: "_id", as, pipeline: [{ $project: project }] },
 });
 
 router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES), async (req, res) => {
@@ -156,129 +223,115 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
     if (!business) {
       return res.status(400).json({ success: false, status: 400, message: "business is required", error: "business is required" });
     }
-
     if (!isValidObjectId(id)) {
       return res.status(400).json({ success: false, status: 400, message: "Invalid chart account id", error: "Invalid chart account id" });
     }
 
-    // Fetch account without recomputing balance snapshot — activity computes its own
-    const account = await ChartOfAccount.findOne({ _id: id, business })
-      .populate("parentAccount", "code name")
-      .lean();
+    const start = normalizeDate(startDate, "start");
+    const end = normalizeDate(endDate, "end");
+    const shouldIncludeReversed = isTruthy(includeReversed);
+    const limit = Math.min(5000, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const skip = (page - 1) * limit;
+    const directionFilter = direction === "debit" || direction === "credit" ? direction : null;
+
+    // everything up to the end date, so one pass yields both the opening and the period
+    const scopeMatch = buildLedgerActivityMatch({ business, accountId: id, start: null, end, direction: null, sourceTransactionType, property, includeReversed: shouldIncludeReversed });
+    const periodMatch = buildLedgerActivityMatch({ business, accountId: id, start, end, direction: null, sourceTransactionType, property, includeReversed: shouldIncludeReversed });
+    const rowMatch = directionFilter ? { ...periodMatch, direction: directionFilter } : periodMatch;
+    const inPeriod = start ? { $gte: ["$transactionDate", start] } : true;
+    const isShown = directionFilter ? { $and: [inPeriod, { $eq: ["$direction", directionFilter] }] } : inPeriod;
+
+    const [account, [sums = {}], entries, [newer = {}]] = await Promise.all([
+      ChartOfAccount.findOne({ _id: id, business }).populate("parentAccount", "code name").lean(),
+      FinancialLedgerEntry.aggregate([
+        { $match: scopeMatch },
+        {
+          $group: {
+            _id: null,
+            openingDebit: { $sum: { $cond: [inPeriod, 0, debitExpr] } },
+            openingCredit: { $sum: { $cond: [inPeriod, 0, creditExpr] } },
+            periodDebit: { $sum: { $cond: [inPeriod, debitExpr, 0] } },
+            periodCredit: { $sum: { $cond: [inPeriod, creditExpr, 0] } },
+            shown: sumGroup(isShown),
+          },
+        },
+      ]).allowDiskUse(true),
+      FinancialLedgerEntry.aggregate([
+        { $match: rowMatch },
+        { $sort: SORT_NEWEST },
+        { $skip: skip },
+        { $limit: limit },
+        lookupOne("users", "createdBy", { surname: 1, otherNames: 1, isSystemAuditUser: 1 }, "_createdBy"),
+        lookupOne("tenants", "tenant", { name: 1 }, "_tenant"),
+        lookupOne("units", "unit", { unitNumber: 1 }, "_unit"),
+        lookupOne("landlords", "landlord", { landlordName: 1 }, "_landlord"),
+        lookupOne("properties", "property", { name: 1, propertyName: 1 }, "_property"),
+        {
+          $lookup: {
+            from: FinancialLedgerEntry.collection.name, localField: "reversedByEntry", foreignField: "_id", as: "_reversal",
+            pipeline: [{ $project: { createdBy: 1 } }, lookupOne("users", "createdBy", { surname: 1, otherNames: 1, isSystemAuditUser: 1 }, "u")],
+          },
+        },
+        {
+          $addFields: {
+            createdByName: userNameExpr("$_createdBy"),
+            reversedByUserName: { $cond: [{ $gt: [{ $size: "$_reversal" }, 0] }, userNameExpr({ $first: "$_reversal.u" }), null] },
+            _tenantName: { $first: "$_tenant.name" },
+            _unitNumber: { $first: "$_unit.unitNumber" },
+            _landlordName: { $first: "$_landlord.landlordName" },
+            _propertyName: { $ifNull: [{ $first: "$_property.propertyName" }, { $first: "$_property.name" }] },
+          },
+        },
+        { $project: { _createdBy: 0, _tenant: 0, _unit: 0, _landlord: 0, _property: 0, _reversal: 0 } },
+      ]).allowDiskUse(true),
+      // running balances: everything in the period newer than this page
+      !directionFilter && skip > 0
+        ? FinancialLedgerEntry.aggregate([
+            { $match: periodMatch }, { $sort: SORT_NEWEST }, { $limit: skip },
+            { $group: { _id: null, debit: { $sum: debitExpr }, credit: { $sum: creditExpr } } },
+          ]).allowDiskUse(true)
+        : [{}],
+    ]);
 
     if (!account) {
       return res.status(404).json({ success: false, status: 404, message: "Chart account not found", error: "Chart account not found" });
     }
 
-    const start = normalizeDate(startDate, "start");
-    const end = normalizeDate(endDate, "end");
+    const debitNormal = getNormalBalanceSide(account.type) === "debit";
+    const signed = (debit = 0, credit = 0) => (debitNormal ? debit - credit : credit - debit);
+    const total = sums.shown || 0;
+    const pages = Math.max(1, Math.ceil(total / limit));
+    const openingBalance = round2(signed(sums.openingDebit, sums.openingCredit));
+    const closingBalance = round2(openingBalance + signed(sums.periodDebit, sums.periodCredit));
 
-    const shouldIncludeReversed = isTruthy(includeReversed);
-
-    const match = buildLedgerActivityMatch({
-      business,
-      accountId: id,
-      start,
-      end,
-      direction,
-      sourceTransactionType,
-      property,
-      includeReversed: shouldIncludeReversed,
-    });
-
-    // Opening balance via aggregation — avoids loading N full documents just to sum amounts
-    let openingBalance = 0;
-    if (start) {
-      const openingMatch = buildLedgerActivityMatch({
-        business,
-        accountId: id,
-        start: null,
-        end: null,
-        direction,
-        sourceTransactionType,
-        property,
-        includeReversed: shouldIncludeReversed,
-      });
-      openingMatch.transactionDate = { $lt: start };
-
-      const normalSide = getNormalBalanceSide(account.type);
-      const [agg] = await FinancialLedgerEntry.aggregate([
-        { $match: openingMatch },
-        {
-          $group: {
-            _id: null,
-            debitSum:  { $sum: { $cond: [{ $eq: ["$direction", "debit"]  }, "$amount", 0] } },
-            creditSum: { $sum: { $cond: [{ $eq: ["$direction", "credit"] }, "$amount", 0] } },
-          },
-        },
-      ]);
-      openingBalance = normalSide === "debit"
-        ? (agg?.debitSum || 0) - (agg?.creditSum || 0)
-        : (agg?.creditSum || 0) - (agg?.debitSum || 0);
-    }
-
-    // Load entries with enriched context for narration display
-    const entries = await FinancialLedgerEntry.find(match)
-      .sort({ transactionDate: 1, createdAt: 1, _id: 1 })
-      .populate("accountId",  "code name type")
-      .populate("createdBy",  "surname otherNames isSystemAuditUser")
-      .populate("tenant",     "name")
-      .populate("unit",       "unitNumber")
-      .populate("landlord",   "landlordName")
-      .populate("property",   "name propertyName")
-      .lean();
-
-    // For reversed entries, look up the creator of the reversal entry to show a name
-    const reversedByEntryIds = entries.filter((e) => e.reversedByEntry).map((e) => e.reversedByEntry);
-    const reversalCreatorMap = new Map();
-    if (reversedByEntryIds.length > 0) {
-      const reversalEntries = await FinancialLedgerEntry.find({ _id: { $in: reversedByEntryIds } })
-        .select("_id createdBy")
-        .populate("createdBy", "surname otherNames isSystemAuditUser")
-        .lean();
-      for (const re of reversalEntries) {
-        const u = re.createdBy;
-        reversalCreatorMap.set(
-          String(re._id),
-          u && !u.isSystemAuditUser ? [u.surname, u.otherNames].filter(Boolean).join(" ").trim() || null : null
-        );
-      }
-    }
-
-    let runningBalance = openingBalance;
+    let balance = closingBalance - signed(newer.debit, newer.credit);
     const rows = entries.map((entry) => {
-      runningBalance += entrySignedForAccount(entry, account.type);
-      const u = entry.createdBy;
-      const createdByName = u && !u.isSystemAuditUser ? [u.surname, u.otherNames].filter(Boolean).join(" ").trim() || null : null;
-      const reversedByUserName = entry.reversedByEntry
-        ? reversalCreatorMap.get(String(entry.reversedByEntry)) || null
-        : null;
+      const debit = entryDebit(entry);
+      const credit = entryCredit(entry);
+      const runningBalance = directionFilter ? null : round2(balance);
+      balance -= signed(debit, credit);
 
-      // Build enriched narration: stored notes + tenant name + unit if available
-      const tenantName  = entry.tenant?.name     || null;
-      const unitNum     = entry.unit?.unitNumber  || null;
-      const landlordName = entry.landlord?.landlordName || null;
-      const propertyName = entry.property?.propertyName || entry.property?.name || null;
+      const tenantName = entry._tenantName || null;
       const contextParts = [
         tenantName,
-        unitNum ? `Unit ${unitNum}` : null,
-        !tenantName && landlordName ? landlordName : null,
-        propertyName ? `[${propertyName}]` : null,
+        entry._unitNumber ? `Unit ${entry._unitNumber}` : null,
+        !tenantName && entry._landlordName ? entry._landlordName : null,
+        entry._propertyName ? `[${entry._propertyName}]` : null,
       ].filter(Boolean);
       const baseNarration = entry.notes || entry.category || "";
       const displayNarration = contextParts.length
         ? (baseNarration ? `${baseNarration} — ${contextParts.join(", ")}` : contextParts.join(", "))
         : baseNarration || null;
 
+      const { _tenantName, _unitNumber, _landlordName, _propertyName, ...rest } = entry;
       return decorateLedgerActivityEntry({
-        ...entry,
-        tenant:   undefined, // strip populated object — id already on entry
-        unit:     undefined,
-        landlord: undefined,
-        property: undefined,
+        ...rest,
+        debit: round2(debit),
+        credit: round2(credit),
         runningBalance,
-        createdByName,
-        reversedByUserName,
+        createdByName: entry.createdByName || null,
+        reversedByUserName: entry.reversedByUserName || null,
         displayNarration,
       });
     });
@@ -289,9 +342,13 @@ router.get("/:id/activity", verifyUser, requireCompanyModule(GL_ACCESS_MODULES),
         account: serializeAccount(account),
         includeReversed: shouldIncludeReversed,
         openingBalance,
-        closingBalance: runningBalance,
-        count: rows.length,
-        entries: rows.reverse(),
+        closingBalance,
+        totals: { debit: round2(sums.periodDebit), credit: round2(sums.periodCredit) },
+        count: total,
+        page,
+        pages,
+        limit,
+        entries: rows,
       },
     });
   } catch (err) {

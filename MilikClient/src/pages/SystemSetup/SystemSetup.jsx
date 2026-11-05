@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useTabState } from "../../hooks/useTabState";
 import { useDispatch, useSelector } from "react-redux";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -10,6 +10,7 @@ import {
   FaCog,
   FaEdit,
   FaEnvelope,
+  FaEraser,
   FaExclamationTriangle,
   FaEye,
   FaGlobeAfrica,
@@ -34,6 +35,7 @@ import {
 import { toast } from "react-toastify";
 import DashboardLayout from "../../components/Layout/DashboardLayout";
 import MilikConfirmDialog from "../../components/Modals/MilikConfirmDialog";
+import CompanyDataResetModal from "./CompanyDataResetModal";
 import {
   deleteCompany,
   deleteUser,
@@ -417,7 +419,7 @@ const OverviewPanel = ({ companies, users, companyReadiness, companyUserCounts, 
 };
 
 // ─── Companies Panel ───────────────────────────────────────────────────────────
-const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendingId, onAddCompany, onEditCompany, onDeleteCompany, onToggleCompanyLock, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
+const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendingId, onAddCompany, onEditCompany, onDeleteCompany, onResetCompanyData, onToggleCompanyLock, onOpenCompanySetup, onOpenOperationalSettings, onOpenWorkspace, onManageUsers }) => {
   const [search, setSearch] = useTabState("/system-setup/companies:search", "");
   const [statusFilter, setStatusFilter] = useTabState("/system-setup/companies:statusFilter", "all");
   const [modeFilter, setModeFilter] = useTabState("/system-setup/companies:modeFilter", "all");
@@ -563,6 +565,7 @@ const CompaniesPanel = ({ companies, companyReadiness, companyUserCounts, pendin
                         { separator: true },
                         { label: "Edit", icon: FaEdit, onClick: () => onEditCompany(company) },
                         { label: company?.locked ? "Unlock" : "Lock", icon: company?.locked ? FaLockOpen : FaLock, onClick: () => onToggleCompanyLock(company) },
+                        { label: "Reset Data", icon: FaEraser, onClick: () => onResetCompanyData(company), danger: true },
                         { label: "Delete", icon: FaTrash, onClick: () => onDeleteCompany(company), danger: true },
                       ]} />
                     )}
@@ -916,6 +919,7 @@ export default function SystemSetupPage() {
   const [selectedCompanyId, setSelectedCompanyId] = useState(companyFilterFromQuery);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: "", message: "", isDangerous: false, confirmText: "Confirm", onConfirm: null });
   const [pendingId, setPendingId] = useState(null);
+  const [resetCompany, setResetCompany] = useState(null);
 
   const companyList = Array.isArray(companies) ? companies : [];
   const userList = Array.isArray(users) ? users : [];
@@ -945,7 +949,8 @@ export default function SystemSetupPage() {
   // Guard both fetches behind isSystemAdmin — non-admins get an access warning and
   // do not need this data. The API enforces auth server-side, but this avoids
   // wasted requests and prevents partial data exposure in Redux state.
-  useEffect(() => { if (isSystemAdmin) dispatch(getCompanies({ includeDemo: true, limit: 200 })); }, [dispatch, isSystemAdmin]);
+  const refreshCompanies = useCallback(() => dispatch(getCompanies({ includeDemo: true, limit: 200 })), [dispatch]);
+  useEffect(() => { if (isSystemAdmin) refreshCompanies(); }, [isSystemAdmin, refreshCompanies]);
   useEffect(() => { if (isSystemAdmin) dispatch(getUsers(selectedCompanyId || undefined, { limit: 500 })); }, [dispatch, isSystemAdmin, selectedCompanyId]);
   useEffect(() => { setSelectedCompanyId(companyFilterFromQuery); }, [companyFilterFromQuery]);
 
@@ -1206,6 +1211,7 @@ export default function SystemSetupPage() {
                     onAddCompany={() => navigate("/add-company", { state: { tabTitle: "New Company" } })}
                     onEditCompany={handleEditCompany}
                     onDeleteCompany={handleDeleteCompany}
+                    onResetCompanyData={setResetCompany}
                     onToggleCompanyLock={handleToggleCompanyLock}
                     onOpenCompanySetup={handleOpenCompanySetup}
                     onOpenOperationalSettings={handleOpenOperationalSettings}
@@ -1254,6 +1260,14 @@ export default function SystemSetupPage() {
 
         </div>
       </div>
+
+      {resetCompany && (
+        <CompanyDataResetModal
+          company={resetCompany}
+          onClose={() => setResetCompany(null)}
+          onFinished={refreshCompanies}
+        />
+      )}
 
       <MilikConfirmDialog
         isOpen={confirmDialog.isOpen}
